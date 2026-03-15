@@ -30,6 +30,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ analysis: djson });
   }
 
+  // Fall back: if we have an apartment-level diagnosis with needs, convert it
+  if (djson.needs && Array.isArray(djson.needs)) {
+    const converted = {
+      summary: (djson.summary as string) || "Analysis available",
+      what_it_needs: (djson.needs as string[]).map((need: string) => ({
+        category: need.replace(/\s+/g, "_").toLowerCase(),
+        description: need,
+        priority: "medium" as const,
+        specs: "",
+      })),
+      what_works: (djson.strengths as string[]) || [],
+      what_should_go: (djson.weaknesses as string[]) || [],
+      design_direction: "",
+    };
+    return NextResponse.json({ analysis: converted });
+  }
+
   return NextResponse.json({ analysis: null });
 }
 
@@ -132,12 +149,15 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       model: selectModel("area_analysis"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.3,
     });
 
     const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON in response");
+    if (!jsonMatch) {
+      console.error("[area-analysis] No JSON in response:", response.content.slice(0, 500));
+      throw new Error("No JSON in response");
+    }
 
     const analysis = JSON.parse(jsonMatch[0]);
 
@@ -159,10 +179,12 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     return NextResponse.json({ analysis });
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    console.error("[area-analysis] Error:", errorMessage, err);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
-      error_message: err instanceof Error ? err.message : "Unknown error",
+      error_message: errorMessage,
     });
-    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
+    return NextResponse.json({ error: `Analysis failed: ${errorMessage}` }, { status: 500 });
   }
 }

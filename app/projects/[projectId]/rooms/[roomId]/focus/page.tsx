@@ -249,6 +249,7 @@ export default function FocusPage() {
   const [generatingMockup, setGeneratingMockup] = useState(false);
   const [roomInfo, setRoomInfo] = useState<{ name: string; room_type: string } | null>(null);
   const [activeTier, setActiveTier] = useState<PriceTier>("balanced");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Run deep area analysis on mount
   useEffect(() => {
@@ -282,15 +283,26 @@ export default function FocusPage() {
       }
 
       // Run new analysis
-      const res = await fetch("/api/area-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room_id: roomId, project_id: projectId }),
-      });
+      try {
+        const res = await fetch("/api/area-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room_id: roomId, project_id: projectId }),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        setAreaAnalysis(data.analysis);
+        if (res.ok) {
+          const data = await res.json();
+          setAreaAnalysis(data.analysis);
+          setStep("analysis");
+        } else {
+          const err = await res.json().catch(() => ({ error: "Unknown error" }));
+          console.error("Area analysis failed:", err);
+          setAnalysisError(err.error || "Analysis failed. Please try again.");
+          setStep("analysis");
+        }
+      } catch (e) {
+        console.error("Area analysis fetch error:", e);
+        setAnalysisError("Failed to connect. Please try again.");
         setStep("analysis");
       }
     }
@@ -420,6 +432,22 @@ export default function FocusPage() {
             <p className="text-sm text-muted-foreground mt-1">
               Looking at your photos, your preferences, and the rest of the apartment
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error state */}
+      {step === "analysis" && analysisError && !areaAnalysis && (
+        <Card>
+          <CardContent className="py-12 text-center space-y-4">
+            <p className="text-destructive font-medium">{analysisError}</p>
+            <Button onClick={() => {
+              setAnalysisError(null);
+              setStep("analyzing");
+              window.location.reload();
+            }}>
+              Retry Analysis
+            </Button>
           </CardContent>
         </Card>
       )}
