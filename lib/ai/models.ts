@@ -1,13 +1,13 @@
 /**
  * Model configuration for the AI pipeline.
- * GPT-4.1 for all analysis. GPT-4.1-mini for lightweight extraction.
+ * GPT-5.4 for all analysis. GPT-5-mini for lightweight extraction.
  */
 
 export const MODELS = {
   /** Fast model for extraction, normalization */
-  fast: "gpt-4.1-mini",
+  fast: "gpt-5-mini",
   /** Primary analysis model for diagnosis, scoring, evaluation */
-  primary: "gpt-4.1",
+  primary: "gpt-5.4",
 } as const;
 
 export type ModelTier = keyof typeof MODELS;
