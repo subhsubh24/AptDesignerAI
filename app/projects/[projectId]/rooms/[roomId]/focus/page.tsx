@@ -102,8 +102,8 @@ function ProductCard({ product }: { product: ProductResult }) {
               </div>
               {evaluation && (
                 <div className="text-right shrink-0">
-                  <span className={`text-xl font-bold ${getScoreColor(evaluation.final_item_score)}`}>
-                    {evaluation.final_item_score.toFixed(1)}
+                  <span className={`text-xl font-bold ${getScoreColor(evaluation.final_item_score ?? 0)}`}>
+                    {(evaluation.final_item_score ?? 0).toFixed(1)}
                   </span>
                   <div>
                     <Badge className={VERDICT_COLORS[evaluation.verdict]}>
@@ -124,8 +124,8 @@ function ProductCard({ product }: { product: ProductResult }) {
                     { label: "Cohesion", score: evaluation.cohesion_fit_score },
                   ].map((s) => (
                     <div key={s.label} className="text-center">
-                      <div className={`font-medium ${getScoreColor(s.score)}`}>
-                        {s.score.toFixed(0)}
+                      <div className={`font-medium ${getScoreColor(s.score ?? 0)}`}>
+                        {(s.score ?? 0).toFixed(0)}
                       </div>
                       <div className="text-muted-foreground">{s.label}</div>
                     </div>
