@@ -13,15 +13,17 @@ export async function scoreProduct(
   roomType: string,
   budgetMode: string,
   existingItems: string[],
-  roomImageUrls: string[]
-): Promise<AgentResult<ProductEvaluationResult>> {
+  roomImageUrls: string[],
+  otherRoomsContext?: string
+): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
   const model = selectModel("scoring");
   const system = getSystemPrompt();
   const evalPrompt = getProductEvalPrompt(
     roomType,
     product.category || "unknown",
     existingItems,
-    budgetMode
+    budgetMode,
+    otherRoomsContext
   );
 
   // Build product context
@@ -80,6 +82,8 @@ export async function scoreProduct(
         final_item_score: finalScore,
         verdict,
         reasoning: parsed.reasoning,
+        area_fit_note: parsed.area_fit_note,
+        apartment_fit_note: parsed.apartment_fit_note,
       },
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
       model: response.model,

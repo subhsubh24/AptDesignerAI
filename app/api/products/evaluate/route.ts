@@ -32,6 +32,26 @@ export async function POST(request: Request) {
   const room = roomRes.data;
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Build cross-room context
+  let otherRoomsContext: string | undefined;
+  const { data: otherRooms } = await supabase
+    .from("rooms")
+    .select("name, room_type, room_diagnoses(diagnosis_json)")
+    .eq("project_id", room.project_id)
+    .neq("id", room_id);
+
+  if (otherRooms && otherRooms.length > 0) {
+    otherRoomsContext = otherRooms
+      .map((r) => {
+        const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
+        const summary = diag
+          ? (diag.diagnosis_json as Record<string, string>).summary || "analyzed"
+          : "not analyzed";
+        return `- ${r.name} (${r.room_type}): ${summary}`;
+      })
+      .join("\n");
+  }
+
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
     room_id,
@@ -44,7 +64,8 @@ export async function POST(request: Request) {
     room.room_type,
     room.budget_mode,
     room.keep_items || [],
-    roomImageUrls
+    roomImageUrls,
+    otherRoomsContext
   );
 
   if (!result.success || !result.data) {
@@ -55,7 +76,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error || "Scoring failed" }, { status: 500 });
   }
 
-  // Save evaluation
+  // Save evaluation (include area/apartment fit notes in reasoning)
+  const reasoning = {
+    ...result.data.reasoning,
+    area_fit_note: result.data.area_fit_note,
+    apartment_fit_note: result.data.apartment_fit_note,
+  };
+
   const { data: evaluation, error: saveError } = await supabase
     .from("product_evaluations")
     .insert({
@@ -64,7 +91,7 @@ export async function POST(request: Request) {
       ...result.data.scores,
       final_item_score: result.data.final_item_score,
       verdict: result.data.verdict,
-      reasoning: result.data.reasoning,
+      reasoning,
       model_used: result.model,
     })
     .select()

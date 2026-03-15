@@ -1,25 +1,27 @@
 /**
  * Model configuration for the AI pipeline.
- * Claude 4.5 Haiku for speed, Claude Opus 4.6 for deep analysis.
+ * Sonnet 4.6 for all analysis. Haiku for lightweight extraction.
  */
 
 export const MODELS = {
-  /** Fast model for extraction, normalization, quick scoring */
+  /** Fast model for extraction, normalization */
   fast: "claude-haiku-4-5-20251001",
-  /** Deep analysis model for diagnosis, complex evaluations, bundle optimization */
-  deep: "claude-opus-4-6",
+  /** Primary analysis model for diagnosis, scoring, evaluation */
+  primary: "claude-sonnet-4-6",
 } as const;
 
 export type ModelTier = keyof typeof MODELS;
 
 /** Select appropriate model based on task complexity */
-export function selectModel(task: "diagnosis" | "extraction" | "scoring" | "bundle" | "search_brief" | "mockup_prompt"): string {
+export function selectModel(task: "diagnosis" | "apartment_analysis" | "area_analysis" | "extraction" | "scoring" | "bundle" | "search_brief" | "mockup_prompt"): string {
   switch (task) {
     case "diagnosis":
-    case "bundle":
-      return MODELS.deep;
-    case "extraction":
+    case "apartment_analysis":
+    case "area_analysis":
     case "scoring":
+    case "bundle":
+      return MODELS.primary;
+    case "extraction":
     case "search_brief":
     case "mockup_prompt":
       return MODELS.fast;

@@ -51,3 +51,29 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ roomId: string }> }
+) {
+  const { roomId } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { image_id } = body;
+
+  if (!image_id) {
+    return NextResponse.json({ error: "image_id is required" }, { status: 400 });
+  }
+
+  const { error } = await supabase
+    .from("room_images")
+    .delete()
+    .eq("id", image_id)
+    .eq("room_id", roomId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

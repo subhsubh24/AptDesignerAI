@@ -3,19 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  FolderOpen,
+  Home,
   Settings,
-  Bookmark,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Projects", href: "/dashboard", icon: FolderOpen },
-  { name: "Saved Items", href: "/dashboard?tab=saved", icon: Bookmark },
+  { name: "My Apartment", href: "/dashboard", icon: Home },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -53,7 +49,7 @@ export function Sidebar() {
       </ScrollArea>
       <div className="border-t p-4">
         <p className="text-xs text-muted-foreground">
-          West Loop Apartment v1
+          Porte Apartments, West Loop
         </p>
       </div>
     </div>
