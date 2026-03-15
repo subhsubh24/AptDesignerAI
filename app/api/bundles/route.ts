@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const roomId = searchParams.get("room_id");
+  if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from("product_bundles")
+    .select("*, product_bundle_items(*, candidate_products(*)), bundle_evaluations(*)")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { room_id, name, product_ids } = body;
+
+  if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+
+  // Create bundle
+  const { data: bundle, error: bundleError } = await supabase
+    .from("product_bundles")
+    .insert({ room_id, name })
+    .select()
+    .single();
+
+  if (bundleError) return NextResponse.json({ error: bundleError.message }, { status: 500 });
+
+  // Add items if provided
+  if (product_ids && product_ids.length > 0) {
+    const items = product_ids.map((pid: string, i: number) => ({
+      bundle_id: bundle.id,
+      product_id: pid,
+      sort_order: i,
+    }));
+    await supabase.from("product_bundle_items").insert(items);
+  }
+
+  return NextResponse.json(bundle, { status: 201 });
+}
