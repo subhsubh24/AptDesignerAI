@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error || "Search failed" }, { status: 500 });
   }
 
-  // Save all discovered products to DB
+  // Save all discovered products to DB with tier metadata
   const savedProducts = [];
   for (const [, products] of Object.entries(result.data.candidatesByCategory)) {
     for (const product of products) {
@@ -87,6 +87,7 @@ export async function POST(request: Request) {
           colors: product.colors,
           description: product.description,
           source_type: "agentic_search",
+          metadata: product.metadata,
         })
         .select()
         .single();

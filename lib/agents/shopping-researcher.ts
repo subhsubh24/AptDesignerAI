@@ -2,14 +2,19 @@ import { anthropicProvider } from "@/lib/ai/anthropic";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
+import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
+
+interface TierBrief {
+  search_queries: string[];
+  price_range: { min: number; max: number };
+  retailers_to_target: string[];
+}
 
 interface SearchBriefCategory {
   category: string;
-  search_queries: string[];
-  price_range: { min: number; max: number };
+  tiers: Record<PriceTier, TierBrief>;
   key_requirements: string[];
-  retailers_to_target: string[];
 }
 
 interface SearchBrief {
@@ -23,8 +28,24 @@ interface SearchCandidate {
   source: string;
 }
 
+const TIER_DOMAINS: Record<PriceTier, string[]> = {
+  budget: [
+    "ikea.com", "target.com", "amazon.com", "wayfair.com",
+    "hm.com", "worldmarket.com", "overstock.com",
+  ],
+  balanced: [
+    "article.com", "cb2.com", "westelm.com", "crateandbarrel.com",
+    "allmodern.com", "jossandmain.com", "ruggable.com",
+  ],
+  high_end: [
+    "restorationhardware.com", "rh.com", "potterybarn.com",
+    "luluandgeorgia.com", "arhaus.com", "roomandboard.com",
+    "dwr.com",
+  ],
+};
+
 /**
- * Generate a shopping brief based on room diagnosis
+ * Generate a shopping brief based on room diagnosis — now with 3 price tiers
  */
 export async function generateSearchBrief(
   roomType: string,
@@ -40,7 +61,7 @@ export async function generateSearchBrief(
       model,
       system,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 2048,
+      max_tokens: 4096,
       temperature: 0.3,
     });
 
@@ -65,13 +86,26 @@ export async function generateSearchBrief(
 }
 
 /**
- * Search the web for products using Tavily API
+ * Search the web for products using Tavily API, optionally scoped to a price tier
  */
-export async function searchProducts(query: string, maxResults: number = 10): Promise<AgentResult<SearchCandidate[]>> {
+export async function searchProducts(
+  query: string,
+  maxResults: number = 10,
+  tier?: PriceTier
+): Promise<AgentResult<SearchCandidate[]>> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) {
     return { success: false, error: "TAVILY_API_KEY not configured" };
   }
+
+  // Use tier-specific domains if provided, otherwise all domains
+  const domains = tier
+    ? TIER_DOMAINS[tier]
+    : [
+        ...TIER_DOMAINS.budget,
+        ...TIER_DOMAINS.balanced,
+        ...TIER_DOMAINS.high_end,
+      ];
 
   try {
     const response = await fetch("https://api.tavily.com/search", {
@@ -81,22 +115,7 @@ export async function searchProducts(query: string, maxResults: number = 10): Pr
         api_key: apiKey,
         query,
         max_results: maxResults,
-        include_domains: [
-          "article.com",
-          "cb2.com",
-          "westelm.com",
-          "crateandbarrel.com",
-          "potterybarn.com",
-          "luluandgeorgia.com",
-          "ruggable.com",
-          "wayfair.com",
-          "target.com",
-          "ikea.com",
-          "amazon.com",
-          "etsy.com",
-          "allmodern.com",
-          "jossandmain.com",
-        ],
+        include_domains: domains,
         search_depth: "advanced",
       }),
     });

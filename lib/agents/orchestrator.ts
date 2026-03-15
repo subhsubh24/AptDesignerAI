@@ -5,6 +5,7 @@ import { evaluateBundle } from "./bundle-optimizer";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
+import type { PriceTier } from "@/lib/prompts/search-brief";
 
 export interface OrchestrationStep {
   step: string;
@@ -20,22 +21,21 @@ export interface OrchestrationResult {
   steps: OrchestrationStep[];
 }
 
+const PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
+const TIER_LABELS: Record<PriceTier, string> = {
+  budget: "Budget",
+  balanced: "Balanced",
+  high_end: "High End",
+};
+
 /**
- * Run the full agentic search loop for a room.
+ * Run the full agentic search loop for a room across 3 price tiers.
  *
  * Flow:
- * 1. Generate search brief from diagnosis
- * 2. Search each missing category
- * 3. Extract product data from results
- * 4. Score each candidate
- * 5. Keep top candidates per category
- * 6. Generate 2-3 bundles
- * 7. Score bundles holistically
- *
- * Stopping criteria:
- * - Max 5 search rounds per category
- * - Max 20 candidates per category
- * - Stop if enough high-scoring candidates found (3+ with score >= 6.5)
+ * 1. Generate tiered search brief from diagnosis
+ * 2. For each tier × category: search → extract → score
+ * 3. Keep top 3 per category per tier
+ * 4. Tag all products with their price tier in metadata
  */
 export async function runAgenticSearch(
   ctx: AgentContext,
@@ -52,32 +52,42 @@ export async function runAgenticSearch(
   }
 
   try {
-    // Step 1: Generate search brief
-    reportStep({ step: "Generating search brief", status: "running" });
+    // Step 1: Generate tiered search brief
+    reportStep({ step: "Generating tiered search brief", status: "running" });
     const briefResult = await generateSearchBrief(
       ctx.roomType,
       missingCategories,
       ctx.budgetMode
     );
     if (!briefResult.success || !briefResult.data) {
-      reportStep({ step: "Generating search brief", status: "failed" });
+      reportStep({ step: "Generating tiered search brief", status: "failed" });
       return { success: false, error: "Failed to generate search brief" };
     }
-    reportStep({ step: "Generating search brief", status: "completed", data: briefResult.data });
+    reportStep({ step: "Generating tiered search brief", status: "completed", data: briefResult.data });
 
-    // Step 2: Search each category
+    // Step 2: Search each category × tier
     for (const categoryBrief of briefResult.data.categories) {
       const category = categoryBrief.category;
       candidatesByCategory[category] = [];
 
-      for (const query of categoryBrief.search_queries.slice(0, 3)) {
-        reportStep({ step: `Searching: ${query}`, status: "running" });
-        const searchResult = await searchProducts(query, 5);
-        if (searchResult.success && searchResult.data) {
-          reportStep({ step: `Searching: ${query}`, status: "completed", data: { count: searchResult.data.length } });
+      for (const tier of PRICE_TIERS) {
+        const tierBrief = categoryBrief.tiers[tier];
+        if (!tierBrief) continue;
 
-          // Step 3: Extract product data from each result
-          for (const candidate of searchResult.data.slice(0, 5)) {
+        reportStep({ step: `Searching ${TIER_LABELS[tier]} ${category}`, status: "running" });
+
+        for (const query of tierBrief.search_queries.slice(0, 2)) {
+          const searchResult = await searchProducts(query, 5, tier);
+          if (!searchResult.success || !searchResult.data) continue;
+
+          reportStep({
+            step: `Searching ${TIER_LABELS[tier]} ${category}`,
+            status: "completed",
+            data: { count: searchResult.data.length },
+          });
+
+          // Extract product data from results
+          for (const candidate of searchResult.data.slice(0, 3)) {
             reportStep({ step: `Extracting: ${candidate.title}`, status: "running" });
             const extractResult = await extractFromUrl(candidate.url);
             if (extractResult.success && extractResult.data) {
@@ -97,7 +107,7 @@ export async function runAgenticSearch(
                 colors: extractResult.data.colors,
                 description: extractResult.data.description,
                 source_type: "agentic_search",
-                metadata: null,
+                metadata: { price_tier: tier },
                 status: "pending",
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -108,46 +118,72 @@ export async function runAgenticSearch(
               reportStep({ step: `Extracting: ${candidate.title}`, status: "failed" });
             }
           }
-        } else {
-          reportStep({ step: `Searching: ${query}`, status: "failed" });
         }
 
-        // Stopping criteria: enough candidates for this category
-        if (candidatesByCategory[category].length >= 10) break;
-      }
-
-      // Step 4: Score candidates for this category
-      for (const product of candidatesByCategory[category]) {
-        reportStep({ step: `Scoring: ${product.title}`, status: "running" });
-        const scoreResult = await scoreProduct(
-          product,
-          ctx.roomType,
-          ctx.budgetMode,
-          ctx.keepItems,
-          ctx.imageUrls
+        // Score candidates for this tier
+        const tierProducts = candidatesByCategory[category].filter(
+          (p) => (p.metadata as { price_tier: string })?.price_tier === tier
         );
-        if (scoreResult.success && scoreResult.data) {
-          evaluations.set(product.id, scoreResult.data);
-          reportStep({ step: `Scoring: ${product.title}`, status: "completed", data: { score: scoreResult.data.final_item_score } });
-        } else {
-          reportStep({ step: `Scoring: ${product.title}`, status: "failed" });
+        for (const product of tierProducts) {
+          reportStep({ step: `Scoring: ${product.title}`, status: "running" });
+          const scoreResult = await scoreProduct(
+            product,
+            ctx.roomType,
+            ctx.budgetMode,
+            ctx.keepItems,
+            ctx.imageUrls
+          );
+          if (scoreResult.success && scoreResult.data) {
+            evaluations.set(product.id, scoreResult.data);
+            reportStep({
+              step: `Scoring: ${product.title}`,
+              status: "completed",
+              data: { score: scoreResult.data.final_item_score },
+            });
+          } else {
+            reportStep({ step: `Scoring: ${product.title}`, status: "failed" });
+          }
         }
       }
 
-      // Keep only top candidates per category (sorted by score)
-      candidatesByCategory[category].sort((a, b) => {
+      // Sort all candidates per category by score, keep top 3 per tier
+      const byTier: Record<PriceTier, CandidateProduct[]> = {
+        budget: [],
+        balanced: [],
+        high_end: [],
+      };
+      for (const product of candidatesByCategory[category]) {
+        const tier = (product.metadata as { price_tier: PriceTier })?.price_tier || "balanced";
+        byTier[tier].push(product);
+      }
+
+      // Sort each tier by score, keep top 3
+      const kept: CandidateProduct[] = [];
+      for (const tier of PRICE_TIERS) {
+        byTier[tier].sort((a, b) => {
+          const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+          const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+          return scoreB - scoreA;
+        });
+        kept.push(...byTier[tier].slice(0, 3));
+      }
+      candidatesByCategory[category] = kept;
+    }
+
+    // Step 3: Generate bundles from top candidates (one per tier)
+    reportStep({ step: "Generating bundles", status: "running" });
+    const topProducts: CandidateProduct[] = [];
+    for (const [, products] of Object.entries(candidatesByCategory)) {
+      // Pick the highest-scored balanced product for the default bundle
+      const balancedProducts = products.filter(
+        (p) => (p.metadata as { price_tier: string })?.price_tier === "balanced"
+      );
+      const sorted = balancedProducts.sort((a, b) => {
         const scoreA = evaluations.get(a.id)?.final_item_score || 0;
         const scoreB = evaluations.get(b.id)?.final_item_score || 0;
         return scoreB - scoreA;
       });
-      candidatesByCategory[category] = candidatesByCategory[category].slice(0, 5);
-    }
-
-    // Step 5: Generate bundles from top candidates
-    reportStep({ step: "Generating bundles", status: "running" });
-    const topProducts: CandidateProduct[] = [];
-    for (const [, products] of Object.entries(candidatesByCategory)) {
-      if (products[0]) topProducts.push(products[0]);
+      if (sorted[0]) topProducts.push(sorted[0]);
     }
 
     let bundleResult = null;
