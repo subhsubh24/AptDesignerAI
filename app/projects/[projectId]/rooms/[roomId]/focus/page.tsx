@@ -314,8 +314,12 @@ export default function FocusPage() {
     setSearching(true);
     setStep("sourcing");
 
-    // Extract categories from area analysis
-    const categories = areaAnalysis?.what_it_needs?.map((n) => n.category) || [];
+    // Extract categories from area analysis (top 5 by priority)
+    const sorted = [...(areaAnalysis?.what_it_needs || [])].sort((a, b) => {
+      const order = { high: 0, medium: 1, low: 2 };
+      return (order[a.priority] || 1) - (order[b.priority] || 1);
+    });
+    const categories = sorted.slice(0, 5).map((n) => n.category);
 
     try {
       const res = await fetch("/api/search", {

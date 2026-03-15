@@ -34,12 +34,24 @@ export async function GET(request: NextRequest) {
   if (djson.needs && Array.isArray(djson.needs)) {
     const converted = {
       summary: (djson.summary as string) || "Analysis available",
-      what_it_needs: (djson.needs as string[]).map((need: string) => ({
-        category: need.replace(/\s+/g, "_").toLowerCase(),
-        description: need,
-        priority: "medium" as const,
-        specs: "",
-      })),
+      what_it_needs: (djson.needs as string[]).map((need: string) => {
+        // Extract short category from strings like "area rug — this is the highest..."
+        // or "replace white tv console immediately — walnut..."
+        const raw = need.split("—")[0].split("–")[0].split("-")[0].trim();
+        // Remove action verbs and clean up
+        const cleaned = raw
+          .replace(/^(replace|add|get|remove|swap|upgrade|buy|find|consider)\s+(the\s+|a\s+|an\s+|or\s+remove\s+the\s+)?/i, "")
+          .trim();
+        // Take first 3 words max for category name
+        const shortName = cleaned.split(/\s+/).slice(0, 3).join("_").toLowerCase()
+          .replace(/[^a-z0-9_]/g, "");
+        return {
+          category: shortName || "other",
+          description: need,
+          priority: "medium" as const,
+          specs: "",
+        };
+      }),
       what_works: (djson.strengths as string[]) || [],
       what_should_go: (djson.weaknesses as string[]) || [],
       design_direction: "",
