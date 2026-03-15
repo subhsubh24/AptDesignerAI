@@ -55,17 +55,24 @@ export async function POST(request: Request) {
     imageUrls,
   };
 
-  const missingCategories = categories || ["rug", "coffee_table", "accent_chair", "art", "plant"];
+  const missingCategories = categories && categories.length > 0
+    ? categories
+    : ["rug", "coffee_table", "accent_chair"];
+
+  console.log(`[search] Starting agentic search for categories: ${missingCategories.join(", ")}`);
 
   const result = await runAgenticSearch(ctx, missingCategories);
 
   if (!result.success || !result.data) {
+    console.error("[search] Failed:", result.error);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: result.error,
     });
     return NextResponse.json({ error: result.error || "Search failed" }, { status: 500 });
   }
+
+  console.log(`[search] Complete. Found ${Object.values(result.data.candidatesByCategory).flat().length} products`);
 
   // Save all discovered products to DB with tier metadata
   const savedProducts = [];

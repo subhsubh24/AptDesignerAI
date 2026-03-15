@@ -49,6 +49,7 @@ export async function runAgenticSearch(
   function reportStep(step: OrchestrationStep) {
     steps.push(step);
     onStep?.(step);
+    console.log(`[orchestrator] ${step.status}: ${step.step}`);
   }
 
   try {
@@ -76,7 +77,8 @@ export async function runAgenticSearch(
 
         reportStep({ step: `Searching ${TIER_LABELS[tier]} ${category}`, status: "running" });
 
-        for (const query of tierBrief.search_queries.slice(0, 2)) {
+        // Use first query only per tier to keep search fast
+        for (const query of tierBrief.search_queries.slice(0, 1)) {
           const searchResult = await searchProducts(query, 5, tier);
           if (!searchResult.success || !searchResult.data) continue;
 
@@ -86,8 +88,8 @@ export async function runAgenticSearch(
             data: { count: searchResult.data.length },
           });
 
-          // Extract product data from results
-          for (const candidate of searchResult.data.slice(0, 3)) {
+          // Extract top 2 results per tier to keep it fast
+          for (const candidate of searchResult.data.slice(0, 2)) {
             reportStep({ step: `Extracting: ${candidate.title}`, status: "running" });
             const extractResult = await extractFromUrl(candidate.url);
             if (extractResult.success && extractResult.data) {

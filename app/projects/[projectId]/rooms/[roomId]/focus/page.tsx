@@ -314,18 +314,28 @@ export default function FocusPage() {
     setSearching(true);
     setStep("sourcing");
 
-    const res = await fetch("/api/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room_id: roomId }),
-    });
+    // Extract categories from area analysis
+    const categories = areaAnalysis?.what_it_needs?.map((n) => n.category) || [];
 
-    if (res.ok) {
-      // Reload products
-      const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-      if (prodRes.ok) {
-        setProducts(await prodRes.json());
+    try {
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_id: roomId, categories }),
+      });
+
+      if (res.ok) {
+        // Reload products
+        const prodRes = await fetch(`/api/products?room_id=${roomId}`);
+        if (prodRes.ok) {
+          setProducts(await prodRes.json());
+        }
+      } else {
+        const err = await res.json().catch(() => ({ error: "Search failed" }));
+        console.error("Agentic search error:", err);
       }
+    } catch (e) {
+      console.error("Agentic search fetch error:", e);
     }
     setSearching(false);
     setStep("results");
