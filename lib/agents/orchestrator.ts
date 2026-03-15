@@ -88,18 +88,34 @@ export async function runAgenticSearch(
             data: { count: searchResult.data.length },
           });
 
+          // Filter to likely product pages (not category/listing pages or PDFs)
+          const productCandidates = searchResult.data.filter((c) => {
+            const url = c.url.toLowerCase();
+            // Skip PDFs, category pages, and generic listings
+            if (url.endsWith(".pdf")) return false;
+            if (/\/(collections|category|categories|all-|shop-all|browse)\b/i.test(url)) return false;
+            // Prefer URLs with product identifiers
+            return true;
+          });
+
           // Extract top 2 results per tier to keep it fast
-          for (const candidate of searchResult.data.slice(0, 2)) {
+          for (const candidate of productCandidates.slice(0, 2)) {
             reportStep({ step: `Extracting: ${candidate.title}`, status: "running" });
             const extractResult = await extractFromUrl(candidate.url);
             if (extractResult.success && extractResult.data) {
+              // Skip results with no title or price (likely not real products)
+              if (!extractResult.data.title && !extractResult.data.price) {
+                reportStep({ step: `Extracting: ${candidate.title}`, status: "failed", data: { reason: "no product data" } });
+                continue;
+              }
+
               const product: CandidateProduct = {
                 id: crypto.randomUUID(),
                 room_id: ctx.roomId,
                 search_session_id: null,
-                title: extractResult.data.title,
+                title: extractResult.data.title || candidate.title,
                 category: extractResult.data.category || category,
-                retailer: extractResult.data.retailer,
+                retailer: extractResult.data.retailer || candidate.source,
                 product_url: candidate.url,
                 image_url: extractResult.data.image_url,
                 local_image_path: null,

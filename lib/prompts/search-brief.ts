@@ -57,5 +57,11 @@ Return a JSON object:
   ]
 }
 
-Be specific in queries. Instead of "rug", use "large 8x10 wool area rug cream taupe modern warm". Include price qualifiers in queries (e.g. "under $200" for budget, "under $800" for balanced).`;
+CRITICAL RULES for search queries:
+- Each query MUST target a SPECIFIC PRODUCT, not a category page.
+- Include brand/retailer name + product type + material + color in each query.
+- Good: "Article Texa rug 8x10 cream wool" or "CB2 Dondra walnut media console"
+- Bad: "modern rugs" or "TV stands" (too generic, will return category pages)
+- Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers.
+- For high end, include retailer name to find specific products.`;
 }
