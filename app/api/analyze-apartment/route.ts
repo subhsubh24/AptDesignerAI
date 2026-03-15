@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -99,7 +99,7 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
   });
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model: selectModel("apartment_analysis"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: contentBlocks }],

@@ -1,4 +1,4 @@
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
@@ -57,7 +57,7 @@ export async function generateSearchBrief(
   const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode);
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content: prompt }],

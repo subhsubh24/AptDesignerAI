@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -157,7 +157,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
   });
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model: selectModel("area_analysis"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: contentBlocks }],

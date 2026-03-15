@@ -1,6 +1,6 @@
 /**
  * AI provider abstraction.
- * Currently wraps Anthropic's Claude API.
+ * Currently wraps OpenAI's GPT API.
  * Can be extended to support other providers.
  */
 
@@ -36,7 +36,5 @@ export interface AIProvider {
     messages: AIMessage[];
     max_tokens?: number;
     temperature?: number;
-    thinking?: { type: "adaptive" } | { type: "enabled"; budget_tokens: number };
-    effort?: "high" | "medium" | "low";
   }): Promise<AIResponse>;
 }

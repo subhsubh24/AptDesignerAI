@@ -1,4 +1,4 @@
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
@@ -44,7 +44,7 @@ export async function runRoomDiagnosis(ctx: AgentContext): Promise<AgentResult<D
   });
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],

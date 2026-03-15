@@ -1,4 +1,4 @@
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
@@ -60,7 +60,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
   }
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model,
       system,
       messages: [
@@ -113,7 +113,7 @@ export async function extractFromImage(imageUrl: string): Promise<AgentResult<Ex
   ];
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],

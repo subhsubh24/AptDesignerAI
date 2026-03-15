@@ -1,4 +1,4 @@
-import { anthropicProvider } from "@/lib/ai/anthropic";
+import { openaiProvider } from "@/lib/ai/openai";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
@@ -45,7 +45,7 @@ export async function evaluateBundle(
   });
 
   try {
-    const response = await anthropicProvider.chat({
+    const response = await openaiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],

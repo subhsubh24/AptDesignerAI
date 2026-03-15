@@ -82,9 +82,8 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              { name: "Anthropic (Claude)", key: "ANTHROPIC_API_KEY" },
+              { name: "OpenAI (GPT)", key: "OPENAI_API_KEY" },
               { name: "Tavily (Search)", key: "TAVILY_API_KEY" },
-              { name: "OpenAI (Mockups)", key: "OPENAI_API_KEY" },
               { name: "Jina (Scraping)", key: "JINA_API_KEY" },
             ].map((service) => (
               <div key={service.key} className="flex items-center justify-between">

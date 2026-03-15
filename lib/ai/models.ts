@@ -1,13 +1,13 @@
 /**
  * Model configuration for the AI pipeline.
- * Sonnet 4.6 for all analysis. Haiku for lightweight extraction.
+ * GPT-4.1 for all analysis. GPT-4.1-mini for lightweight extraction.
  */
 
 export const MODELS = {
   /** Fast model for extraction, normalization */
-  fast: "claude-haiku-4-5-20251001",
+  fast: "gpt-4.1-mini",
   /** Primary analysis model for diagnosis, scoring, evaluation */
-  primary: "claude-sonnet-4-6",
+  primary: "gpt-4.1",
 } as const;
 
 export type ModelTier = keyof typeof MODELS;
