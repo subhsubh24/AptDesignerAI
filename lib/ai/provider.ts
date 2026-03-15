@@ -36,5 +36,7 @@ export interface AIProvider {
     messages: AIMessage[];
     max_tokens?: number;
     temperature?: number;
+    thinking?: { type: "adaptive" } | { type: "enabled"; budget_tokens: number };
+    effort?: "high" | "medium" | "low";
   }): Promise<AIResponse>;
 }

@@ -47,18 +47,38 @@ function convertMessages(messages: AIMessage[]): Anthropic.MessageParam[] {
   });
 }
 
+/** Models that support adaptive thinking */
+const ADAPTIVE_THINKING_MODELS = ["claude-sonnet-4-6", "claude-opus-4-6"];
+
 export const anthropicProvider: AIProvider = {
-  async chat({ model, system, messages, max_tokens = 4096, temperature = 0.3 }): Promise<AIResponse> {
+  async chat({ model, system, messages, max_tokens = 16000, temperature = 0.3, thinking, effort }): Promise<AIResponse> {
     const anthropic = getClient();
 
-    const response = await anthropic.messages.create({
+    const supportsAdaptive = ADAPTIVE_THINKING_MODELS.some((m) => model.includes(m));
+
+    // Build request params
+    const params: Record<string, unknown> = {
       model,
       max_tokens,
-      temperature,
       system,
       messages: convertMessages(messages),
-    });
+    };
 
+    if (supportsAdaptive) {
+      // Use adaptive thinking for Sonnet 4.6 / Opus 4.6
+      params.thinking = thinking || { type: "adaptive" };
+      params.output_config = { effort: effort || "high" };
+      // Temperature must be 1 when thinking is enabled
+      params.temperature = 1;
+    } else {
+      params.temperature = temperature;
+    }
+
+    const response = await anthropic.messages.create(
+      params as unknown as Anthropic.MessageCreateParamsNonStreaming
+    );
+
+    // Extract text content (skip thinking blocks)
     const textContent = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
       .map((block) => block.text)
