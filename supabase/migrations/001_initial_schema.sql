@@ -1,6 +1,4 @@
 -- AptDesignerAI Initial Schema
--- Enable UUID generation
-create extension if not exists "uuid-ossp";
 
 -- ============================================
 -- PROFILES (extends Supabase auth.users)
@@ -35,7 +33,7 @@ create trigger on_auth_user_created
 -- DESIGN PROFILES
 -- ============================================
 create table design_profiles (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade,
   profile_data jsonb not null,
   is_active boolean default true,
@@ -47,7 +45,7 @@ create table design_profiles (
 -- PROJECTS
 -- ============================================
 create table projects (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade not null,
   name text not null,
   description text,
@@ -61,7 +59,7 @@ create table projects (
 -- ROOMS
 -- ============================================
 create table rooms (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade not null,
   name text not null,
   room_type text not null check (room_type in ('living_room', 'dining_area', 'kitchen', 'bedroom', 'bathroom')),
@@ -79,7 +77,7 @@ create table rooms (
 -- ROOM IMAGES
 -- ============================================
 create table room_images (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   image_url text not null,
   image_type text default 'room' check (image_type in ('room', 'apartment_context', 'detail')),
@@ -92,7 +90,7 @@ create table room_images (
 -- ROOM DIAGNOSES
 -- ============================================
 create table room_diagnoses (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   diagnosis_json jsonb not null,
   design_direction_json jsonb,
@@ -106,7 +104,7 @@ create table room_diagnoses (
 -- SEARCH SESSIONS (created before candidate_products for FK)
 -- ============================================
 create table search_sessions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   mode text not null check (mode in ('manual', 'agentic', 'hybrid')),
   status text default 'active' check (status in ('active', 'paused', 'completed', 'cancelled')),
@@ -120,7 +118,7 @@ create table search_sessions (
 -- CANDIDATE PRODUCTS
 -- ============================================
 create table candidate_products (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   search_session_id uuid references search_sessions(id) on delete set null,
   title text,
@@ -145,7 +143,7 @@ create table candidate_products (
 -- PRODUCT EVALUATIONS
 -- ============================================
 create table product_evaluations (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   product_id uuid references candidate_products(id) on delete cascade not null,
   room_id uuid references rooms(id) on delete cascade not null,
   style_fit_score numeric(3,1) check (style_fit_score between 0 and 10),
@@ -167,7 +165,7 @@ create table product_evaluations (
 -- PRODUCT BUNDLES
 -- ============================================
 create table product_bundles (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   name text,
   description text,
@@ -180,7 +178,7 @@ create table product_bundles (
 -- PRODUCT BUNDLE ITEMS
 -- ============================================
 create table product_bundle_items (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   bundle_id uuid references product_bundles(id) on delete cascade not null,
   product_id uuid references candidate_products(id) on delete cascade not null,
   category text,
@@ -192,7 +190,7 @@ create table product_bundle_items (
 -- BUNDLE EVALUATIONS
 -- ============================================
 create table bundle_evaluations (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   bundle_id uuid references product_bundles(id) on delete cascade not null,
   palette_harmony_score numeric(3,1),
   material_balance_score numeric(3,1),
@@ -211,7 +209,7 @@ create table bundle_evaluations (
 -- MOCKUP JOBS
 -- ============================================
 create table mockup_jobs (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade not null,
   bundle_id uuid references product_bundles(id) on delete set null,
   prompt text,
@@ -230,7 +228,7 @@ create table mockup_jobs (
 -- SAVED ITEMS
 -- ============================================
 create table saved_items (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade not null,
   product_id uuid references candidate_products(id) on delete cascade not null,
   room_id uuid references rooms(id) on delete set null,
@@ -242,7 +240,7 @@ create table saved_items (
 -- AGENT RUNS
 -- ============================================
 create table agent_runs (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   room_id uuid references rooms(id) on delete cascade,
   search_session_id uuid references search_sessions(id) on delete set null,
   agent_type text not null,
@@ -260,7 +258,7 @@ create table agent_runs (
 -- AGENT STEPS
 -- ============================================
 create table agent_steps (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   agent_run_id uuid references agent_runs(id) on delete cascade not null,
   step_number integer not null,
   step_type text not null,
