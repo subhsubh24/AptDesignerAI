@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import fs from "fs";
+import path from "path";
 import type {
   AIProvider,
   AIMessage,
@@ -22,6 +24,21 @@ function getClient(): GoogleGenAI {
  * Fetch an image URL and return base64-encoded data.
  */
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
+  // Handle relative URLs by reading directly from the local filesystem
+  if (url.startsWith("/uploads/")) {
+    const filePath = path.join(process.cwd(), "public", url);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Local image not found: ${filePath}`);
+    }
+    const buffer = fs.readFileSync(filePath);
+    if (buffer.byteLength === 0) {
+      throw new Error(`Local image is empty: ${filePath}`);
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+    return { data: buffer.toString("base64"), mimeType };
+  }
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Image fetch failed: ${response.status} ${response.statusText} for ${url}`);
