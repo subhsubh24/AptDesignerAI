@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
   Loader2,
-  Sparkles,
   Search,
   ExternalLink,
   CheckCircle2,
@@ -22,6 +21,8 @@ import {
   Eye,
   AlertTriangle,
   ShieldCheck,
+  Ruler,
+  LayoutGrid,
 } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
@@ -80,6 +81,18 @@ const TIER_LABELS: Record<PriceTier, string> = {
   high_end: "Luxury",
 };
 
+// ─── Search phase labels for live progress ──────────────────────
+
+const SEARCH_PHASES = [
+  { key: "Generating intensive search brief", label: "Building search strategy", statKey: "totalSearchQueries" },
+  { key: "Searching across all retailers", label: "Searching retailers", statKey: "totalRawUrls" },
+  { key: "Quick-screening candidates", label: "Screening candidates", statKey: "totalAfterScreen" },
+  { key: "Extracting product details from websites", label: "Extracting product details", statKey: "totalExtracted" },
+  { key: "Quick-scoring all candidates", label: "Quick-scoring products", statKey: "totalQuickScored" },
+  { key: "Deep-scoring top candidates", label: "Deep-scoring finalists", statKey: "totalDeepScored" },
+  { key: "Validating all recommendations", label: "Validating picks", statKey: "totalFinal" },
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 function getProductTier(product: ProductResult): PriceTier {
@@ -114,6 +127,21 @@ export default function FocusPage() {
   const [roomInfo, setRoomInfo] = useState<{ name: string; room_type: string } | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // Live search progress (SSE)
+  const [searchPhases, setSearchPhases] = useState<Array<{ step: string; status: string; data?: Record<string, unknown> }>>([]);
+  const [liveStats, setLiveStats] = useState<Record<string, number>>({});
+
+  // Floor plan context
+  const [floorPlan, setFloorPlan] = useState<{
+    total_sqft?: string;
+    room_dimensions?: Record<string, string>;
+    living_dining_combined?: boolean;
+    kitchen_style?: string;
+    notable_spatial_features?: string[];
+    room_layout?: string;
+  } | null>(null);
+  const [floorPlanFound, setFloorPlanFound] = useState<boolean | null>(null);
+
   // Vision mockup state
   const [visionUrl, setVisionUrl] = useState<string | null>(null);
   const [generatingVision, setGeneratingVision] = useState(false);
@@ -129,6 +157,27 @@ export default function FocusPage() {
     async function analyze() {
       const roomRes = await fetch(`/api/rooms/${roomId}`);
       if (roomRes.ok) setRoomInfo(await roomRes.json());
+
+      // Load floor plan info from project
+      try {
+        const projRes = await fetch(`/api/projects/${projectId}`);
+        if (projRes.ok) {
+          const project = await projRes.json();
+          const br = project?.building_research;
+          if (br?.floor_plan) {
+            const fp = br.floor_plan;
+            // Only trust floor plan if it was explicitly found (not hallucinated)
+            const wasFound = fp.found === true;
+            const hasRealData = wasFound && (fp.total_sqft || fp.room_dimensions || fp.notable_spatial_features?.length);
+            setFloorPlan(fp);
+            setFloorPlanFound(!!hasRealData);
+          } else {
+            setFloorPlanFound(false);
+          }
+        }
+      } catch {
+        setFloorPlanFound(false);
+      }
 
       // Check existing analysis
       const existingRes = await fetch(`/api/area-analysis?room_id=${roomId}`);
@@ -199,10 +248,12 @@ export default function FocusPage() {
     setGeneratingVision(false);
   };
 
-  // Agentic search
+  // Agentic search with SSE streaming for live progress
   const handleSearch = async () => {
     setSearching(true);
     setStep("sourcing");
+    setSearchPhases([]);
+    setLiveStats({});
 
     const sorted = [...(areaAnalysis?.what_it_needs || [])].sort((a, b) => {
       const order = { high: 0, medium: 1, low: 2 };
@@ -215,18 +266,82 @@ export default function FocusPage() {
     }));
 
     try {
-      const res = await fetch("/api/search", {
+      const res = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId, categories }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.stats) setSearchStats(data.stats);
-        if (data.validation) setValidationInfo(data.validation);
-        const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-        if (prodRes.ok) setProducts(await prodRes.json());
+      if (!res.ok || !res.body) {
+        // Fallback to batch endpoint
+        const batchRes = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room_id: roomId, categories }),
+        });
+        if (batchRes.ok) {
+          const data = await batchRes.json();
+          if (data.stats) setSearchStats(data.stats);
+          if (data.validation) setValidationInfo(data.validation);
+          const prodRes = await fetch(`/api/products?room_id=${roomId}`);
+          if (prodRes.ok) setProducts(await prodRes.json());
+        }
+        setSearching(false);
+        setStep("results");
+        return;
+      }
+
+      // Parse SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ") && currentEvent) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (currentEvent === "step") {
+                setSearchPhases((prev) => {
+                  // Update existing phase or add new one
+                  const existing = prev.findIndex((p) => p.step === data.step);
+                  if (existing >= 0) {
+                    const updated = [...prev];
+                    updated[existing] = data;
+                    return updated;
+                  }
+                  return [...prev, data];
+                });
+                // Update live stats from step data
+                if (data.data?.stats) {
+                  setLiveStats(data.data.stats);
+                }
+              } else if (currentEvent === "done") {
+                if (data.stats) setSearchStats(data.stats);
+                if (data.validation) setValidationInfo(data.validation);
+                // Load final products
+                const prodRes = await fetch(`/api/products?room_id=${roomId}`);
+                if (prodRes.ok) setProducts(await prodRes.json());
+              } else if (currentEvent === "error") {
+                console.error("Search stream error:", data.error);
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+            currentEvent = "";
+          }
+        }
       }
     } catch (e) {
       console.error("Search error:", e);
@@ -322,6 +437,50 @@ export default function FocusPage() {
             </div>
           )}
 
+          {/* Floor plan context */}
+          {floorPlanFound !== null && (
+            <div className={cn(
+              "flex items-start gap-3 p-3 rounded-lg text-sm",
+              floorPlanFound
+                ? "bg-blue-50 border border-blue-200 text-blue-800"
+                : "bg-muted/50 border text-muted-foreground"
+            )}>
+              {floorPlanFound ? (
+                <Ruler className="h-5 w-5 shrink-0 mt-0.5 text-blue-600" />
+              ) : (
+                <LayoutGrid className="h-5 w-5 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1">
+                {floorPlanFound && floorPlan ? (
+                  <>
+                    <span className="font-medium">Floor plan found</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
+                      {floorPlan.total_sqft && (
+                        <span>{floorPlan.total_sqft} sqft</span>
+                      )}
+                      {floorPlan.room_dimensions && roomInfo && floorPlan.room_dimensions[roomInfo.room_type] && (
+                        <span>This room: ~{floorPlan.room_dimensions[roomInfo.room_type]}</span>
+                      )}
+                      {floorPlan.living_dining_combined && (
+                        <span>Combined living/dining</span>
+                      )}
+                      {floorPlan.kitchen_style && (
+                        <span>Kitchen: {floorPlan.kitchen_style}</span>
+                      )}
+                    </div>
+                    {floorPlan.notable_spatial_features && floorPlan.notable_spatial_features.length > 0 && (
+                      <p className="text-xs mt-1 opacity-80">
+                        Layout: {floorPlan.notable_spatial_features.join(", ")}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <span>No floor plan found — furniture sizing based on photos only</span>
+                )}
+              </div>
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Design Assessment</CardTitle>
@@ -395,21 +554,65 @@ export default function FocusPage() {
         </Card>
       )}
 
-      {/* ─── Step: Sourcing ─── */}
+      {/* ─── Step: Sourcing (live progress) ─── */}
       {step === "sourcing" && searching && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <h3 className="text-lg font-semibold">Scouring the internet...</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
-              Searching 30+ retailers across budget, mid-range, and luxury tiers. Extracting, scoring, and validating every candidate.
-            </p>
-            <div className="flex flex-col gap-1.5 mt-6 text-sm text-muted-foreground">
-              <StepIndicator done label="Search brief generated" />
-              <StepIndicator active label="Searching across retailers..." />
-              <StepIndicator label="Extracting product details" />
-              <StepIndicator label="Scoring and validating" />
+          <CardContent className="py-10">
+            <div className="flex flex-col items-center mb-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <h3 className="text-lg font-semibold">Scouring the internet...</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
+                Searching 30+ retailers across budget, mid-range, and luxury tiers.
+              </p>
             </div>
+
+            {/* Live phase progress */}
+            <div className="max-w-md mx-auto space-y-2">
+              {SEARCH_PHASES.map((phase) => {
+                const match = searchPhases.find((p) => p.step === phase.key);
+                const isDone = match?.status === "completed";
+                const isActive = match?.status === "running";
+                return (
+                  <div key={phase.key} className="flex items-center gap-3">
+                    <div className="w-5 flex justify-center">
+                      {isDone ? (
+                        <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
+                      ) : isActive ? (
+                        <Loader2 className="h-4.5 w-4.5 animate-spin text-primary" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={cn(
+                        "text-sm",
+                        isDone && "text-emerald-700 font-medium",
+                        isActive && "text-foreground font-medium",
+                        !isDone && !isActive && "text-muted-foreground"
+                      )}>
+                        {phase.label}
+                      </span>
+                    </div>
+                    {/* Live count for this phase */}
+                    {(isDone || isActive) && phase.statKey && liveStats[phase.statKey] != null && (
+                      <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                        {liveStats[phase.statKey]}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Live stats bar */}
+            {Object.keys(liveStats).length > 0 && (
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {liveStats.totalSearchQueries > 0 && <span>{liveStats.totalSearchQueries} queries</span>}
+                {liveStats.totalRawUrls > 0 && <><span className="text-border">·</span><span>{liveStats.totalRawUrls} URLs</span></>}
+                {liveStats.totalExtracted > 0 && <><span className="text-border">·</span><span>{liveStats.totalExtracted} extracted</span></>}
+                {liveStats.totalDeepScored > 0 && <><span className="text-border">·</span><span>{liveStats.totalDeepScored} scored</span></>}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight, Minus, Plus } from "lucide-react";
+import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight, Minus, Plus, AlertTriangle } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 
@@ -540,26 +540,61 @@ export default function DashboardPage() {
             </Button>
           )}
 
-          {buildingResearch && (
-            <Card className="animate-fade-in-up border-green-200 bg-green-50/50">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm text-green-900">Building researched</p>
-                    <p className="text-sm text-green-700 mt-1">
-                      {(buildingResearch as Record<string, unknown>).summary as string || "Research complete"}
-                    </p>
-                    {String((buildingResearch as Record<string, unknown>).building_style || "") && (
-                      <p className="text-xs text-green-600 mt-1">
-                        Style: {String((buildingResearch as Record<string, unknown>).building_style || "")}
+          {buildingResearch && (() => {
+            const br = buildingResearch as Record<string, unknown>;
+            const fp = br.floor_plan as Record<string, unknown> | undefined;
+            const hasFloorPlan = fp?.found === true;
+            const confidenceNotes = Array.isArray(br.confidence_notes) ? br.confidence_notes as string[] : [];
+
+            return (
+              <Card className="animate-fade-in-up border-green-200 bg-green-50/50">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1.5">
+                      <p className="font-medium text-sm text-green-900">Building researched</p>
+                      <p className="text-sm text-green-700">
+                        {br.summary as string || "Research complete"}
                       </p>
-                    )}
+                      {String(br.building_style || "") && (
+                        <p className="text-xs text-green-600">
+                          Style: {String(br.building_style || "")}
+                        </p>
+                      )}
+
+                      {/* Floor plan status */}
+                      <div className={cn(
+                        "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full mt-1",
+                        hasFloorPlan
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-amber-100 text-amber-700"
+                      )}>
+                        {hasFloorPlan ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3" />
+                            Floor plan found
+                            {fp?.total_sqft && <span>· {String(fp.total_sqft)} sqft</span>}
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-3 w-3" />
+                            No floor plan found — will size from photos
+                          </>
+                        )}
+                      </div>
+
+                      {/* What we couldn't verify */}
+                      {confidenceNotes.length > 0 && (
+                        <p className="text-[11px] text-green-600/70 mt-1">
+                          Note: {confidenceNotes.slice(0, 2).join(". ")}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           <div className="flex gap-3 pt-2">
             <Button variant="outline" className="h-12" onClick={() => setStep("location")}>Back</Button>

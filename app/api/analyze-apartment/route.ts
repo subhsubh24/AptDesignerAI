@@ -99,12 +99,12 @@ Summary: ${br.summary || ""}
 
 Provide a JSON response with this structure:
 {
-  "overall": "A 2-3 sentence personalized summary of the apartment's current state, what's working, and the overall vibe. Reference the owner's style preferences.",
+  "overall": "A 2-3 sentence personalized summary of the apartment's current state, what's working, and the overall vibe. ONLY describe things you can actually see in the photos. Do NOT invent or assume items that aren't visible.",
   "rooms": {
     "<room_type>": {
-      "summary": "1-2 sentence assessment of this specific area",
+      "summary": "1-2 sentence assessment of this specific area — only reference what you see",
       "score": <1-10 current design score>,
-      "keep": ["Specific items/features that should STAY — reference actual things you see, e.g. 'Dark gray sectional sofa — good scale and anchors the room'"],
+      "keep": ["Specific items/features that should STAY — reference actual things you see in the photos, e.g. 'Dark gray sectional sofa — good scale and anchors the room'"],
       "replace": ["Specific items that should be REMOVED or REPLACED — say what and why, e.g. 'Glass coffee table — drastically undersized for the sectional, cheapens the space'"],
       "add": ["Specific items/changes to ADD — be very descriptive so these can be used as search queries, e.g. 'Large 8x10 textured wool area rug in warm ivory or oatmeal to ground the seating area'"],
       "priority": <1-10 how urgently this room needs attention>
@@ -112,8 +112,12 @@ Provide a JSON response with this structure:
   }
 }
 
-Be specific and opinionated. Reference actual items you see. Don't be generic.
-For the "add" array, write each item as a detailed, searchable product description — include size, material, color, and purpose. These will be used directly to search for products.`,
+CRITICAL RULES:
+- ONLY describe items, furniture, and features you can actually SEE in the photos. Never make up items.
+- If a room photo is unclear or you can't see certain areas, say so. Don't fill in gaps with assumptions.
+- Be specific and opinionated about what you DO see. Reference actual items visible in the photos.
+- For the "add" array, write each item as a detailed, searchable product description — include size, material, color, and purpose. These will be used directly to search for products.
+- Your credibility depends on accuracy. One wrong detail ("I see a blue chair" when there isn't one) destroys trust.`,
   });
 
   // Create agent run for tracking

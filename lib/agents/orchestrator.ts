@@ -126,8 +126,10 @@ export async function runAgenticSearch(
   };
 
   function reportStep(step: OrchestrationStep) {
+    // Attach running stats to every step event for real-time progress
+    const enriched = { ...step, data: { ...(step.data as Record<string, unknown> || {}), stats: { ...stats } } };
     steps.push(step);
-    onStep?.(step);
+    onStep?.(enriched);
     console.log(`[orchestrator] ${step.status}: ${step.step}`);
   }
 
