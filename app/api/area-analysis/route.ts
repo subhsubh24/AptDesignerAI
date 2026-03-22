@@ -101,13 +101,21 @@ export async function POST(request: Request) {
   // Inject building research if available
   if (project?.building_research) {
     const br = project.building_research as Record<string, unknown>;
+    const floorPlan = br.floor_plan as Record<string, unknown> | undefined;
+    const floorPlanSection = floorPlan
+      ? `\nFloor Plan: ${floorPlan.total_sqft || "unknown"} sqft | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
+Room layout: ${floorPlan.room_layout || "unknown"}
+Room dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}
+Spatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
+      : "";
+
     contentBlocks.push({
       type: "text",
       text: `--- BUILDING CONTEXT ---
 Building style: ${br.building_style || "unknown"}
 Finishes: ${JSON.stringify(br.finishes || {})}
 Layout: ${br.layout_style || "unknown"} | Windows: ${br.windows || "unknown"} | Ceiling: ${br.ceiling_height || "unknown"}
-Aesthetic: ${br.design_aesthetic || "unknown"}
+Aesthetic: ${br.design_aesthetic || "unknown"}${floorPlanSection}
 ---`,
     });
   }

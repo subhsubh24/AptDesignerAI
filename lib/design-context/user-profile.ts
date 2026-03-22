@@ -20,6 +20,7 @@ export interface DynamicDesignProfile {
     layout_style?: string;
     design_aesthetic?: string;
     summary?: string;
+    floor_plan?: Record<string, unknown>;
   };
   apartmentAnalysis?: {
     overall?: string;
@@ -69,6 +70,27 @@ ${f.countertops ? `- Countertops: ${f.countertops}` : ""}
 ${f.cabinetry ? `- Cabinetry: ${f.cabinetry}` : ""}
 ${f.appliances ? `- Appliances: ${f.appliances}` : ""}
 ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
+    }
+
+    if (building.floor_plan) {
+      const fp = building.floor_plan;
+      const fpLines: string[] = [];
+      if (fp.total_sqft) fpLines.push(`- Total: ~${fp.total_sqft} sqft`);
+      if (fp.room_layout) fpLines.push(`- Layout: ${fp.room_layout}`);
+      if (fp.living_dining_combined) fpLines.push(`- Living/dining: combined open space`);
+      if (fp.kitchen_style) fpLines.push(`- Kitchen: ${fp.kitchen_style}`);
+      if (fp.room_dimensions) {
+        const dims = fp.room_dimensions as Record<string, string>;
+        for (const [room, dim] of Object.entries(dims)) {
+          if (dim) fpLines.push(`- ${room}: ~${dim}`);
+        }
+      }
+      if (Array.isArray(fp.notable_spatial_features) && fp.notable_spatial_features.length > 0) {
+        fpLines.push(`- Spatial notes: ${fp.notable_spatial_features.join(", ")}`);
+      }
+      if (fpLines.length > 0) {
+        sections.push(`## FLOOR PLAN\n${fpLines.join("\n")}`);
+      }
     }
 
     if (building.summary) {

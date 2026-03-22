@@ -24,8 +24,18 @@ const TIER_RETAILERS: Record<PriceTier, string[]> = {
 };
 
 export function getSearchBriefPrompt(roomType: string, missingCategories: string[], budgetMode: string, categoryHints?: Record<string, string>): string {
-  const hintsSection = categoryHints && Object.keys(categoryHints).length > 0
-    ? `\n\n## CATEGORY DETAILS\n${Object.entries(categoryHints).map(([cat, hint]) => `- **${cat}**: ${hint}`).join("\n")}`
+  // Separate floor plan context from per-category hints
+  const floorPlanHint = categoryHints?.["_floor_plan"];
+  const catOnlyHints = categoryHints
+    ? Object.fromEntries(Object.entries(categoryHints).filter(([k]) => k !== "_floor_plan"))
+    : {};
+
+  const hintsSection = Object.keys(catOnlyHints).length > 0
+    ? `\n\n## CATEGORY DETAILS\n${Object.entries(catOnlyHints).map(([cat, hint]) => `- **${cat}**: ${hint}`).join("\n")}`
+    : "";
+
+  const floorPlanSection = floorPlanHint
+    ? `\n\n## FLOOR PLAN CONTEXT\n${floorPlanHint}\nIMPORTANT: Use these dimensions to search for correctly sized furniture. A small room needs compact pieces; a large room can handle statement furniture. Include size constraints in search queries (e.g. "compact 48 inch dining table" for small spaces, "large 8x10 area rug" for spacious rooms).`
     : "";
 
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
@@ -33,7 +43,7 @@ export function getSearchBriefPrompt(roomType: string, missingCategories: string
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

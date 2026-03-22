@@ -34,6 +34,7 @@ export function buildDesignProfile(
       layout_style: br.layout_style as string | undefined,
       design_aesthetic: br.design_aesthetic as string | undefined,
       summary: br.summary as string | undefined,
+      floor_plan: br.floor_plan as Record<string, unknown> | undefined,
     };
   }
 

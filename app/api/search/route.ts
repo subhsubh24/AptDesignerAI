@@ -23,6 +23,13 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
+  // Fetch project for floor plan context
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", room.project_id)
+    .single();
+
   // Create search session
   const { data: session } = await supabase
     .from("search_sessions")
@@ -73,6 +80,29 @@ export async function POST(request: Request) {
         if (c.search_title) parts.push(c.search_title);
         if (c.specs) parts.push(typeof c.specs === "string" ? c.specs : JSON.stringify(c.specs));
         if (parts.length > 0) categoryHints[c.category] = parts.join(" — ");
+      }
+    }
+  }
+
+  // Inject floor plan context into category hints so search queries include correct sizing
+  if (project?.building_research) {
+    const br = project.building_research as Record<string, unknown>;
+    const fp = br.floor_plan as Record<string, unknown> | undefined;
+    if (fp) {
+      const dims = fp.room_dimensions as Record<string, string> | undefined;
+      const roomDim = dims?.[room.room_type] || dims?.living_room;
+      const spatialNotes = Array.isArray(fp.notable_spatial_features)
+        ? fp.notable_spatial_features.join(", ")
+        : "";
+      const floorPlanHint = [
+        roomDim ? `Room dimensions: ~${roomDim}` : "",
+        fp.total_sqft ? `Apartment: ~${fp.total_sqft} sqft` : "",
+        fp.living_dining_combined ? "Combined living/dining space" : "",
+        spatialNotes ? `Layout notes: ${spatialNotes}` : "",
+      ].filter(Boolean).join(". ");
+
+      if (floorPlanHint) {
+        categoryHints["_floor_plan"] = floorPlanHint;
       }
     }
   }

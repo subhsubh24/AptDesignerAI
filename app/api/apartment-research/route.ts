@@ -39,6 +39,18 @@ export async function POST(request: Request) {
   "windows": "description of window style and size",
   "ceiling_height": "estimated height",
   "layout_style": "open concept, traditional, etc.",
+  "floor_plan": {
+    "total_sqft": "estimated square footage if available",
+    "room_layout": "description of how rooms connect — e.g. 'open living/dining/kitchen flows into a hallway leading to bedrooms'",
+    "living_dining_combined": true/false,
+    "kitchen_style": "open to living, galley, U-shaped, etc.",
+    "room_dimensions": {
+      "living_room": "estimated dimensions if available (e.g. '15x20 ft')",
+      "bedroom": "estimated dimensions",
+      "kitchen": "estimated dimensions"
+    },
+    "notable_spatial_features": ["e.g. 'long narrow living room', 'L-shaped layout', 'balcony off living room', 'pass-through kitchen', 'alcove bedroom']"
+  },
   "amenities": ["relevant amenities"],
   "neighborhood_vibe": "description of neighborhood character",
   "design_aesthetic": "the overall aesthetic the building conveys",
@@ -55,10 +67,10 @@ Extract everything useful for an interior designer advising a resident:
 - Building style and architecture (modern, historic, industrial, etc.)
 - Standard finishes and fixtures (flooring, countertops, cabinetry, appliances)
 - Apartment features (windows, ceiling height, layout style)
+- FLOOR PLAN: Look for floor plans, unit layouts, or virtual tours. Determine room dimensions, whether living/dining are combined, how rooms connect, kitchen layout (open/galley/U-shaped), and any spatial constraints (narrow rooms, L-shapes, alcoves). This is CRITICAL for recommending correctly sized furniture.
 - Building amenities that affect lifestyle
 - Neighborhood vibe and character
 - Any design aesthetic the building promotes
-- Floor plan characteristics
 
 Return JSON:
 ${jsonSchema}`
@@ -68,6 +80,7 @@ Extract:
 - Building style and architecture
 - Standard finishes (flooring, countertops, cabinetry)
 - Apartment features (windows, ceiling height, layout)
+- FLOOR PLAN: Look for floor plans, unit layouts, or virtual tours. Determine room dimensions, whether living/dining are combined, how rooms connect, kitchen layout style, spatial constraints. This is CRITICAL for furniture sizing.
 - Building amenities
 - Neighborhood character
 - Design aesthetic
