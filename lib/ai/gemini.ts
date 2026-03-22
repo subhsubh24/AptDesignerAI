@@ -137,12 +137,7 @@ export const geminiProvider: AIProvider = {
       config.tools = convertTools(tools);
     }
 
-    // responseMimeType is NOT compatible with Gemini grounding tools
-    // (googleSearch, urlContext). Skip it when tools are present.
-    const hasGroundingTools = tools?.some(
-      (t) => "googleSearch" in t || "urlContext" in t
-    );
-    if (responseMimeType && !hasGroundingTools) {
+    if (responseMimeType) {
       config.responseMimeType = responseMimeType;
     }
 
@@ -162,11 +157,17 @@ export const geminiProvider: AIProvider = {
       config.responseModalities = responseModalities;
     }
 
-    const response = await ai.models.generateContent({
-      model,
-      contents,
-      config,
-    });
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents,
+        config,
+      });
+    } catch (err) {
+      console.error(`[gemini] API error for model=${model}:`, JSON.stringify(err, null, 2));
+      throw err;
+    }
 
     // Extract text content
     let content = "";
