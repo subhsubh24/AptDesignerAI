@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { room_id, bundle_id, product_ids } = body;
+  const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
@@ -49,6 +49,46 @@ export async function POST(request: Request) {
     .limit(1)
     .single();
 
+  // ─── Vision Mode: pre-search imagination mockup ────────────────
+  if (vision_mode) {
+    const agentRun = await createAgentRun(supabase, {
+      room_id,
+      agent_type: "mockup_vision",
+      input_json: { vision_mode: true },
+    });
+
+    const visionPrompt = `Create a photorealistic interior design visualization of a ${room.room_type}.
+
+Current design direction: ${design_direction || "modern, cohesive apartment design"}
+
+Items to visualize in the room:
+${items_description || "All recommended furniture and decor items from the diagnosis"}
+
+Make it look like a real photograph of a beautifully designed room. Show how all the items work together cohesively. The style should be aspirational but achievable.`;
+
+    const imageResult = await generateMockupImage(visionPrompt);
+
+    if (!imageResult.success || !imageResult.data) {
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: imageResult.error,
+      });
+      return NextResponse.json({ error: imageResult.error }, { status: 500 });
+    }
+
+    await completeAgentRun(supabase, agentRun.id, {
+      status: "completed",
+      output_json: { image_url: imageResult.data.image_url },
+    });
+
+    return NextResponse.json({
+      image_url: imageResult.data.image_url,
+      prompt: visionPrompt,
+      vision_mode: true,
+    });
+  }
+
+  // ─── Standard Mode: product-based mockup ───────────────────────
   // Fetch products
   let products;
   if (bundle_id) {

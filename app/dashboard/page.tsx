@@ -560,8 +560,9 @@ export default function DashboardPage() {
               size="lg"
               className="flex-1 h-12"
               onClick={() => setStep("photos")}
+              disabled={!buildingResearch}
             >
-              {buildingResearch ? "Continue" : "Skip — I'll just upload photos"}
+              {buildingResearch ? "Continue" : "Research your building first"}
               <ChevronRight className="h-5 w-5 ml-2" />
             </Button>
           </div>

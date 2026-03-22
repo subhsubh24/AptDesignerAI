@@ -4,6 +4,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { validateAnalysis } from "@/lib/agents/validation-agent";
 import type { AIContentBlock } from "@/lib/ai/provider";
 
 export async function GET(request: NextRequest) {
@@ -79,6 +80,13 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
+  // Load project with building research and apartment analysis
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", project_id || room.project_id)
+    .single();
+
   // Load other rooms for cross-room awareness
   const { data: otherRooms } = await supabase
     .from("rooms")
@@ -87,9 +95,39 @@ export async function POST(request: Request) {
     .neq("id", room_id);
 
   // Build vision content
-  const contentBlocks: AIContentBlock[] = [
-    { type: "text", text: `Focus area: ${room.name} (${room.room_type})\n\nHere are the photos of this area:` },
-  ];
+  const contentBlocks: AIContentBlock[] = [];
+
+  // Inject building research if available
+  if (project?.building_research) {
+    const br = project.building_research as Record<string, unknown>;
+    contentBlocks.push({
+      type: "text",
+      text: `--- BUILDING CONTEXT ---
+Building style: ${br.building_style || "unknown"}
+Finishes: ${JSON.stringify(br.finishes || {})}
+Layout: ${br.layout_style || "unknown"} | Windows: ${br.windows || "unknown"} | Ceiling: ${br.ceiling_height || "unknown"}
+Aesthetic: ${br.design_aesthetic || "unknown"}
+---`,
+    });
+  }
+
+  // Inject apartment analysis if available
+  if (project?.apartment_analysis) {
+    const aa = project.apartment_analysis as Record<string, unknown>;
+    contentBlocks.push({
+      type: "text",
+      text: `--- APARTMENT-LEVEL ANALYSIS (already completed) ---
+Overall: ${aa.overall || ""}
+${JSON.stringify(aa.rooms || {}, null, 2)}
+---
+Use this apartment-level context to ensure cross-room coherence in your area analysis.`,
+    });
+  }
+
+  contentBlocks.push({
+    type: "text",
+    text: `Focus area: ${room.name} (${room.room_type})\n\nHere are the photos of this area:`,
+  });
 
   for (const img of room.room_images || []) {
     contentBlocks.push({
@@ -166,12 +204,39 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       responseMimeType: "application/json",
     });
 
-    const analysis = JSON.parse(response.content);
+    let analysis = JSON.parse(response.content);
+
+    // Post-diagnosis validation — check analysis for consistency
+    const validationResult = await validateAnalysis(
+      "room_diagnosis",
+      analysis,
+      {
+        buildingResearch: project?.building_research as Record<string, unknown> | undefined,
+        apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
+        roomImages: (room.room_images || []).map((img: { image_url: string }) => img.image_url),
+      }
+    );
+
+    let validation = null;
+    if (validationResult.success && validationResult.data) {
+      validation = {
+        isValid: validationResult.data.isValid,
+        confidence: validationResult.data.confidence,
+        issues: validationResult.data.issues,
+        suggestions: validationResult.data.suggestions,
+      };
+
+      // If validation confidence is low and we got a revised analysis, use it
+      if (validationResult.data.confidence < 7 && validationResult.data.revisedAnalysis) {
+        console.log(`[area-analysis] Validation confidence ${validationResult.data.confidence}/10 — using revised analysis`);
+        analysis = validationResult.data.revisedAnalysis;
+      }
+    }
 
     // Save as detailed diagnosis
     await supabase.from("room_diagnoses").insert({
       room_id,
-      diagnosis_json: analysis,
+      diagnosis_json: { ...analysis, validation },
       design_direction_json: { direction: analysis.design_direction },
       missing_categories: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
       action_list: analysis.what_it_needs || [],
@@ -180,11 +245,11 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
-      output_json: analysis,
+      output_json: { analysis, validation },
       tokens_used: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
     });
 
-    return NextResponse.json({ analysis });
+    return NextResponse.json({ analysis, validation });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("[area-analysis] Error:", errorMessage, err);

@@ -35,6 +35,13 @@ export async function POST(request: Request) {
   const { project_id } = await request.json();
   if (!project_id) return NextResponse.json({ error: "project_id required" }, { status: 400 });
 
+  // Load project with building research
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", project_id)
+    .single();
+
   // Load all rooms with their images
   const { data: rooms } = await supabase
     .from("rooms")
@@ -68,9 +75,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Inject building research context if available
+  if (project?.building_research) {
+    const br = project.building_research as Record<string, unknown>;
+    contentBlocks.push({
+      type: "text",
+      text: `\n--- BUILDING RESEARCH (from the building's website) ---
+Building style: ${br.building_style || "unknown"}
+Finishes: ${JSON.stringify(br.finishes || {})}
+Layout style: ${br.layout_style || "unknown"}
+Windows: ${br.windows || "unknown"}
+Ceiling height: ${br.ceiling_height || "unknown"}
+Design aesthetic: ${br.design_aesthetic || "unknown"}
+Summary: ${br.summary || ""}
+---`,
+    });
+  }
+
   contentBlocks.push({
     type: "text",
-    text: `\nAnalyze this entire apartment holistically. You know everything about the owner (see your system prompt).
+    text: `\nAnalyze this entire apartment holistically. You know everything about the owner (see your system prompt). ${project?.building_research ? "Use the building research context above to understand the apartment finishes and architectural style." : ""}
 
 Provide a JSON response with this structure:
 {
@@ -129,6 +153,12 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
         .update({ status: "diagnosed" })
         .eq("id", room.id);
     }
+
+    // Save apartment analysis to project for downstream use by area analysis
+    await supabase
+      .from("projects")
+      .update({ apartment_analysis: analysis })
+      .eq("id", project_id);
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
