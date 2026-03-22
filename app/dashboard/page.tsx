@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight } from "lucide-react";
+import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight, Minus, Plus } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 
@@ -74,7 +74,14 @@ export default function DashboardPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [apartmentSummary, setApartmentSummary] = useState<{
     overall: string;
-    rooms: Record<string, { summary: string; score: number; needs: string[] }>;
+    rooms: Record<string, {
+      summary: string;
+      score: number;
+      keep?: string[];
+      replace?: string[];
+      add?: string[];
+      needs?: string[]; // legacy fallback
+    }>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -676,17 +683,46 @@ export default function DashboardPage() {
                       </div>
                       <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1 group-hover:translate-x-1 transition-transform" />
                     </div>
-                    {roomData?.needs && roomData.needs.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-3">
-                        {roomData.needs.slice(0, 3).map((need) => (
-                          <Badge key={need} variant="secondary" className="text-xs">
-                            {need}
-                          </Badge>
-                        ))}
-                        {roomData.needs.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{roomData.needs.length - 3} more
-                          </Badge>
+
+                    {roomData && (roomData.keep || roomData.replace || roomData.add || roomData.needs) && (
+                      <div className="mt-3 space-y-2">
+                        {/* Keep */}
+                        {roomData.keep && roomData.keep.length > 0 && (
+                          <div className="space-y-1">
+                            {roomData.keep.slice(0, 2).map((item, i) => (
+                              <div key={i} className="flex items-start gap-1.5 text-xs text-emerald-700">
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                <span className="line-clamp-1">{item.split(" — ")[0]}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Replace */}
+                        {roomData.replace && roomData.replace.length > 0 && (
+                          <div className="space-y-1">
+                            {roomData.replace.slice(0, 2).map((item, i) => (
+                              <div key={i} className="flex items-start gap-1.5 text-xs text-red-600">
+                                <Minus className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                <span className="line-clamp-1">{item.split(" — ")[0]}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Add */}
+                        {(roomData.add || roomData.needs) && (roomData.add || roomData.needs)!.length > 0 && (
+                          <div className="space-y-1">
+                            {(roomData.add || roomData.needs)!.slice(0, 3).map((item, i) => (
+                              <div key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <Plus className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                <span className="line-clamp-1">{item}</span>
+                              </div>
+                            ))}
+                            {(roomData.add || roomData.needs)!.length > 3 && (
+                              <span className="text-[10px] text-muted-foreground ml-5">
+                                +{(roomData.add || roomData.needs)!.length - 3} more
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

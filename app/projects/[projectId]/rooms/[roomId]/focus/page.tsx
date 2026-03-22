@@ -33,6 +33,7 @@ interface AreaAnalysis {
   summary: string;
   what_it_needs: Array<{
     category: string;
+    search_title?: string;
     description: string;
     priority: "high" | "medium" | "low";
     specs: string;
@@ -176,8 +177,8 @@ export default function FocusPage() {
     setGeneratingVision(true);
     setStep("vision");
 
-    // Build description from area analysis
-    const items = areaAnalysis?.what_it_needs.map((n) => n.description).join("; ") || "";
+    // Build description from area analysis — use search_title for specificity
+    const items = areaAnalysis?.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
 
     const res = await fetch("/api/mockups", {
       method: "POST",
@@ -207,7 +208,11 @@ export default function FocusPage() {
       const order = { high: 0, medium: 1, low: 2 };
       return (order[a.priority] || 1) - (order[b.priority] || 1);
     });
-    const categories = sorted.slice(0, 5).map((n) => n.category);
+    const categories = sorted.slice(0, 5).map((n) => ({
+      category: n.category,
+      search_title: n.search_title || n.description,
+      specs: n.specs,
+    }));
 
     try {
       const res = await fetch("/api/search", {
@@ -330,9 +335,9 @@ export default function FocusPage() {
                     <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                       <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
                       <div>
-                        <p className="font-medium text-sm capitalize">{item.category.replace(/_/g, " ")}</p>
+                        <p className="font-medium text-sm">{item.search_title || item.category.replace(/_/g, " ")}</p>
                         <p className="text-sm text-muted-foreground">{item.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1 italic">{item.specs}</p>
+                        {item.specs && <p className="text-xs text-muted-foreground mt-1 italic">{item.specs}</p>}
                       </div>
                     </div>
                   ))}
@@ -609,7 +614,7 @@ function RecommendationTable({
               return (
                 <tr key={category} className={cn("border-t", idx % 2 === 0 ? "bg-background" : "bg-muted/20")}>
                   <td className="px-4 py-3">
-                    <span className="font-medium text-sm capitalize">{category.replace(/_/g, " ")}</span>
+                    <span className="font-medium text-sm">{category.replace(/_/g, " ")}</span>
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-xs text-muted-foreground line-clamp-2">

@@ -104,15 +104,16 @@ Provide a JSON response with this structure:
     "<room_type>": {
       "summary": "1-2 sentence assessment of this specific area",
       "score": <1-10 current design score>,
-      "strengths": ["what works well"],
-      "weaknesses": ["what needs improvement"],
-      "needs": ["specific items/changes needed, e.g. 'area rug', 'accent lighting', 'wall art'"],
+      "keep": ["Specific items/features that should STAY — reference actual things you see, e.g. 'Dark gray sectional sofa — good scale and anchors the room'"],
+      "replace": ["Specific items that should be REMOVED or REPLACED — say what and why, e.g. 'Glass coffee table — drastically undersized for the sectional, cheapens the space'"],
+      "add": ["Specific items/changes to ADD — be very descriptive so these can be used as search queries, e.g. 'Large 8x10 textured wool area rug in warm ivory or oatmeal to ground the seating area'"],
       "priority": <1-10 how urgently this room needs attention>
     }
   }
 }
 
-Be specific and opinionated. Reference actual items you see. Don't be generic.`,
+Be specific and opinionated. Reference actual items you see. Don't be generic.
+For the "add" array, write each item as a detailed, searchable product description — include size, material, color, and purpose. These will be used directly to search for products.`,
   });
 
   // Create agent run for tracking
@@ -154,8 +155,8 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
         room_id: room.id,
         diagnosis_json: roomAnalysis,
         design_direction_json: { overall: analysis.overall },
-        missing_categories: roomAnalysis.needs || [],
-        action_list: roomAnalysis.weaknesses || [],
+        missing_categories: roomAnalysis.add || roomAnalysis.needs || [],
+        action_list: roomAnalysis.replace || roomAnalysis.weaknesses || [],
         model_used: selectModel("apartment_analysis"),
       });
 
