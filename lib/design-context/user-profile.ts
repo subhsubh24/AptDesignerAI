@@ -75,6 +75,7 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
     if (building.floor_plan) {
       const fp = building.floor_plan;
       const fpLines: string[] = [];
+      if (fp.unit_type_searched) fpLines.push(`- Unit type: ${fp.unit_type_searched}`);
       if (fp.total_sqft) fpLines.push(`- Total: ~${fp.total_sqft} sqft`);
       if (fp.room_layout) fpLines.push(`- Layout: ${fp.room_layout}`);
       if (fp.living_dining_combined) fpLines.push(`- Living/dining: combined open space`);
@@ -83,6 +84,18 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
         const dims = fp.room_dimensions as Record<string, string>;
         for (const [room, dim] of Object.entries(dims)) {
           if (dim) fpLines.push(`- ${room}: ~${dim}`);
+        }
+      }
+      // Surface per-variant details if available
+      const variants = fp.unit_variants as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(variants) && variants.length > 0) {
+        for (const v of variants) {
+          const vParts: string[] = [];
+          if (v.name) vParts.push(v.name as string);
+          if (v.sqft) vParts.push(`${v.sqft} sqft`);
+          if (v.kitchen_style) vParts.push(`kitchen: ${v.kitchen_style}`);
+          if (v.living_dining_combined) vParts.push("combined living/dining");
+          if (vParts.length > 0) fpLines.push(`- Variant: ${vParts.join(" — ")}`);
         }
       }
       if (Array.isArray(fp.notable_spatial_features) && fp.notable_spatial_features.length > 0) {

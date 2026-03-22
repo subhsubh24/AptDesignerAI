@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { building_name, building_url, city, state, neighborhood, project_id } = await request.json();
+  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms } = await request.json();
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
@@ -25,6 +25,11 @@ export async function POST(request: Request) {
     neighborhood,
     "apartments",
   ].filter(Boolean).join(" ");
+
+  // Build unit type filter for floor plan search
+  const unitBed = bedrooms ?? 1;
+  const unitBath = bathrooms ?? 1;
+  const unitLabel = `${unitBed} bedroom ${unitBath} bathroom`;
 
   const jsonSchema = `{
   "building_style": "description of architectural and interior style",
@@ -41,23 +46,40 @@ export async function POST(request: Request) {
   "layout_style": "open concept, traditional, etc.",
   "floor_plan": {
     "found": true or false,
-    "source": "where you found floor plan info (e.g. 'building website floor plan page', 'virtual tour', 'unit listing') or null if not found",
-    "total_sqft": "square footage if explicitly stated on website, or null if not found — DO NOT GUESS",
-    "room_layout": "description of how rooms connect if visible in floor plan, or null",
+    "source": "where you found floor plan info — include the exact URL(s) you visited",
+    "unit_type_searched": "${unitLabel}",
+    "total_sqft": "square footage for the ${unitLabel} unit, or range if multiple options — DO NOT GUESS",
+    "unit_variants": [
+      {
+        "name": "unit/plan name (e.g. 'A1', 'The Loop', 'Plan B')",
+        "sqft": "square footage for this specific variant",
+        "floor_plan_image_url": "direct URL to the floor plan image if one exists, or null",
+        "room_layout": "description of how rooms connect based on the floor plan image or diagram",
+        "living_dining_combined": true/false/null,
+        "kitchen_style": "open to living, galley, U-shaped, etc.",
+        "room_dimensions": {
+          "living_room": "dimensions ONLY if explicitly stated (e.g. '15x20 ft'), otherwise null",
+          "bedroom": "dimensions ONLY if explicitly stated, otherwise null",
+          "kitchen": "dimensions ONLY if explicitly stated, otherwise null"
+        },
+        "notable_spatial_features": ["features visible in the floor plan — e.g. 'L-shaped layout', 'walk-in closet', 'balcony off living room', 'en-suite bathroom'"]
+      }
+    ],
+    "room_layout": "summary of most common layout for ${unitLabel} units, or null",
     "living_dining_combined": true/false/null,
-    "kitchen_style": "open to living, galley, U-shaped, etc. — only if you can see it in floor plan or photos",
+    "kitchen_style": "most common kitchen style for ${unitLabel} units",
     "room_dimensions": {
-      "living_room": "dimensions ONLY if explicitly stated (e.g. '15x20 ft'), otherwise null",
-      "bedroom": "dimensions ONLY if explicitly stated, otherwise null",
-      "kitchen": "dimensions ONLY if explicitly stated, otherwise null"
+      "living_room": "dimensions if found for any ${unitLabel} variant, otherwise null",
+      "bedroom": "dimensions if found, otherwise null",
+      "kitchen": "dimensions if found, otherwise null"
     },
-    "notable_spatial_features": ["ONLY features you can actually verify from floor plan or photos — e.g. 'L-shaped layout', 'balcony off living room'"]
+    "notable_spatial_features": ["combined list of features across ${unitLabel} variants"]
   },
   "amenities": ["relevant amenities"],
   "neighborhood_vibe": "description of neighborhood character",
   "design_aesthetic": "the overall aesthetic the building conveys",
   "website_url": "URL of the building website if found",
-  "confidence_notes": ["List what you could NOT find or verify — e.g. 'No floor plan available on website', 'Room dimensions not listed', 'Could not access virtual tour'"],
+  "confidence_notes": ["List what you could NOT find or verify"],
   "summary": "2-3 sentence summary useful for a designer. Be explicit about what is based on the website vs what is inferred."
 }`;
 
@@ -69,33 +91,62 @@ CRITICAL RULES:
 - Use confidence_notes to list what you couldn't find. This is important for user trust.
 - If the website doesn't have certain finishes info, say "not specified" rather than guessing.`;
 
+  const floorPlanInstructions = `
+## FLOOR PLAN DEEP CRAWL — THIS IS CRITICAL
+The user has a ${unitLabel} apartment. You MUST follow this process to find floor plans:
+
+1. **Find the floor plans page**: Most apartment websites have a "Floor Plans" link in the navigation, or a page at /floor-plans, /floorplans, or /apartments. Navigate to it.
+
+2. **Filter by unit type**: On the floor plans page, look for filters or tabs for "${unitBed} Bed" / "${unitBed} BR" / "${unitBed} Bedroom". Select/filter for ${unitLabel} units specifically.
+
+3. **Click through EVERY unit variant**: Buildings typically have multiple floor plan options for the same bed/bath count (e.g. "A1", "A2", "B1", or named plans like "The Loop", "The Park"). Visit EACH individual floor plan option to see:
+   - The floor plan image/diagram
+   - Square footage for that specific unit
+   - Room dimensions if listed
+   - Layout details (combined living/dining, kitchen style, etc.)
+
+4. **Extract floor plan image URLs**: If the website shows floor plan diagrams/images, capture the direct image URL. This is extremely valuable — look for <img> tags or image links on the floor plan detail pages.
+
+5. **Record every variant**: In unit_variants, create an entry for each distinct ${unitLabel} floor plan you find, with its specific details.
+
+6. **If the building website doesn't have a floor plans page**, try:
+   - Searching "${building_name || searchContext} floor plans" on Google
+   - Looking at apartment listing sites (apartments.com, zillow, etc.) for floor plan images
+   - Checking if the building has virtual tours that show the layout
+
+7. **If the website has no floor plans at all**, set floor_plan.found to false and note it in confidence_notes.`;
+
   const prompt = building_url
     ? `Read and analyze this apartment building's website: ${building_url}
 
 Also search online for additional details about "${searchContext}".
 
+The user lives in a **${unitLabel}** apartment in this building.
+
 Extract everything useful for an interior designer advising a resident:
 - Building style and architecture (modern, historic, industrial, etc.)
 - Standard finishes and fixtures (flooring, countertops, cabinetry, appliances)
 - Apartment features (windows, ceiling height, layout style)
-- FLOOR PLAN: Look for floor plans, unit layouts, or virtual tours. If you find one, extract room dimensions, layout, kitchen style, and spatial features. If you DON'T find a floor plan, set floor_plan.found to false and note it in confidence_notes.
 - Building amenities that affect lifestyle
 - Neighborhood vibe and character
 - Any design aesthetic the building promotes
+${floorPlanInstructions}
 ${honesty}
 
 Return JSON:
 ${jsonSchema}`
     : `Search for "${searchContext}" and find the official apartment building website. Read the website and extract information useful for an interior designer advising a resident.
 
+The user lives in a **${unitLabel}** apartment in this building.
+
 Extract:
 - Building style and architecture
 - Standard finishes (flooring, countertops, cabinetry)
 - Apartment features (windows, ceiling height, layout)
-- FLOOR PLAN: Look for floor plans, unit layouts, or virtual tours. If found, extract dimensions and layout details. If NOT found, set floor_plan.found to false.
 - Building amenities
 - Neighborhood character
 - Design aesthetic
+${floorPlanInstructions}
 ${honesty}
 
 Return JSON:
@@ -104,9 +155,11 @@ ${jsonSchema}`;
   try {
     const response = await geminiProvider.chat({
       model: selectModel("apartment_research"),
-      system: "You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations.",
+      system: `You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations.
+
+When researching floor plans, be thorough: navigate to the building's floor plans page, filter for the user's unit type (${unitLabel}), and click through each individual floor plan option. Most apartment websites have multiple layout variants per bed/bath count — examine each one. Capture floor plan image URLs when available.`,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.2,
       tools: [{ googleSearch: {} }, { urlContext: {} }],
       responseMimeType: "application/json",

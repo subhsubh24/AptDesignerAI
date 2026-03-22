@@ -264,6 +264,7 @@ export default function DashboardPage() {
           building_url: buildingUrl || undefined,
           city, state, neighborhood,
           project_id: projId,
+          bedrooms, bathrooms,
         }),
       });
       if (res.ok) {
@@ -273,7 +274,7 @@ export default function DashboardPage() {
     } finally {
       setResearchingBuilding(false);
     }
-  }, [buildingName, buildingUrl, city, state, neighborhood, ensureProject]);
+  }, [buildingName, buildingUrl, city, state, neighborhood, bedrooms, bathrooms, ensureProject]);
 
   // Analyze apartment
   const handleAnalyze = useCallback(async () => {
@@ -574,6 +575,9 @@ export default function DashboardPage() {
                             <CheckCircle2 className="h-3 w-3" />
                             Floor plan found
                             {fp?.total_sqft && <span>· {String(fp.total_sqft)} sqft</span>}
+                            {Array.isArray(fp?.unit_variants) && fp.unit_variants.length > 0 && (
+                              <span>· {fp.unit_variants.length} layout{fp.unit_variants.length > 1 ? "s" : ""}</span>
+                            )}
                           </>
                         ) : (
                           <>
