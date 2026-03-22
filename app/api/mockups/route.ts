@@ -216,7 +216,8 @@ IMPORTANT: Keep the same room architecture, layout, flooring, walls, and windows
  * Upload base64 image data to Supabase Storage and return the public URL.
  */
 async function uploadMockupImage(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   base64Data: string,
   mimeType?: string,
 ): Promise<string> {

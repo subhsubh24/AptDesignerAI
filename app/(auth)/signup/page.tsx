@@ -42,7 +42,7 @@ export default function SignupPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError((error as { message: string })?.message || "Signup failed");
       setLoading(false);
     } else {
       setSuccess(true);

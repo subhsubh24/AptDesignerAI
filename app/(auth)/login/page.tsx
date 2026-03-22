@@ -29,7 +29,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError((error as { message: string })?.message || "Login failed");
       setLoading(false);
     } else {
       router.push("/dashboard");

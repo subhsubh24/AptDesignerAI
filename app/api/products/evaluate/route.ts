@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
   if (otherRooms && otherRooms.length > 0) {
     otherRoomsContext = otherRooms
-      .map((r) => {
+      .map((r: any) => {
         const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
         const summary = diag
           ? (diag.diagnosis_json as Record<string, string>).summary || "analyzed"
