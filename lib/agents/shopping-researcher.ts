@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
@@ -21,7 +21,7 @@ interface SearchBrief {
   categories: SearchBriefCategory[];
 }
 
-interface SearchCandidate {
+export interface SearchCandidate {
   title: string;
   url: string;
   snippet: string;
@@ -45,7 +45,8 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
 };
 
 /**
- * Generate a shopping brief based on room diagnosis — now with 3 price tiers
+ * Generate a shopping brief based on room diagnosis — now with 3 price tiers.
+ * Uses Gemini with structured output.
  */
 export async function generateSearchBrief(
   roomType: string,
@@ -57,20 +58,16 @@ export async function generateSearchBrief(
   const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode);
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content: prompt }],
       max_tokens: 4096,
       temperature: 0.3,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse search brief JSON" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as SearchBrief;
+    const parsed = JSON.parse(response.content) as SearchBrief;
     return {
       success: true,
       data: parsed,
@@ -86,19 +83,15 @@ export async function generateSearchBrief(
 }
 
 /**
- * Search the web for products using Tavily API, optionally scoped to a price tier
+ * Search the web for products using Gemini Google Search grounding.
+ * Replaces Tavily API. Uses Google Search tool for real-time web search.
  */
 export async function searchProducts(
   query: string,
   maxResults: number = 10,
   tier?: PriceTier
 ): Promise<AgentResult<SearchCandidate[]>> {
-  const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) {
-    return { success: false, error: "TAVILY_API_KEY not configured" };
-  }
-
-  // Use tier-specific domains if provided, otherwise all domains
+  // Use tier-specific domains if provided
   const domains = tier
     ? TIER_DOMAINS[tier]
     : [
@@ -107,32 +100,59 @@ export async function searchProducts(
         ...TIER_DOMAINS.high_end,
       ];
 
+  const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.
+
+Search query: "${query}"
+
+For each product found, provide the title, URL, a brief description, and the retailer name. Find up to ${maxResults} relevant product pages.
+
+Return JSON:
+{
+  "products": [
+    {
+      "title": "Product name",
+      "url": "https://...",
+      "snippet": "Brief description of the product",
+      "source": "retailer domain"
+    }
+  ]
+}`;
+
   try {
-    const response = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        max_results: maxResults,
-        include_domains: domains,
-        search_depth: "advanced",
-      }),
+    const response = await geminiProvider.chat({
+      model: selectModel("search"),
+      system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages.",
+      messages: [{ role: "user", content: searchPrompt }],
+      max_tokens: 4096,
+      temperature: 0.2,
+      tools: [{ googleSearch: {} }],
+      responseMimeType: "application/json",
     });
 
-    if (!response.ok) {
-      return { success: false, error: `Tavily API error: ${response.status}` };
-    }
+    let candidates: SearchCandidate[] = [];
 
-    const data = await response.json();
-    const candidates: SearchCandidate[] = (data.results || []).map(
-      (r: { title: string; url: string; content: string }) => ({
-        title: r.title,
-        url: r.url,
-        snippet: r.content?.slice(0, 500) || "",
-        source: new URL(r.url).hostname.replace("www.", ""),
-      })
-    );
+    // Try to parse structured response
+    try {
+      const parsed = JSON.parse(response.content);
+      candidates = (parsed.products || []).map(
+        (r: { title: string; url: string; snippet: string; source: string }) => ({
+          title: r.title || "",
+          url: r.url || "",
+          snippet: (r.snippet || "").slice(0, 500),
+          source: r.source || "",
+        })
+      );
+    } catch {
+      // Fallback: use grounding metadata sources
+      if (response.groundingMetadata?.sources) {
+        candidates = response.groundingMetadata.sources.map((s) => ({
+          title: s.title,
+          url: s.uri,
+          snippet: "",
+          source: new URL(s.uri).hostname.replace("www.", ""),
+        }));
+      }
+    }
 
     return { success: true, data: candidates };
   } catch (error) {

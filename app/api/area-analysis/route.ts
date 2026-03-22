@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -157,21 +157,16 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
   });
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model: selectModel("area_analysis"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 8192,
       temperature: 0.3,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("[area-analysis] No JSON in response:", response.content.slice(0, 500));
-      throw new Error("No JSON in response");
-    }
-
-    const analysis = JSON.parse(jsonMatch[0]);
+    const analysis = JSON.parse(response.content);
 
     // Save as detailed diagnosis
     await supabase.from("room_diagnoses").insert({

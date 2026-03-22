@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
@@ -18,7 +18,7 @@ interface MockupGenerationResult {
 }
 
 /**
- * Generate an image generation prompt from room context + selected products
+ * Generate an image generation prompt from room context + selected products.
  */
 export async function generateMockupPrompt(
   roomType: string,
@@ -36,20 +36,16 @@ export async function generateMockupPrompt(
   const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions);
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content: prompt }],
       max_tokens: 2048,
       temperature: 0.4,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse mockup prompt JSON" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as MockupPromptResult;
+    const parsed = JSON.parse(response.content) as MockupPromptResult;
     return {
       success: true,
       data: parsed,
@@ -65,50 +61,34 @@ export async function generateMockupPrompt(
 }
 
 /**
- * Generate a mockup image using OpenAI's image generation API
+ * Generate a mockup image using Gemini native image generation.
+ * Replaces OpenAI DALL-E / gpt-image-1.
  */
 export async function generateMockupImage(prompt: string): Promise<AgentResult<MockupGenerationResult>> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { success: false, error: "OPENAI_API_KEY not configured" };
-  }
-
   try {
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-image-1",
-        prompt,
-        n: 1,
-        size: "1536x1024",
-        quality: "high",
-      }),
+    const response = await geminiProvider.chat({
+      model: selectModel("image_generation"),
+      system: "You are an interior design visualization specialist. Generate photorealistic room mockups.",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1024,
+      temperature: 0.5,
+      responseModalities: ["Text", "Image"],
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      return { success: false, error: `OpenAI API error: ${response.status} ${JSON.stringify(err)}` };
+    if (response.imageData) {
+      // Return as data URI — caller can upload to Supabase Storage
+      const imageUrl = `data:${response.imageData.mimeType};base64,${response.imageData.data}`;
+      return {
+        success: true,
+        data: {
+          image_url: imageUrl,
+          prompt_used: prompt,
+          provider: "gemini-image",
+        },
+      };
     }
 
-    const data = await response.json();
-    const imageData = data.data?.[0];
-
-    if (!imageData) {
-      return { success: false, error: "No image generated" };
-    }
-
-    return {
-      success: true,
-      data: {
-        image_url: imageData.url || `data:image/png;base64,${imageData.b64_json}`,
-        prompt_used: prompt,
-        provider: "openai-gpt-image-1",
-      },
-    };
+    return { success: false, error: "No image generated in response" };
   } catch (error) {
     return {
       success: false,

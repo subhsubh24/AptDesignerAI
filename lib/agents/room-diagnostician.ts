@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
@@ -44,21 +44,16 @@ export async function runRoomDiagnosis(ctx: AgentContext): Promise<AgentResult<D
   });
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],
       max_tokens: 8192,
       temperature: 0.3,
+      responseMimeType: "application/json",
     });
 
-    // Parse JSON from response
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse diagnosis JSON from model response" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(response.content);
 
     return {
       success: true,

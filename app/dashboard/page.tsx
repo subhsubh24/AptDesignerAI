@@ -5,18 +5,46 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X } from "lucide-react";
+import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 
-const ROOM_SECTIONS = [
-  { key: "living_room", label: "Living Room / Dining", icon: "🛋️" },
-  { key: "kitchen", label: "Kitchen", icon: "🍳" },
-  { key: "bedroom", label: "Bedroom", icon: "🛏️" },
-  { key: "bathroom", label: "Bathroom", icon: "🚿" },
-] as const;
+// ─── Room Sections Config ────────────────────────────────────────────
+function getRoomSections(bedrooms: number, bathrooms: number) {
+  const sections: { key: string; label: string; icon: string }[] = [];
 
-type RoomKey = (typeof ROOM_SECTIONS)[number]["key"];
+  if (bedrooms === 0) {
+    // Studio
+    sections.push({ key: "main_room", label: "Main Room", icon: "🏠" });
+  } else {
+    sections.push({ key: "living_room", label: "Living Room / Dining", icon: "🛋️" });
+  }
+
+  sections.push({ key: "kitchen", label: "Kitchen", icon: "🍳" });
+
+  if (bedrooms === 0) {
+    // Studio — no separate bedroom
+  } else if (bedrooms === 1) {
+    sections.push({ key: "bedroom", label: "Bedroom", icon: "🛏️" });
+  } else {
+    for (let i = 1; i <= Math.min(bedrooms, 3); i++) {
+      sections.push({
+        key: i === 1 ? "bedroom" : `bedroom_${i}`,
+        label: i === 1 ? "Primary Bedroom" : `Bedroom ${i}`,
+        icon: "🛏️",
+      });
+    }
+  }
+
+  if (bathrooms >= 1) {
+    sections.push({ key: "bathroom", label: bathrooms > 1 ? "Primary Bathroom" : "Bathroom", icon: "🚿" });
+  }
+  for (let i = 2; i <= Math.min(bathrooms, 3); i++) {
+    sections.push({ key: `bathroom_${i}`, label: `Bathroom ${i}`, icon: "🚿" });
+  }
+
+  return sections;
+}
 
 interface UploadedImage {
   id: string;
@@ -24,25 +52,38 @@ interface UploadedImage {
   path: string;
 }
 
+// ─── Step Components ─────────────────────────────────────────────────
+const STEPS = ["welcome", "layout", "location", "building", "photos", "analyzing", "room_select"] as const;
+type Step = (typeof STEPS)[number];
+
 export default function DashboardPage() {
   const router = useRouter();
-  const [roomImages, setRoomImages] = useState<Record<RoomKey, UploadedImage[]>>({
-    living_room: [],
-    kitchen: [],
-    bedroom: [],
-    bathroom: [],
-  });
+  const [step, setStep] = useState<Step>("welcome");
+  const [bedrooms, setBedrooms] = useState(1);
+  const [bathrooms, setBathrooms] = useState(1);
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [buildingName, setBuildingName] = useState("");
+  const [buildingUrl, setBuildingUrl] = useState("");
+  const [buildingResearch, setBuildingResearch] = useState<Record<string, unknown> | null>(null);
+  const [researchingBuilding, setResearchingBuilding] = useState(false);
+  const [roomImages, setRoomImages] = useState<Record<string, UploadedImage[]>>({});
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [roomIds, setRoomIds] = useState<Record<RoomKey, string>>({} as Record<RoomKey, string>);
+  const [roomIds, setRoomIds] = useState<Record<string, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysisComplete, setAnalysisComplete] = useState(false);
   const [apartmentSummary, setApartmentSummary] = useState<{
     overall: string;
     rooms: Record<string, { summary: string; score: number; needs: string[] }>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check for existing project on load
+  const roomSections = getRoomSections(bedrooms, bathrooms);
+  const showNeighborhood = ["new york", "nyc", "los angeles", "la", "san francisco", "sf", "chicago"].some(
+    (c) => city.toLowerCase().includes(c)
+  );
+
+  // Load existing project on mount
   useEffect(() => {
     async function loadExisting() {
       const res = await fetch("/api/projects");
@@ -52,37 +93,59 @@ export default function DashboardPage() {
           const project = projects[0];
           setProjectId(project.id);
 
-          // Load existing rooms and their images
+          // Restore onboarding state
+          if (project.bedrooms) setBedrooms(project.bedrooms);
+          if (project.bathrooms) setBathrooms(project.bathrooms);
+          if (project.city) setCity(project.city);
+          if (project.state) setState(project.state);
+          if (project.neighborhood) setNeighborhood(project.neighborhood);
+          if (project.building_name) setBuildingName(project.building_name);
+          if (project.building_url) setBuildingUrl(project.building_url);
+          if (project.building_research) setBuildingResearch(project.building_research);
+
+          // Load rooms and images
           const roomsRes = await fetch(`/api/rooms?project_id=${project.id}`);
           if (roomsRes.ok) {
             const rooms = await roomsRes.json();
             const ids: Record<string, string> = {};
-            const images: Record<string, UploadedImage[]> = {
-              living_room: [],
-              kitchen: [],
-              bedroom: [],
-              bathroom: [],
-            };
+            const images: Record<string, UploadedImage[]> = {};
+            let hasAnalysis = false;
 
             for (const room of rooms) {
-              ids[room.room_type as RoomKey] = room.id;
+              ids[room.room_type] = room.id;
               const imgRes = await fetch(`/api/rooms/${room.id}/images`);
               if (imgRes.ok) {
                 const imgs = await imgRes.json();
-                images[room.room_type as RoomKey] = imgs.map((img: { id: string; image_url: string; storage_path: string }) => ({
+                images[room.room_type] = imgs.map((img: { id: string; image_url: string; storage_path: string }) => ({
                   id: img.id,
                   url: img.image_url,
                   path: img.storage_path,
                 }));
               }
-
-              // Check if analysis exists
-              if (room.status === "diagnosed" || room.status === "sourcing" || room.status === "completed") {
-                setAnalysisComplete(true);
+              if (["diagnosed", "sourcing", "completed"].includes(room.status)) {
+                hasAnalysis = true;
               }
             }
-            setRoomIds(ids as Record<RoomKey, string>);
-            setRoomImages(images as Record<RoomKey, UploadedImage[]>);
+            setRoomIds(ids);
+            setRoomImages(images);
+
+            if (hasAnalysis) {
+              // Jump to room selection
+              const summaryRes = await fetch(`/api/analyze-apartment?project_id=${project.id}`);
+              if (summaryRes.ok) {
+                const data = await summaryRes.json();
+                setApartmentSummary(data.summary);
+              }
+              setStep("room_select");
+            } else if (Object.keys(images).some((k) => (images[k]?.length || 0) > 0)) {
+              setStep("photos");
+            } else if (project.building_research) {
+              setStep("photos");
+            } else if (project.city) {
+              setStep("building");
+            } else if (project.bedrooms) {
+              setStep("location");
+            }
           }
         }
       }
@@ -92,7 +155,7 @@ export default function DashboardPage() {
   }, []);
 
   // Ensure project exists
-  const ensureProject = async (): Promise<string> => {
+  const ensureProject = useCallback(async (): Promise<string> => {
     if (projectId) return projectId;
 
     const res = await fetch("/api/projects", {
@@ -100,19 +163,28 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "My Apartment",
-        description: "West Loop, Chicago - Porte Apartments",
+        description: `${bedrooms}BD/${bathrooms}BA${city ? ` in ${city}` : ""}`,
       }),
     });
     const project = await res.json();
     setProjectId(project.id);
     return project.id;
-  };
+  }, [projectId, bedrooms, bathrooms, city]);
 
-  // Ensure room exists for a section
-  const ensureRoom = async (projId: string, roomType: RoomKey): Promise<string> => {
+  // Save project metadata
+  const saveProjectMeta = useCallback(async (data: Record<string, unknown>) => {
+    const projId = await ensureProject();
+    await fetch(`/api/projects/${projId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  }, [ensureProject]);
+
+  // Ensure room exists
+  const ensureRoom = useCallback(async (projId: string, roomType: string, label: string): Promise<string> => {
     if (roomIds[roomType]) return roomIds[roomType];
 
-    const label = ROOM_SECTIONS.find((s) => s.key === roomType)?.label || roomType;
     const res = await fetch("/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -125,11 +197,12 @@ export default function DashboardPage() {
     const room = await res.json();
     setRoomIds((prev) => ({ ...prev, [roomType]: room.id }));
     return room.id;
-  };
+  }, [roomIds]);
 
-  const handleUpload = async (roomType: RoomKey, files: File[]) => {
+  // Handle image upload
+  const handleUpload = useCallback(async (roomType: string, label: string, files: File[]) => {
     const projId = await ensureProject();
-    const roomId = await ensureRoom(projId, roomType);
+    const roomId = await ensureRoom(projId, roomType, label);
 
     for (const file of files) {
       const formData = new FormData();
@@ -150,12 +223,12 @@ export default function DashboardPage() {
 
       setRoomImages((prev) => ({
         ...prev,
-        [roomType]: [...prev[roomType], { id: imageData.id, url, path }],
+        [roomType]: [...(prev[roomType] || []), { id: imageData.id, url, path }],
       }));
     }
-  };
+  }, [ensureProject, ensureRoom]);
 
-  const removeImage = async (roomType: RoomKey, imageId: string) => {
+  const removeImage = useCallback(async (roomType: string, imageId: string) => {
     const roomId = roomIds[roomType];
     if (!roomId) return;
 
@@ -167,15 +240,40 @@ export default function DashboardPage() {
 
     setRoomImages((prev) => ({
       ...prev,
-      [roomType]: prev[roomType].filter((img) => img.id !== imageId),
+      [roomType]: (prev[roomType] || []).filter((img) => img.id !== imageId),
     }));
-  };
+  }, [roomIds]);
 
-  const totalImages = Object.values(roomImages).flat().length;
+  // Research building
+  const handleResearchBuilding = useCallback(async () => {
+    setResearchingBuilding(true);
+    try {
+      const projId = await ensureProject();
+      const res = await fetch("/api/apartment-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          building_name: buildingName,
+          building_url: buildingUrl || undefined,
+          city, state, neighborhood,
+          project_id: projId,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBuildingResearch(data.research);
+      }
+    } finally {
+      setResearchingBuilding(false);
+    }
+  }, [buildingName, buildingUrl, city, state, neighborhood, ensureProject]);
 
-  const handleAnalyze = async () => {
+  // Analyze apartment
+  const handleAnalyze = useCallback(async () => {
+    const totalImages = Object.values(roomImages).flat().length;
     if (totalImages === 0) return;
     setAnalyzing(true);
+    setStep("analyzing");
 
     try {
       const res = await fetch("/api/analyze-apartment", {
@@ -187,71 +285,408 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         setApartmentSummary(data.summary);
-        setAnalysisComplete(true);
+        setStep("room_select");
+      } else {
+        setStep("photos");
       }
+    } catch {
+      setStep("photos");
     } finally {
       setAnalyzing(false);
     }
-  };
+  }, [roomImages, projectId]);
+
+  const totalImages = Object.values(roomImages).flat().length;
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex justify-center items-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  // If analysis is complete, show summary + area selection
-  if (analysisComplete && apartmentSummary) {
+  // ─── Step: Welcome ─────────────────────────────────────────────
+  if (step === "welcome") {
     return (
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
+      <div className="max-w-2xl mx-auto px-4 py-16 animate-fade-in-up">
+        <div className="text-center space-y-6">
+          <div className="flex justify-center">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight">Welcome to AptDesigner</h1>
+          <p className="text-lg text-muted-foreground max-w-md mx-auto">
+            Your AI-powered interior design copilot. Upload photos of your apartment and get personalized, detailed recommendations.
+          </p>
+          <Button
+            size="lg"
+            className="h-14 px-10 text-base mt-4"
+            onClick={() => setStep("layout")}
+          >
+            Let&apos;s get started
+            <ChevronRight className="h-5 w-5 ml-2" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Layout (Bed/Bath) ──────────────────────────────────
+  if (step === "layout") {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
+        <StepHeader
+          step={2}
+          total={5}
+          title="Tell us about your apartment"
+          subtitle="This helps us understand what rooms to analyze."
+        />
+
+        <div className="space-y-8 mt-8">
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-3 block">How many bedrooms?</label>
+            <div className="flex gap-3">
+              {[{ value: 0, label: "Studio" }, { value: 1, label: "1" }, { value: 2, label: "2" }, { value: 3, label: "3+" }].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setBedrooms(opt.value)}
+                  className={cn(
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200",
+                    bedrooms === opt.value
+                      ? "border-primary bg-primary text-primary-foreground shadow-md"
+                      : "border-border hover:border-primary/50 hover:bg-secondary"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-3 block">How many bathrooms?</label>
+            <div className="flex gap-3">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setBathrooms(n)}
+                  className={cn(
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200",
+                    bathrooms === n
+                      ? "border-primary bg-primary text-primary-foreground shadow-md"
+                      : "border-border hover:border-primary/50 hover:bg-secondary"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              We&apos;ll ask for photos of: {getRoomSections(bedrooms, bathrooms).map((s) => s.label).join(", ")}
+            </p>
+            <Button
+              size="lg"
+              className="w-full h-12"
+              onClick={async () => {
+                await saveProjectMeta({ bedrooms, bathrooms });
+                setStep("location");
+              }}
+            >
+              Continue
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Location ───────────────────────────────────────────
+  if (step === "location") {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
+        <StepHeader
+          step={3}
+          total={5}
+          title="Where do you live?"
+          subtitle="This helps the AI understand your local design context and find nearby retailers."
+        />
+
+        <div className="space-y-6 mt-8">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">City</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Chicago"
+                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">State</label>
+              <input
+                type="text"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                placeholder="IL"
+                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+            </div>
+          </div>
+
+          {showNeighborhood && (
+            <div className="animate-fade-in-up">
+              <label className="text-sm font-medium mb-1.5 block">Neighborhood</label>
+              <input
+                type="text"
+                value={neighborhood}
+                onChange={(e) => setNeighborhood(e.target.value)}
+                placeholder="West Loop"
+                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" className="h-12" onClick={() => setStep("layout")}>Back</Button>
+            <Button
+              size="lg"
+              className="flex-1 h-12"
+              onClick={async () => {
+                await saveProjectMeta({ city, state, neighborhood });
+                setStep("building");
+              }}
+              disabled={!city}
+            >
+              Continue
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Building Research ──────────────────────────────────
+  if (step === "building") {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
+        <StepHeader
+          step={4}
+          total={5}
+          title="What building do you live in?"
+          subtitle="We'll research your building to understand the finishes, style, and aesthetic."
+        />
+
+        <div className="space-y-6 mt-8">
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">
+              <Building2 className="h-4 w-4 inline mr-1.5" />
+              Apartment building name
+            </label>
+            <input
+              type="text"
+              value={buildingName}
+              onChange={(e) => setBuildingName(e.target.value)}
+              placeholder="e.g. Porte Apartments"
+              className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
+              Building website (optional — helps us learn more)
+            </label>
+            <input
+              type="url"
+              value={buildingUrl}
+              onChange={(e) => setBuildingUrl(e.target.value)}
+              placeholder="https://www.porteapts.com"
+              className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+          </div>
+
+          {!buildingResearch && (
+            <Button
+              className="w-full h-12"
+              onClick={handleResearchBuilding}
+              disabled={!buildingName || researchingBuilding}
+            >
+              {researchingBuilding ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Researching your building...
+                </>
+              ) : (
+                <>
+                  <Search className="h-5 w-5 mr-2" />
+                  Research Building
+                </>
+              )}
+            </Button>
+          )}
+
+          {buildingResearch && (
+            <Card className="animate-fade-in-up border-green-200 bg-green-50/50">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm text-green-900">Building researched</p>
+                    <p className="text-sm text-green-700 mt-1">
+                      {(buildingResearch as Record<string, unknown>).summary as string || "Research complete"}
+                    </p>
+                    {String((buildingResearch as Record<string, unknown>).building_style || "") && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Style: {String((buildingResearch as Record<string, unknown>).building_style || "")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" className="h-12" onClick={() => setStep("location")}>Back</Button>
+            <Button
+              size="lg"
+              className="flex-1 h-12"
+              onClick={() => setStep("photos")}
+            >
+              {buildingResearch ? "Continue" : "Skip — I'll just upload photos"}
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Upload Photos ──────────────────────────────────────
+  if (step === "photos") {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
+        <StepHeader
+          step={5}
+          total={5}
+          title="Upload photos of your apartment"
+          subtitle="Take or upload photos of each room so the AI can understand your space. Works from your phone camera too."
+        />
+
+        <div className="space-y-6 mt-8">
+          {roomSections.map((section) => (
+            <RoomUploadSection
+              key={section.key}
+              section={section}
+              images={roomImages[section.key] || []}
+              onUpload={(files) => handleUpload(section.key, section.label, files)}
+              onRemove={(imageId) => removeImage(section.key, imageId)}
+            />
+          ))}
+        </div>
+
+        <div className="flex gap-3 pt-8 pb-8">
+          <Button variant="outline" className="h-12" onClick={() => setStep("building")}>Back</Button>
+          <Button
+            size="lg"
+            className="flex-1 h-14 text-base gap-3"
+            onClick={handleAnalyze}
+            disabled={totalImages === 0 || analyzing}
+          >
+            <Sparkles className="h-5 w-5" />
+            Analyze My Apartment ({totalImages} {totalImages === 1 ? "photo" : "photos"})
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Analyzing ──────────────────────────────────────────
+  if (step === "analyzing") {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-24 text-center animate-fade-in-up">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+        <h2 className="text-2xl font-bold mt-6">Analyzing your apartment...</h2>
+        <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+          The AI is examining your photos, researching your building, and building a holistic understanding of your space. This takes 30-60 seconds.
+        </p>
+        <div className="flex flex-col gap-2 mt-8 text-sm text-muted-foreground">
+          <StepIndicator done label="Photos received" />
+          {buildingResearch && <StepIndicator done label="Building context loaded" />}
+          <StepIndicator active label="Analyzing rooms holistically..." />
+          <StepIndicator label="Generating design profile" />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Step: Room Selection ─────────────────────────────────────
+  if (step === "room_select") {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Your Apartment</h1>
-          <p className="text-muted-foreground mt-1">{apartmentSummary.overall}</p>
+          {apartmentSummary?.overall && (
+            <p className="text-muted-foreground mt-2">{apartmentSummary.overall}</p>
+          )}
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Which area would you like to focus on?</CardTitle>
+            <CardTitle>What room are we designing today?</CardTitle>
             <CardDescription>
-              We&apos;ll do a deep analysis and find the perfect pieces. One area at a time.
+              Pick one room to focus on. We&apos;ll do a deep analysis and find the perfect pieces.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2">
-              {ROOM_SECTIONS.map((section) => {
-                const roomData = apartmentSummary.rooms[section.key];
-                const hasImages = roomImages[section.key].length > 0;
+              {roomSections.map((section) => {
+                const roomData = apartmentSummary?.rooms[section.key];
+                const hasImages = (roomImages[section.key]?.length || 0) > 0;
                 const roomId = roomIds[section.key];
 
-                if (!hasImages || !roomData) return null;
+                if (!hasImages) return null;
 
                 return (
                   <button
                     key={section.key}
                     onClick={() => router.push(`/projects/${projectId}/rooms/${roomId}/focus`)}
-                    className="text-left p-4 rounded-lg border hover:border-primary hover:shadow-md transition-all"
+                    className="text-left p-5 rounded-xl border hover:border-primary hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 group"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{section.icon}</span>
                         <div>
-                          <h3 className="font-semibold">{section.label}</h3>
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                            {roomData.summary}
-                          </p>
+                          <h3 className="font-semibold group-hover:text-primary transition-colors">{section.label}</h3>
+                          {roomData && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {roomData.summary}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1" />
+                      <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1 group-hover:translate-x-1 transition-transform" />
                     </div>
-                    {roomData.needs.length > 0 && (
+                    {roomData?.needs && roomData.needs.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-3">
                         {roomData.needs.slice(0, 3).map((need) => (
                           <Badge key={need} variant="secondary" className="text-xs">
                             {need}
                           </Badge>
                         ))}
+                        {roomData.needs.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{roomData.needs.length - 3} more
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </button>
@@ -264,60 +699,43 @@ export default function DashboardPage() {
     );
   }
 
-  // If analysis is complete but no summary loaded yet, redirect to load it
-  if (analysisComplete && !apartmentSummary) {
-    // Load the apartment summary from existing diagnoses
-    (async () => {
-      const res = await fetch(`/api/analyze-apartment?project_id=${projectId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setApartmentSummary(data.summary);
-      }
-    })();
-  }
+  return null;
+}
 
-  // Upload flow
+// ─── Sub-Components ────────────────────────────────────────────────
+
+function StepHeader({ step, total, title, subtitle }: { step: number; total: number; title: string; subtitle: string }) {
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to AptDesigner</h1>
-        <p className="text-muted-foreground mt-1">
-          Upload photos of your apartment and I&apos;ll analyze everything. Add photos to each room section below.
-        </p>
-      </div>
-
-      <div className="space-y-6">
-        {ROOM_SECTIONS.map((section) => (
-          <RoomUploadSection
-            key={section.key}
-            section={section}
-            images={roomImages[section.key]}
-            onUpload={(files) => handleUpload(section.key, files)}
-            onRemove={(imageId) => removeImage(section.key, imageId)}
+    <div>
+      {/* Progress bar */}
+      <div className="flex gap-1.5 mb-8">
+        {Array.from({ length: total }, (_, i) => (
+          <div
+            key={i}
+            className={cn(
+              "h-1 rounded-full flex-1 transition-all duration-500",
+              i < step ? "bg-primary" : "bg-border"
+            )}
           />
         ))}
       </div>
+      <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+      <p className="text-muted-foreground mt-1">{subtitle}</p>
+    </div>
+  );
+}
 
-      <div className="flex justify-center pt-4 pb-8">
-        <Button
-          size="lg"
-          className="h-14 px-8 text-base gap-3"
-          onClick={handleAnalyze}
-          disabled={totalImages === 0 || analyzing}
-        >
-          {analyzing ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Analyzing your apartment...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-5 w-5" />
-              Analyze My Apartment ({totalImages} {totalImages === 1 ? "photo" : "photos"})
-            </>
-          )}
-        </Button>
-      </div>
+function StepIndicator({ done, active, label }: { done?: boolean; active?: boolean; label: string }) {
+  return (
+    <div className={cn("flex items-center gap-2", done && "text-green-600", active && "text-primary font-medium")}>
+      {done ? (
+        <CheckCircle2 className="h-4 w-4" />
+      ) : active ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <div className="h-4 w-4 rounded-full border-2" />
+      )}
+      {label}
     </div>
   );
 }
@@ -346,7 +764,7 @@ function RoomUploadSection({
   });
 
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
           <span className="text-xl">{section.icon}</span>
@@ -365,7 +783,7 @@ function RoomUploadSection({
               <img
                 src={img.url}
                 alt=""
-                className="h-24 w-24 rounded-lg object-cover border"
+                className="h-24 w-24 rounded-lg object-cover border transition-transform duration-200 group-hover:scale-105"
               />
               <button
                 onClick={() => onRemove(img.id)}
@@ -376,21 +794,24 @@ function RoomUploadSection({
             </div>
           ))}
 
+          {/* Upload zone — with mobile camera support */}
           <div
             {...getRootProps()}
             className={cn(
-              "h-24 w-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors",
-              isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50",
+              "h-24 min-w-[6rem] rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all duration-200",
+              isDragActive ? "border-primary bg-primary/5 scale-105" : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-secondary/50",
               uploading && "pointer-events-none opacity-50"
             )}
           >
-            <input {...getInputProps()} />
+            <input {...getInputProps()} capture="environment" />
             {uploading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             ) : (
               <>
                 <Camera className="h-5 w-5 text-muted-foreground/50" />
-                <span className="text-[10px] text-muted-foreground mt-1">Add</span>
+                <span className="text-[10px] text-muted-foreground mt-1">
+                  {images.length === 0 ? "Add photos" : "Add more"}
+                </span>
               </>
             )}
           </div>

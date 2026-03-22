@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
@@ -57,20 +57,16 @@ export async function scoreProduct(
   });
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],
       max_tokens: 2048,
       temperature: 0.2,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse scoring JSON" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(response.content);
     const scores = parsed.scores;
     const finalScore = computeFinalItemScore(scores);
     const verdict = determineVerdict(finalScore, scores.confidence_score);

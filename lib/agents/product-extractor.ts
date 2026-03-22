@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
@@ -24,61 +24,31 @@ export interface ExtractedProduct {
 }
 
 /**
- * Extract product information from a URL via Jina Reader API
- */
-async function fetchPageContent(url: string): Promise<string | null> {
-  try {
-    const jinaUrl = `https://r.jina.ai/${url}`;
-    const res = await fetch(jinaUrl, {
-      headers: {
-        Accept: "text/plain",
-        ...(process.env.JINA_API_KEY
-          ? { Authorization: `Bearer ${process.env.JINA_API_KEY}` }
-          : {}),
-      },
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    // Truncate to avoid token limits
-    return text.slice(0, 15000);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Extract product info from a URL
+ * Extract product info from a URL using Gemini URL Context.
+ * Replaces the old Jina Reader API + OpenAI extraction pipeline.
  */
 export async function extractFromUrl(url: string): Promise<AgentResult<ExtractedProduct>> {
   const model = selectModel("extraction");
   const system = getSystemPrompt();
   const extractionPrompt = getExtractionPrompt();
 
-  const pageContent = await fetchPageContent(url);
-  if (!pageContent) {
-    return { success: false, error: "Could not fetch page content. Try uploading a screenshot instead." };
-  }
-
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [
         {
           role: "user",
-          content: `${extractionPrompt}\n\n## PRODUCT PAGE CONTENT\nURL: ${url}\n\n${pageContent}`,
+          content: `${extractionPrompt}\n\nExtract product information from this URL: ${url}`,
         },
       ],
       max_tokens: 2048,
       temperature: 0.1,
+      tools: [{ urlContext: {} }],
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse extraction JSON" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as ExtractedProduct;
+    const parsed = JSON.parse(response.content) as ExtractedProduct;
     return {
       success: true,
       data: parsed,
@@ -94,7 +64,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
 }
 
 /**
- * Extract product info from an image
+ * Extract product info from an image using Gemini vision.
  */
 export async function extractFromImage(imageUrl: string): Promise<AgentResult<ExtractedProduct>> {
   const model = selectModel("extraction");
@@ -113,20 +83,16 @@ export async function extractFromImage(imageUrl: string): Promise<AgentResult<Ex
   ];
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],
       max_tokens: 2048,
       temperature: 0.1,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse extraction JSON from image" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]) as ExtractedProduct;
+    const parsed = JSON.parse(response.content) as ExtractedProduct;
     return {
       success: true,
       data: parsed,

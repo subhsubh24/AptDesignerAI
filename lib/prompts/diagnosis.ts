@@ -1,8 +1,4 @@
-import { USER_DESIGN_PROFILE } from "@/lib/design-context/user-profile";
-
 export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[]): string {
-  const roomPriorities = USER_DESIGN_PROFILE.room_priorities[roomType as keyof typeof USER_DESIGN_PROFILE.room_priorities];
-
   return `Analyze the room photos provided and produce a comprehensive room diagnosis.
 
 ## ROOM CONTEXT
@@ -10,8 +6,6 @@ export function getDiagnosisPrompt(roomType: string, keepItems: string[], replac
 - Items to keep: ${keepItems.length > 0 ? keepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}
-${roomPriorities ? `- Room-specific goals: ${roomPriorities.goals.join(", ")}` : ""}
-${roomPriorities ? `- Likely needs: ${roomPriorities.likely_needs.join(", ")}` : ""}
 
 ## INSTRUCTIONS
 Examine the room photos carefully. Consider:
@@ -59,5 +53,5 @@ Return a JSON object with this exact structure:
   ]
 }
 
-Be specific and opinionated. This is not a generic analysis — it is tailored to this specific person and apartment.`;
+Be specific and opinionated. Reference actual items visible in the photos. This is not a generic analysis — it is tailored to this specific apartment and space.`;
 }

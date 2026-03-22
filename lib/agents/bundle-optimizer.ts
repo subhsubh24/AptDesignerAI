@@ -1,4 +1,4 @@
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
@@ -45,20 +45,16 @@ export async function evaluateBundle(
   });
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content }],
       max_tokens: 4096,
       temperature: 0.3,
+      responseMimeType: "application/json",
     });
 
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { success: false, error: "Failed to parse bundle evaluation JSON" };
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(response.content);
     const scores = parsed.scores;
     const finalScore = computeFinalBundleScore(scores);
 

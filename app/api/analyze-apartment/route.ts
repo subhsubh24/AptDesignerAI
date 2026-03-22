@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { openaiProvider } from "@/lib/ai/openai";
+import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -99,19 +99,16 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
   });
 
   try {
-    const response = await openaiProvider.chat({
+    const response = await geminiProvider.chat({
       model: selectModel("apartment_analysis"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 4096,
       temperature: 0.3,
+      responseMimeType: "application/json",
     });
 
-    // Parse JSON from response
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
-
-    const analysis = JSON.parse(jsonMatch[0]);
+    const analysis = JSON.parse(response.content);
 
     // Save diagnosis for each room
     for (const room of rooms) {
