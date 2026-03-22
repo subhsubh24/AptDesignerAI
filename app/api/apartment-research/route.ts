@@ -93,17 +93,24 @@ Return JSON:
       ? [{ urlContext: {} }]
       : [{ googleSearch: {} }, { urlContext: {} }];
 
+    // Note: responseMimeType is NOT compatible with Gemini grounding tools
+    // (googleSearch, urlContext). We ask for JSON in the prompt instead.
     const response = await geminiProvider.chat({
       model: selectModel("apartment_research"),
-      system: "You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations.",
+      system: "You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations. Always respond with valid JSON only — no markdown fences, no extra text.",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 4096,
       temperature: 0.2,
       tools,
-      responseMimeType: "application/json",
     });
 
-    const research = JSON.parse(response.content);
+    // Extract JSON from response (may have markdown fences or preamble)
+    let jsonStr = response.content.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1].trim();
+    }
+    const research = JSON.parse(jsonStr);
 
     // Save to project if project_id provided
     if (project_id) {

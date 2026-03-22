@@ -20,7 +20,7 @@ export async function GET(
   return NextResponse.json(data);
 }
 
-export async function PATCH(
+async function updateProject(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
@@ -40,6 +40,9 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
+
+export const PUT = updateProject;
+export const PATCH = updateProject;
 
 export async function DELETE(
   _request: Request,

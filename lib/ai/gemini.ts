@@ -137,7 +137,12 @@ export const geminiProvider: AIProvider = {
       config.tools = convertTools(tools);
     }
 
-    if (responseMimeType) {
+    // responseMimeType is NOT compatible with Gemini grounding tools
+    // (googleSearch, urlContext). Skip it when tools are present.
+    const hasGroundingTools = tools?.some(
+      (t) => "googleSearch" in t || "urlContext" in t
+    );
+    if (responseMimeType && !hasGroundingTools) {
       config.responseMimeType = responseMimeType;
     }
 

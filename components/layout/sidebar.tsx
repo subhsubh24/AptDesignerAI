@@ -47,11 +47,7 @@ export function Sidebar() {
           })}
         </nav>
       </ScrollArea>
-      <div className="border-t p-4">
-        <p className="text-xs text-muted-foreground">
-          Porte Apartments, West Loop
-        </p>
-      </div>
+      <div className="border-t p-4" />
     </div>
   );
 }
