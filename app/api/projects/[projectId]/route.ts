@@ -30,14 +30,30 @@ async function updateProject(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+
+  // Only allow known columns to prevent DB errors from unknown fields
+  const allowedFields: Record<string, unknown> = {};
+  const ALLOWED_KEYS = [
+    "name", "description", "status", "cover_image_url",
+    "bedrooms", "bathrooms", "city", "state", "neighborhood",
+    "building_name", "building_url", "building_research", "apartment_analysis",
+  ];
+  for (const key of ALLOWED_KEYS) {
+    if (key in body) allowedFields[key] = body[key];
+  }
+  allowedFields.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("projects")
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(allowedFields)
     .eq("id", projectId)
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error(`[projects/${projectId}] Update failed:`, error.message, "Fields:", Object.keys(allowedFields));
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(data);
 }
 
