@@ -640,98 +640,63 @@ export default function DashboardPage() {
   if (step === "room_select") {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Your Apartment</h1>
-          {apartmentSummary?.overall && (
-            <p className="text-muted-foreground mt-2">{apartmentSummary.overall}</p>
-          )}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium mb-4">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Apartment analyzed
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Which room are we designing?</h1>
+          <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+            Pick a room to start. We&apos;ll do a deep analysis and find the perfect pieces for it.
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>What room are we designing today?</CardTitle>
-            <CardDescription>
-              Pick one room to focus on. We&apos;ll do a deep analysis and find the perfect pieces.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              {roomSections.map((section) => {
-                const roomData = apartmentSummary?.rooms[section.key];
-                const hasImages = (roomImages[section.key]?.length || 0) > 0;
-                const roomId = roomIds[section.key];
+        <div className="grid gap-4 md:grid-cols-2">
+          {roomSections.map((section) => {
+            const hasImages = (roomImages[section.key]?.length || 0) > 0;
+            const roomId = roomIds[section.key];
+            const firstImage = roomImages[section.key]?.[0];
 
-                if (!hasImages) return null;
+            if (!hasImages) return null;
 
-                return (
-                  <button
-                    key={section.key}
-                    onClick={() => router.push(`/projects/${projectId}/rooms/${roomId}/focus`)}
-                    className="text-left p-5 rounded-xl border hover:border-primary hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 group"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{section.icon}</span>
-                        <div>
-                          <h3 className="font-semibold group-hover:text-primary transition-colors">{section.label}</h3>
-                          {roomData && (
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                              {roomData.summary}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1 group-hover:translate-x-1 transition-transform" />
+            return (
+              <button
+                key={section.key}
+                onClick={() => router.push(`/projects/${projectId}/rooms/${roomId}/focus`)}
+                className="group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-primary/30"
+              >
+                {/* Room thumbnail */}
+                {firstImage && (
+                  <div className="aspect-[16/10] overflow-hidden">
+                    <img
+                      src={firstImage.url}
+                      alt={section.label}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  </div>
+                )}
+
+                {/* Room label */}
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">{section.icon}</span>
+                      <h3 className="font-semibold text-white text-lg">{section.label}</h3>
                     </div>
-
-                    {roomData && (roomData.keep || roomData.replace || roomData.add || roomData.needs) && (
-                      <div className="mt-3 space-y-2">
-                        {/* Keep */}
-                        {roomData.keep && roomData.keep.length > 0 && (
-                          <div className="space-y-1">
-                            {roomData.keep.slice(0, 2).map((item, i) => (
-                              <div key={i} className="flex items-start gap-1.5 text-xs text-emerald-700">
-                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                <span className="line-clamp-1">{item.split(" — ")[0]}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* Replace */}
-                        {roomData.replace && roomData.replace.length > 0 && (
-                          <div className="space-y-1">
-                            {roomData.replace.slice(0, 2).map((item, i) => (
-                              <div key={i} className="flex items-start gap-1.5 text-xs text-red-600">
-                                <Minus className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                <span className="line-clamp-1">{item.split(" — ")[0]}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* Add */}
-                        {(roomData.add || roomData.needs) && (roomData.add || roomData.needs)!.length > 0 && (
-                          <div className="space-y-1">
-                            {(roomData.add || roomData.needs)!.slice(0, 3).map((item, i) => (
-                              <div key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                                <Plus className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                <span className="line-clamp-1">{item}</span>
-                              </div>
-                            ))}
-                            {(roomData.add || roomData.needs)!.length > 3 && (
-                              <span className="text-[10px] text-muted-foreground ml-5">
-                                +{(roomData.add || roomData.needs)!.length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                    <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/40 transition-colors">
+                      <ArrowRight className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <p className="text-white/70 text-xs mt-1">
+                    {roomImages[section.key]?.length || 0} {(roomImages[section.key]?.length || 0) === 1 ? "photo" : "photos"}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
