@@ -1,12 +1,21 @@
-import { generateSearchBrief, searchProducts } from "./shopping-researcher";
+import {
+  generateSearchBrief,
+  searchProducts,
+  deduplicateCandidates,
+  quickScreenCandidates,
+  type SearchCandidate,
+  type SearchBrief,
+} from "./shopping-researcher";
 import { extractFromUrl } from "./product-extractor";
-import { scoreProduct } from "./fit-scorer";
+import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { PriceTier } from "@/lib/prompts/search-brief";
+
+// ─── Types ─────────────────────────────────────────────────────
 
 export interface OrchestrationStep {
   step: string;
@@ -21,6 +30,16 @@ export interface OrchestrationResult {
   bundles: unknown[];
   steps: OrchestrationStep[];
   validation?: { isValid: boolean; confidence: number; issues: string[] };
+  stats: {
+    totalSearchQueries: number;
+    totalRawUrls: number;
+    totalAfterDedup: number;
+    totalAfterScreen: number;
+    totalExtracted: number;
+    totalQuickScored: number;
+    totalDeepScored: number;
+    totalFinal: number;
+  };
 }
 
 const PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
@@ -30,18 +49,61 @@ const TIER_LABELS: Record<PriceTier, string> = {
   high_end: "High End",
 };
 
+// ─── Concurrency Limiter ───────────────────────────────────────
+
+function pLimit(concurrency: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  function next() {
+    if (queue.length > 0 && active < concurrency) {
+      active++;
+      const run = queue.shift()!;
+      run();
+    }
+  }
+
+  return function <T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      queue.push(() => {
+        fn().then(resolve, reject).finally(() => {
+          active--;
+          next();
+        });
+      });
+      next();
+    });
+  };
+}
+
+// ─── URL Filtering ─────────────────────────────────────────────
+
+const NON_PRODUCT_PATTERNS = /\/(collections|category|categories|all-|shop-all|browse|blog|magazine|inspiration|ideas|guides|reviews?)\b/i;
+
+function isLikelyProductUrl(url: string): boolean {
+  try {
+    const lower = url.toLowerCase();
+    if (lower.endsWith(".pdf")) return false;
+    if (NON_PRODUCT_PATTERNS.test(lower)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Main Orchestrator ─────────────────────────────────────────
+
 /**
- * Run the full agentic search loop for a room across 3 price tiers.
- * Uses Gemini Google Search + URL Context for search and extraction.
- * Validates results holistically with validation agent.
+ * Run the full intensive agentic search loop.
  *
- * Flow:
- * 1. Generate tiered search brief from diagnosis
- * 2. For each tier × category: search → extract → score (in parallel per category)
- * 3. Keep top 3 per category per tier
- * 4. Validate all products holistically
- * 5. If validation fails, re-search weak items
- * 6. Generate bundle from top balanced products
+ * 6-Phase Funnel:
+ * 1. Generate 5 diverse search queries per tier per category
+ * 2. Run ALL queries → ~450 raw URLs → deduplicate to ~150
+ * 3. Quick screen with Flash → ~90 likely product pages
+ * 4. Extract all screened URLs with URL Context → ~60 valid products
+ * 5a. Quick score with Flash (batch, no images) → top 8 per tier
+ * 5b. Deep score with Pro (images, 8 dimensions) → top 5 per tier
+ * 6. Validate holistically + generate bundles
  */
 export async function runAgenticSearch(
   ctx: AgentContext,
@@ -51,6 +113,16 @@ export async function runAgenticSearch(
   const steps: OrchestrationStep[] = [];
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
   const evaluations = new Map<string, ProductEvaluationResult>();
+  const stats = {
+    totalSearchQueries: 0,
+    totalRawUrls: 0,
+    totalAfterDedup: 0,
+    totalAfterScreen: 0,
+    totalExtracted: 0,
+    totalQuickScored: 0,
+    totalDeepScored: 0,
+    totalFinal: 0,
+  };
 
   function reportStep(step: OrchestrationStep) {
     steps.push(step);
@@ -59,155 +131,334 @@ export async function runAgenticSearch(
   }
 
   try {
-    // Step 1: Generate tiered search brief
-    reportStep({ step: "Generating tiered search brief", status: "running" });
-    const briefResult = await generateSearchBrief(
-      ctx.roomType,
-      missingCategories,
-      ctx.budgetMode
-    );
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 1: Generate search brief (5 queries × 3 tiers × N categories)
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Generating intensive search brief", status: "running" });
+    const briefResult = await generateSearchBrief(ctx.roomType, missingCategories, ctx.budgetMode);
     if (!briefResult.success || !briefResult.data) {
-      reportStep({ step: "Generating tiered search brief", status: "failed" });
+      reportStep({ step: "Generating intensive search brief", status: "failed" });
       return { success: false, error: "Failed to generate search brief" };
     }
-    reportStep({ step: "Generating tiered search brief", status: "completed", data: briefResult.data });
+    const brief: SearchBrief = briefResult.data;
+    reportStep({ step: "Generating intensive search brief", status: "completed", data: brief });
 
-    // Step 2: Search each category across all tiers IN PARALLEL
-    const categorySearchPromises = briefResult.data.categories.map(async (categoryBrief) => {
-      const category = categoryBrief.category;
-      const categoryProducts: CandidateProduct[] = [];
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 2: Run ALL search queries in parallel, deduplicate
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Searching across all retailers", status: "running" });
 
-      // Search all 3 tiers in parallel for this category
-      const tierPromises = PRICE_TIERS.map(async (tier) => {
+    // Build list of all search tasks
+    const searchTasks: Array<{
+      category: string;
+      tier: PriceTier;
+      query: string;
+      angle: string;
+    }> = [];
+
+    for (const categoryBrief of brief.categories) {
+      for (const tier of PRICE_TIERS) {
         const tierBrief = categoryBrief.tiers[tier];
-        if (!tierBrief) return [];
-
-        reportStep({ step: `Searching ${TIER_LABELS[tier]} ${category}`, status: "running" });
-
-        const tierProducts: CandidateProduct[] = [];
-
-        // Use first query per tier
-        for (const query of tierBrief.search_queries.slice(0, 1)) {
-          const searchResult = await searchProducts(query, 5, tier);
-          if (!searchResult.success || !searchResult.data) continue;
-
-          reportStep({
-            step: `Searching ${TIER_LABELS[tier]} ${category}`,
-            status: "completed",
-            data: { count: searchResult.data.length },
+        if (!tierBrief) continue;
+        for (const queryObj of tierBrief.search_queries) {
+          searchTasks.push({
+            category: categoryBrief.category,
+            tier,
+            query: queryObj.query,
+            angle: queryObj.angle,
           });
-
-          // Filter to likely product pages
-          const productCandidates = searchResult.data.filter((c) => {
-            const url = c.url.toLowerCase();
-            if (url.endsWith(".pdf")) return false;
-            if (/\/(collections|category|categories|all-|shop-all|browse)\b/i.test(url)) return false;
-            return true;
-          });
-
-          // Extract top 2 results per tier
-          for (const candidate of productCandidates.slice(0, 2)) {
-            reportStep({ step: `Extracting: ${candidate.title}`, status: "running" });
-            const extractResult = await extractFromUrl(candidate.url);
-            if (extractResult.success && extractResult.data) {
-              if (!extractResult.data.title && !extractResult.data.price) {
-                reportStep({ step: `Extracting: ${candidate.title}`, status: "failed", data: { reason: "no product data" } });
-                continue;
-              }
-
-              const product: CandidateProduct = {
-                id: crypto.randomUUID(),
-                room_id: ctx.roomId,
-                search_session_id: null,
-                title: extractResult.data.title || candidate.title,
-                category: extractResult.data.category || category,
-                retailer: extractResult.data.retailer || candidate.source,
-                product_url: candidate.url,
-                image_url: extractResult.data.image_url,
-                local_image_path: null,
-                price: extractResult.data.price,
-                dimensions: extractResult.data.dimensions,
-                materials: extractResult.data.materials,
-                colors: extractResult.data.colors,
-                description: extractResult.data.description,
-                source_type: "agentic_search",
-                metadata: { price_tier: tier },
-                status: "pending",
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              };
-              tierProducts.push(product);
-              reportStep({ step: `Extracting: ${candidate.title}`, status: "completed" });
-            } else {
-              reportStep({ step: `Extracting: ${candidate.title}`, status: "failed" });
-            }
-          }
-        }
-
-        return tierProducts;
-      });
-
-      const tierResults = await Promise.all(tierPromises);
-      for (const products of tierResults) {
-        categoryProducts.push(...products);
-      }
-
-      // Score all candidates for this category
-      for (const product of categoryProducts) {
-        reportStep({ step: `Scoring: ${product.title}`, status: "running" });
-        const scoreResult = await scoreProduct(
-          product,
-          ctx.roomType,
-          ctx.budgetMode,
-          ctx.keepItems,
-          ctx.imageUrls
-        );
-        if (scoreResult.success && scoreResult.data) {
-          evaluations.set(product.id, scoreResult.data);
-          reportStep({
-            step: `Scoring: ${product.title}`,
-            status: "completed",
-            data: { score: scoreResult.data.final_item_score },
-          });
-        } else {
-          reportStep({ step: `Scoring: ${product.title}`, status: "failed" });
         }
       }
+    }
 
-      return { category, products: categoryProducts };
+    stats.totalSearchQueries = searchTasks.length;
+
+    // Run all searches with concurrency limit of 15
+    const searchLimit = pLimit(15);
+    const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
+
+    const searchPromises = searchTasks.map((task) =>
+      searchLimit(async () => {
+        const result = await searchProducts(task.query, 10, task.tier);
+        return {
+          category: task.category,
+          tier: task.tier,
+          candidates: result.success ? (result.data || []) : [],
+        };
+      })
+    );
+
+    const searchResults = await Promise.all(searchPromises);
+
+    // Organize by category and tier
+    for (const result of searchResults) {
+      if (!searchResultsByCategory[result.category]) {
+        searchResultsByCategory[result.category] = { budget: [], balanced: [], high_end: [] };
+      }
+      searchResultsByCategory[result.category][result.tier].push(...result.candidates);
+    }
+
+    // Count raw URLs and deduplicate per category+tier
+    const dedupedByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
+
+    for (const [category, tierResults] of Object.entries(searchResultsByCategory)) {
+      dedupedByCategory[category] = { budget: [], balanced: [], high_end: [] };
+      for (const tier of PRICE_TIERS) {
+        const raw = tierResults[tier].filter((c) => c.url && isLikelyProductUrl(c.url));
+        stats.totalRawUrls += raw.length;
+        const deduped = deduplicateCandidates(raw);
+        stats.totalAfterDedup += deduped.length;
+        dedupedByCategory[category][tier] = deduped;
+      }
+    }
+
+    reportStep({
+      step: "Searching across all retailers",
+      status: "completed",
+      data: { queries: stats.totalSearchQueries, rawUrls: stats.totalRawUrls, afterDedup: stats.totalAfterDedup },
     });
 
-    const categoryResults = await Promise.all(categorySearchPromises);
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 3: Quick screen with Flash (batch, text-only)
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Quick-screening candidates", status: "running" });
 
-    // Organize results
-    for (const { category, products } of categoryResults) {
-      candidatesByCategory[category] = products;
+    const screenedByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
+    const screenPromises: Promise<void>[] = [];
 
-      // Sort and keep top 3 per tier
-      const byTier: Record<PriceTier, CandidateProduct[]> = {
-        budget: [],
-        balanced: [],
-        high_end: [],
-      };
-      for (const product of products) {
-        const tier = (product.metadata as { price_tier: PriceTier })?.price_tier || "balanced";
-        byTier[tier].push(product);
-      }
+    for (const [category, tierResults] of Object.entries(dedupedByCategory)) {
+      screenedByCategory[category] = { budget: [], balanced: [], high_end: [] };
 
-      const kept: CandidateProduct[] = [];
       for (const tier of PRICE_TIERS) {
-        byTier[tier].sort((a, b) => {
+        const candidates = tierResults[tier];
+        if (candidates.length === 0) continue;
+
+        // Find requirements from brief
+        const catBrief = brief.categories.find((c) => c.category === category);
+        const requirements = catBrief?.key_requirements || [];
+
+        screenPromises.push(
+          (async () => {
+            const screenResult = await quickScreenCandidates(candidates, category, tier, requirements);
+            if (screenResult.success && screenResult.data) {
+              screenedByCategory[category][tier] = screenResult.data;
+              stats.totalAfterScreen += screenResult.data.length;
+            } else {
+              // Fail open: keep all candidates
+              screenedByCategory[category][tier] = candidates;
+              stats.totalAfterScreen += candidates.length;
+            }
+          })()
+        );
+      }
+    }
+
+    await Promise.all(screenPromises);
+
+    reportStep({
+      step: "Quick-screening candidates",
+      status: "completed",
+      data: { screened: stats.totalAfterScreen },
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 4: Extract all screened URLs with URL Context
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Extracting product details from websites", status: "running" });
+
+    const extractLimit = pLimit(10);
+    const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
+
+    const extractPromises: Promise<void>[] = [];
+
+    for (const [category, tierResults] of Object.entries(screenedByCategory)) {
+      extractedByCategory[category] = { budget: [], balanced: [], high_end: [] };
+
+      for (const tier of PRICE_TIERS) {
+        const candidates = tierResults[tier];
+
+        for (const candidate of candidates) {
+          extractPromises.push(
+            extractLimit(async () => {
+              try {
+                const extractResult = await extractFromUrl(candidate.url);
+                if (!extractResult.success || !extractResult.data) return;
+                if (!extractResult.data.title && !extractResult.data.price) return;
+
+                // Price range filter: skip if price is way outside tier range
+                const catBriefForPrice = brief.categories.find((c) => c.category === category);
+                const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
+                if (priceRange && extractResult.data.price) {
+                  if (extractResult.data.price > priceRange.max * 2) return;
+                  if (extractResult.data.price < priceRange.min * 0.3) return;
+                }
+
+                const product: CandidateProduct = {
+                  id: crypto.randomUUID(),
+                  room_id: ctx.roomId,
+                  search_session_id: null,
+                  title: extractResult.data.title || candidate.title,
+                  category: extractResult.data.category || category,
+                  retailer: extractResult.data.retailer || candidate.source,
+                  product_url: candidate.url,
+                  image_url: extractResult.data.image_url,
+                  local_image_path: null,
+                  price: extractResult.data.price,
+                  dimensions: extractResult.data.dimensions,
+                  materials: extractResult.data.materials,
+                  colors: extractResult.data.colors,
+                  description: extractResult.data.description,
+                  source_type: "agentic_search",
+                  metadata: { price_tier: tier },
+                  status: "pending",
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                };
+
+                extractedByCategory[category][tier].push(product);
+                stats.totalExtracted++;
+              } catch {
+                // Skip failed extractions
+              }
+            })
+          );
+        }
+      }
+    }
+
+    await Promise.all(extractPromises);
+
+    // Deduplicate extracted products by title+retailer within each tier
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        const seen = new Set<string>();
+        extractedByCategory[category][tier] = tierResults[tier].filter((p) => {
+          const key = `${(p.title || "").toLowerCase().trim()}|${(p.retailer || "").toLowerCase().trim()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+    }
+
+    reportStep({
+      step: "Extracting product details from websites",
+      status: "completed",
+      data: { extracted: stats.totalExtracted },
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 5a: Quick score with Flash (batch, no images)
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Quick-scoring all candidates", status: "running" });
+
+    const quickScoresByProduct = new Map<string, number>();
+    const quickScorePromises: Promise<void>[] = [];
+
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        const products = tierResults[tier];
+        if (products.length === 0) continue;
+
+        quickScorePromises.push(
+          (async () => {
+            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode);
+            if (result.success && result.data) {
+              for (const entry of result.data) {
+                quickScoresByProduct.set(entry.productId, entry.quickScore);
+                stats.totalQuickScored++;
+              }
+            }
+          })()
+        );
+      }
+    }
+
+    await Promise.all(quickScorePromises);
+
+    reportStep({
+      step: "Quick-scoring all candidates",
+      status: "completed",
+      data: { quickScored: stats.totalQuickScored },
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 5b: Deep score top candidates with Pro (images, 8 dims)
+    // ═══════════════════════════════════════════════════════════
+    reportStep({ step: "Deep-scoring top candidates", status: "running" });
+
+    const deepScoreLimit = pLimit(5);
+    const deepScorePromises: Promise<void>[] = [];
+
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        let products = tierResults[tier];
+
+        // Sort by quick score, keep top 8 per tier (or all if ≤8)
+        products.sort((a, b) => {
+          const scoreA = quickScoresByProduct.get(a.id) || 0;
+          const scoreB = quickScoresByProduct.get(b.id) || 0;
+          return scoreB - scoreA;
+        });
+
+        // Keep top 8 or those with quickScore >= 6, whichever is more
+        const passThreshold = products.filter((p) => (quickScoresByProduct.get(p.id) || 0) >= 6);
+        const topN = products.slice(0, 8);
+        const toScore = passThreshold.length > topN.length ? passThreshold.slice(0, 12) : topN;
+
+        for (const product of toScore) {
+          deepScorePromises.push(
+            deepScoreLimit(async () => {
+              const scoreResult = await scoreProduct(
+                product,
+                ctx.roomType,
+                ctx.budgetMode,
+                ctx.keepItems,
+                ctx.imageUrls
+              );
+              if (scoreResult.success && scoreResult.data) {
+                evaluations.set(product.id, scoreResult.data);
+                stats.totalDeepScored++;
+              }
+            })
+          );
+        }
+      }
+    }
+
+    await Promise.all(deepScorePromises);
+
+    reportStep({
+      step: "Deep-scoring top candidates",
+      status: "completed",
+      data: { deepScored: stats.totalDeepScored },
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // Organize final results: top 5 per tier per category
+    // ═══════════════════════════════════════════════════════════
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      const kept: CandidateProduct[] = [];
+
+      for (const tier of PRICE_TIERS) {
+        const products = tierResults[tier].filter((p) => evaluations.has(p.id));
+        products.sort((a, b) => {
           const scoreA = evaluations.get(a.id)?.final_item_score || 0;
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
           return scoreB - scoreA;
         });
-        kept.push(...byTier[tier].slice(0, 3));
+        kept.push(...products.slice(0, 5));
       }
+
       candidatesByCategory[category] = kept;
+      stats.totalFinal += kept.length;
     }
 
-    // Step 3: Validate all products holistically
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 6: Validate + generate bundles
+    // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Validating all recommendations", status: "running" });
+
     const allProducts = Object.values(candidatesByCategory).flat();
     const validationResult = await validateProductSet(
       allProducts.map((p) => ({
@@ -233,45 +484,146 @@ export async function runAgenticSearch(
         confidence: validationResult.data.confidence,
         issues: validationResult.data.issues,
       };
-      reportStep({
-        step: "Validating all recommendations",
-        status: "completed",
-        data: validationData,
-      });
+      reportStep({ step: "Validating all recommendations", status: "completed", data: validationData });
     } else {
       reportStep({ step: "Validating all recommendations", status: "failed" });
     }
 
-    // Step 4: Generate bundles from top candidates
+    // Generate bundles for each tier
     reportStep({ step: "Generating bundles", status: "running" });
-    const topProducts: CandidateProduct[] = [];
-    for (const [, products] of Object.entries(candidatesByCategory)) {
-      const balancedProducts = products.filter(
-        (p) => (p.metadata as { price_tier: string })?.price_tier === "balanced"
-      );
-      const sorted = balancedProducts.sort((a, b) => {
-        const scoreA = evaluations.get(a.id)?.final_item_score || 0;
-        const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-        return scoreB - scoreA;
-      });
-      if (sorted[0]) topProducts.push(sorted[0]);
+    const bundles: unknown[] = [];
+
+    const bundlePromises = PRICE_TIERS.map(async (tier) => {
+      const tierProducts: CandidateProduct[] = [];
+      for (const products of Object.values(candidatesByCategory)) {
+        const tierFiltered = products.filter(
+          (p) => (p.metadata as { price_tier: string })?.price_tier === tier
+        );
+        tierFiltered.sort((a, b) => {
+          const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+          const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+          return scoreB - scoreA;
+        });
+        if (tierFiltered[0]) tierProducts.push(tierFiltered[0]);
+      }
+
+      if (tierProducts.length > 0) {
+        const bundleResult = await evaluateBundle(tierProducts, ctx.roomType, ctx.imageUrls);
+        if (bundleResult.success && bundleResult.data) {
+          return { tier, ...bundleResult.data };
+        }
+      }
+      return null;
+    });
+
+    const bundleResults = await Promise.all(bundlePromises);
+    for (const b of bundleResults) {
+      if (b) bundles.push(b);
+    }
+    reportStep({ step: "Generating bundles", status: "completed", data: { bundles: bundles.length } });
+
+    // ═══════════════════════════════════════════════════════════
+    // Backfill weak tiers
+    // ═══════════════════════════════════════════════════════════
+    const weakTiers: Array<{ category: string; tier: PriceTier }> = [];
+    for (const [category, products] of Object.entries(candidatesByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        const tierProducts = products.filter(
+          (p) => (p.metadata as { price_tier: string })?.price_tier === tier
+        );
+        const strongProducts = tierProducts.filter(
+          (p) => (evaluations.get(p.id)?.final_item_score || 0) >= 7
+        );
+        if (strongProducts.length < 3) {
+          weakTiers.push({ category, tier });
+        }
+      }
     }
 
-    let bundleResult = null;
-    if (topProducts.length > 0) {
-      bundleResult = await evaluateBundle(topProducts, ctx.roomType, ctx.imageUrls);
+    if (weakTiers.length > 0) {
+      reportStep({
+        step: `Backfilling ${weakTiers.length} weak tier(s)`,
+        status: "running",
+        data: { weakTiers: weakTiers.map((t) => `${t.category}/${t.tier}`) },
+      });
+
+      // Run targeted backfill searches for weak tiers
+      const backfillSearchLimit = pLimit(10);
+      const backfillPromises = weakTiers.map((wt) =>
+        backfillSearchLimit(async () => {
+          const backfillQuery = `best ${wt.category} for modern apartment ${TIER_LABELS[wt.tier]} price 2025`;
+          const searchResult = await searchProducts(backfillQuery, 10, wt.tier);
+          if (!searchResult.success || !searchResult.data) return;
+
+          const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));
+          const deduped = deduplicateCandidates(filtered);
+
+          // Extract top 5 backfill candidates
+          for (const candidate of deduped.slice(0, 5)) {
+            try {
+              const extractResult = await extractFromUrl(candidate.url);
+              if (!extractResult.success || !extractResult.data) continue;
+              if (!extractResult.data.title && !extractResult.data.price) continue;
+
+              const product: CandidateProduct = {
+                id: crypto.randomUUID(),
+                room_id: ctx.roomId,
+                search_session_id: null,
+                title: extractResult.data.title || candidate.title,
+                category: extractResult.data.category || wt.category,
+                retailer: extractResult.data.retailer || candidate.source,
+                product_url: candidate.url,
+                image_url: extractResult.data.image_url,
+                local_image_path: null,
+                price: extractResult.data.price,
+                dimensions: extractResult.data.dimensions,
+                materials: extractResult.data.materials,
+                colors: extractResult.data.colors,
+                description: extractResult.data.description,
+                source_type: "agentic_search",
+                metadata: { price_tier: wt.tier, backfill: true },
+                status: "pending",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+
+              // Deep score the backfill product directly
+              const scoreResult = await scoreProduct(
+                product,
+                ctx.roomType,
+                ctx.budgetMode,
+                ctx.keepItems,
+                ctx.imageUrls
+              );
+              if (scoreResult.success && scoreResult.data) {
+                evaluations.set(product.id, scoreResult.data);
+                if (scoreResult.data.final_item_score >= 6) {
+                  candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
+                  candidatesByCategory[wt.category].push(product);
+                  stats.totalFinal++;
+                }
+              }
+            } catch {
+              // Skip failed backfill extractions
+            }
+          }
+        })
+      );
+
+      await Promise.all(backfillPromises);
+      reportStep({ step: `Backfilling ${weakTiers.length} weak tier(s)`, status: "completed" });
     }
-    reportStep({ step: "Generating bundles", status: "completed", data: bundleResult?.data });
 
     return {
       success: true,
       data: {
-        searchBrief: briefResult.data,
+        searchBrief: brief,
         candidatesByCategory,
         evaluations,
-        bundles: bundleResult?.data ? [bundleResult.data] : [],
+        bundles,
         steps,
         validation: validationData,
+        stats,
       },
     };
   } catch (error) {

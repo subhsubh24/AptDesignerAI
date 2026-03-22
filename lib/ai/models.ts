@@ -30,6 +30,8 @@ export function selectModel(
     | "apartment_research"
     | "image_generation"
     | "search"
+    | "quick_score"
+    | "quick_screen"
 ): string {
   switch (task) {
     case "diagnosis":
@@ -46,6 +48,8 @@ export function selectModel(
     case "search_brief":
     case "mockup_prompt":
     case "search":
+    case "quick_score":
+    case "quick_screen":
       return MODELS.fast;
     default:
       return MODELS.fast;

@@ -147,5 +147,7 @@ export async function POST(request: Request) {
     products_found: savedProducts.length,
     products: savedProducts,
     steps: result.data.steps,
+    stats: result.data.stats,
+    validation: result.data.validation,
   });
 }
