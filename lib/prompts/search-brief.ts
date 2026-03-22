@@ -23,13 +23,17 @@ const TIER_RETAILERS: Record<PriceTier, string[]> = {
   ],
 };
 
-export function getSearchBriefPrompt(roomType: string, missingCategories: string[], budgetMode: string): string {
+export function getSearchBriefPrompt(roomType: string, missingCategories: string[], budgetMode: string, categoryHints?: Record<string, string>): string {
+  const hintsSection = categoryHints && Object.keys(categoryHints).length > 0
+    ? `\n\n## CATEGORY DETAILS\n${Object.entries(categoryHints).map(([cat, hint]) => `- **${cat}**: ${hint}`).join("\n")}`
+    : "";
+
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

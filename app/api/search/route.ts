@@ -55,13 +55,31 @@ export async function POST(request: Request) {
     imageUrls,
   };
 
-  const missingCategories = categories && categories.length > 0
+  // Categories can be strings or rich objects { category, search_title, specs }
+  const rawCategories = categories && categories.length > 0
     ? categories
     : ["rug", "coffee_table", "accent_chair"];
 
+  const missingCategories: string[] = rawCategories.map(
+    (c: string | { category: string }) => typeof c === "string" ? c : c.category
+  );
+
+  // Build search hints from rich category objects (search_title, specs)
+  const categoryHints: Record<string, string> = {};
+  if (Array.isArray(categories)) {
+    for (const c of categories) {
+      if (typeof c === "object" && c.category) {
+        const parts: string[] = [];
+        if (c.search_title) parts.push(c.search_title);
+        if (c.specs) parts.push(typeof c.specs === "string" ? c.specs : JSON.stringify(c.specs));
+        if (parts.length > 0) categoryHints[c.category] = parts.join(" — ");
+      }
+    }
+  }
+
   console.log(`[search] Starting agentic search for categories: ${missingCategories.join(", ")}`);
 
-  const result = await runAgenticSearch(ctx, missingCategories);
+  const result = await runAgenticSearch(ctx, missingCategories, undefined, categoryHints);
 
   if (!result.success || !result.data) {
     console.error("[search] Failed:", result.error);

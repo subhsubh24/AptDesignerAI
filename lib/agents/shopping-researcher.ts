@@ -59,11 +59,12 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
 export async function generateSearchBrief(
   roomType: string,
   missingCategories: string[],
-  budgetMode: string
+  budgetMode: string,
+  categoryHints?: Record<string, string>
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
   const system = getSystemPrompt();
-  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode);
+  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints);
 
   try {
     const response = await geminiProvider.chat({

@@ -175,7 +175,7 @@ Return JSON:
   "summary": "2-3 sentence assessment of the current state of this area",
   "what_it_needs": [
     {
-      "category": "snake_case category slug, e.g. area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza",
+      "category": "snake_case category slug, e.g. area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light",
       "search_title": "A detailed, specific product title that could be used as a search query on a furniture website. Include material, color/finish, approximate size, and style. Examples: 'Large 8x10 hand-knotted wool area rug in warm ivory with subtle texture', 'Solid walnut round coffee table 36-40 inch diameter with tapered legs', 'Woven rattan credenza with closed doors in natural finish 60 inches wide'",
       "description": "Why this item is needed and how it fits the design direction — be specific about what problem it solves",
       "priority": "high | medium | low",
@@ -189,7 +189,9 @@ Return JSON:
 
 IMPORTANT for search_title: Write each title as if you're typing it into a furniture store search bar. Be extremely specific about material, color, dimensions, and style. These titles will be used to find real products, so vague titles like "Coffee Table" will return bad results. Instead write "Solid wood rectangular coffee table 48 inch with shelf in walnut or warm oak finish".
 
-Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.`,
+Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.
+
+IMPORTANT: If this room serves multiple functions (e.g. a living room with a dining area, or a combined living/dining space), make sure to include items for ALL zones — dining table, dining chairs, lighting for the dining zone, etc. Don't limit your recommendations to just the primary function.`,
   });
 
   const agentRun = await createAgentRun(supabase, {

@@ -108,7 +108,8 @@ function isLikelyProductUrl(url: string): boolean {
 export async function runAgenticSearch(
   ctx: AgentContext,
   missingCategories: string[],
-  onStep?: (step: OrchestrationStep) => void
+  onStep?: (step: OrchestrationStep) => void,
+  categoryHints?: Record<string, string>
 ): Promise<AgentResult<OrchestrationResult>> {
   const steps: OrchestrationStep[] = [];
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
@@ -135,7 +136,7 @@ export async function runAgenticSearch(
     // PHASE 1: Generate search brief (5 queries × 3 tiers × N categories)
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Generating intensive search brief", status: "running" });
-    const briefResult = await generateSearchBrief(ctx.roomType, missingCategories, ctx.budgetMode);
+    const briefResult = await generateSearchBrief(ctx.roomType, missingCategories, ctx.budgetMode, categoryHints);
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed" });
       return { success: false, error: "Failed to generate search brief" };
