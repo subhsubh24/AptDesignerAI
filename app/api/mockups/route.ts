@@ -49,6 +49,15 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
+  // Load project for building research context (finishes, flooring, walls, etc.)
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", room.project_id)
+    .single();
+
+  const buildingResearch = project?.building_research as Record<string, unknown> | undefined;
+
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
@@ -60,14 +69,33 @@ export async function POST(request: Request) {
       input_json: { vision_mode: true },
     });
 
-    const visionPrompt = `Redesign this room as a photorealistic interior design visualization of a ${room.room_type}.
+    // Build architectural context from building research
+    const archContext = buildArchitecturalContext(buildingResearch, room.room_type);
 
-Current design direction: ${design_direction || "modern, cohesive apartment design"}
+    const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
 
-Items to visualize in the room:
+CRITICAL — MATCH THE ACTUAL ROOM:
+Study the reference photos carefully. The generated image MUST preserve:
+- The EXACT same room shape, dimensions, and proportions
+- The EXACT same flooring (type, color, plank direction)
+- The EXACT same wall color and finish
+- The EXACT same windows (shape, size, position, trim style)
+- The EXACT same ceiling height and any ceiling details
+- The EXACT same doorways, built-ins, and architectural features
+- The same natural lighting direction and quality
+${archContext}
+
+Design direction: ${design_direction || "modern, cohesive apartment design"}
+
+New furniture and decor to place in the room:
 ${items_description || "All recommended furniture and decor items from the diagnosis"}
 
-IMPORTANT: Keep the same room architecture, layout, flooring, walls, and windows visible in the reference photos. Replace/add furniture and decor as described above. Make it look like a real photograph of a beautifully designed room. The style should be aspirational but achievable.`;
+RULES:
+- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos — same colors, same materials, same proportions.
+- Only change the furniture and decor, not the architecture.
+- Place furniture at realistic scale relative to the actual room size visible in photos.
+- Use natural lighting consistent with the window positions in the reference photos.
+- The result should look like a real photograph taken in this exact apartment, not a generic render.`;
 
     const imageResult = await generateMockupImage(visionPrompt, roomImageUrls);
 
@@ -151,7 +179,7 @@ IMPORTANT: Keep the same room architecture, layout, flooring, walls, and windows
     || (djson?.design_direction as string)
     || "";
 
-  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, existingItems, designDir);
+  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, existingItems, designDir, buildingResearch);
 
   if (!promptResult.success || !promptResult.data) {
     await supabase
@@ -242,4 +270,41 @@ async function uploadMockupImage(
 
   const { data: urlData } = supabase.storage.from("room-images").getPublicUrl(data.path);
   return urlData.publicUrl;
+}
+
+/**
+ * Build a text block describing the apartment's architectural details
+ * from building research, so the image generator knows the exact finishes.
+ */
+function buildArchitecturalContext(
+  br: Record<string, unknown> | undefined,
+  roomType: string,
+): string {
+  if (!br) return "";
+
+  const lines: string[] = [];
+
+  const finishes = br.finishes as Record<string, string> | undefined;
+  if (finishes) {
+    if (finishes.flooring) lines.push(`Flooring: ${finishes.flooring}`);
+    if (finishes.countertops && roomType === "kitchen") lines.push(`Countertops: ${finishes.countertops}`);
+    if (finishes.cabinetry && roomType === "kitchen") lines.push(`Cabinetry: ${finishes.cabinetry}`);
+    if (finishes.fixtures) lines.push(`Fixtures: ${finishes.fixtures}`);
+  }
+
+  if (br.windows) lines.push(`Windows: ${br.windows}`);
+  if (br.ceiling_height) lines.push(`Ceiling height: ${br.ceiling_height}`);
+  if (br.layout_style) lines.push(`Layout: ${br.layout_style}`);
+  if (br.building_style) lines.push(`Building style: ${br.building_style}`);
+
+  const fp = br.floor_plan as Record<string, unknown> | undefined;
+  if (fp) {
+    const dims = fp.room_dimensions as Record<string, string> | undefined;
+    const roomDim = dims?.[roomType] || dims?.living_room;
+    if (roomDim) lines.push(`Room dimensions: ~${roomDim}`);
+    if (fp.total_sqft) lines.push(`Apartment: ~${fp.total_sqft} sqft`);
+  }
+
+  if (lines.length === 0) return "";
+  return `\nKnown architectural details (from building research):\n${lines.map((l) => `- ${l}`).join("\n")}`;
 }
