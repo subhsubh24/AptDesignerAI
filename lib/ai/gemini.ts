@@ -23,7 +23,13 @@ function getClient(): GoogleGenAI {
  */
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
   const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Image fetch failed: ${response.status} ${response.statusText} for ${url}`);
+  }
   const buffer = await response.arrayBuffer();
+  if (buffer.byteLength === 0) {
+    throw new Error(`Image fetch returned empty data for ${url}`);
+  }
   const data = Buffer.from(buffer).toString("base64");
   const contentType = response.headers.get("content-type") || "image/jpeg";
   return { data, mimeType: contentType };
@@ -37,6 +43,9 @@ async function convertMessages(
 ): Promise<{ role: string; parts: Record<string, unknown>[] }[]> {
   const result: { role: string; parts: Record<string, unknown>[] }[] = [];
 
+  let totalImages = 0;
+  let failedImages = 0;
+
   for (const msg of messages) {
     const parts: Record<string, unknown>[] = [];
 
@@ -45,6 +54,7 @@ async function convertMessages(
     } else {
       for (const block of msg.content) {
         if (block.type === "image" && block.source) {
+          totalImages++;
           if (block.source.type === "base64" && block.source.data) {
             parts.push({
               inlineData: {
@@ -58,9 +68,9 @@ async function convertMessages(
               parts.push({
                 inlineData: { mimeType, data },
               });
-            } catch {
-              // If we can't fetch the image, skip it
-              console.warn(`[gemini] Failed to fetch image: ${block.source.url}`);
+            } catch (err) {
+              failedImages++;
+              console.error(`[gemini] Failed to fetch image: ${block.source.url}`, err instanceof Error ? err.message : err);
             }
           }
         } else if (block.type === "text" && block.text) {
@@ -73,6 +83,17 @@ async function convertMessages(
       role: msg.role === "assistant" ? "model" : "user",
       parts,
     });
+  }
+
+  // If ALL images failed, throw so the caller knows analysis would be blind
+  if (totalImages > 0 && failedImages === totalImages) {
+    throw new Error(
+      `All ${totalImages} image(s) failed to load. Cannot proceed with analysis without visual input. Check that image URLs are accessible.`
+    );
+  }
+
+  if (failedImages > 0) {
+    console.warn(`[gemini] ${failedImages}/${totalImages} images failed to load — proceeding with partial visual context`);
   }
 
   return result;

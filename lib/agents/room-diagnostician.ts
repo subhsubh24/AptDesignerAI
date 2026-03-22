@@ -5,6 +5,7 @@ import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
@@ -13,9 +14,9 @@ export interface DiagnosisResult {
   action_list: ActionItem[];
 }
 
-export async function runRoomDiagnosis(ctx: AgentContext): Promise<AgentResult<DiagnosisResult>> {
+export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesignProfile): Promise<AgentResult<DiagnosisResult>> {
   const model = selectModel("diagnosis");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(profile);
   const userPrompt = getDiagnosisPrompt(
     ctx.roomType,
     ctx.keepItems,

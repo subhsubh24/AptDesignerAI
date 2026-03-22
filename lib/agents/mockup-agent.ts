@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
 import type { AgentResult } from "./types";
+import type { AIContentBlock } from "@/lib/ai/provider";
 import type { CandidateProduct } from "@/lib/types/database";
 
 interface MockupPromptResult {
@@ -13,6 +14,7 @@ interface MockupPromptResult {
 
 interface MockupGenerationResult {
   image_url: string;
+  image_mime_type?: string;
   prompt_used: string;
   provider: string;
 }
@@ -23,7 +25,9 @@ interface MockupGenerationResult {
 export async function generateMockupPrompt(
   roomType: string,
   diagnosisSummary: string,
-  products: CandidateProduct[]
+  products: CandidateProduct[],
+  existingItems?: string[],
+  designDirection?: string,
 ): Promise<AgentResult<MockupPromptResult>> {
   const model = selectModel("mockup_prompt");
   const system = getSystemPrompt();
@@ -33,7 +37,7 @@ export async function generateMockupPrompt(
       `${p.category}: ${p.title || "Unknown"} (${p.colors?.join("/") || "neutral"}, ${p.materials?.join("/") || "unknown material"})`
   );
 
-  const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions);
+  const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions, existingItems, designDirection);
 
   try {
     const response = await geminiProvider.chat({
@@ -62,26 +66,50 @@ export async function generateMockupPrompt(
 
 /**
  * Generate a mockup image using Gemini native image generation.
- * Replaces OpenAI DALL-E / gpt-image-1.
+ * Supports optional room photos as visual reference so the generated
+ * image actually resembles the real apartment.
  */
-export async function generateMockupImage(prompt: string): Promise<AgentResult<MockupGenerationResult>> {
+export async function generateMockupImage(
+  prompt: string,
+  roomImageUrls?: string[],
+): Promise<AgentResult<MockupGenerationResult>> {
   try {
+    // Build content blocks: room photos first (if any), then prompt text
+    const content: AIContentBlock[] = [];
+
+    if (roomImageUrls && roomImageUrls.length > 0) {
+      content.push({
+        type: "text",
+        text: "Here are photos of the actual room. Use these as visual reference for the room's architecture, layout, flooring, walls, windows, and lighting when generating the mockup:",
+      });
+      for (const url of roomImageUrls) {
+        content.push({
+          type: "image",
+          source: { type: "url", url },
+        });
+      }
+    }
+
+    content.push({
+      type: "text",
+      text: prompt,
+    });
+
     const response = await geminiProvider.chat({
       model: selectModel("image_generation"),
-      system: "You are an interior design visualization specialist. Generate photorealistic room mockups.",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 1024,
+      system: "You are an interior design visualization specialist. Generate photorealistic room mockups that match the actual room architecture shown in any reference photos.",
+      messages: [{ role: "user", content }],
+      max_tokens: 8192,
       temperature: 0.5,
       responseModalities: ["Text", "Image"],
     });
 
     if (response.imageData) {
-      // Return as data URI — caller can upload to Supabase Storage
-      const imageUrl = `data:${response.imageData.mimeType};base64,${response.imageData.data}`;
       return {
         success: true,
         data: {
-          image_url: imageUrl,
+          image_url: response.imageData.data,
+          image_mime_type: response.imageData.mimeType,
           prompt_used: prompt,
           provider: "gemini-image",
         },

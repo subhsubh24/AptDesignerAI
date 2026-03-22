@@ -5,6 +5,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -123,9 +124,10 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
   });
 
   try {
+    const profile = buildDesignProfile(project);
     const response = await geminiProvider.chat({
       model: selectModel("apartment_analysis"),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 4096,
       temperature: 0.3,
@@ -134,9 +136,18 @@ Be specific and opinionated. Reference actual items you see. Don't be generic.`,
 
     const analysis = JSON.parse(response.content);
 
-    // Save diagnosis for each room
+    // Save diagnosis for each room — normalize keys to handle case/format mismatches
+    const analysisRooms = analysis.rooms || {};
+    const normalizedRooms: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(analysisRooms)) {
+      normalizedRooms[key.toLowerCase().replace(/[\s-]+/g, "_")] = value;
+    }
+
     for (const room of rooms) {
-      const roomAnalysis = analysis.rooms?.[room.room_type];
+      const normalizedType = room.room_type.toLowerCase().replace(/[\s-]+/g, "_");
+      const roomAnalysis = normalizedRooms[normalizedType]
+        || normalizedRooms[room.room_type]
+        || analysisRooms[room.room_type];
       if (!roomAnalysis) continue;
 
       await supabase.from("room_diagnoses").insert({

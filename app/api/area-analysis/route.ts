@@ -6,6 +6,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateAnalysis } from "@/lib/agents/validation-agent";
 import type { AIContentBlock } from "@/lib/ai/provider";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -195,9 +196,10 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
   });
 
   try {
+    const profile = buildDesignProfile(project);
     const response = await geminiProvider.chat({
       model: selectModel("area_analysis"),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 8192,
       temperature: 0.3,

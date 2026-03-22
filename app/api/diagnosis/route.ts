@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import type { AgentContext } from "@/lib/agents/types";
 
 export async function POST(request: Request) {
@@ -34,6 +35,15 @@ export async function POST(request: Request) {
     input_json: { room_type: room.room_type, image_count: imageUrls.length },
   });
 
+  // Load project for design profile context
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", room.project_id)
+    .single();
+
+  const profile = buildDesignProfile(project);
+
   // Build context and run diagnosis
   const ctx: AgentContext = {
     roomId: room_id,
@@ -46,7 +56,7 @@ export async function POST(request: Request) {
     imageUrls,
   };
 
-  const result = await runRoomDiagnosis(ctx);
+  const result = await runRoomDiagnosis(ctx, profile);
 
   if (!result.success || !result.data) {
     await completeAgentRun(supabase, agentRun.id, {
