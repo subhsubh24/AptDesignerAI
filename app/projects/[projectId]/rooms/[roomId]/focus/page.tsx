@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   Loader2,
@@ -23,6 +24,9 @@ import {
   ShieldCheck,
   Ruler,
   LayoutGrid,
+  MessageSquare,
+  RefreshCw,
+  ArrowRight,
 } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
@@ -142,6 +146,13 @@ export default function FocusPage() {
   } | null>(null);
   const [floorPlanFound, setFloorPlanFound] = useState<boolean | null>(null);
 
+  // Feedback / refinement state
+  const [feedbackText, setFeedbackText] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [impactSummary, setImpactSummary] = useState<string | null>(null);
+  const [changesMade, setChangesMade] = useState<string[]>([]);
+  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+
   // Vision mockup state
   const [visionUrl, setVisionUrl] = useState<string | null>(null);
   const [generatingVision, setGeneratingVision] = useState(false);
@@ -220,6 +231,41 @@ export default function FocusPage() {
     }
     analyze();
   }, [roomId, projectId]);
+
+  // Refine analysis based on user feedback
+  const handleRefine = async () => {
+    if (!feedbackText.trim() || !areaAnalysis) return;
+    setRefining(true);
+    setImpactSummary(null);
+    setChangesMade([]);
+
+    try {
+      const res = await fetch("/api/area-analysis/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room_id: roomId,
+          project_id: projectId,
+          user_feedback: feedbackText.trim(),
+          previous_analysis: areaAnalysis,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAreaAnalysis(data.analysis);
+        setImpactSummary(data.impact_summary || null);
+        setChangesMade(data.changes_made || []);
+        setFeedbackText("");
+        setShowFeedbackInput(false);
+        // Clear any existing products since the analysis changed
+        setProducts([]);
+      }
+    } catch (err) {
+      console.error("Refinement error:", err);
+    }
+    setRefining(false);
+  };
 
   // Pre-search vision mockup
   const handleGenerateVision = async () => {
@@ -529,13 +575,91 @@ export default function FocusPage() {
             </CardContent>
           </Card>
 
+          {/* Impact summary — shown after refinement */}
+          {impactSummary && (
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 animate-fade-in-up">
+              <RefreshCw className="h-5 w-5 shrink-0 mt-0.5 text-blue-600" />
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Analysis updated based on your feedback</p>
+                <p className="text-sm">{impactSummary}</p>
+                {changesMade.length > 0 && (
+                  <ul className="text-xs space-y-0.5 mt-1">
+                    {changesMade.map((change, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-blue-500" />
+                        <span>{change}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User feedback input */}
+          {showFeedbackInput ? (
+            <Card className="border-accent-warm/30 animate-fade-in-up">
+              <CardContent className="pt-5 pb-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <MessageSquare className="h-4 w-4 text-accent-warm" />
+                  Tell us what you think
+                </div>
+                <Textarea
+                  placeholder="e.g. &quot;Actually I want to keep the floor lamp&quot; or &quot;I need more seating for hosting dinner parties&quot; or &quot;I don't like walnut, prefer lighter wood&quot;"
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={3}
+                  className="resize-none text-sm"
+                  disabled={refining}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleRefine}
+                    disabled={!feedbackText.trim() || refining}
+                    size="sm"
+                  >
+                    {refining ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                        Refining...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-1.5" />
+                        Refine Analysis
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setShowFeedbackInput(false); setFeedbackText(""); }}
+                    disabled={refining}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setShowFeedbackInput(true)}
+            >
+              <MessageSquare className="h-4 w-4 mr-1.5" />
+              Have feedback? Refine this analysis
+            </Button>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button size="lg" className="flex-1 h-14 text-base" onClick={handleSearch}>
+            <Button size="lg" className="flex-1 h-14 text-base" onClick={handleSearch} disabled={refining}>
               <Search className="h-5 w-5 mr-2" />
               Find the Perfect Pieces
             </Button>
-            <Button size="lg" variant="outline" className="h-14" onClick={handleGenerateVision} disabled={generatingVision}>
+            <Button size="lg" variant="outline" className="h-14" onClick={handleGenerateVision} disabled={generatingVision || refining}>
               {generatingVision ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Eye className="h-5 w-5 mr-2" />}
               Envision the Room
             </Button>
