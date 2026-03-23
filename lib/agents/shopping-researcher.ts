@@ -135,13 +135,31 @@ Return JSON:
       max_tokens: 4096,
       temperature: 0.2,
       tools: [{ googleSearch: {} }],
-      responseMimeType: "application/json",
     });
 
     let candidates: SearchCandidate[] = [];
 
     try {
-      const parsed = JSON.parse(response.content);
+      // gemini-3-flash-preview doesn't support responseMimeType + tools,
+      // so we parse JSON from the text response
+      const raw = response.content.trim();
+      let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[1].trim());
+        } else {
+          const braceStart = raw.indexOf("{");
+          const braceEnd = raw.lastIndexOf("}");
+          if (braceStart !== -1 && braceEnd > braceStart) {
+            parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+          } else {
+            parsed = {};
+          }
+        }
+      }
       candidates = (parsed.products || []).map(
         (r: { title: string; url: string; snippet: string; source: string }) => ({
           title: r.title || "",
