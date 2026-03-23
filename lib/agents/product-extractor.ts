@@ -21,11 +21,15 @@ export interface ExtractedProduct {
   category: string;
   description: string | null;
   image_url: string | null;
+  lifestyle_image_url?: string | null;
+  visual_style_tags?: string[];
+  available_variants?: string[];
 }
 
 /**
- * Extract product info from a URL using Gemini URL Context.
- * Replaces the old Jina Reader API + OpenAI extraction pipeline.
+ * Extract product info from a URL using Gemini URL Context + Google Search.
+ * Deep-crawls the product page: reads all content, examines product images,
+ * checks color/finish variants, and captures lifestyle photography.
  */
 export async function extractFromUrl(url: string): Promise<AgentResult<ExtractedProduct>> {
   const model = selectModel("extraction");
@@ -39,12 +43,12 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       messages: [
         {
           role: "user",
-          content: `${extractionPrompt}\n\nExtract product information from this URL: ${url}`,
+          content: `${extractionPrompt}\n\nExtract product information from this URL: ${url}\n\nVisit the page, read all the content, examine all product images carefully, and check for available color/material variants.`,
         },
       ],
-      max_tokens: 2048,
+      max_tokens: 3072,
       temperature: 0.1,
-      tools: [{ urlContext: {} }],
+      tools: [{ urlContext: {} }, { googleSearch: {} }],
       responseMimeType: "application/json",
     });
 
@@ -78,7 +82,7 @@ export async function extractFromImage(imageUrl: string): Promise<AgentResult<Ex
     },
     {
       type: "text",
-      text: `${extractionPrompt}\n\nAnalyze the product shown in this image. Extract all available information from visual cues.`,
+      text: `${extractionPrompt}\n\nAnalyze the product shown in this image. Extract all available information from visual cues — describe what you see in detail (color, material, style, texture, proportions).`,
     },
   ];
 

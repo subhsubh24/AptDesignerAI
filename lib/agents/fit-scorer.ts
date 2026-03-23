@@ -26,6 +26,12 @@ export async function scoreProduct(
     otherRoomsContext
   );
 
+  // Extract visual metadata from product metadata
+  const meta = product.metadata as Record<string, unknown> | null;
+  const visualTags = (meta?.visual_style_tags as string[]) || [];
+  const availableVariants = (meta?.available_variants as string[]) || [];
+  const lifestyleImageUrl = meta?.lifestyle_image_url as string | undefined;
+
   // Build product context
   const productInfo = [
     product.title && `Title: ${product.title}`,
@@ -34,6 +40,8 @@ export async function scoreProduct(
     product.dimensions && `Dimensions: ${JSON.stringify(product.dimensions)}`,
     product.materials?.length && `Materials: ${product.materials.join(", ")}`,
     product.colors?.length && `Colors: ${product.colors.join(", ")}`,
+    visualTags.length > 0 && `Visual style (from product images): ${visualTags.join(", ")}`,
+    availableVariants.length > 0 && `Other available options: ${availableVariants.join(", ")}`,
     product.description && `Description: ${product.description}`,
   ]
     .filter(Boolean)
@@ -51,9 +59,14 @@ export async function scoreProduct(
     content.push({ type: "image", source: { type: "url", url: product.image_url } });
   }
 
+  // Add lifestyle/room-setting image if available — helps assess scale and style in context
+  if (lifestyleImageUrl) {
+    content.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
+  }
+
   content.push({
     type: "text",
-    text: `${evalPrompt}\n\n## PRODUCT INFORMATION\n${productInfo}`,
+    text: `${evalPrompt}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
   });
 
   try {
@@ -127,12 +140,15 @@ export async function quickScoreProducts(
     batches.map(async (batch) => {
       const productList = batch
         .map((p, i) => {
+          const pMeta = p.metadata as Record<string, unknown> | null;
+          const vTags = (pMeta?.visual_style_tags as string[]) || [];
           const info = [
             `[${i}] ${p.title || "Unknown"}`,
             p.retailer && `  Retailer: ${p.retailer}`,
             p.price && `  Price: $${p.price}`,
             p.materials?.length && `  Materials: ${p.materials.join(", ")}`,
             p.colors?.length && `  Colors: ${p.colors.join(", ")}`,
+            vTags.length > 0 && `  Visual style: ${vTags.join(", ")}`,
             p.description && `  Description: ${p.description.slice(0, 150)}`,
           ].filter(Boolean).join("\n");
           return info;
