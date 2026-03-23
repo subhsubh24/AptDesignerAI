@@ -182,7 +182,13 @@ export const geminiProvider: AIProvider = {
         config,
       });
     } catch (err) {
-      console.error(`[gemini] API error for model=${model}:`, JSON.stringify(err, null, 2));
+      const e = err as Record<string, unknown>;
+      console.error(`[gemini] API error for model=${model}:`, JSON.stringify({
+        name: e.name,
+        status: e.status,
+        message: e.message || (err instanceof Error ? err.message : "unknown"),
+        details: e.details || e.errorDetails,
+      }, null, 2));
       throw err;
     }
 
