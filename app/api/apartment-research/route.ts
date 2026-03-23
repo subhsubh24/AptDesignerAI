@@ -162,10 +162,34 @@ When researching floor plans, be thorough: navigate to the building's floor plan
       max_tokens: 8192,
       temperature: 0.2,
       tools: [{ googleSearch: {} }, { urlContext: {} }],
-      responseMimeType: "application/json",
     });
 
-    const research = JSON.parse(response.content);
+    // When using grounding tools, Gemini may not produce clean JSON.
+    // Try to extract JSON from the response content.
+    let research: Record<string, unknown>;
+    const raw = response.content.trim();
+    if (!raw) {
+      throw new Error("Building research returned empty response — try again");
+    }
+    try {
+      research = JSON.parse(raw);
+    } catch {
+      // Try extracting JSON from markdown code blocks
+      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        research = JSON.parse(jsonMatch[1].trim());
+      } else {
+        // Last resort: find the first { ... } block
+        const braceStart = raw.indexOf("{");
+        const braceEnd = raw.lastIndexOf("}");
+        if (braceStart !== -1 && braceEnd > braceStart) {
+          research = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+        } else {
+          console.error("[apartment-research] Could not parse response:", raw.slice(0, 500));
+          throw new Error("Could not parse building research response");
+        }
+      }
+    }
 
     // Save to project if project_id provided
     if (project_id) {
