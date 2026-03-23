@@ -133,9 +133,13 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     });
   }
 
+  const userContextNote = room.user_context
+    ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. For example, if they say to ignore something, don't include it in your assessment or recommendations.`
+    : "";
+
   contentBlocks.push({
     type: "text",
-    text: `Focus area: ${room.name} (${room.room_type})\n\nHere are the photos of this area:`,
+    text: `Focus area: ${room.name} (${room.room_type})${userContextNote}\n\nHere are the photos of this area:`,
   });
 
   for (const img of room.room_images || []) {

@@ -85,6 +85,9 @@ export default function DashboardPage() {
     }>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  const [roomContext, setRoomContext] = useState<Record<string, string>>({});
+  const [savingContext, setSavingContext] = useState(false);
 
   const roomSections = getRoomSections(bedrooms, bathrooms);
   const showNeighborhood = ["new york", "nyc", "los angeles", "la", "san francisco", "sf", "chicago"].some(
@@ -678,6 +681,28 @@ export default function DashboardPage() {
 
   // ─── Step: Room Selection ─────────────────────────────────────
   if (step === "room_select") {
+    const handleProceedToRoom = async () => {
+      if (!selectedRoom) return;
+      const roomId = roomIds[selectedRoom];
+      if (!roomId) return;
+
+      const context = roomContext[selectedRoom]?.trim();
+      if (context) {
+        setSavingContext(true);
+        try {
+          await fetch(`/api/rooms/${roomId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_context: context }),
+          });
+        } finally {
+          setSavingContext(false);
+        }
+      }
+
+      router.push(`/projects/${projectId}/rooms/${roomId}/focus`);
+    };
+
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
         <div className="text-center mb-10">
@@ -694,16 +719,21 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {roomSections.map((section) => {
             const hasImages = (roomImages[section.key]?.length || 0) > 0;
-            const roomId = roomIds[section.key];
             const firstImage = roomImages[section.key]?.[0];
+            const isSelected = selectedRoom === section.key;
 
             if (!hasImages) return null;
 
             return (
               <button
                 key={section.key}
-                onClick={() => router.push(`/projects/${projectId}/rooms/${roomId}/focus`)}
-                className="group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1 hover:border-primary/30"
+                onClick={() => setSelectedRoom(isSelected ? null : section.key)}
+                className={cn(
+                  "group relative overflow-hidden rounded-2xl border-2 bg-card transition-all duration-300 text-left",
+                  isSelected
+                    ? "border-accent-warm shadow-xl ring-2 ring-accent-warm/20 -translate-y-1"
+                    : "border-transparent hover:shadow-xl hover:-translate-y-1 hover:border-primary/30"
+                )}
               >
                 {/* Room thumbnail */}
                 {firstImage && (
@@ -711,10 +741,20 @@ export default function DashboardPage() {
                     <img
                       src={firstImage.url}
                       alt={section.label}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-500",
+                        isSelected ? "scale-105" : "group-hover:scale-105"
+                      )}
                     />
                     {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  </div>
+                )}
+
+                {/* Selected indicator */}
+                {isSelected && (
+                  <div className="absolute top-3 right-3 h-7 w-7 rounded-full bg-accent-warm flex items-center justify-center shadow-lg animate-fade-in-up">
+                    <CheckCircle2 className="h-4 w-4 text-white" />
                   </div>
                 )}
 
@@ -725,9 +765,11 @@ export default function DashboardPage() {
                       <span className="text-xl">{section.icon}</span>
                       <h3 className="font-semibold text-white text-lg">{section.label}</h3>
                     </div>
-                    <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/40 transition-colors">
-                      <ArrowRight className="h-4 w-4 text-white" />
-                    </div>
+                    {!isSelected && (
+                      <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/40 transition-colors">
+                        <ArrowRight className="h-4 w-4 text-white" />
+                      </div>
+                    )}
                   </div>
                   <p className="text-white/70 text-xs mt-1">
                     {roomImages[section.key]?.length || 0} {(roomImages[section.key]?.length || 0) === 1 ? "photo" : "photos"}
@@ -737,6 +779,49 @@ export default function DashboardPage() {
             );
           })}
         </div>
+
+        {/* Context input — appears when a room is selected */}
+        {selectedRoom && (
+          <div className="mt-8 animate-fade-in-up">
+            <Card>
+              <CardContent className="pt-6 pb-5 space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">
+                    Anything the AI should know about these photos?
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Optional — tell us what to ignore, what&apos;s temporary, or anything that&apos;s not obvious from the photos.
+                  </p>
+                  <textarea
+                    value={roomContext[selectedRoom] || ""}
+                    onChange={(e) =>
+                      setRoomContext((prev) => ({ ...prev, [selectedRoom]: e.target.value }))
+                    }
+                    placeholder={"e.g. \"Ignore the yoga mat, it won't be there\" or \"The clutter will be cleaned up — focus on the furniture and layout\""}
+                    className="w-full h-24 px-4 py-3 rounded-lg border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent-warm/30 focus:border-accent-warm transition-all"
+                  />
+                </div>
+
+                <Button
+                  size="lg"
+                  className="w-full h-12 text-base gap-2"
+                  onClick={handleProceedToRoom}
+                  disabled={savingContext}
+                >
+                  {savingContext ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles className="h-5 w-5" />
+                      Design this room
+                      <ArrowRight className="h-4 w-4 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }

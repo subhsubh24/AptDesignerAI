@@ -58,9 +58,13 @@ Aesthetic: ${br.design_aesthetic || "unknown"}${floorPlanSection}
   }
 
   // Room photos
+  const userContextNote = room.user_context
+    ? `\n\nUSER NOTES ABOUT PHOTOS: "${room.user_context}"`
+    : "";
+
   contentBlocks.push({
     type: "text",
-    text: `Focus area: ${room.name} (${room.room_type})\n\nHere are the photos of this area:`,
+    text: `Focus area: ${room.name} (${room.room_type})${userContextNote}\n\nHere are the photos of this area:`,
   });
 
   for (const img of room.room_images || []) {
