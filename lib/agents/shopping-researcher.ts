@@ -4,6 +4,8 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import type { DesignDirection } from "@/lib/types/database";
 
 interface QueryWithAngle {
   query: string;
@@ -60,11 +62,14 @@ export async function generateSearchBrief(
   roomType: string,
   missingCategories: string[],
   budgetMode: string,
-  categoryHints?: Record<string, string>
+  categoryHints?: Record<string, string>,
+  designProfile?: DynamicDesignProfile,
+  designDirection?: DesignDirection,
+  priorities?: string[]
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
-  const system = getSystemPrompt();
-  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints);
+  const system = getSystemPrompt(designProfile);
+  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities);
 
   try {
     const response = await geminiProvider.chat({

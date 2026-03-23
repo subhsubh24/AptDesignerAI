@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runAgenticSearch } from "@/lib/agents/orchestrator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import type { AgentContext } from "@/lib/agents/types";
 
 export async function POST(request: Request) {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
-  // Fetch room
+  // Fetch room with images
   const { data: room } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
@@ -23,11 +24,20 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
-  // Fetch project for floor plan context
+  // Fetch project for full building/apartment context
   const { data: project } = await supabase
     .from("projects")
     .select("*")
     .eq("id", room.project_id)
+    .single();
+
+  // Fetch room diagnosis for design direction + what's working/not working
+  const { data: diagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("*")
+    .eq("room_id", room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .single();
 
   // Create search session
@@ -51,6 +61,9 @@ export async function POST(request: Request) {
 
   const imageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Build full design profile from project data
+  const designProfile = buildDesignProfile(project);
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -60,6 +73,11 @@ export async function POST(request: Request) {
     budgetMode: room.budget_mode,
     sourcingMode: room.sourcing_mode,
     imageUrls,
+    // Full apartment + building context for all agents
+    designProfile,
+    // Room diagnosis results so agents know what to fix
+    diagnosis: diagnosis?.diagnosis_json || undefined,
+    designDirection: diagnosis?.design_direction_json || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

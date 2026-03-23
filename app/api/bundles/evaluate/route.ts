@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     (item: { candidate_products: unknown }) => item.candidate_products
   );
 
-  // Fetch room images
+  // Fetch room with images
   const { data: room } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
@@ -34,6 +35,22 @@ export async function POST(request: Request) {
 
   const roomImageUrls = (room?.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Fetch project for full building/apartment context
+  const { data: project } = room?.project_id
+    ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
+    : { data: null };
+
+  // Fetch room diagnosis for design direction
+  const { data: diagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("*")
+    .eq("room_id", bundle.room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  const designProfile = buildDesignProfile(project);
+
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
     room_id: bundle.room_id,
@@ -41,7 +58,14 @@ export async function POST(request: Request) {
     input_json: { bundle_id, product_count: products.length },
   });
 
-  const result = await evaluateBundle(products, room?.room_type || "living_room", roomImageUrls);
+  const result = await evaluateBundle(products, {
+    roomType: room?.room_type || "living_room",
+    roomImageUrls,
+    priorities: room?.priorities || [],
+    designProfile,
+    diagnosis: diagnosis?.diagnosis_json || undefined,
+    designDirection: diagnosis?.design_direction_json || undefined,
+  });
 
   if (!result.success || !result.data) {
     await completeAgentRun(supabase, agentRun.id, {

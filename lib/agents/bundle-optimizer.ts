@@ -6,16 +6,30 @@ import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
-import type { CandidateProduct } from "@/lib/types/database";
+import type { CandidateProduct, DiagnosisData, DesignDirection } from "@/lib/types/database";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+export interface BundleContext {
+  roomType: string;
+  roomImageUrls: string[];
+  priorities?: string[];
+  designProfile?: DynamicDesignProfile;
+  diagnosis?: DiagnosisData;
+  designDirection?: DesignDirection;
+}
 
 export async function evaluateBundle(
   products: CandidateProduct[],
-  roomType: string,
-  roomImageUrls: string[]
+  bundleCtx: BundleContext
 ): Promise<AgentResult<BundleEvaluationResult>> {
   const model = selectModel("bundle");
-  const system = getSystemPrompt();
-  const bundlePrompt = getBundleEvalPrompt(roomType);
+  const system = getSystemPrompt(bundleCtx.designProfile);
+  const bundlePrompt = getBundleEvalPrompt(
+    bundleCtx.roomType,
+    bundleCtx.priorities,
+    bundleCtx.diagnosis,
+    bundleCtx.designDirection
+  );
 
   // Build bundle context with visual metadata
   const bundleInfo = products
@@ -38,7 +52,7 @@ export async function evaluateBundle(
   const content: AIContentBlock[] = [];
 
   // Add room images
-  for (const url of roomImageUrls.slice(0, 2)) {
+  for (const url of bundleCtx.roomImageUrls.slice(0, 2)) {
     content.push({ type: "image", source: { type: "url", url } });
   }
 

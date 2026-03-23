@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "product_id and room_id required" }, { status: 400 });
   }
 
-  // Fetch product and room
+  // Fetch product, room, project, and diagnosis in parallel
   const [productRes, roomRes] = await Promise.all([
     supabase.from("candidate_products").select("*").eq("id", product_id).single(),
     supabase.from("rooms").select("*, room_images(*)").eq("id", room_id).single(),
@@ -31,6 +32,24 @@ export async function POST(request: Request) {
   const product = productRes.data;
   const room = roomRes.data;
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
+
+  // Fetch project for full building/apartment context
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", room.project_id)
+    .single();
+
+  // Fetch room diagnosis for design direction
+  const { data: diagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("*")
+    .eq("room_id", room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  const designProfile = buildDesignProfile(project);
 
   // Build cross-room context
   let otherRoomsContext: string | undefined;
@@ -59,14 +78,17 @@ export async function POST(request: Request) {
     input_json: { product_id, product_title: product.title },
   });
 
-  const result = await scoreProduct(
-    product,
-    room.room_type,
-    room.budget_mode,
-    room.keep_items || [],
+  const result = await scoreProduct(product, {
+    roomType: room.room_type,
+    budgetMode: room.budget_mode,
+    existingItems: room.keep_items || [],
     roomImageUrls,
-    otherRoomsContext
-  );
+    priorities: room.priorities || [],
+    otherRoomsContext,
+    designProfile,
+    diagnosis: diagnosis?.diagnosis_json || undefined,
+    designDirection: diagnosis?.design_direction_json || undefined,
+  });
 
   if (!result.success || !result.data) {
     await completeAgentRun(supabase, agentRun.id, {

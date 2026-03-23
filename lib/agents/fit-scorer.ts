@@ -6,24 +6,36 @@ import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-s
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
-import type { CandidateProduct } from "@/lib/types/database";
+import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/types/database";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+export interface ScoringContext {
+  roomType: string;
+  budgetMode: string;
+  existingItems: string[];
+  roomImageUrls: string[];
+  priorities?: string[];
+  otherRoomsContext?: string;
+  designProfile?: DynamicDesignProfile;
+  diagnosis?: DiagnosisData;
+  designDirection?: DesignDirection;
+}
 
 export async function scoreProduct(
   product: CandidateProduct,
-  roomType: string,
-  budgetMode: string,
-  existingItems: string[],
-  roomImageUrls: string[],
-  otherRoomsContext?: string
+  scoringCtx: ScoringContext
 ): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
   const model = selectModel("scoring");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(scoringCtx.designProfile);
   const evalPrompt = getProductEvalPrompt(
-    roomType,
+    scoringCtx.roomType,
     product.category || "unknown",
-    existingItems,
-    budgetMode,
-    otherRoomsContext
+    scoringCtx.existingItems,
+    scoringCtx.budgetMode,
+    scoringCtx.otherRoomsContext,
+    scoringCtx.priorities,
+    scoringCtx.diagnosis,
+    scoringCtx.designDirection
   );
 
   // Extract visual metadata from product metadata
@@ -50,7 +62,7 @@ export async function scoreProduct(
   const content: AIContentBlock[] = [];
 
   // Add room images for context
-  for (const url of roomImageUrls.slice(0, 2)) {
+  for (const url of scoringCtx.roomImageUrls.slice(0, 2)) {
     content.push({ type: "image", source: { type: "url", url } });
   }
 

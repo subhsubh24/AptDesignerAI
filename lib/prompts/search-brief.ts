@@ -1,3 +1,5 @@
+import type { DesignDirection } from "@/lib/types/database";
+
 export type PriceTier = "budget" | "balanced" | "high_end";
 
 const TIER_LABELS: Record<PriceTier, string> = {
@@ -23,7 +25,14 @@ const TIER_RETAILERS: Record<PriceTier, string[]> = {
   ],
 };
 
-export function getSearchBriefPrompt(roomType: string, missingCategories: string[], budgetMode: string, categoryHints?: Record<string, string>): string {
+export function getSearchBriefPrompt(
+  roomType: string,
+  missingCategories: string[],
+  budgetMode: string,
+  categoryHints?: Record<string, string>,
+  designDirection?: DesignDirection,
+  priorities?: string[]
+): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
   const catOnlyHints = categoryHints
@@ -38,12 +47,31 @@ export function getSearchBriefPrompt(roomType: string, missingCategories: string
     ? `\n\n## FLOOR PLAN CONTEXT\n${floorPlanHint}\nIMPORTANT: Use these dimensions to search for correctly sized furniture. A small room needs compact pieces; a large room can handle statement furniture. Include size constraints in search queries (e.g. "compact 48 inch dining table" for small spaces, "large 8x10 area rug" for spacious rooms).`
     : "";
 
+  // Build design direction section from actual diagnosis — not hardcoded
+  const designInfo = designDirection
+    ? [
+        designDirection.recommended_palette?.length && `Target palette: ${designDirection.recommended_palette.join(", ")}`,
+        designDirection.recommended_materials?.length && `Target materials: ${designDirection.recommended_materials.join(", ")}`,
+        designDirection.recommended_textures?.length && `Target textures: ${designDirection.recommended_textures.join(", ")}`,
+        designDirection.style_notes && `Style: ${designDirection.style_notes}`,
+      ].filter(Boolean).join("\n")
+    : null;
+
+  const designSection = designInfo
+    ? `\n\n## DESIGN DIRECTION (from room diagnosis)\n${designInfo}\nAll tiers should match this aesthetic direction — budget doesn't mean ugly.`
+    : `\nThe design profile should be inferred from the apartment context in the system prompt. All tiers should match the apartment's aesthetic — budget doesn't mean ugly.`;
+
+  // Build priorities section — captures hosting, seating, lifestyle
+  const prioritiesSection = priorities?.length
+    ? `\n\n## CLIENT PRIORITIES & LIFESTYLE\n${priorities.map((p) => `- ${p}`).join("\n")}\nIMPORTANT: Search for pieces that serve these priorities. If hosting is important, search for dining tables that seat enough guests and extra seating options. If comfort is key, search for deeply comfortable seating. The search should reflect how the client actually lives.`
+    : "";
+
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:
@@ -51,13 +79,10 @@ For each category, generate search queries for THREE price tiers:
 2. **Balanced** — mid-range quality from ${TIER_RETAILERS.balanced.join(", ")}
 3. **High End** — premium/investment pieces from ${TIER_RETAILERS.high_end.join(", ")}
 
-The design profile is: modern warm, walnut/cream/taupe, sophisticated, urban.
-All tiers should match this aesthetic — budget doesn't mean ugly.
-
 ## QUERY DIVERSITY REQUIREMENT
 You MUST generate exactly **5 queries per tier**, each approaching the search from a different angle:
 1. **product_specific** — Target a specific known product by name: "Article Seno walnut coffee table"
-2. **style_material** — Describe the style + material + color: "modern walnut coffee table tapered legs cream"
+2. **style_material** — Describe the style + material + color using the design direction above: "modern walnut coffee table tapered legs cream"
 3. **retailer_browse** — Browse a specific retailer's selection: "West Elm coffee tables under $800"
 4. **comparison** — Find comparison/roundup articles: "best mid-century modern coffee tables 2025"
 5. **brand_collection** — Target a specific brand or collection: "Floyd coffee table walnut"
@@ -93,6 +118,7 @@ Return a JSON object:
 CRITICAL RULES for search queries:
 - Each query MUST target a SPECIFIC PRODUCT or specific retailer page, not a generic category.
 - Include brand/retailer name + product type + material + color in product_specific and brand_collection queries.
+- Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic.
 - Good: "Article Texa rug 8x10 cream wool" or "CB2 Dondra walnut media console"
 - Bad: "modern rugs" or "TV stands" (too generic, will return category pages)
 - Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers.

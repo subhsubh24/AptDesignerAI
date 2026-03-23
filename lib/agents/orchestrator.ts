@@ -138,7 +138,10 @@ export async function runAgenticSearch(
     // PHASE 1: Generate search brief (5 queries × 3 tiers × N categories)
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Generating intensive search brief", status: "running" });
-    const briefResult = await generateSearchBrief(ctx.roomType, missingCategories, ctx.budgetMode, categoryHints);
+    const briefResult = await generateSearchBrief(
+      ctx.roomType, missingCategories, ctx.budgetMode, categoryHints,
+      ctx.designProfile, ctx.designDirection, ctx.priorities
+    );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed" });
       return { success: false, error: "Failed to generate search brief" };
@@ -417,13 +420,16 @@ export async function runAgenticSearch(
         for (const product of toScore) {
           deepScorePromises.push(
             deepScoreLimit(async () => {
-              const scoreResult = await scoreProduct(
-                product,
-                ctx.roomType,
-                ctx.budgetMode,
-                ctx.keepItems,
-                ctx.imageUrls
-              );
+              const scoreResult = await scoreProduct(product, {
+                roomType: ctx.roomType,
+                budgetMode: ctx.budgetMode,
+                existingItems: ctx.keepItems,
+                roomImageUrls: ctx.imageUrls,
+                priorities: ctx.priorities,
+                designProfile: ctx.designProfile,
+                diagnosis: ctx.diagnosis,
+                designDirection: ctx.designDirection,
+              });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
@@ -485,9 +491,10 @@ export async function runAgenticSearch(
       }),
       {
         roomType: ctx.roomType,
-        designDirection: "Based on apartment photos and building context",
+        designDirection: ctx.designDirection?.style_notes || "Based on apartment photos and building context",
         existingItems: ctx.keepItems,
         roomImageUrls: ctx.imageUrls,
+        designProfile: ctx.designProfile,
       }
     );
 
@@ -522,7 +529,14 @@ export async function runAgenticSearch(
       }
 
       if (tierProducts.length > 0) {
-        const bundleResult = await evaluateBundle(tierProducts, ctx.roomType, ctx.imageUrls);
+        const bundleResult = await evaluateBundle(tierProducts, {
+                roomType: ctx.roomType,
+                roomImageUrls: ctx.imageUrls,
+                priorities: ctx.priorities,
+                designProfile: ctx.designProfile,
+                diagnosis: ctx.diagnosis,
+                designDirection: ctx.designDirection,
+              });
         if (bundleResult.success && bundleResult.data) {
           return { tier, ...bundleResult.data };
         }
@@ -608,13 +622,16 @@ export async function runAgenticSearch(
               };
 
               // Deep score the backfill product directly
-              const scoreResult = await scoreProduct(
-                product,
-                ctx.roomType,
-                ctx.budgetMode,
-                ctx.keepItems,
-                ctx.imageUrls
-              );
+              const scoreResult = await scoreProduct(product, {
+                roomType: ctx.roomType,
+                budgetMode: ctx.budgetMode,
+                existingItems: ctx.keepItems,
+                roomImageUrls: ctx.imageUrls,
+                priorities: ctx.priorities,
+                designProfile: ctx.designProfile,
+                diagnosis: ctx.diagnosis,
+                designDirection: ctx.designDirection,
+              });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 if (scoreResult.data.final_item_score >= 6) {

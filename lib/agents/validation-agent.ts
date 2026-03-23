@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -109,10 +110,11 @@ export async function validateProductSet(
     designDirection: string;
     existingItems: string[];
     roomImageUrls?: string[];
+    designProfile?: DynamicDesignProfile;
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(roomContext.designProfile);
 
   const promptText = `Validate this set of product search results. You have room photos and product images — use them to verify visual coherence.
 
