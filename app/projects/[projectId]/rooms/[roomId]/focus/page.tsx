@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -88,13 +89,13 @@ const TIER_LABELS: Record<PriceTier, string> = {
 // ─── Search phase labels for live progress ──────────────────────
 
 const SEARCH_PHASES = [
-  { key: "Generating intensive search brief", label: "Building search strategy", statKey: "totalSearchQueries" },
-  { key: "Searching across all retailers", label: "Searching retailers", statKey: "totalRawUrls" },
-  { key: "Quick-screening candidates", label: "Screening candidates", statKey: "totalAfterScreen" },
-  { key: "Extracting product details from websites", label: "Extracting product details", statKey: "totalExtracted" },
-  { key: "Quick-scoring all candidates", label: "Quick-scoring products", statKey: "totalQuickScored" },
-  { key: "Deep-scoring top candidates", label: "Deep-scoring finalists", statKey: "totalDeepScored" },
-  { key: "Validating all recommendations", label: "Validating picks", statKey: "totalFinal" },
+  { key: "Generating intensive search brief", label: "Building search strategy", weight: 5 },
+  { key: "Searching across all retailers", label: "Searching retailers", weight: 25 },
+  { key: "Quick-screening candidates", label: "Screening candidates", weight: 10 },
+  { key: "Extracting product details from websites", label: "Extracting product details", weight: 25 },
+  { key: "Quick-scoring all candidates", label: "Quick-scoring products", weight: 10 },
+  { key: "Deep-scoring top candidates", label: "Deep-scoring finalists", weight: 20 },
+  { key: "Validating all recommendations", label: "Validating picks", weight: 5 },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -134,6 +135,9 @@ export default function FocusPage() {
   // Live search progress (SSE)
   const [searchPhases, setSearchPhases] = useState<Array<{ step: string; status: string; data?: Record<string, unknown> }>>([]);
   const [liveStats, setLiveStats] = useState<Record<string, number>>({});
+  const [searchStartTime, setSearchStartTime] = useState<number | null>(null);
+  const [searchElapsed, setSearchElapsed] = useState(0);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Floor plan context
   const [floorPlan, setFloorPlan] = useState<{
@@ -163,21 +167,34 @@ export default function FocusPage() {
   const [generatingMockup, setGeneratingMockup] = useState(false);
   const [showMockupOverlay, setShowMockupOverlay] = useState(false);
 
-  // Run deep area analysis on mount
+  // Elapsed time counter during search
+  useEffect(() => {
+    if (!searchStartTime || step !== "sourcing") return;
+    const interval = setInterval(() => {
+      setSearchElapsed(Math.floor((Date.now() - searchStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [searchStartTime, step]);
+
+  // Run deep area analysis on mount — parallel data fetches
   useEffect(() => {
     async function analyze() {
-      const roomRes = await fetch(`/api/rooms/${roomId}`);
+      // Fetch room info, project, and existing analysis in parallel
+      const [roomRes, projRes, existingRes] = await Promise.all([
+        fetch(`/api/rooms/${roomId}`),
+        fetch(`/api/projects/${projectId}`),
+        fetch(`/api/area-analysis?room_id=${roomId}`),
+      ]);
+
       if (roomRes.ok) setRoomInfo(await roomRes.json());
 
-      // Load floor plan info from project
+      // Process floor plan from project
       try {
-        const projRes = await fetch(`/api/projects/${projectId}`);
         if (projRes.ok) {
           const project = await projRes.json();
           const br = project?.building_research;
           if (br?.floor_plan) {
             const fp = br.floor_plan;
-            // Only trust floor plan if it was explicitly found (not hallucinated)
             const wasFound = fp.found === true;
             const hasRealData = wasFound && (fp.total_sqft || fp.room_dimensions || fp.notable_spatial_features?.length);
             setFloorPlan(fp);
@@ -191,7 +208,6 @@ export default function FocusPage() {
       }
 
       // Check existing analysis
-      const existingRes = await fetch(`/api/area-analysis?room_id=${roomId}`);
       if (existingRes.ok) {
         const existing = await existingRes.json();
         if (existing.analysis) {
@@ -300,6 +316,9 @@ export default function FocusPage() {
     setStep("sourcing");
     setSearchPhases([]);
     setLiveStats({});
+    setSearchStartTime(Date.now());
+    setSearchElapsed(0);
+    setSearchError(null);
 
     const sorted = [...(areaAnalysis?.what_it_needs || [])].sort((a, b) => {
       const order = { high: 0, medium: 1, low: 2 };
@@ -381,6 +400,7 @@ export default function FocusPage() {
                 if (prodRes.ok) setProducts(await prodRes.json());
               } else if (currentEvent === "error") {
                 console.error("Search stream error:", data.error);
+                setSearchError(data.error || "Search failed");
               }
             } catch {
               // Skip malformed JSON
@@ -391,8 +411,10 @@ export default function FocusPage() {
       }
     } catch (e) {
       console.error("Search error:", e);
+      setSearchError(e instanceof Error ? e.message : "Search failed — please try again");
     }
     setSearching(false);
+    setSearchStartTime(null);
     setStep("results");
   };
 
@@ -440,10 +462,19 @@ export default function FocusPage() {
       {/* ─── Step: Analyzing ─── */}
       {step === "analyzing" && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <h3 className="text-lg font-semibold">Analyzing this area...</h3>
-            <p className="text-sm text-muted-foreground mt-1">Examining photos, building context, and apartment-wide analysis</p>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center mb-8">
+              <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
+              <h3 className="text-lg font-semibold">Analyzing this area</h3>
+              <p className="text-sm text-muted-foreground mt-1">This usually takes 15-30 seconds</p>
+            </div>
+            <div className="max-w-sm mx-auto space-y-2">
+              <AnalysisSubstep label="Loading room photos" delay={0} />
+              <AnalysisSubstep label="Reviewing building context" delay={2000} />
+              <AnalysisSubstep label="Cross-referencing other rooms" delay={5000} />
+              <AnalysisSubstep label="Generating design assessment" delay={8000} />
+              <AnalysisSubstep label="Validating recommendations" delay={15000} />
+            </div>
           </CardContent>
         </Card>
       )}
@@ -682,29 +713,86 @@ export default function FocusPage() {
       {step === "sourcing" && searching && (
         <Card>
           <CardContent className="py-10">
-            <div className="flex flex-col items-center mb-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-              <h3 className="text-lg font-semibold">Scouring the internet...</h3>
+            {/* Header with elapsed time */}
+            <div className="flex flex-col items-center mb-6">
+              <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
+              <h3 className="text-lg font-semibold">Finding your perfect pieces</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
-                Searching 30+ retailers across budget, mid-range, and luxury tiers.
+                Searching 30+ retailers across budget, mid-range, and luxury tiers
               </p>
+              {searchElapsed > 0 && (
+                <span className="text-xs text-muted-foreground mt-2 font-mono tabular-nums">
+                  {Math.floor(searchElapsed / 60)}:{String(searchElapsed % 60).padStart(2, "0")} elapsed
+                </span>
+              )}
             </div>
 
+            {/* Overall progress bar */}
+            {(() => {
+              const completedWeight = SEARCH_PHASES.reduce((sum, phase) => {
+                const match = searchPhases.find((p) => p.step === phase.key);
+                if (match?.status === "completed") return sum + phase.weight;
+                if (match?.status === "running") {
+                  // Estimate partial progress for running phases
+                  const data = match.data as Record<string, number> | undefined;
+                  if (data?.progress && data?.total && data.total > 0) {
+                    return sum + (phase.weight * data.progress / data.total);
+                  }
+                  return sum + phase.weight * 0.3; // Show ~30% when running with no granular data
+                }
+                return sum;
+              }, 0);
+              const totalWeight = SEARCH_PHASES.reduce((sum, p) => sum + p.weight, 0);
+              const pct = Math.min(Math.round((completedWeight / totalWeight) * 100), 99);
+              return (
+                <div className="max-w-md mx-auto mb-6">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                    <span>Progress</span>
+                    <span className="font-mono tabular-nums">{pct}%</span>
+                  </div>
+                  <Progress value={pct} className="h-2" />
+                </div>
+              );
+            })()}
+
             {/* Live phase progress */}
-            <div className="max-w-md mx-auto space-y-2">
+            <div className="max-w-md mx-auto space-y-1.5">
               {SEARCH_PHASES.map((phase) => {
                 const match = searchPhases.find((p) => p.step === phase.key);
                 const isDone = match?.status === "completed";
                 const isActive = match?.status === "running";
+                const data = match?.data as Record<string, number> | undefined;
+                // Build a descriptive live counter
+                let liveCount = "";
+                if (isDone || isActive) {
+                  if (data?.completed && data?.total) {
+                    liveCount = `${data.completed}/${data.total}`;
+                  } else if (data?.extracted != null) {
+                    liveCount = `${data.extracted} found`;
+                  } else if (data?.deepScored != null && data?.total) {
+                    liveCount = `${data.deepScored}/${data.total}`;
+                  } else if (data?.screened != null) {
+                    liveCount = `${data.screened} passed`;
+                  } else if (data?.quickScored != null) {
+                    liveCount = `${data.quickScored} scored`;
+                  } else if (data?.queries != null) {
+                    liveCount = `${data.queries} queries`;
+                  } else if (data?.rawUrls != null) {
+                    liveCount = `${data.rawUrls} URLs`;
+                  }
+                }
                 return (
-                  <div key={phase.key} className="flex items-center gap-3">
+                  <div key={phase.key} className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                    isActive && "bg-accent/50",
+                  )}>
                     <div className="w-5 flex justify-center">
                       {isDone ? (
-                        <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                       ) : isActive ? (
-                        <Loader2 className="h-4.5 w-4.5 animate-spin text-primary" />
+                        <Loader2 className="h-4 w-4 animate-spin text-accent-warm" />
                       ) : (
-                        <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30" />
+                        <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/20" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -712,15 +800,17 @@ export default function FocusPage() {
                         "text-sm",
                         isDone && "text-emerald-700 font-medium",
                         isActive && "text-foreground font-medium",
-                        !isDone && !isActive && "text-muted-foreground"
+                        !isDone && !isActive && "text-muted-foreground/60"
                       )}>
                         {phase.label}
                       </span>
                     </div>
-                    {/* Live count for this phase */}
-                    {(isDone || isActive) && phase.statKey && liveStats[phase.statKey] != null && (
-                      <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                        {liveStats[phase.statKey]}
+                    {liveCount && (
+                      <span className={cn(
+                        "text-xs font-mono tabular-nums",
+                        isActive ? "text-accent-warm font-medium" : "text-muted-foreground"
+                      )}>
+                        {liveCount}
                       </span>
                     )}
                   </div>
@@ -728,12 +818,12 @@ export default function FocusPage() {
               })}
             </div>
 
-            {/* Live stats bar */}
+            {/* Live stats summary bar */}
             {Object.keys(liveStats).length > 0 && (
               <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 {liveStats.totalSearchQueries > 0 && <span>{liveStats.totalSearchQueries} queries</span>}
                 {liveStats.totalRawUrls > 0 && <><span className="text-border">·</span><span>{liveStats.totalRawUrls} URLs</span></>}
-                {liveStats.totalExtracted > 0 && <><span className="text-border">·</span><span>{liveStats.totalExtracted} extracted</span></>}
+                {liveStats.totalExtracted > 0 && <><span className="text-border">·</span><span>{liveStats.totalExtracted} products</span></>}
                 {liveStats.totalDeepScored > 0 && <><span className="text-border">·</span><span>{liveStats.totalDeepScored} scored</span></>}
               </div>
             )}
@@ -744,6 +834,20 @@ export default function FocusPage() {
       {/* ─── Step: Results ─── */}
       {step === "results" && (
         <>
+          {/* Error banner with retry */}
+          {searchError && (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Search encountered an issue</p>
+                <p className="text-xs mt-0.5 opacity-80">{searchError}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => { setSearchError(null); handleSearch(); }}>
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Retry
+              </Button>
+            </div>
+          )}
+
           {/* Stats bar */}
           {searchStats && (
             <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
@@ -831,6 +935,45 @@ export default function FocusPage() {
           }
         />
       )}
+    </div>
+  );
+}
+
+// ─── Image Overlay ───────────────────────────────────────────────
+
+// ─── Analysis Substep (timed reveal) ────────────────────────────
+
+function AnalysisSubstep({ label, delay }: { label: string; delay: number }) {
+  const [state, setState] = useState<"pending" | "active" | "done">("pending");
+
+  useEffect(() => {
+    const activateTimer = setTimeout(() => setState("active"), delay);
+    const doneTimer = setTimeout(() => setState("done"), delay + 3000);
+    return () => { clearTimeout(activateTimer); clearTimeout(doneTimer); };
+  }, [delay]);
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300",
+      state === "active" && "bg-accent/50",
+    )}>
+      <div className="w-5 flex justify-center">
+        {state === "done" ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        ) : state === "active" ? (
+          <Loader2 className="h-4 w-4 animate-spin text-accent-warm" />
+        ) : (
+          <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/20" />
+        )}
+      </div>
+      <span className={cn(
+        "text-sm transition-colors",
+        state === "done" && "text-emerald-700 font-medium",
+        state === "active" && "text-foreground font-medium",
+        state === "pending" && "text-muted-foreground/60",
+      )}>
+        {label}
+      </span>
     </div>
   );
 }

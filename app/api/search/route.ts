@@ -140,50 +140,58 @@ export async function POST(request: Request) {
 
   console.log(`[search] Complete. Found ${Object.values(result.data.candidatesByCategory).flat().length} products`);
 
-  // Save all discovered products to DB with tier metadata
-  const savedProducts = [];
-  for (const [, products] of Object.entries(result.data.candidatesByCategory)) {
-    for (const product of products) {
-      const { data: saved } = await supabase
-        .from("candidate_products")
-        .insert({
-          room_id,
-          search_session_id: session?.id,
-          title: product.title,
-          category: product.category,
-          retailer: product.retailer,
-          product_url: product.product_url,
-          image_url: product.image_url,
-          price: product.price,
-          dimensions: product.dimensions,
-          materials: product.materials,
-          colors: product.colors,
-          description: product.description,
-          source_type: "agentic_search",
-          metadata: product.metadata,
-        })
-        .select()
-        .single();
+  // Save all discovered products to DB — batch inserts instead of N+1
+  const allProducts = Object.values(result.data.candidatesByCategory).flat();
+  const productRows = allProducts.map((product) => ({
+    room_id,
+    search_session_id: session?.id,
+    title: product.title,
+    category: product.category,
+    retailer: product.retailer,
+    product_url: product.product_url,
+    image_url: product.image_url,
+    price: product.price,
+    dimensions: product.dimensions,
+    materials: product.materials,
+    colors: product.colors,
+    description: product.description,
+    source_type: "agentic_search" as const,
+    metadata: product.metadata,
+  }));
 
-      if (saved) {
-        savedProducts.push(saved);
-        // Save evaluation if exists
-        const evaluation = result.data.evaluations.get(product.id);
-        if (evaluation) {
-          await supabase.from("product_evaluations").insert({
-            product_id: saved.id,
-            room_id,
-            ...evaluation.scores,
-            final_item_score: evaluation.final_item_score,
-            verdict: evaluation.verdict,
-            reasoning: evaluation.reasoning,
-          });
-          await supabase
-            .from("candidate_products")
-            .update({ status: "evaluated" })
-            .eq("id", saved.id);
-        }
+  const { data: savedProducts } = await (supabase
+    .from("candidate_products")
+    .insert(productRows)
+    .select() as unknown as Promise<{ data: { id: string }[] | null }>);
+
+  // Batch insert evaluations
+  if (savedProducts && savedProducts.length > 0) {
+    const evalRows: Record<string, unknown>[] = [];
+    const evaluatedIds: string[] = [];
+
+    for (let i = 0; i < savedProducts.length; i++) {
+      const saved = savedProducts[i];
+      const original = allProducts[i];
+      const evaluation = result.data.evaluations.get(original.id);
+      if (evaluation) {
+        evalRows.push({
+          product_id: saved.id,
+          room_id,
+          ...evaluation.scores,
+          final_item_score: evaluation.final_item_score,
+          verdict: evaluation.verdict,
+          reasoning: evaluation.reasoning,
+        });
+        evaluatedIds.push(saved.id);
       }
+    }
+
+    if (evalRows.length > 0) {
+      await supabase.from("product_evaluations").insert(evalRows);
+      await supabase
+        .from("candidate_products")
+        .update({ status: "evaluated" })
+        .in("id", evaluatedIds);
     }
   }
 
@@ -202,7 +210,7 @@ export async function POST(request: Request) {
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
     output_json: {
-      products_found: savedProducts.length,
+      products_found: savedProducts?.length || 0,
       categories_searched: Object.keys(result.data.candidatesByCategory),
       steps_count: result.data.steps.length,
     },
@@ -210,7 +218,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     session_id: session?.id,
-    products_found: savedProducts.length,
+    products_found: savedProducts?.length || 0,
     products: savedProducts,
     steps: result.data.steps,
     stats: result.data.stats,

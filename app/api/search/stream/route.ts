@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAgenticSearch } from "@/lib/agents/orchestrator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import type { AgentContext } from "@/lib/agents/types";
 
 /**
@@ -38,12 +39,23 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ error: "Room not found" }), { status: 404 });
   }
 
-  // Fetch project for floor plan context
+  // Fetch project for full building/apartment context
   const { data: project } = await supabase
     .from("projects")
     .select("*")
     .eq("id", room.project_id)
     .single();
+
+  // Fetch room diagnosis for design direction
+  const { data: diagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("*")
+    .eq("room_id", room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  const designProfile = buildDesignProfile(project);
 
   // Create search session
   const { data: session } = await supabase
@@ -75,6 +87,9 @@ export async function POST(request: Request) {
     budgetMode: room.budget_mode,
     sourcingMode: room.sourcing_mode,
     imageUrls,
+    designProfile,
+    diagnosis: diagnosis?.diagnosis_json || undefined,
+    designDirection: diagnosis?.design_direction_json || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }
@@ -155,49 +170,60 @@ export async function POST(request: Request) {
           return;
         }
 
-        // Save products to DB
-        const savedProducts = [];
-        for (const [, products] of Object.entries(result.data.candidatesByCategory)) {
-          for (const product of products) {
-            const { data: saved } = await supabase
-              .from("candidate_products")
-              .insert({
-                room_id,
-                search_session_id: session?.id,
-                title: product.title,
-                category: product.category,
-                retailer: product.retailer,
-                product_url: product.product_url,
-                image_url: product.image_url,
-                price: product.price,
-                dimensions: product.dimensions,
-                materials: product.materials,
-                colors: product.colors,
-                description: product.description,
-                source_type: "agentic_search",
-                metadata: product.metadata,
-              })
-              .select()
-              .single();
+        // Save products to DB — batch inserts instead of N+1
+        send("step", { step: "Saving results", status: "running" });
 
-            if (saved) {
-              savedProducts.push(saved);
-              const evaluation = result.data.evaluations.get(product.id);
-              if (evaluation) {
-                await supabase.from("product_evaluations").insert({
-                  product_id: saved.id,
-                  room_id,
-                  ...evaluation.scores,
-                  final_item_score: evaluation.final_item_score,
-                  verdict: evaluation.verdict,
-                  reasoning: evaluation.reasoning,
-                });
-                await supabase
-                  .from("candidate_products")
-                  .update({ status: "evaluated" })
-                  .eq("id", saved.id);
-              }
+        const allProducts = Object.values(result.data.candidatesByCategory).flat();
+        const productRows = allProducts.map((product) => ({
+          room_id,
+          search_session_id: session?.id,
+          title: product.title,
+          category: product.category,
+          retailer: product.retailer,
+          product_url: product.product_url,
+          image_url: product.image_url,
+          price: product.price,
+          dimensions: product.dimensions,
+          materials: product.materials,
+          colors: product.colors,
+          description: product.description,
+          source_type: "agentic_search" as const,
+          metadata: product.metadata,
+        }));
+
+        const { data: savedProducts } = await (supabase
+          .from("candidate_products")
+          .insert(productRows)
+          .select() as unknown as Promise<{ data: { id: string }[] | null }>);
+
+        // Batch insert evaluations
+        if (savedProducts && savedProducts.length > 0) {
+          const evalRows: Record<string, unknown>[] = [];
+          const evaluatedIds: string[] = [];
+
+          for (let i = 0; i < savedProducts.length; i++) {
+            const saved = savedProducts[i];
+            const original = allProducts[i];
+            const evaluation = result.data.evaluations.get(original.id);
+            if (evaluation) {
+              evalRows.push({
+                product_id: saved.id,
+                room_id,
+                ...evaluation.scores,
+                final_item_score: evaluation.final_item_score,
+                verdict: evaluation.verdict,
+                reasoning: evaluation.reasoning,
+              });
+              evaluatedIds.push(saved.id);
             }
+          }
+
+          if (evalRows.length > 0) {
+            await supabase.from("product_evaluations").insert(evalRows);
+            await supabase
+              .from("candidate_products")
+              .update({ status: "evaluated" })
+              .in("id", evaluatedIds);
           }
         }
 
@@ -213,10 +239,12 @@ export async function POST(request: Request) {
           .update({ status: "sourcing", updated_at: new Date().toISOString() })
           .eq("id", room_id);
 
+        const productCount = savedProducts?.length || 0;
+
         await completeAgentRun(supabase, agentRun.id, {
           status: "completed",
           output_json: {
-            products_found: savedProducts.length,
+            products_found: productCount,
             categories_searched: Object.keys(result.data.candidatesByCategory),
             steps_count: result.data.steps.length,
           },
@@ -225,7 +253,7 @@ export async function POST(request: Request) {
         // Send final result
         send("done", {
           session_id: session?.id,
-          products_found: savedProducts.length,
+          products_found: productCount,
           stats: result.data.stats,
           validation: result.data.validation,
         });

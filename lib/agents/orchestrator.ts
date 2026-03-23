@@ -182,10 +182,20 @@ export async function runAgenticSearch(
     // Run all searches with concurrency limit of 15
     const searchLimit = pLimit(15);
     const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
+    let searchesCompleted = 0;
 
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
         const result = await searchProducts(task.query, 10, task.tier);
+        searchesCompleted++;
+        // Report progress every 5 searches
+        if (searchesCompleted % 5 === 0 || searchesCompleted === searchTasks.length) {
+          reportStep({
+            step: "Searching across all retailers",
+            status: "running",
+            data: { completed: searchesCompleted, total: searchTasks.length },
+          });
+        }
         return {
           category: task.category,
           tier: task.tier,
@@ -275,6 +285,11 @@ export async function runAgenticSearch(
     const extractLimit = pLimit(10);
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
+    const totalToExtract = Object.values(screenedByCategory).reduce(
+      (sum, tiers) => sum + Object.values(tiers).reduce((s, c) => s + c.length, 0), 0
+    );
+    let extractedSoFar = 0;
+
     const extractPromises: Promise<void>[] = [];
 
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
@@ -288,15 +303,27 @@ export async function runAgenticSearch(
             extractLimit(async () => {
               try {
                 const extractResult = await extractFromUrl(candidate.url);
-                if (!extractResult.success || !extractResult.data) return;
-                if (!extractResult.data.title && !extractResult.data.price) return;
+                if (!extractResult.success || !extractResult.data) {
+                  extractedSoFar++;
+                  return;
+                }
+                if (!extractResult.data.title && !extractResult.data.price) {
+                  extractedSoFar++;
+                  return;
+                }
 
                 // Price range filter: skip if price is way outside tier range
                 const catBriefForPrice = brief.categories.find((c) => c.category === category);
                 const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
                 if (priceRange && extractResult.data.price) {
-                  if (extractResult.data.price > priceRange.max * 2) return;
-                  if (extractResult.data.price < priceRange.min * 0.3) return;
+                  if (extractResult.data.price > priceRange.max * 2) {
+                    extractedSoFar++;
+                    return;
+                  }
+                  if (extractResult.data.price < priceRange.min * 0.3) {
+                    extractedSoFar++;
+                    return;
+                  }
                 }
 
                 const product: CandidateProduct = {
@@ -330,6 +357,15 @@ export async function runAgenticSearch(
                 stats.totalExtracted++;
               } catch {
                 // Skip failed extractions
+              }
+              extractedSoFar++;
+              // Report incremental progress every 5 extractions
+              if (extractedSoFar % 5 === 0 || extractedSoFar === totalToExtract) {
+                reportStep({
+                  step: "Extracting product details from websites",
+                  status: "running",
+                  data: { extracted: stats.totalExtracted, progress: extractedSoFar, total: totalToExtract },
+                });
               }
             })
           );
@@ -400,6 +436,7 @@ export async function runAgenticSearch(
 
     const deepScoreLimit = pLimit(5);
     const deepScorePromises: Promise<void>[] = [];
+    let totalToDeepScore = 0;
 
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -416,6 +453,7 @@ export async function runAgenticSearch(
         const passThreshold = products.filter((p) => (quickScoresByProduct.get(p.id) || 0) >= 6);
         const topN = products.slice(0, 8);
         const toScore = passThreshold.length > topN.length ? passThreshold.slice(0, 12) : topN;
+        totalToDeepScore += toScore.length;
 
         for (const product of toScore) {
           deepScorePromises.push(
@@ -433,6 +471,12 @@ export async function runAgenticSearch(
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
+                // Report progress on every scored product
+                reportStep({
+                  step: "Deep-scoring top candidates",
+                  status: "running",
+                  data: { deepScored: stats.totalDeepScored, total: totalToDeepScore },
+                });
               }
             })
           );
