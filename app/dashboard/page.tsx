@@ -330,14 +330,14 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
           <p className="text-lg text-muted-foreground max-w-md mx-auto">
-            Your AI-powered interior design copilot. Upload photos of your apartment and get personalized, detailed recommendations.
+            Show us your apartment, and we&apos;ll help you furnish it — room by room, piece by piece.
           </p>
           <Button
             size="lg"
             className="h-14 px-10 text-base mt-4"
             onClick={() => setStep("layout")}
           >
-            Let&apos;s get started
+            Let&apos;s go
             <ChevronRight className="h-5 w-5 ml-2" />
           </Button>
         </div>
@@ -352,13 +352,13 @@ export default function DashboardPage() {
         <StepHeader
           step={2}
           total={5}
-          title="Tell us about your apartment"
-          subtitle="This helps us understand what rooms to analyze."
+          title="What&apos;s your layout?"
+          subtitle="So we know which rooms to ask for."
         />
 
         <div className="space-y-8 mt-8">
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-3 block">How many bedrooms?</label>
+            <label className="text-sm font-medium text-muted-foreground mb-3 block">Bedrooms</label>
             <div className="flex gap-3">
               {[{ value: 0, label: "Studio" }, { value: 1, label: "1" }, { value: 2, label: "2" }, { value: 3, label: "3+" }].map((opt) => (
                 <button
@@ -378,7 +378,7 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-3 block">How many bathrooms?</label>
+            <label className="text-sm font-medium text-muted-foreground mb-3 block">Bathrooms</label>
             <div className="flex gap-3">
               {[1, 2, 3].map((n) => (
                 <button
@@ -399,7 +399,7 @@ export default function DashboardPage() {
 
           <div className="pt-4">
             <p className="text-sm text-muted-foreground mb-4">
-              We&apos;ll ask for photos of: {getRoomSections(bedrooms, bathrooms).map((s) => s.label).join(", ")}
+              We&apos;ll need photos of: {getRoomSections(bedrooms, bathrooms).map((s) => s.label).join(", ")}
             </p>
             <Button
               size="lg"
@@ -425,8 +425,8 @@ export default function DashboardPage() {
         <StepHeader
           step={3}
           total={5}
-          title="Where do you live?"
-          subtitle="This helps the AI understand your local design context and find nearby retailers."
+          title="Where&apos;s home?"
+          subtitle="Helps us understand your local design context and source from nearby retailers."
         />
 
         <div className="space-y-6 mt-8">
@@ -493,15 +493,15 @@ export default function DashboardPage() {
         <StepHeader
           step={4}
           total={5}
-          title="What building do you live in?"
-          subtitle="We'll research your building to understand the finishes, style, and aesthetic."
+          title="Your building"
+          subtitle="We&apos;ll research your building&apos;s finishes, floor plans, and design style."
         />
 
         <div className="space-y-6 mt-8">
           <div>
             <label className="text-sm font-medium mb-1.5 block">
               <Building2 className="h-4 w-4 inline mr-1.5" />
-              Apartment building name
+              Building name
             </label>
             <input
               type="text"
@@ -514,7 +514,7 @@ export default function DashboardPage() {
 
           <div>
             <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
-              Building website (optional — helps us learn more)
+              Website (optional — helps us learn more)
             </label>
             <input
               type="url"
@@ -628,8 +628,8 @@ export default function DashboardPage() {
         <StepHeader
           step={5}
           total={5}
-          title="Upload photos of your apartment"
-          subtitle="Take or upload photos of each room so the AI can understand your space. Works from your phone camera too."
+          title="Show us your rooms"
+          subtitle="Snap or upload photos of each room. Multiple angles help — phone camera works great."
         />
 
         <div className="space-y-6 mt-8">
@@ -665,15 +665,15 @@ export default function DashboardPage() {
     return (
       <div className="max-w-xl mx-auto px-4 py-24 text-center animate-fade-in-up">
         <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-        <h2 className="text-2xl font-bold mt-6">Analyzing your apartment...</h2>
+        <h2 className="text-2xl font-bold mt-6">Studying your apartment...</h2>
         <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-          The AI is examining your photos, researching your building, and building a holistic understanding of your space. This takes 30-60 seconds.
+          Examining each room, cross-referencing your building&apos;s finishes, and forming a design perspective. Usually 30-60 seconds.
         </p>
         <div className="flex flex-col gap-2 mt-8 text-sm text-muted-foreground">
           <StepIndicator done label="Photos received" />
           {buildingResearch && <StepIndicator done label="Building context loaded" />}
-          <StepIndicator active label="Analyzing rooms holistically..." />
-          <StepIndicator label="Generating design profile" />
+          <StepIndicator active label="Studying rooms holistically..." />
+          <StepIndicator label="Forming design direction" />
         </div>
       </div>
     );
@@ -710,9 +710,9 @@ export default function DashboardPage() {
             <CheckCircle2 className="h-3.5 w-3.5" />
             Apartment analyzed
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Which room are we designing?</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Where should we start?</h1>
           <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-            Pick a room to start. We&apos;ll do a deep analysis and find the perfect pieces for it.
+            Pick a room and we&apos;ll do a deep dive — what to keep, what to change, and exactly what to get.
           </p>
         </div>
 
@@ -787,10 +787,10 @@ export default function DashboardPage() {
               <CardContent className="pt-6 pb-5 space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
-                    Anything the AI should know about these photos?
+                    Anything we should know about these photos?
                   </label>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Optional — tell us what to ignore, what&apos;s temporary, or anything that&apos;s not obvious from the photos.
+                    Optional — mention anything temporary, out of place, or not obvious from the photos.
                   </p>
                   <textarea
                     value={roomContext[selectedRoom] || ""}

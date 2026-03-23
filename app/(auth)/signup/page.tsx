@@ -87,7 +87,7 @@ export default function SignupPage() {
             Create your account
           </CardTitle>
           <CardDescription className="text-base">
-            Your AI-powered interior design copilot
+            Design your apartment with confidence
           </CardDescription>
         </CardHeader>
         <CardContent>

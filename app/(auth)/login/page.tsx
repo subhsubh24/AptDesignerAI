@@ -49,7 +49,7 @@ export default function LoginPage() {
             Apt<span className="text-accent-warm">Designer</span>
           </CardTitle>
           <CardDescription className="text-base">
-            Sign in to your account
+            Sign in to continue
           </CardDescription>
         </CardHeader>
         <CardContent>

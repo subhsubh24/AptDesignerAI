@@ -89,13 +89,13 @@ const TIER_LABELS: Record<PriceTier, string> = {
 // ─── Search phase labels for live progress ──────────────────────
 
 const SEARCH_PHASES = [
-  { key: "Generating intensive search brief", label: "Building search strategy", weight: 5 },
+  { key: "Generating intensive search brief", label: "Planning search strategy", weight: 5 },
   { key: "Searching across all retailers", label: "Searching retailers", weight: 25 },
-  { key: "Quick-screening candidates", label: "Screening candidates", weight: 10 },
-  { key: "Extracting product details from websites", label: "Extracting product details", weight: 25 },
-  { key: "Quick-scoring all candidates", label: "Quick-scoring products", weight: 10 },
-  { key: "Deep-scoring top candidates", label: "Deep-scoring finalists", weight: 20 },
-  { key: "Validating all recommendations", label: "Validating picks", weight: 5 },
+  { key: "Quick-screening candidates", label: "Screening results", weight: 10 },
+  { key: "Extracting product details from websites", label: "Reading product pages", weight: 25 },
+  { key: "Quick-scoring all candidates", label: "Quick-scoring candidates", weight: 10 },
+  { key: "Deep-scoring top candidates", label: "Evaluating finalists", weight: 20 },
+  { key: "Validating all recommendations", label: "Final validation", weight: 5 },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -454,7 +454,7 @@ export default function FocusPage() {
       {/* Header */}
       <div>
         <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft className="h-4 w-4" /> Back to Apartment
+          <ArrowLeft className="h-4 w-4" /> All rooms
         </Link>
         <h1 className="text-3xl font-bold tracking-tight">{roomInfo?.name || "Room"}</h1>
       </div>
@@ -465,14 +465,14 @@ export default function FocusPage() {
           <CardContent className="py-12">
             <div className="flex flex-col items-center mb-8">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
-              <h3 className="text-lg font-semibold">Analyzing this area</h3>
-              <p className="text-sm text-muted-foreground mt-1">This usually takes 15-30 seconds</p>
+              <h3 className="text-lg font-semibold">Studying this room</h3>
+              <p className="text-sm text-muted-foreground mt-1">Usually 15-30 seconds</p>
             </div>
             <div className="max-w-sm mx-auto space-y-2">
-              <AnalysisSubstep label="Loading room photos" delay={0} />
-              <AnalysisSubstep label="Reviewing building context" delay={2000} />
+              <AnalysisSubstep label="Reading room photos" delay={0} />
+              <AnalysisSubstep label="Checking building finishes" delay={2000} />
               <AnalysisSubstep label="Cross-referencing other rooms" delay={5000} />
-              <AnalysisSubstep label="Generating design assessment" delay={8000} />
+              <AnalysisSubstep label="Forming design assessment" delay={8000} />
               <AnalysisSubstep label="Validating recommendations" delay={15000} />
             </div>
           </CardContent>
@@ -506,7 +506,7 @@ export default function FocusPage() {
                 <AlertTriangle className="h-5 w-5 shrink-0" />
               )}
               <div>
-                <span className="font-medium">Analysis confidence: {areaAnalysis.validation.confidence}/10</span>
+                <span className="font-medium">Confidence: {areaAnalysis.validation.confidence}/10</span>
                 {areaAnalysis.validation.issues.length > 0 && (
                   <p className="text-xs mt-0.5 opacity-80">{areaAnalysis.validation.issues[0]}</p>
                 )}
@@ -565,7 +565,7 @@ export default function FocusPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
-                <h3 className="font-semibold text-sm mb-3">What This Area Needs</h3>
+                <h3 className="font-semibold text-sm mb-3">What to get</h3>
                 <div className="space-y-3">
                   {areaAnalysis.what_it_needs.map((item, i) => (
                     <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
@@ -582,7 +582,7 @@ export default function FocusPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-emerald-700">What Works</h3>
+                  <h3 className="font-semibold text-sm mb-2 text-emerald-700">Keep</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {areaAnalysis.what_works.map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />{item}</li>
@@ -590,7 +590,7 @@ export default function FocusPage() {
                   </ul>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-amber-700">Should Go</h3>
+                  <h3 className="font-semibold text-sm mb-2 text-amber-700">Replace or remove</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {areaAnalysis.what_should_go.map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><ThumbsDown className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />{item}</li>
@@ -633,10 +633,10 @@ export default function FocusPage() {
               <CardContent className="pt-5 pb-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <MessageSquare className="h-4 w-4 text-accent-warm" />
-                  Tell us what you think
+                  Refine this assessment
                 </div>
                 <Textarea
-                  placeholder="e.g. &quot;Actually I want to keep the floor lamp&quot; or &quot;I need more seating for hosting dinner parties&quot; or &quot;I don't like walnut, prefer lighter wood&quot;"
+                  placeholder={"e.g. \"Actually I want to keep the floor lamp\" or \"I need more seating for hosting\" or \"I prefer lighter wood tones\""}
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   rows={3}
@@ -680,7 +680,7 @@ export default function FocusPage() {
               onClick={() => setShowFeedbackInput(true)}
             >
               <MessageSquare className="h-4 w-4 mr-1.5" />
-              Have feedback? Refine this analysis
+              Something off? Refine this assessment
             </Button>
           )}
 
@@ -688,11 +688,11 @@ export default function FocusPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             <Button size="lg" className="flex-1 h-14 text-base" onClick={handleSearch} disabled={refining}>
               <Search className="h-5 w-5 mr-2" />
-              Find the Perfect Pieces
+              Find pieces for this room
             </Button>
             <Button size="lg" variant="outline" className="h-14" onClick={handleGenerateVision} disabled={generatingVision || refining}>
               {generatingVision ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Eye className="h-5 w-5 mr-2" />}
-              Envision the Room
+              Preview the vision
             </Button>
           </div>
         </>
@@ -703,8 +703,8 @@ export default function FocusPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <h3 className="text-lg font-semibold">Imagining your redesigned room...</h3>
-            <p className="text-sm text-muted-foreground mt-1">Generating a vision based on the design direction</p>
+            <h3 className="text-lg font-semibold">Imagining your room redesigned...</h3>
+            <p className="text-sm text-muted-foreground mt-1">Creating a vision based on the design direction</p>
           </CardContent>
         </Card>
       )}
@@ -716,9 +716,9 @@ export default function FocusPage() {
             {/* Header with elapsed time */}
             <div className="flex flex-col items-center mb-6">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
-              <h3 className="text-lg font-semibold">Finding your perfect pieces</h3>
+              <h3 className="text-lg font-semibold">Sourcing pieces for your room</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
-                Searching 30+ retailers across budget, mid-range, and luxury tiers
+                Searching across retailers at every price point
               </p>
               {searchElapsed > 0 && (
                 <span className="text-xs text-muted-foreground mt-2 font-mono tabular-nums">
@@ -839,7 +839,7 @@ export default function FocusPage() {
             <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <div className="flex-1">
-                <p className="text-sm font-medium">Search encountered an issue</p>
+                <p className="text-sm font-medium">Something went wrong during search</p>
                 <p className="text-xs mt-0.5 opacity-80">{searchError}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => { setSearchError(null); handleSearch(); }}>
@@ -873,7 +873,7 @@ export default function FocusPage() {
             )}>
               {validationInfo.confidence >= 7 ? <ShieldCheck className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
               <div>
-                <span className="font-medium">Recommendation confidence: {validationInfo.confidence}/10</span>
+                <span className="font-medium">Confidence: {validationInfo.confidence}/10</span>
                 {validationInfo.issues.length > 0 && (
                   <p className="text-xs mt-0.5 opacity-80">{validationInfo.issues.slice(0, 2).join(" • ")}</p>
                 )}
@@ -881,10 +881,10 @@ export default function FocusPage() {
             </div>
           )}
 
-          <h2 className="text-xl font-bold">Recommendations</h2>
+          <h2 className="text-xl font-bold">Our picks</h2>
 
           {products.length === 0 ? (
-            <Card className="border-dashed"><CardContent className="py-12 text-center"><p className="text-muted-foreground">No products found yet.</p></CardContent></Card>
+            <Card className="border-dashed"><CardContent className="py-12 text-center"><p className="text-muted-foreground">No products found yet. Try running a search.</p></CardContent></Card>
           ) : (
             <RecommendationTable
               products={products}
@@ -895,9 +895,9 @@ export default function FocusPage() {
 
           {/* Actions */}
           <div className="flex gap-4 justify-center pt-4">
-            <Button variant="outline" onClick={() => setStep("analysis")}>Back to Analysis</Button>
+            <Button variant="outline" onClick={() => setStep("analysis")}>Back to assessment</Button>
             <Button onClick={handleSaveAndContinue}>
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Done — Next Area
+              <CheckCircle2 className="h-4 w-4 mr-2" /> Done — next room
             </Button>
           </div>
         </>
@@ -907,12 +907,12 @@ export default function FocusPage() {
       {showVisionOverlay && visionUrl && (
         <ImageOverlay
           imageUrl={visionUrl}
-          title="Your Room — Reimagined"
-          subtitle="This is the AI's vision based on the design direction. Now let's find the real pieces."
+          title="Your room, reimagined"
+          subtitle="A preview of the direction we&apos;re heading. Ready to find the real pieces?"
           onClose={() => { setShowVisionOverlay(false); setStep("analysis"); }}
           actions={
             <Button onClick={() => { setShowVisionOverlay(false); handleSearch(); }}>
-              <Search className="h-4 w-4 mr-2" /> Find These Pieces
+              <Search className="h-4 w-4 mr-2" /> Find these pieces
             </Button>
           }
         />
@@ -922,14 +922,14 @@ export default function FocusPage() {
       {showMockupOverlay && mockupUrl && (
         <ImageOverlay
           imageUrl={mockupUrl}
-          title="Room Mockup"
-          subtitle="Here's how the selected products would look in your space."
+          title="Room mockup"
+          subtitle="Here&apos;s how these pieces would look in your space."
           onClose={() => setShowMockupOverlay(false)}
           actions={
             <>
-              <Button variant="outline" onClick={() => setShowMockupOverlay(false)}>Back to Results</Button>
+              <Button variant="outline" onClick={() => setShowMockupOverlay(false)}>Back to picks</Button>
               <Button onClick={handleSaveAndContinue}>
-                <CheckCircle2 className="h-4 w-4 mr-2" /> Save & Next Area
+                <CheckCircle2 className="h-4 w-4 mr-2" /> Done — next room
               </Button>
             </>
           }
@@ -1056,7 +1056,7 @@ function RecommendationTable({
           <thead>
             <tr className="bg-muted/50">
               <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 w-[200px]">Item</th>
-              <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Why You Need It</th>
+              <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Why</th>
               <th className="text-center text-xs font-semibold px-4 py-3 w-[140px]">
                 <div className="flex items-center justify-center gap-1.5 text-emerald-700">
                   <DollarSign className="h-3.5 w-3.5" /> Budget

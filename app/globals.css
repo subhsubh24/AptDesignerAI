@@ -32,27 +32,27 @@
 }
 
 :root {
-  --background: #faf9f7;
+  --background: #f8f6f3;             /* warmer base — hint of linen */
   --foreground: #1c1917;
   --card: #ffffff;
   --card-foreground: #1c1917;
   --popover: #ffffff;
   --popover-foreground: #1c1917;
-  --primary: #292524;              /* stone-900 — real visual weight for buttons */
+  --primary: #292524;                 /* stone-900 — strong buttons */
   --primary-foreground: #fafaf9;
-  --secondary: #f5f0eb;
+  --secondary: #f0ebe5;              /* warm cream — card fills, section backgrounds */
   --secondary-foreground: #44403c;
-  --muted: #f7f5f3;               /* slightly lighter than secondary for hierarchy */
+  --muted: #f5f2ee;                  /* between background and secondary */
   --muted-foreground: #78716c;
-  --accent: #ece5de;               /* distinct from secondary — visible active states */
+  --accent: #e8e0d6;                 /* distinctly darker — active states, hover fills */
   --accent-foreground: #292524;
-  --accent-warm: #b45309;          /* warm amber/terracotta — draws the eye sparingly */
+  --accent-warm: #9a3412;            /* burnt sienna — richer and more refined than pure amber */
   --destructive: #dc2626;
   --destructive-foreground: #fafaf9;
-  --border: #e7e0d8;
-  --input: #d6cfc7;                /* slightly darker input border for definition */
-  --ring: #b45309;                 /* accent color for focus rings — visible and warm */
-  --sidebar: #f5f0eb;
+  --border: #e2dbd2;                 /* warm stone border */
+  --input: #d4ccc2;                  /* clear input edges */
+  --ring: #9a3412;                   /* matches accent-warm for consistency */
+  --sidebar: #f0ebe5;
   --sidebar-foreground: #44403c;
   --radius: 0.625rem;
 }

@@ -21,17 +21,17 @@ export default function LandingPage() {
       <main className="max-w-4xl mx-auto px-6 md:px-8 py-16 md:py-24 text-center">
         <div className="animate-fade-in-up">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.15] mb-6">
-            Your apartment deserves
+            Furniture that actually
             <br />
-            <span className="text-accent-warm">a design copilot</span>
+            <span className="text-accent-warm">belongs in your space</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Snap photos from your phone, and our AI analyzes your space, finds furniture that actually fits your aesthetic, and validates every recommendation down to the last detail.
+            Snap a few photos, and we&apos;ll study your apartment — the finishes, the light, the layout — then find pieces that fit like they were chosen by your own designer.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg" className="h-13 px-8 text-base">
               <Link href="/login">
-                Get Started
+                Start designing
                 <ChevronRight className="h-5 w-5 ml-1" />
               </Link>
             </Button>
@@ -40,10 +40,10 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 mt-20 md:mt-24">
           {[
-            { icon: Camera, title: "Snap & Analyze", desc: "AI understands your entire apartment from photos" },
-            { icon: Palette, title: "Design Direction", desc: "Personalized palette, materials, and style strategy" },
-            { icon: ShoppingBag, title: "Smart Search", desc: "Budget, mid-range, and luxury options found for you" },
-            { icon: Shield, title: "AI Validated", desc: "Every recommendation verified for holistic fit" },
+            { icon: Camera, title: "Photo Analysis", desc: "We study every angle — finishes, lighting, proportions" },
+            { icon: Palette, title: "Design Direction", desc: "A palette and material strategy tailored to your space" },
+            { icon: ShoppingBag, title: "Curated Picks", desc: "Budget, mid-range, and investment pieces — all scored for fit" },
+            { icon: Shield, title: "Validated Choices", desc: "Every recommendation checked for scale, style, and cohesion" },
           ].map((feature, i) => (
             <div
               key={feature.title}
@@ -63,9 +63,9 @@ export default function LandingPage() {
           <h2 className="text-xl font-semibold mb-4">How it works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             {[
-              { step: "1", title: "Upload photos", desc: "Take photos of each room from your phone. The AI researches your building too." },
-              { step: "2", title: "Get recommendations", desc: "AI analyzes what stays, what goes, and what to add — validated for consistency." },
-              { step: "3", title: "Find the pieces", desc: "Budget, mid-range, and luxury options for every item, scored for fit." },
+              { step: "1", title: "Show us your space", desc: "Take photos of each room. We also research your building for context." },
+              { step: "2", title: "Get a design assessment", desc: "What to keep, what to replace, what to add — with a clear design direction." },
+              { step: "3", title: "Find the right pieces", desc: "Curated picks at every price point, scored and validated for your space." },
             ].map((item) => (
               <div key={item.step} className="flex gap-3">
                 <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
