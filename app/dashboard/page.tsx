@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight, Minus, Plus, AlertTriangle } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
+import { LogoMark } from "@/components/ui/logo-mark";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -321,10 +322,10 @@ export default function DashboardPage() {
         <div className="text-center space-y-6">
           <div className="flex justify-center">
             <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <Sparkles className="h-8 w-8 text-primary" />
+              <LogoMark className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Welcome to AptDesigner</h1>
+          <h1 className="text-4xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
           <p className="text-lg text-muted-foreground max-w-md mx-auto">
             Your AI-powered interior design copilot. Upload photos of your apartment and get personalized, detailed recommendations.
           </p>

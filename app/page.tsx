@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Camera, ShoppingBag, Palette, LayoutGrid, ChevronRight, Shield } from "lucide-react";
+import { Camera, ShoppingBag, Palette, Shield, ChevronRight } from "lucide-react";
+import { LogoMark } from "@/components/ui/logo-mark";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between px-6 md:px-8 py-6 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <span className="text-xl font-semibold tracking-tight">AptDesigner</span>
+        <div className="flex items-center gap-2.5">
+          <LogoMark className="h-6 w-6 text-primary" />
+          <span className="text-xl font-semibold tracking-tight">
+            Apt<span className="text-accent-warm">Designer</span>
+          </span>
         </div>
         <Button asChild>
           <Link href="/login">Sign In</Link>
@@ -17,12 +20,12 @@ export default function LandingPage() {
 
       <main className="max-w-4xl mx-auto px-6 md:px-8 py-16 md:py-24 text-center">
         <div className="animate-fade-in-up">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-tight mb-6">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.15] mb-6">
             Your apartment deserves
             <br />
-            <span className="text-primary/80">an AI design copilot</span>
+            <span className="text-accent-warm">a design copilot</span>
           </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
             Snap photos from your phone, and our AI analyzes your space, finds furniture that actually fits your aesthetic, and validates every recommendation down to the last detail.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -51,13 +54,13 @@ export default function LandingPage() {
                 <feature.icon className="h-6 w-6 text-primary" />
               </div>
               <h3 className="font-semibold text-sm">{feature.title}</h3>
-              <p className="text-xs text-muted-foreground">{feature.desc}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{feature.desc}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-20 md:mt-24 p-8 rounded-2xl bg-secondary/50 border animate-fade-in-up" style={{ animationDelay: "400ms" }}>
-          <h2 className="text-xl font-semibold mb-3">How it works</h2>
+          <h2 className="text-xl font-semibold mb-4">How it works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             {[
               { step: "1", title: "Upload photos", desc: "Take photos of each room from your phone. The AI researches your building too." },
@@ -70,7 +73,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm">{item.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.desc}</p>
                 </div>
               </div>
             ))}

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { LogoMark } from "@/components/ui/logo-mark";
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -41,8 +42,11 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <div className="flex justify-center mb-2">
+            <LogoMark className="h-8 w-8 text-primary" />
+          </div>
           <CardTitle className="text-2xl font-bold tracking-tight">
-            AptDesigner
+            Apt<span className="text-accent-warm">Designer</span>
           </CardTitle>
           <CardDescription className="text-base">
             Sign in to your account

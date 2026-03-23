@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import {
   Home,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LogoMark } from "@/components/ui/logo-mark";
 
 const navigation = [
   { name: "My Apartment", href: "/dashboard", icon: Home },
@@ -20,9 +20,11 @@ export function Sidebar() {
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-sidebar">
-      <div className="flex h-16 items-center gap-2 border-b px-6">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <span className="text-lg font-semibold tracking-tight">AptDesigner</span>
+      <div className="flex h-16 items-center gap-2.5 border-b px-6">
+        <LogoMark className="h-6 w-6 text-primary" />
+        <span className="text-lg font-semibold tracking-tight">
+          Apt<span className="text-accent-warm">Designer</span>
+        </span>
       </div>
       <ScrollArea className="flex-1 py-4">
         <nav className="flex flex-col gap-1 px-3">

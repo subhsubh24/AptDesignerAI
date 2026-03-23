@@ -15,6 +15,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-warm: var(--accent-warm);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -37,19 +38,20 @@
   --card-foreground: #1c1917;
   --popover: #ffffff;
   --popover-foreground: #1c1917;
-  --primary: #44403c;
-  --primary-foreground: #faf9f7;
+  --primary: #292524;              /* stone-900 — real visual weight for buttons */
+  --primary-foreground: #fafaf9;
   --secondary: #f5f0eb;
   --secondary-foreground: #44403c;
-  --muted: #f5f0eb;
+  --muted: #f7f5f3;               /* slightly lighter than secondary for hierarchy */
   --muted-foreground: #78716c;
-  --accent: #f5f0eb;
-  --accent-foreground: #44403c;
+  --accent: #ece5de;               /* distinct from secondary — visible active states */
+  --accent-foreground: #292524;
+  --accent-warm: #b45309;          /* warm amber/terracotta — draws the eye sparingly */
   --destructive: #dc2626;
-  --destructive-foreground: #faf9f7;
+  --destructive-foreground: #fafaf9;
   --border: #e7e0d8;
-  --input: #e7e0d8;
-  --ring: #a8a29e;
+  --input: #d6cfc7;                /* slightly darker input border for definition */
+  --ring: #b45309;                 /* accent color for focus rings — visible and warm */
   --sidebar: #f5f0eb;
   --sidebar-foreground: #44403c;
   --radius: 0.625rem;
