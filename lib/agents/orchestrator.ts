@@ -469,19 +469,25 @@ export async function runAgenticSearch(
 
     const allProducts = Object.values(candidatesByCategory).flat();
     const validationResult = await validateProductSet(
-      allProducts.map((p) => ({
-        title: p.title || "Unknown",
-        category: p.category || "unknown",
-        tier: ((p.metadata as { price_tier?: string })?.price_tier) || "balanced",
-        materials: p.materials || undefined,
-        colors: p.colors || undefined,
-        price: p.price || undefined,
-        description: p.description || undefined,
-      })),
+      allProducts.map((p) => {
+        const pMeta = p.metadata as Record<string, unknown> | null;
+        return {
+          title: p.title || "Unknown",
+          category: p.category || "unknown",
+          tier: ((pMeta?.price_tier as string) || "balanced"),
+          materials: p.materials || undefined,
+          colors: p.colors || undefined,
+          price: p.price || undefined,
+          description: p.description || undefined,
+          image_url: p.image_url,
+          visual_style_tags: (pMeta?.visual_style_tags as string[]) || undefined,
+        };
+      }),
       {
         roomType: ctx.roomType,
         designDirection: "Based on apartment photos and building context",
         existingItems: ctx.keepItems,
+        roomImageUrls: ctx.imageUrls,
       }
     );
 

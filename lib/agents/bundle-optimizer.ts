@@ -17,12 +17,22 @@ export async function evaluateBundle(
   const system = getSystemPrompt();
   const bundlePrompt = getBundleEvalPrompt(roomType);
 
-  // Build bundle context
+  // Build bundle context with visual metadata
   const bundleInfo = products
-    .map(
-      (p, i) =>
-        `${i + 1}. [${p.category}] ${p.title || "Unknown"} - ${p.retailer || "Unknown retailer"} - $${p.price || "?"}\n   Materials: ${p.materials?.join(", ") || "unknown"}\n   Colors: ${p.colors?.join(", ") || "unknown"}\n   Dimensions: ${p.dimensions ? JSON.stringify(p.dimensions) : "unknown"}`
-    )
+    .map((p, i) => {
+      const meta = p.metadata as Record<string, unknown> | null;
+      const vTags = (meta?.visual_style_tags as string[]) || [];
+      const variants = (meta?.available_variants as string[]) || [];
+      const lines = [
+        `${i + 1}. [${p.category}] ${p.title || "Unknown"} - ${p.retailer || "Unknown retailer"} - $${p.price || "?"}`,
+        `   Materials: ${p.materials?.join(", ") || "unknown"}`,
+        `   Colors: ${p.colors?.join(", ") || "unknown"}`,
+        `   Dimensions: ${p.dimensions ? JSON.stringify(p.dimensions) : "unknown"}`,
+      ];
+      if (vTags.length > 0) lines.push(`   Visual style: ${vTags.join(", ")}`);
+      if (variants.length > 0) lines.push(`   Also available in: ${variants.join(", ")}`);
+      return lines.join("\n");
+    })
     .join("\n\n");
 
   const content: AIContentBlock[] = [];
@@ -32,16 +42,21 @@ export async function evaluateBundle(
     content.push({ type: "image", source: { type: "url", url } });
   }
 
-  // Add product images
+  // Add product images + lifestyle images
   for (const product of products) {
     if (product.image_url) {
       content.push({ type: "image", source: { type: "url", url: product.image_url } });
+    }
+    const meta = product.metadata as Record<string, unknown> | null;
+    const lifestyleUrl = meta?.lifestyle_image_url as string | undefined;
+    if (lifestyleUrl) {
+      content.push({ type: "image", source: { type: "url", url: lifestyleUrl } });
     }
   }
 
   content.push({
     type: "text",
-    text: `${bundlePrompt}\n\n## BUNDLE ITEMS\n${bundleInfo}`,
+    text: `${bundlePrompt}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
   });
 
   try {

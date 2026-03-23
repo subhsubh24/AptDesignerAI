@@ -1,6 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
+import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 
 export interface ValidationResult {
@@ -89,6 +90,7 @@ Return JSON:
 /**
  * Validate a set of product search results holistically.
  * Checks that all items work together across tiers.
+ * Now includes product images and visual metadata for visual coherence checks.
  */
 export async function validateProductSet(
   products: Array<{
@@ -99,23 +101,29 @@ export async function validateProductSet(
     colors?: string[];
     price?: number;
     description?: string;
+    image_url?: string | null;
+    visual_style_tags?: string[];
   }>,
   roomContext: {
     roomType: string;
     designDirection: string;
     existingItems: string[];
+    roomImageUrls?: string[];
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
   const system = getSystemPrompt();
 
-  const prompt = `Validate this set of product search results. Check that:
-1. Every item description is detailed enough (specific materials, exact colors with undertones, dimensions)
-2. All items within each tier work together aesthetically
-3. Items match the room's design direction
-4. Budget/Middle/Luxury tiers have appropriate price differentiation
-5. No duplicate or near-duplicate products across tiers
-6. All items fit with existing furniture
+  const promptText = `Validate this set of product search results. You have room photos and product images — use them to verify visual coherence.
+
+## VALIDATION CHECKLIST
+1. **Visual cohesion**: Do the product images ACTUALLY look like they belong together? Check real colors, textures, and styles in the images — not just text descriptions.
+2. Every item description is detailed enough (specific materials, exact colors with undertones, dimensions)
+3. All items within each tier work together aesthetically
+4. Items match the room's design direction and existing furniture visible in room photos
+5. Budget/Middle/Luxury tiers have appropriate price differentiation
+6. No duplicate or near-duplicate products across tiers
+7. Scale and proportion: Do these items look like they'd work at the right scale for the room shown?
 
 ## ROOM CONTEXT
 - Room type: ${roomContext.roomType}
@@ -123,21 +131,38 @@ export async function validateProductSet(
 - Existing items: ${roomContext.existingItems.join(", ")}
 
 ## PRODUCTS TO VALIDATE
-${JSON.stringify(products, null, 2)}
+${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
 
 Return JSON:
 {
   "isValid": true/false,
   "confidence": 0-10,
-  "issues": ["specific problems"],
+  "issues": ["specific problems — reference what you SEE in the images"],
   "suggestions": ["specific improvements"]
 }`;
+
+  const content: AIContentBlock[] = [];
+
+  // Add room images for context
+  if (roomContext.roomImageUrls) {
+    for (const url of roomContext.roomImageUrls.slice(0, 2)) {
+      content.push({ type: "image", source: { type: "url", url } });
+    }
+  }
+
+  // Add product images (up to 10 to stay within limits)
+  const productsWithImages = products.filter((p) => p.image_url);
+  for (const p of productsWithImages.slice(0, 10)) {
+    content.push({ type: "image", source: { type: "url", url: p.image_url! } });
+  }
+
+  content.push({ type: "text", text: promptText });
 
   try {
     const response = await geminiProvider.chat({
       model,
       system,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content }],
       max_tokens: 4096,
       temperature: 0.2,
       thinkingConfig: { thinkingLevel: "medium" },
