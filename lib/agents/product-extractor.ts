@@ -105,33 +105,11 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
         model: response.model,
       };
-    } catch {
-      // Attempt 3: fall back to extraction without urlContext (plain LLM with URL in prompt)
-      try {
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: userContent }],
-          max_tokens: 3072,
-          temperature: 0.1,
-        });
-
-        const raw = response.content.trim();
-        if (!raw) throw new Error("Empty response from extraction (no-tool fallback)");
-
-        const parsed = parseJsonResponse<ExtractedProduct>(raw);
-        return {
-          success: true,
-          data: parsed,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-          model: response.model,
-        };
-      } catch (fallbackError) {
-        return {
-          success: false,
-          error: fallbackError instanceof Error ? fallbackError.message : "Extraction failed",
-        };
-      }
+    } catch (retryError) {
+      return {
+        success: false,
+        error: retryError instanceof Error ? retryError.message : "Extraction failed",
+      };
     }
   }
 }
