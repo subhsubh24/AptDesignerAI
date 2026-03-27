@@ -159,10 +159,14 @@ export async function POST(request: Request) {
     metadata: product.metadata,
   }));
 
-  const { data: savedProducts } = await (supabase
+  const { data: savedProducts, error: insertError } = await (supabase
     .from("candidate_products")
     .insert(productRows)
-    .select() as unknown as Promise<{ data: { id: string }[] | null }>);
+    .select() as unknown as Promise<{ data: { id: string }[] | null; error: { message: string } | null }>);
+
+  if (insertError) {
+    console.error("[search] Failed to insert products:", insertError.message);
+  }
 
   // Batch insert evaluations
   if (savedProducts && savedProducts.length > 0) {

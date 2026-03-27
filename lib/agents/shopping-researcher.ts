@@ -171,12 +171,17 @@ Return JSON:
     } catch {
       // Fallback: use grounding metadata sources
       if (response.groundingMetadata?.sources) {
-        candidates = response.groundingMetadata.sources.map((s) => ({
-          title: s.title,
-          url: s.uri,
-          snippet: "",
-          source: new URL(s.uri).hostname.replace("www.", ""),
-        }));
+        candidates = response.groundingMetadata.sources
+          .filter((s) => s.uri)
+          .map((s) => {
+            let source = "";
+            try {
+              source = new URL(s.uri).hostname.replace("www.", "");
+            } catch {
+              source = s.uri;
+            }
+            return { title: s.title, url: s.uri, snippet: "", source };
+          });
       }
     }
 

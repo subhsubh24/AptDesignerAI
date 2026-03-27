@@ -35,6 +35,7 @@ export default function LoginPage() {
     } else {
       router.push("/dashboard");
       router.refresh();
+      // Don't setLoading(false) — component will unmount on navigation
     }
   };
 

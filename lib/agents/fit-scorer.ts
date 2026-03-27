@@ -93,6 +93,9 @@ export async function scoreProduct(
 
     const parsed = JSON.parse(response.content);
     const scores = parsed.scores;
+    if (!scores || typeof scores.confidence_score !== "number") {
+      throw new Error("Invalid scoring response: missing scores or confidence_score");
+    }
     const finalScore = computeFinalItemScore(scores);
     const verdict = determineVerdict(finalScore, scores.confidence_score);
 

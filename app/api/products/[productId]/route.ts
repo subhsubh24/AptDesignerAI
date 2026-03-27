@@ -11,9 +11,21 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+
+  const allowedFields: Record<string, unknown> = {};
+  const ALLOWED_KEYS = [
+    "title", "category", "retailer", "product_url", "image_url",
+    "price", "dimensions", "materials", "colors", "description",
+    "source_type", "metadata", "user_rating", "user_notes",
+  ];
+  for (const key of ALLOWED_KEYS) {
+    if (key in body) allowedFields[key] = body[key];
+  }
+  allowedFields.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("candidate_products")
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(allowedFields)
     .eq("id", productId)
     .select()
     .single();

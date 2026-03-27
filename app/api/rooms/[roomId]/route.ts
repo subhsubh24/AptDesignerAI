@@ -30,9 +30,20 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+
+  const allowedFields: Record<string, unknown> = {};
+  const ALLOWED_KEYS = [
+    "name", "room_type", "status", "budget_mode", "sourcing_mode",
+    "priorities", "keep_items", "replace_items",
+  ];
+  for (const key of ALLOWED_KEYS) {
+    if (key in body) allowedFields[key] = body[key];
+  }
+  allowedFields.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("rooms")
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(allowedFields)
     .eq("id", roomId)
     .select()
     .single();

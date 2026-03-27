@@ -14,6 +14,7 @@ export async function GET(
     .from("projects")
     .select("*, rooms(*)")
     .eq("id", projectId)
+    .eq("user_id", user.id)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -47,6 +48,7 @@ async function updateProject(
     .from("projects")
     .update(allowedFields)
     .eq("id", projectId)
+    .eq("user_id", user.id)
     .select()
     .single();
 
@@ -69,7 +71,7 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { error } = await supabase.from("projects").delete().eq("id", projectId);
+  const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("user_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }
