@@ -5,6 +5,29 @@ import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 
+// ─── Extraction Cache (24h TTL) ───────────────────────────────
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const extractionCache = new Map<string, { data: ExtractedProduct; timestamp: number }>();
+
+function getCachedExtraction(url: string): ExtractedProduct | null {
+  const entry = extractionCache.get(url);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    extractionCache.delete(url);
+    return null;
+  }
+  return entry.data;
+}
+
+function cacheExtraction(url: string, data: ExtractedProduct) {
+  extractionCache.set(url, { data, timestamp: Date.now() });
+  // Prevent unbounded growth — evict oldest entries over 500
+  if (extractionCache.size > 500) {
+    const oldest = extractionCache.keys().next().value;
+    if (oldest) extractionCache.delete(oldest);
+  }
+}
+
 export interface ExtractedProduct {
   title: string | null;
   retailer: string | null;
@@ -55,6 +78,12 @@ function parseJsonResponse<T>(raw: string): T {
  * Falls back to extraction without urlContext if both attempts fail.
  */
 export async function extractFromUrl(url: string): Promise<AgentResult<ExtractedProduct>> {
+  // Check cache first
+  const cached = getCachedExtraction(url);
+  if (cached) {
+    return { success: true, data: cached };
+  }
+
   const model = selectModel("extraction");
   const system = getSystemPrompt();
   const extractionPrompt = getExtractionPrompt();
@@ -76,6 +105,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
     if (!raw) throw new Error("Empty response from extraction");
 
     const parsed = parseJsonResponse<ExtractedProduct>(raw);
+    cacheExtraction(url, parsed);
     return {
       success: true,
       data: parsed,
@@ -99,6 +129,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       if (!raw) throw new Error("Empty response from extraction (retry)");
 
       const parsed = parseJsonResponse<ExtractedProduct>(raw);
+      cacheExtraction(url, parsed);
       return {
         success: true,
         data: parsed,

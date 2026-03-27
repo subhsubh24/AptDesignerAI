@@ -76,7 +76,7 @@ export async function generateSearchBrief(
       model,
       system,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 8192,
+      max_tokens: 4096,
       temperature: 0.3,
       responseMimeType: "application/json",
     });
@@ -222,13 +222,15 @@ export function deduplicateCandidates(candidates: SearchCandidate[]): SearchCand
 /**
  * Quick screen candidates using Flash model (text-only, no tools).
  * Rates each candidate 1-5 on relevance and filters to ≥3.
+ * Includes design direction context for style filtering.
  * Batches up to 30 candidates per call for efficiency.
  */
 export async function quickScreenCandidates(
   candidates: SearchCandidate[],
   category: string,
   tier: PriceTier,
-  requirements: string[]
+  requirements: string[],
+  designDirection?: DesignDirection
 ): Promise<AgentResult<SearchCandidate[]>> {
   if (candidates.length === 0) {
     return { success: true, data: [] };
@@ -249,18 +251,22 @@ export async function quickScreenCandidates(
         .map((c, i) => `[${batchIdx * BATCH_SIZE + i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 120)}`)
         .join("\n");
 
+      const styleContext = designDirection
+        ? `\nDesign direction: ${designDirection.style_notes}. Palette: ${designDirection.recommended_palette?.join(", ") || "flexible"}. Materials: ${designDirection.recommended_materials?.join(", ") || "flexible"}.\nPenalize products that clearly clash with this direction (e.g. wrong style family).`
+        : "";
+
       const prompt = `Rate each URL candidate for relevance to finding a **${category}** product in the **${tier}** price tier.
 
-Requirements: ${requirements.join(", ")}
+Requirements: ${requirements.join(", ")}${styleContext}
 
 ## CANDIDATES
 ${candidateList}
 
 ## RATING CRITERIA
-- 5: Clearly a specific product page for the right category and price tier
+- 5: Clearly a specific product page for the right category and price tier, style-compatible
 - 4: Likely a product page, right category, might be right tier
 - 3: Possibly relevant — could be a product page or very targeted listing
-- 2: Probably a category page, blog, or wrong product type
+- 2: Probably a category page, blog, wrong product type, or clearly wrong style
 - 1: Definitely not relevant — review article, unrelated product, broken URL
 
 Return JSON:

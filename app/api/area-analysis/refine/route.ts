@@ -129,7 +129,7 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 8192,
+      max_tokens: 4096,
       temperature: 0.3,
       responseMimeType: "application/json",
     });

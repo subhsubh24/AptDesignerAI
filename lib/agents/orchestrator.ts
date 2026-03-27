@@ -255,7 +255,7 @@ export async function runAgenticSearch(
 
         screenPromises.push(
           (async () => {
-            const screenResult = await quickScreenCandidates(candidates, category, tier, requirements);
+            const screenResult = await quickScreenCandidates(candidates, category, tier, requirements, ctx.designDirection);
             if (screenResult.success && screenResult.data) {
               screenedByCategory[category][tier] = screenResult.data;
               stats.totalAfterScreen += screenResult.data.length;
@@ -308,6 +308,13 @@ export async function runAgenticSearch(
                   return;
                 }
                 if (!extractResult.data.title && !extractResult.data.price) {
+                  extractedSoFar++;
+                  return;
+                }
+                // Confidence gate: skip products with no meaningful data
+                const hasSubstance = extractResult.data.title
+                  && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
+                if (!hasSubstance) {
                   extractedSoFar++;
                   return;
                 }
@@ -409,7 +416,7 @@ export async function runAgenticSearch(
 
         quickScorePromises.push(
           (async () => {
-            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode);
+            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection);
             if (result.success && result.data) {
               for (const entry of result.data) {
                 quickScoresByProduct.set(entry.productId, entry.quickScore);
@@ -447,6 +454,12 @@ export async function runAgenticSearch(
           const scoreA = quickScoresByProduct.get(a.id) || 0;
           const scoreB = quickScoresByProduct.get(b.id) || 0;
           return scoreB - scoreA;
+        });
+
+        // Filter out low-confidence products (quick score confidence < 4)
+        products = products.filter((p) => {
+          const qs = quickScoresByProduct.get(p.id);
+          return qs === undefined || qs >= 4; // keep unscored (fail-open) and scored >= 4
         });
 
         // Keep top 8 or those with quickScore >= 6, whichever is more
@@ -554,12 +567,22 @@ export async function runAgenticSearch(
       reportStep({ step: "Validating all recommendations", status: "failed" });
     }
 
-    // Generate bundles for each tier
+    // Generate bundles for each tier — try multiple combinations, pick best
     reportStep({ step: "Generating bundles", status: "running" });
     const bundles: unknown[] = [];
 
+    const bundleCtx = {
+      roomType: ctx.roomType,
+      roomImageUrls: ctx.imageUrls,
+      priorities: ctx.priorities,
+      designProfile: ctx.designProfile,
+      diagnosis: ctx.diagnosis,
+      designDirection: ctx.designDirection,
+    };
+
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
-      const tierProducts: CandidateProduct[] = [];
+      // Get top 3 products per category for this tier
+      const topByCategory: CandidateProduct[][] = [];
       for (const products of Object.values(candidatesByCategory)) {
         const tierFiltered = products.filter(
           (p) => (p.metadata as { price_tier: string })?.price_tier === tier
@@ -569,23 +592,88 @@ export async function runAgenticSearch(
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
           return scoreB - scoreA;
         });
-        if (tierFiltered[0]) tierProducts.push(tierFiltered[0]);
+        if (tierFiltered.length > 0) topByCategory.push(tierFiltered.slice(0, 3));
       }
 
-      if (tierProducts.length > 0) {
-        const bundleResult = await evaluateBundle(tierProducts, {
-                roomType: ctx.roomType,
-                roomImageUrls: ctx.imageUrls,
-                priorities: ctx.priorities,
-                designProfile: ctx.designProfile,
-                diagnosis: ctx.diagnosis,
-                designDirection: ctx.designDirection,
-              });
-        if (bundleResult.success && bundleResult.data) {
-          return { tier, ...bundleResult.data };
+      if (topByCategory.length === 0) return null;
+
+      // Generate candidate bundles: default (top-1 each) + 2 alternatives
+      const combos: CandidateProduct[][] = [];
+
+      // Combo 0: top-1 from each category (baseline)
+      combos.push(topByCategory.map((cats) => cats[0]));
+
+      // Combo 1: swap in #2 from the category with the weakest top pick
+      if (topByCategory.some((cats) => cats.length >= 2)) {
+        const baseline = topByCategory.map((cats) => cats[0]);
+        let weakestIdx = 0;
+        let weakestScore = Infinity;
+        for (let i = 0; i < baseline.length; i++) {
+          const score = evaluations.get(baseline[i].id)?.final_item_score || 0;
+          if (score < weakestScore && topByCategory[i].length >= 2) {
+            weakestScore = score;
+            weakestIdx = i;
+          }
+        }
+        if (topByCategory[weakestIdx].length >= 2) {
+          const alt = [...baseline];
+          alt[weakestIdx] = topByCategory[weakestIdx][1];
+          combos.push(alt);
         }
       }
-      return null;
+
+      // Combo 2: swap in #2 from the category with the strongest top pick (diversity)
+      if (topByCategory.some((cats) => cats.length >= 2)) {
+        const baseline = topByCategory.map((cats) => cats[0]);
+        let strongestIdx = 0;
+        let strongestScore = -1;
+        for (let i = 0; i < baseline.length; i++) {
+          const score = evaluations.get(baseline[i].id)?.final_item_score || 0;
+          if (score > strongestScore && topByCategory[i].length >= 2) {
+            strongestScore = score;
+            strongestIdx = i;
+          }
+        }
+        if (topByCategory[strongestIdx].length >= 2 && strongestIdx !== (combos.length > 1 ? combos[1].findIndex((p, i) => p !== combos[0][i]) : -1)) {
+          const alt = [...baseline];
+          alt[strongestIdx] = topByCategory[strongestIdx][1];
+          combos.push(alt);
+        }
+      }
+
+      // Evaluate all combos, pick the one with the highest bundle score
+      const comboResults = await Promise.all(
+        combos.map(async (combo) => {
+          const result = await evaluateBundle(combo, bundleCtx);
+          if (result.success && result.data) {
+            return { products: combo, ...result.data };
+          }
+          return null;
+        })
+      );
+
+      const validResults = comboResults.filter(Boolean) as Array<{
+        products: CandidateProduct[];
+        scores: unknown;
+        final_bundle_score: number;
+        verdict: string;
+        analysis: unknown;
+      }>;
+
+      if (validResults.length === 0) return null;
+
+      // Pick the best bundle
+      validResults.sort((a, b) => b.final_bundle_score - a.final_bundle_score);
+      const best = validResults[0];
+      return {
+        tier,
+        scores: best.scores,
+        final_bundle_score: best.final_bundle_score,
+        verdict: best.verdict,
+        analysis: best.analysis,
+        product_ids: best.products.map((p) => p.id),
+        combos_evaluated: validResults.length,
+      };
     });
 
     const bundleResults = await Promise.all(bundlePromises);

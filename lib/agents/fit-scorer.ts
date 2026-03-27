@@ -137,7 +137,8 @@ export async function quickScoreProducts(
   products: CandidateProduct[],
   category: string,
   roomType: string,
-  budgetMode: string
+  budgetMode: string,
+  designDirection?: DesignDirection
 ): Promise<AgentResult<QuickScoreEntry[]>> {
   if (products.length === 0) {
     return { success: true, data: [] };
@@ -170,15 +171,24 @@ export async function quickScoreProducts(
         })
         .join("\n\n");
 
+      // Build design aesthetic from dynamic design direction
+      const aesthetic = designDirection
+        ? [
+            designDirection.style_notes,
+            designDirection.recommended_palette?.length && `Palette: ${designDirection.recommended_palette.join(", ")}`,
+            designDirection.recommended_materials?.length && `Materials: ${designDirection.recommended_materials.join(", ")}`,
+          ].filter(Boolean).join(". ")
+        : "Based on apartment photos and building context";
+
       const prompt = `Quick-score these ${category} products for a ${roomType}. Budget mode: ${budgetMode}.
 
-Design aesthetic: modern warm, walnut/cream/taupe, sophisticated, urban. No boho, no farmhouse, no overly industrial.
+Design direction: ${aesthetic}
 
 ## PRODUCTS
 ${productList}
 
 ## SCORING (each 0-10)
-- **style_fit**: Does this match the modern warm aesthetic? Penalize wrong styles.
+- **style_fit**: Does this match the design direction above? Penalize products that clash with the specified palette, materials, or style.
 - **value_fit**: Is the price reasonable for what you get? ${budgetMode === "budget" ? "Weight heavily." : "Balance quality and price."}
 - **confidence**: How confident are you based on the available information?
 

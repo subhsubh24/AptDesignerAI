@@ -218,7 +218,7 @@ IMPORTANT: If this room serves multiple functions (e.g. a living room with a din
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 8192,
+      max_tokens: 4096,
       temperature: 0.3,
       responseMimeType: "application/json",
     });
