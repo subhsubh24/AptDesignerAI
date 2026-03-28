@@ -255,7 +255,7 @@ Return JSON:
       messages: [{ role: "user", content }],
       max_tokens: 16000,
       temperature: 0.2,
-      thinkingConfig: { thinkingLevel: "medium" },
+      thinkingConfig: { thinkingLevel: "high" },
       responseMimeType: "application/json",
     });
 
