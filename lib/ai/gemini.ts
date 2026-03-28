@@ -50,13 +50,19 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
   if (!response.ok) {
     throw new Error(`Image fetch failed: ${response.status} ${response.statusText} for ${url}`);
   }
+
+  // Reject responses that aren't actually images (e.g., HTML 404 pages, redirects to login)
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`Image URL returned non-image content-type: ${contentType} for ${url}`);
+  }
+
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength === 0) {
     throw new Error(`Image fetch returned empty data for ${url}`);
   }
   const data = Buffer.from(buffer).toString("base64");
-  const contentType = response.headers.get("content-type") || "image/jpeg";
-  return { data, mimeType: contentType };
+  return { data, mimeType: contentType.split(";")[0].trim() };
 }
 
 /**
