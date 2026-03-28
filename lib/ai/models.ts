@@ -41,11 +41,11 @@ export function selectModel(
     case "bundle":
     case "validation":
     case "apartment_research":
+    case "search_brief":
       return MODELS.primary;
     case "image_generation":
       return MODELS.image;
     case "extraction":
-    case "search_brief":
     case "mockup_prompt":
     case "search":
     case "quick_score":
