@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, MapPin, Search, ChevronRight, Minus, Plus, AlertTriangle } from "lucide-react";
+import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
@@ -54,7 +54,7 @@ interface UploadedImage {
 }
 
 // ─── Step Components ─────────────────────────────────────────────────
-const STEPS = ["welcome", "layout", "location", "building", "photos", "analyzing", "room_select"] as const;
+const STEPS = ["welcome", "layout", "location", "setup", "analyzing", "room_select"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function DashboardPage() {
@@ -68,11 +68,11 @@ export default function DashboardPage() {
   const [buildingName, setBuildingName] = useState("");
   const [buildingUrl, setBuildingUrl] = useState("");
   const [buildingResearch, setBuildingResearch] = useState<Record<string, unknown> | null>(null);
-  const [researchingBuilding, setResearchingBuilding] = useState(false);
   const [roomImages, setRoomImages] = useState<Record<string, UploadedImage[]>>({});
   const [projectId, setProjectId] = useState<string | null>(null);
   const [roomIds, setRoomIds] = useState<Record<string, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzePhase, setAnalyzePhase] = useState<"building" | "photos" | "done">("building");
   const [apartmentSummary, setApartmentSummary] = useState<{
     overall: string;
     rooms: Record<string, {
@@ -149,11 +149,11 @@ export default function DashboardPage() {
               }
               setStep("room_select");
             } else if (Object.keys(images).some((k) => (images[k]?.length || 0) > 0)) {
-              setStep("photos");
+              setStep("setup");
             } else if (project.building_research) {
-              setStep("photos");
+              setStep("setup");
             } else if (project.city) {
-              setStep("building");
+              setStep("setup");
             } else if (project.bedrooms) {
               setStep("location");
             }
@@ -255,32 +255,8 @@ export default function DashboardPage() {
     }));
   }, [roomIds]);
 
-  // Research building
-  const handleResearchBuilding = useCallback(async () => {
-    setResearchingBuilding(true);
-    try {
-      const projId = await ensureProject();
-      const res = await fetch("/api/apartment-research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          building_name: buildingName,
-          building_url: buildingUrl || undefined,
-          city, state, neighborhood,
-          project_id: projId,
-          bedrooms, bathrooms,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setBuildingResearch(data.research);
-      }
-    } finally {
-      setResearchingBuilding(false);
-    }
-  }, [buildingName, buildingUrl, city, state, neighborhood, bedrooms, bathrooms, ensureProject]);
-
-  // Analyze apartment
+  // Combined analyze: building research (if needed) → photo analysis
+  // Sequential because photo analysis uses building research as context
   const handleAnalyze = useCallback(async () => {
     const totalImages = Object.values(roomImages).flat().length;
     if (totalImages === 0) return;
@@ -288,25 +264,55 @@ export default function DashboardPage() {
     setStep("analyzing");
 
     try {
+      const projId = projectId || await ensureProject();
+
+      // Phase 1: Research building (if we have a building name and haven't already)
+      if (buildingName && !buildingResearch) {
+        setAnalyzePhase("building");
+        try {
+          const res = await fetch("/api/apartment-research", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              building_name: buildingName,
+              building_url: buildingUrl || undefined,
+              city, state, neighborhood,
+              project_id: projId,
+              bedrooms, bathrooms,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setBuildingResearch(data.research);
+          }
+        } catch {
+          // Building research is optional — continue to photo analysis
+          console.warn("[dashboard] Building research failed, continuing without it");
+        }
+      }
+
+      // Phase 2: Analyze apartment photos (uses building research as context)
+      setAnalyzePhase("photos");
       const res = await fetch("/api/analyze-apartment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId }),
+        body: JSON.stringify({ project_id: projId }),
       });
 
       if (res.ok) {
         const data = await res.json();
         setApartmentSummary(data.summary);
+        setAnalyzePhase("done");
         setStep("room_select");
       } else {
-        setStep("photos");
+        setStep("setup");
       }
     } catch {
-      setStep("photos");
+      setStep("setup");
     } finally {
       setAnalyzing(false);
     }
-  }, [roomImages, projectId]);
+  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, ensureProject]);
 
   const totalImages = Object.values(roomImages).flat().length;
 
@@ -351,7 +357,7 @@ export default function DashboardPage() {
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
           step={2}
-          total={5}
+          total={4}
           title="What&apos;s your layout?"
           subtitle="So we know which rooms to ask for."
         />
@@ -424,7 +430,7 @@ export default function DashboardPage() {
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
           step={3}
-          total={5}
+          total={4}
           title="Where&apos;s home?"
           subtitle="Helps us understand your local design context and source from nearby retailers."
         />
@@ -473,7 +479,7 @@ export default function DashboardPage() {
               className="flex-1 h-12"
               onClick={async () => {
                 await saveProjectMeta({ city, state, neighborhood });
-                setStep("building");
+                setStep("setup");
               }}
               disabled={!city}
             >
@@ -486,166 +492,88 @@ export default function DashboardPage() {
     );
   }
 
-  // ─── Step: Building Research ──────────────────────────────────
-  if (step === "building") {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
-        <StepHeader
-          step={4}
-          total={5}
-          title="Your building"
-          subtitle="We&apos;ll research your building&apos;s finishes, floor plans, and design style."
-        />
-
-        <div className="space-y-6 mt-8">
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">
-              <Building2 className="h-4 w-4 inline mr-1.5" />
-              Building name
-            </label>
-            <input
-              type="text"
-              value={buildingName}
-              onChange={(e) => setBuildingName(e.target.value)}
-              placeholder="e.g. Porte Apartments"
-              className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
-              Website (optional — helps us learn more)
-            </label>
-            <input
-              type="url"
-              value={buildingUrl}
-              onChange={(e) => setBuildingUrl(e.target.value)}
-              placeholder="https://www.porteapts.com"
-              className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
-          </div>
-
-          {!buildingResearch && (
-            <Button
-              className="w-full h-12"
-              onClick={handleResearchBuilding}
-              disabled={!buildingName || researchingBuilding}
-            >
-              {researchingBuilding ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Researching your building...
-                </>
-              ) : (
-                <>
-                  <Search className="h-5 w-5 mr-2" />
-                  Research Building
-                </>
-              )}
-            </Button>
-          )}
-
-          {buildingResearch && (() => {
-            const br = buildingResearch as Record<string, unknown>;
-            const fp = br.floor_plan as Record<string, unknown> | undefined;
-            const hasFloorPlan = fp?.found === true;
-            const confidenceNotes = Array.isArray(br.confidence_notes) ? br.confidence_notes as string[] : [];
-
-            return (
-              <Card className="animate-fade-in-up border-green-200 bg-green-50/50">
-                <CardContent className="pt-4 pb-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-                    <div className="space-y-1.5">
-                      <p className="font-medium text-sm text-green-900">Building researched</p>
-                      <p className="text-sm text-green-700">
-                        {br.summary as string || "Research complete"}
-                      </p>
-                      {String(br.building_style || "") && (
-                        <p className="text-xs text-green-600">
-                          Style: {String(br.building_style || "")}
-                        </p>
-                      )}
-
-                      {/* Floor plan status */}
-                      <div className={cn(
-                        "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full mt-1",
-                        hasFloorPlan
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-amber-100 text-amber-700"
-                      )}>
-                        {hasFloorPlan ? (
-                          <>
-                            <CheckCircle2 className="h-3 w-3" />
-                            Floor plan found
-                            {fp?.total_sqft && <span>· {String(fp.total_sqft)} sqft</span>}
-                            {Array.isArray(fp?.unit_variants) && fp.unit_variants.length > 0 && (
-                              <span>· {fp.unit_variants.length} layout{fp.unit_variants.length > 1 ? "s" : ""}</span>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="h-3 w-3" />
-                            No floor plan found — will size from photos
-                          </>
-                        )}
-                      </div>
-
-                      {/* What we couldn't verify */}
-                      {confidenceNotes.length > 0 && (
-                        <p className="text-[11px] text-green-600/70 mt-1">
-                          Note: {confidenceNotes.slice(0, 2).join(". ")}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="h-12" onClick={() => setStep("location")}>Back</Button>
-            <Button
-              size="lg"
-              className="flex-1 h-12"
-              onClick={() => setStep("photos")}
-              disabled={!buildingResearch}
-            >
-              {buildingResearch ? "Continue" : "Research your building first"}
-              <ChevronRight className="h-5 w-5 ml-2" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Step: Upload Photos ──────────────────────────────────────
-  if (step === "photos") {
+  // ─── Step: Setup (Building + Photos combined) ─────────────────
+  if (step === "setup") {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
-          step={5}
-          total={5}
-          title="Show us your rooms"
-          subtitle="Snap or upload photos of each room. Multiple angles help — phone camera works great."
+          step={4}
+          total={4}
+          title="Your apartment"
+          subtitle="Tell us about your building and show us your rooms. We&apos;ll handle the rest."
         />
 
-        <div className="space-y-6 mt-8">
-          {roomSections.map((section) => (
-            <RoomUploadSection
-              key={section.key}
-              section={section}
-              images={roomImages[section.key] || []}
-              onUpload={(files) => handleUpload(section.key, section.label, files)}
-              onRemove={(imageId) => removeImage(section.key, imageId)}
-            />
-          ))}
+        <div className="space-y-8 mt-8">
+          {/* Building info section */}
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Building
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Building name</label>
+                <input
+                  type="text"
+                  value={buildingName}
+                  onChange={(e) => setBuildingName(e.target.value)}
+                  placeholder="e.g. Porte Apartments"
+                  className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
+                  Website <span className="text-xs">(optional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={buildingUrl}
+                  onChange={(e) => setBuildingUrl(e.target.value)}
+                  placeholder="https://www.porteapts.com"
+                  className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Show research result if already done */}
+            {buildingResearch && (() => {
+              const br = buildingResearch as Record<string, unknown>;
+              const fp = br.floor_plan as Record<string, unknown> | undefined;
+              const hasFloorPlan = fp?.found === true;
+              return (
+                <div className="mt-3 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Building researched — {String(br.building_style || "style identified")}
+                    {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Room photos section */}
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Camera className="h-4 w-4" />
+              Room Photos
+            </h3>
+            <div className="space-y-4">
+              {roomSections.map((section) => (
+                <RoomUploadSection
+                  key={section.key}
+                  section={section}
+                  images={roomImages[section.key] || []}
+                  onUpload={(files) => handleUpload(section.key, section.label, files)}
+                  onRemove={(imageId) => removeImage(section.key, imageId)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3 pt-8 pb-8">
-          <Button variant="outline" className="h-12" onClick={() => setStep("building")}>Back</Button>
+          <Button variant="outline" className="h-12" onClick={() => setStep("location")}>Back</Button>
           <Button
             size="lg"
             className="flex-1 h-14 text-base gap-3"
@@ -662,18 +590,29 @@ export default function DashboardPage() {
 
   // ─── Step: Analyzing ──────────────────────────────────────────
   if (step === "analyzing") {
+    const buildingDone = analyzePhase !== "building";
+    const photosDone = analyzePhase === "done";
+    const showBuildingStep = !!buildingName && !buildingResearch;
+
     return (
       <div className="max-w-xl mx-auto px-4 py-24 text-center animate-fade-in-up">
         <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-        <h2 className="text-2xl font-bold mt-6">Studying your apartment...</h2>
+        <h2 className="text-2xl font-bold mt-6">
+          {analyzePhase === "building" ? "Researching your building..." : "Analyzing your rooms..."}
+        </h2>
         <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-          Examining each room, cross-referencing your building&apos;s finishes, and forming a design perspective. Usually 30-60 seconds.
+          {analyzePhase === "building"
+            ? "Looking up floor plans, finishes, and architectural details."
+            : "Examining each room, cross-referencing your building\u2019s finishes, and forming a design perspective."}
         </p>
         <div className="flex flex-col gap-2 mt-8 text-sm text-muted-foreground">
-          <StepIndicator done label="Photos received" />
-          {buildingResearch && <StepIndicator done label="Building context loaded" />}
-          <StepIndicator active label="Studying rooms holistically..." />
-          <StepIndicator label="Forming design direction" />
+          <StepIndicator done label={`${totalImages} photo${totalImages === 1 ? "" : "s"} received`} />
+          {showBuildingStep && (
+            <StepIndicator done={buildingDone} active={analyzePhase === "building"} label="Researching building finishes & floor plans" />
+          )}
+          {buildingResearch && !showBuildingStep && <StepIndicator done label="Building context loaded" />}
+          <StepIndicator done={photosDone} active={analyzePhase === "photos"} label="Studying rooms holistically" />
+          <StepIndicator done={photosDone} label="Forming design direction" />
         </div>
       </div>
     );
