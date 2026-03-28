@@ -149,33 +149,29 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     });
   }
 
-  // Add cross-room context
+  // Add cross-room context as TEXT ONLY — no images from other rooms
+  // Sending other rooms' photos causes the model to confuse which room it's analyzing
   if (otherRooms && otherRooms.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const otherRoomSummaries = otherRooms.map((otherRoom: any) => {
+      const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown> }> | undefined;
+      const otherDiagnosis = diagnoses?.[diagnoses.length - 1];
+      const djson = otherDiagnosis?.diagnosis_json;
+      const summary = djson?.summary as string | undefined;
+      const direction = djson?.design_direction as string | undefined;
+      const works = djson?.what_works as string[] | undefined;
+      const lines = [`**${otherRoom.name}** (${otherRoom.room_type}):`];
+      if (summary) lines.push(`  Summary: ${summary}`);
+      if (direction) lines.push(`  Design direction: ${direction}`);
+      if (works?.length) lines.push(`  Key items: ${works.slice(0, 5).join("; ")}`);
+      if (!summary) lines.push(`  Status: not yet analyzed`);
+      return lines.join("\n");
+    }).join("\n\n");
+
     contentBlocks.push({
       type: "text",
-      text: "\n--- OTHER ROOMS IN THIS APARTMENT (for cross-room coherence) ---",
+      text: `\n--- OTHER ROOMS IN THIS APARTMENT (text context only — for cross-room coherence) ---\nUse this context to ensure your recommendations are cohesive with the rest of the apartment. Do NOT confuse these descriptions with the room you are analyzing above.\n\n${otherRoomSummaries}`,
     });
-
-    for (const otherRoom of otherRooms) {
-      const otherDiagnosis = otherRoom.room_diagnoses?.[otherRoom.room_diagnoses.length - 1];
-      contentBlocks.push({
-        type: "text",
-        text: `\n${otherRoom.name} (${otherRoom.room_type}): ${
-          otherDiagnosis
-            ? JSON.stringify((otherDiagnosis.diagnosis_json as Record<string, unknown>).summary || "analyzed")
-            : "not yet analyzed"
-        }`,
-      });
-
-      // Include one photo from each other room for visual context
-      const firstImage = otherRoom.room_images?.[0];
-      if (firstImage) {
-        contentBlocks.push({
-          type: "image",
-          source: { type: "url", url: firstImage.image_url },
-        });
-      }
-    }
   }
 
   contentBlocks.push({
