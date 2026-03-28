@@ -96,7 +96,6 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       model,
       system,
       messages: [{ role: "user", content: userContent }],
-      max_tokens: 3072,
       temperature: 0.1,
       tools: [{ urlContext: {} }],
     });
@@ -120,7 +119,6 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         model,
         system,
         messages: [{ role: "user", content: userContent }],
-        max_tokens: 3072,
         temperature: 0.1,
         tools: [{ urlContext: {} }],
       });
@@ -145,7 +143,6 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
           model: proModel,
           system,
           messages: [{ role: "user", content: userContent }],
-          max_tokens: 3072,
           temperature: 0.1,
           tools: [{ urlContext: {} }],
         });
@@ -195,7 +192,6 @@ export async function extractFromImage(imageUrl: string): Promise<AgentResult<Ex
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 2048,
       temperature: 0.1,
       responseMimeType: "application/json",
     });

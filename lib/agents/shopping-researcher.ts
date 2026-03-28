@@ -77,7 +77,6 @@ export async function generateSearchBrief(
         model,
         system,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 8192,
         temperature: 0.3,
         responseMimeType: "application/json",
       });
@@ -141,7 +140,6 @@ Return JSON:
       model: selectModel("search"),
       system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages.",
       messages: [{ role: "user", content: searchPrompt }],
-      max_tokens: 4096,
       temperature: 0.2,
       tools: [{ googleSearch: {} }],
     });
@@ -290,7 +288,6 @@ Return JSON:
           model: selectModel("quick_screen"),
           system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category.",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 2048,
           temperature: 0.1,
           responseMimeType: "application/json",
         });

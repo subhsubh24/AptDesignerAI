@@ -50,7 +50,6 @@ export async function generateMockupPrompt(
       model,
       system,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 2048,
       temperature: 0.4,
       responseMimeType: "application/json",
     });
@@ -126,7 +125,6 @@ Generate images in a photorealistic, editorial interior photography style — wa
       model: selectModel("image_generation"),
       system: imageSystemPrompt,
       messages: [{ role: "user", content }],
-      max_tokens: 8192,
       temperature: 0.4,
       responseModalities: ["Text", "Image"],
     });
