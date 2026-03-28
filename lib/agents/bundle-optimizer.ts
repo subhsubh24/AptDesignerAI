@@ -73,35 +73,43 @@ export async function evaluateBundle(
     text: `${bundlePrompt}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
   });
 
-  try {
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content }],
-      max_tokens: 4096,
-      temperature: 0.3,
-      responseMimeType: "application/json",
-    });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content }],
+        max_tokens: 4096,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
 
-    const parsed = JSON.parse(response.content);
-    const scores = parsed.scores;
-    const finalScore = computeFinalBundleScore(scores);
+      const parsed = JSON.parse(response.content);
+      const scores = parsed.scores;
+      const finalScore = computeFinalBundleScore(scores);
 
-    return {
-      success: true,
-      data: {
-        scores,
-        final_bundle_score: finalScore,
-        verdict: parsed.verdict,
-        analysis: parsed.analysis,
-      },
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-      model: response.model,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Bundle evaluation failed",
-    };
+      return {
+        success: true,
+        data: {
+          scores,
+          final_bundle_score: finalScore,
+          verdict: parsed.verdict,
+          analysis: parsed.analysis,
+        },
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        model: response.model,
+      };
+    } catch (error) {
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Bundle evaluation failed",
+      };
+    }
   }
+
+  return { success: false, error: "Bundle evaluation failed after retries" };
 }

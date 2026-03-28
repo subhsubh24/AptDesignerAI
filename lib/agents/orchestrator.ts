@@ -40,6 +40,7 @@ export interface OrchestrationResult {
     totalQuickScored: number;
     totalDeepScored: number;
     totalFinal: number;
+    tokensUsed: number;
   };
   trace?: ReturnType<PipelineTracer["getTrace"]>;
 }
@@ -77,6 +78,33 @@ function pLimit(concurrency: number) {
     });
   };
 }
+
+// ─── Token Budget ─────────────────────────────────────────────
+
+/** Track cumulative token usage and enforce a hard cap. */
+class TokenBudget {
+  used = 0;
+  readonly cap: number;
+
+  constructor(cap: number) {
+    this.cap = cap;
+  }
+
+  add(tokens: number) {
+    this.used += tokens;
+  }
+
+  get remaining() {
+    return Math.max(0, this.cap - this.used);
+  }
+
+  get exceeded() {
+    return this.used >= this.cap;
+  }
+}
+
+/** Default cap: 1.5M tokens per search run (~$3-4 on Gemini pricing). */
+const DEFAULT_TOKEN_CAP = 1_500_000;
 
 // ─── URL Filtering ─────────────────────────────────────────────
 
@@ -117,6 +145,7 @@ export async function runAgenticSearch(
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
   const evaluations = new Map<string, ProductEvaluationResult>();
   const tracer = new PipelineTracer(crypto.randomUUID(), ctx.roomId);
+  const tokenBudget = new TokenBudget(DEFAULT_TOKEN_CAP);
   const stats = {
     totalSearchQueries: 0,
     totalRawUrls: 0,
@@ -126,6 +155,7 @@ export async function runAgenticSearch(
     totalQuickScored: 0,
     totalDeepScored: 0,
     totalFinal: 0,
+    tokensUsed: 0,
   };
 
   function reportStep(step: OrchestrationStep) {
@@ -320,6 +350,7 @@ export async function runAgenticSearch(
             extractLimit(async () => {
               try {
                 const extractResult = await extractFromUrl(candidate.url);
+                if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; }
                 if (!extractResult.success || !extractResult.data) {
                   tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
                   extractedSoFar++;
@@ -498,6 +529,10 @@ export async function runAgenticSearch(
         for (const product of toScore) {
           deepScorePromises.push(
             deepScoreLimit(async () => {
+              if (tokenBudget.exceeded) {
+                tracer.traceFilter("deep_score", product.id, product.product_url || "", "token budget exceeded");
+                return;
+              }
               const scoreResult = await scoreProduct(product, {
                 roomType: ctx.roomType,
                 budgetMode: ctx.budgetMode,
@@ -509,6 +544,7 @@ export async function runAgenticSearch(
                 designDirection: ctx.designDirection,
                 userFeedbackContext: ctx.userFeedbackContext,
               });
+              if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
@@ -526,6 +562,23 @@ export async function runAgenticSearch(
     }
 
     await Promise.all(deepScorePromises);
+
+    if (tokenBudget.exceeded) {
+      console.warn(`[orchestrator] Token budget exceeded (${stats.tokensUsed.toLocaleString()}/${DEFAULT_TOKEN_CAP.toLocaleString()}), skipping validation and bundles`);
+      reportStep({ step: "Token budget exceeded — returning scored results", status: "completed" });
+      return {
+        success: true,
+        data: {
+          searchBrief: brief,
+          candidatesByCategory,
+          evaluations,
+          bundles: [],
+          steps,
+          stats,
+          trace: tracer.getTrace(),
+        },
+      };
+    }
 
     reportStep({
       step: "Deep-scoring top candidates",
@@ -657,7 +710,9 @@ export async function runAgenticSearch(
       const comboResults = await Promise.all(
         combos.map((combo) =>
           bundleEvalLimit(async () => {
+            if (tokenBudget.exceeded) return null;
             const result = await evaluateBundle(combo, bundleCtx);
+            if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; }
             if (result.success && result.data) {
               return { products: combo, ...result.data };
             }
@@ -718,7 +773,7 @@ export async function runAgenticSearch(
       }
     }
 
-    if (weakTiers.length > 0) {
+    if (weakTiers.length > 0 && !tokenBudget.exceeded) {
       reportStep({
         step: `Backfilling ${weakTiers.length} weak tier(s)`,
         status: "running",
@@ -729,7 +784,8 @@ export async function runAgenticSearch(
       const backfillSearchLimit = pLimit(10);
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
-          const backfillQuery = `best ${wt.category} for modern apartment ${TIER_LABELS[wt.tier]} price 2025`;
+          const styleHint = ctx.designDirection?.style_notes || "modern apartment";
+          const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price 2025`;
           const searchResult = await searchProducts(backfillQuery, 10, wt.tier);
           if (!searchResult.success || !searchResult.data) return;
 

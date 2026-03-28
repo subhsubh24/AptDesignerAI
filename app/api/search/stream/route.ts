@@ -236,10 +236,17 @@ export async function POST(request: Request) {
           }
         }
 
-        // Update search session
+        // Update search session — persist trace summary for post-run debugging
         await supabase
           .from("search_sessions")
-          .update({ status: "completed", updated_at: new Date().toISOString() })
+          .update({
+            status: "completed",
+            updated_at: new Date().toISOString(),
+            metadata: {
+              trace_summary: result.data.trace?.summary || null,
+              tokens_used: result.data.stats.tokensUsed,
+            },
+          })
           .eq("id", session?.id);
 
         // Update room status
@@ -256,7 +263,9 @@ export async function POST(request: Request) {
             products_found: productCount,
             categories_searched: Object.keys(result.data.candidatesByCategory),
             steps_count: result.data.steps.length,
+            trace_summary: result.data.trace?.summary || null,
           },
+          tokens_used: result.data.stats.tokensUsed,
         });
 
         // Send final result

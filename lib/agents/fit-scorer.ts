@@ -239,41 +239,55 @@ Return JSON:
   ]
 }`;
 
-      try {
-        const response = await geminiProvider.chat({
-          model: selectModel("quick_score"),
-          system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good.",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 2048,
-          temperature: 0.1,
-          responseMimeType: "application/json",
-        });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await geminiProvider.chat({
+            model: selectModel("quick_score"),
+            system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good.",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 2048,
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          });
 
-        const parsed = JSON.parse(response.content);
-        const entries: QuickScoreEntry[] = [];
-        for (const score of parsed.scores || []) {
-          if (score.index >= 0 && score.index < batch.length) {
-            const avg = (score.style_fit + score.value_fit + score.confidence) / 3;
-            entries.push({
-              productId: batch[score.index].id,
-              quickScore: Math.round(avg * 10) / 10,
-              styleFit: score.style_fit,
-              valueFit: score.value_fit,
-              confidence: score.confidence,
-            });
+          const parsed = JSON.parse(response.content);
+          const entries: QuickScoreEntry[] = [];
+          for (const score of parsed.scores || []) {
+            if (score.index >= 0 && score.index < batch.length) {
+              const avg = (score.style_fit + score.value_fit + score.confidence) / 3;
+              entries.push({
+                productId: batch[score.index].id,
+                quickScore: Math.round(avg * 10) / 10,
+                styleFit: score.style_fit,
+                valueFit: score.value_fit,
+                confidence: score.confidence,
+              });
+            }
           }
+          return entries;
+        } catch {
+          if (attempt === 0) {
+            await new Promise((r) => setTimeout(r, 1000));
+            continue;
+          }
+          // On second failure, give all products a passing score (fail open)
+          return batch.map((p) => ({
+            productId: p.id,
+            quickScore: 6,
+            styleFit: 6,
+            valueFit: 6,
+            confidence: 5,
+          }));
         }
-        return entries;
-      } catch {
-        // On failure, give all products a passing score (fail open)
-        return batch.map((p) => ({
-          productId: p.id,
-          quickScore: 6,
-          styleFit: 6,
-          valueFit: 6,
-          confidence: 5,
-        }));
       }
+      // Unreachable but satisfies TypeScript
+      return batch.map((p) => ({
+        productId: p.id,
+        quickScore: 6,
+        styleFit: 6,
+        valueFit: 6,
+        confidence: 5,
+      }));
     })
   );
 
