@@ -324,7 +324,7 @@ export default function FocusPage() {
       const order = { high: 0, medium: 1, low: 2 };
       return (order[a.priority] || 1) - (order[b.priority] || 1);
     });
-    const categories = sorted.slice(0, 5).map((n) => ({
+    const categories = sorted.map((n) => ({
       category: n.category,
       search_title: n.search_title || n.description,
       specs: n.specs,
