@@ -10,6 +10,7 @@ import { extractFromUrl } from "./product-extractor";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
+import { PipelineTracer } from "./pipeline-trace";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
@@ -40,6 +41,7 @@ export interface OrchestrationResult {
     totalDeepScored: number;
     totalFinal: number;
   };
+  trace?: ReturnType<PipelineTracer["getTrace"]>;
 }
 
 const PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
@@ -114,6 +116,7 @@ export async function runAgenticSearch(
   const steps: OrchestrationStep[] = [];
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
   const evaluations = new Map<string, ProductEvaluationResult>();
+  const tracer = new PipelineTracer(crypto.randomUUID(), ctx.roomId);
   const stats = {
     totalSearchQueries: 0,
     totalRawUrls: 0,
@@ -186,9 +189,13 @@ export async function runAgenticSearch(
 
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
+        tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
         const result = await searchProducts(task.query, 10, task.tier);
+        const candidates = result.success ? (result.data || []) : [];
+        for (const c of candidates) {
+          tracer.trace({ phase: "search", action: "found", url: c.url, category: task.category, tier: task.tier });
+        }
         searchesCompleted++;
-        // Report progress every 5 searches
         if (searchesCompleted % 5 === 0 || searchesCompleted === searchTasks.length) {
           reportStep({
             step: "Searching across all retailers",
@@ -199,7 +206,7 @@ export async function runAgenticSearch(
         return {
           category: task.category,
           tier: task.tier,
-          candidates: result.success ? (result.data || []) : [],
+          candidates,
         };
       })
     );
@@ -259,6 +266,16 @@ export async function runAgenticSearch(
             if (screenResult.success && screenResult.data) {
               screenedByCategory[category][tier] = screenResult.data;
               stats.totalAfterScreen += screenResult.data.length;
+              for (const c of screenResult.data) {
+                tracer.trace({ phase: "screen", action: "passed", url: c.url, category, tier });
+              }
+              // Trace filtered-out candidates
+              const passedUrls = new Set(screenResult.data.map((c) => c.url));
+              for (const c of candidates) {
+                if (!passedUrls.has(c.url)) {
+                  tracer.traceFilter("screen", "", c.url, "failed quick screen");
+                }
+              }
             } else {
               // Fail open: keep all candidates
               screenedByCategory[category][tier] = candidates;
@@ -304,10 +321,12 @@ export async function runAgenticSearch(
               try {
                 const extractResult = await extractFromUrl(candidate.url);
                 if (!extractResult.success || !extractResult.data) {
+                  tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
                   extractedSoFar++;
                   return;
                 }
                 if (!extractResult.data.title && !extractResult.data.price) {
+                  tracer.traceFilter("extract", "", candidate.url, "no title or price");
                   extractedSoFar++;
                   return;
                 }
@@ -315,6 +334,7 @@ export async function runAgenticSearch(
                 const hasSubstance = extractResult.data.title
                   && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
                 if (!hasSubstance) {
+                  tracer.traceFilter("extract", "", candidate.url, "insufficient substance");
                   extractedSoFar++;
                   return;
                 }
@@ -324,10 +344,12 @@ export async function runAgenticSearch(
                 const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
                 if (priceRange && extractResult.data.price) {
                   if (extractResult.data.price > priceRange.max * 2) {
+                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} above 2x max $${priceRange.max}`);
                     extractedSoFar++;
                     return;
                   }
                   if (extractResult.data.price < priceRange.min * 0.3) {
+                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} below 0.3x min $${priceRange.min}`);
                     extractedSoFar++;
                     return;
                   }
@@ -362,8 +384,9 @@ export async function runAgenticSearch(
 
                 extractedByCategory[category][tier].push(product);
                 stats.totalExtracted++;
-              } catch {
-                // Skip failed extractions
+                tracer.trace({ phase: "extract", action: "success", productId: product.id, url: candidate.url, category, tier });
+              } catch (err) {
+                tracer.traceError("extract", candidate.url, err);
               }
               extractedSoFar++;
               // Report incremental progress every 5 extractions
@@ -459,7 +482,11 @@ export async function runAgenticSearch(
         // Filter out low-confidence products (quick score confidence < 4)
         products = products.filter((p) => {
           const qs = quickScoresByProduct.get(p.id);
-          return qs === undefined || qs >= 4; // keep unscored (fail-open) and scored >= 4
+          if (qs !== undefined && qs < 4) {
+            tracer.traceFilter("quick_score", p.id, p.product_url || "", `quickScore ${qs} < 4`);
+            return false;
+          }
+          return true;
         });
 
         // Keep top 8 or those with quickScore >= 6, whichever is more
@@ -480,11 +507,12 @@ export async function runAgenticSearch(
                 designProfile: ctx.designProfile,
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
+                userFeedbackContext: ctx.userFeedbackContext,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
-                // Report progress on every scored product
+                tracer.traceScore("deep_score", product.id, scoreResult.data.final_item_score, { verdict: scoreResult.data.verdict });
                 reportStep({
                   step: "Deep-scoring top candidates",
                   status: "running",
@@ -597,59 +625,45 @@ export async function runAgenticSearch(
 
       if (topByCategory.length === 0) return null;
 
-      // Generate candidate bundles: default (top-1 each) + 2 alternatives
-      const combos: CandidateProduct[][] = [];
-
-      // Combo 0: top-1 from each category (baseline)
-      combos.push(topByCategory.map((cats) => cats[0]));
-
-      // Combo 1: swap in #2 from the category with the weakest top pick
-      if (topByCategory.some((cats) => cats.length >= 2)) {
-        const baseline = topByCategory.map((cats) => cats[0]);
-        let weakestIdx = 0;
-        let weakestScore = Infinity;
-        for (let i = 0; i < baseline.length; i++) {
-          const score = evaluations.get(baseline[i].id)?.final_item_score || 0;
-          if (score < weakestScore && topByCategory[i].length >= 2) {
-            weakestScore = score;
-            weakestIdx = i;
+      // Generate full cartesian product of top candidates across categories
+      // e.g. 3 categories × 3 options each = up to 27 combos
+      function cartesian(arrays: CandidateProduct[][]): CandidateProduct[][] {
+        if (arrays.length === 0) return [[]];
+        const [first, ...rest] = arrays;
+        const restCombos = cartesian(rest);
+        const result: CandidateProduct[][] = [];
+        for (const item of first) {
+          for (const combo of restCombos) {
+            result.push([item, ...combo]);
           }
         }
-        if (topByCategory[weakestIdx].length >= 2) {
-          const alt = [...baseline];
-          alt[weakestIdx] = topByCategory[weakestIdx][1];
-          combos.push(alt);
-        }
+        return result;
       }
 
-      // Combo 2: swap in #2 from the category with the strongest top pick (diversity)
-      if (topByCategory.some((cats) => cats.length >= 2)) {
-        const baseline = topByCategory.map((cats) => cats[0]);
-        let strongestIdx = 0;
-        let strongestScore = -1;
-        for (let i = 0; i < baseline.length; i++) {
-          const score = evaluations.get(baseline[i].id)?.final_item_score || 0;
-          if (score > strongestScore && topByCategory[i].length >= 2) {
-            strongestScore = score;
-            strongestIdx = i;
-          }
-        }
-        if (topByCategory[strongestIdx].length >= 2 && strongestIdx !== (combos.length > 1 ? combos[1].findIndex((p, i) => p !== combos[0][i]) : -1)) {
-          const alt = [...baseline];
-          alt[strongestIdx] = topByCategory[strongestIdx][1];
-          combos.push(alt);
-        }
+      let combos = cartesian(topByCategory);
+
+      // Safety cap: if more than 27 combos, keep only top 27 by average individual score
+      if (combos.length > 27) {
+        combos.sort((a, b) => {
+          const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
+          const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
+          return avgB - avgA;
+        });
+        combos = combos.slice(0, 27);
       }
 
-      // Evaluate all combos, pick the one with the highest bundle score
+      // Evaluate all combos with concurrency limit
+      const bundleEvalLimit = pLimit(3);
       const comboResults = await Promise.all(
-        combos.map(async (combo) => {
-          const result = await evaluateBundle(combo, bundleCtx);
-          if (result.success && result.data) {
-            return { products: combo, ...result.data };
-          }
-          return null;
-        })
+        combos.map((combo) =>
+          bundleEvalLimit(async () => {
+            const result = await evaluateBundle(combo, bundleCtx);
+            if (result.success && result.data) {
+              return { products: combo, ...result.data };
+            }
+            return null;
+          })
+        )
       );
 
       const validResults = comboResults.filter(Boolean) as Array<{
@@ -665,6 +679,10 @@ export async function runAgenticSearch(
       // Pick the best bundle
       validResults.sort((a, b) => b.final_bundle_score - a.final_bundle_score);
       const best = validResults[0];
+      for (const r of validResults) {
+        tracer.trace({ phase: "bundle", action: "evaluated", tier, score: r.final_bundle_score, metadata: { verdict: r.verdict } });
+      }
+      tracer.trace({ phase: "bundle", action: "selected", tier, score: best.final_bundle_score, metadata: { product_ids: best.products.map((p) => p.id) } });
       return {
         tier,
         scores: best.scores,
@@ -763,6 +781,7 @@ export async function runAgenticSearch(
                 designProfile: ctx.designProfile,
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
+                userFeedbackContext: ctx.userFeedbackContext,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
@@ -793,6 +812,7 @@ export async function runAgenticSearch(
         steps,
         validation: validationData,
         stats,
+        trace: tracer.getTrace(),
       },
     };
   } catch (error) {

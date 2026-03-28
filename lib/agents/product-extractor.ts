@@ -137,10 +137,36 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         model: response.model,
       };
     } catch (retryError) {
-      return {
-        success: false,
-        error: retryError instanceof Error ? retryError.message : "Extraction failed",
-      };
+      // Attempt 3: fallback to Pro model (more capable, handles complex pages)
+      console.warn(`[extract] Flash failed twice for ${url}, falling back to Pro model`);
+      try {
+        const proModel = selectModel("scoring"); // Pro model
+        const response = await geminiProvider.chat({
+          model: proModel,
+          system,
+          messages: [{ role: "user", content: userContent }],
+          max_tokens: 3072,
+          temperature: 0.1,
+          tools: [{ urlContext: {} }],
+        });
+
+        const raw = response.content.trim();
+        if (!raw) throw new Error("Empty response from Pro extraction");
+
+        const parsed = parseJsonResponse<ExtractedProduct>(raw);
+        cacheExtraction(url, parsed);
+        return {
+          success: true,
+          data: parsed,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+          model: response.model,
+        };
+      } catch (proError) {
+        return {
+          success: false,
+          error: proError instanceof Error ? proError.message : "Extraction failed (all attempts)",
+        };
+      }
     }
   }
 }

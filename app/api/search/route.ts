@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runAgenticSearch } from "@/lib/agents/orchestrator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import type { AgentContext } from "@/lib/agents/types";
 
 export async function POST(request: Request) {
@@ -64,6 +65,9 @@ export async function POST(request: Request) {
   // Build full design profile from project data
   const designProfile = buildDesignProfile(project);
 
+  // Load cross-session user feedback (accepted/rejected products)
+  const userFeedbackContext = await loadUserFeedbackContext(supabase, room_id, room.project_id);
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -78,6 +82,8 @@ export async function POST(request: Request) {
     // Room diagnosis results so agents know what to fix
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
+    // Cross-session learning from user feedback
+    userFeedbackContext: userFeedbackContext || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

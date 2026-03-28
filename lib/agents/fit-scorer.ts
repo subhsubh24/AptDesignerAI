@@ -19,8 +19,32 @@ export interface ScoringContext {
   designProfile?: DynamicDesignProfile;
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
+  userFeedbackContext?: string;
 }
 
+// ─── Score Calibration Anchors ────────────────────────────────
+// Few-shot examples so the model has concrete reference points for what each score level means.
+const CALIBRATION_ANCHORS = `
+## SCORE CALIBRATION — USE THESE AS ANCHORS
+Before scoring, calibrate against these reference examples:
+
+**9-10 (Exceptional fit)**: A walnut coffee table with tapered legs for a mid-century modern living room that already has a walnut media console and warm-toned rug. Materials match, scale is perfect for the seating area, style is cohesive, price is fair.
+
+**7-8 (Strong fit)**: A linen upholstered accent chair in a warm neutral tone for a room with a leather sofa and wood floors. Style works, palette compatible, but the specific shade might not be ideal — needs to be seen in person.
+
+**5-6 (Mediocre)**: A generic gray fabric ottoman for a room that needs warmth and texture. It doesn't clash, but it doesn't solve any problems either. It's safe but uninspired — a missed opportunity.
+
+**3-4 (Poor fit)**: A glossy white lacquer side table in a room with warm wood tones and matte finishes. The material and finish actively clash with the existing palette. It would look out of place.
+
+**1-2 (Wrong)**: A farmhouse-style distressed wood dining table for a sleek modern apartment with clean lines and contemporary finishes. Completely wrong style family.
+
+Use these anchors to ensure your scores are grounded and consistent.`;
+
+/**
+ * Score a single product with the Pro model using extended thinking.
+ * Includes score calibration anchors and optional user feedback context.
+ * Retries once on failure before returning error.
+ */
 export async function scoreProduct(
   product: CandidateProduct,
   scoringCtx: ScoringContext
@@ -71,53 +95,69 @@ export async function scoreProduct(
     content.push({ type: "image", source: { type: "url", url: product.image_url } });
   }
 
-  // Add lifestyle/room-setting image if available — helps assess scale and style in context
+  // Add lifestyle/room-setting image if available
   if (lifestyleImageUrl) {
     content.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
   }
 
+  // Build the full prompt with calibration anchors and optional user feedback
+  const feedbackSection = scoringCtx.userFeedbackContext
+    ? `\n\n${scoringCtx.userFeedbackContext}`
+    : "";
+
   content.push({
     type: "text",
-    text: `${evalPrompt}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
+    text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
   });
 
-  try {
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content }],
-      max_tokens: 2048,
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    });
+  // Attempt scoring with retry on failure
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content }],
+        max_tokens: 2048,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "medium" },
+      });
 
-    const parsed = JSON.parse(response.content);
-    const scores = parsed.scores;
-    if (!scores || typeof scores.confidence_score !== "number") {
-      throw new Error("Invalid scoring response: missing scores or confidence_score");
+      const parsed = JSON.parse(response.content);
+      const scores = parsed.scores;
+      if (!scores || typeof scores.confidence_score !== "number") {
+        throw new Error("Invalid scoring response: missing scores or confidence_score");
+      }
+      const finalScore = computeFinalItemScore(scores);
+      const verdict = determineVerdict(finalScore, scores.confidence_score);
+
+      return {
+        success: true,
+        data: {
+          scores,
+          final_item_score: finalScore,
+          verdict,
+          reasoning: parsed.reasoning,
+          area_fit_note: parsed.area_fit_note,
+          apartment_fit_note: parsed.apartment_fit_note,
+        },
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        model: response.model,
+      };
+    } catch (error) {
+      if (attempt === 0) {
+        // Retry after brief delay
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Scoring failed",
+      };
     }
-    const finalScore = computeFinalItemScore(scores);
-    const verdict = determineVerdict(finalScore, scores.confidence_score);
-
-    return {
-      success: true,
-      data: {
-        scores,
-        final_item_score: finalScore,
-        verdict,
-        reasoning: parsed.reasoning,
-        area_fit_note: parsed.area_fit_note,
-        apartment_fit_note: parsed.apartment_fit_note,
-      },
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-      model: response.model,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Scoring failed",
-    };
   }
+
+  return { success: false, error: "Scoring failed after retries" };
 }
 
 export interface QuickScoreEntry {

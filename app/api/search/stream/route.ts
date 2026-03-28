@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runAgenticSearch } from "@/lib/agents/orchestrator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import type { AgentContext } from "@/lib/agents/types";
 
 /**
@@ -78,6 +79,9 @@ export async function POST(request: Request) {
 
   const imageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Load cross-session user feedback (accepted/rejected products)
+  const userFeedbackContext = await loadUserFeedbackContext(supabase, room_id, room.project_id);
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -90,6 +94,7 @@ export async function POST(request: Request) {
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
+    userFeedbackContext: userFeedbackContext || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

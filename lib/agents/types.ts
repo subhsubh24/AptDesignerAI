@@ -17,6 +17,9 @@ export interface AgentContext {
   // Room diagnosis results — what's working, what's not, design direction
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
+
+  // Cross-session learning — user feedback from accepted/rejected products
+  userFeedbackContext?: string;
 }
 
 export interface AgentResult<T = unknown> {
