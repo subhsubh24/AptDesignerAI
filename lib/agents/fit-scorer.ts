@@ -117,7 +117,7 @@ export async function scoreProduct(
         model,
         system,
         messages: [{ role: "user", content }],
-        max_tokens: 3000,
+        max_tokens: 8000,
         temperature: 0.2,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "medium" },
@@ -141,7 +141,7 @@ export async function scoreProduct(
           area_fit_note: parsed.area_fit_note,
           apartment_fit_note: parsed.apartment_fit_note,
         },
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (error) {

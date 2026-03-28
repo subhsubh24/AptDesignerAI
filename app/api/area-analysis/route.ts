@@ -248,7 +248,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 5000,
+      max_tokens: 8000,
       temperature: 0.3,
       responseMimeType: "application/json",
     });

@@ -67,7 +67,7 @@ Return JSON:
       model,
       system,
       messages: [{ role: "user", content: validationPrompt }],
-      max_tokens: 4000,
+      max_tokens: 10000,
       temperature: 0.2,
       thinkingConfig: { thinkingLevel: "high" },
       responseMimeType: "application/json",
@@ -77,7 +77,7 @@ Return JSON:
     return {
       success: true,
       data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (error) {
@@ -165,7 +165,7 @@ Return JSON:
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 3000,
+      max_tokens: 8000,
       temperature: 0.2,
       thinkingConfig: { thinkingLevel: "medium" },
       responseMimeType: "application/json",
@@ -175,7 +175,7 @@ Return JSON:
     return {
       success: true,
       data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (error) {

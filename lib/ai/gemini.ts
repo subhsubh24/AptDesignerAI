@@ -238,8 +238,20 @@ export const geminiProvider: AIProvider = {
       }
     }
 
-    // Extract usage
+    // Detect truncation — response was cut off due to max_tokens
+    const finishReason = response.candidates?.[0]?.finishReason as string | undefined;
+    const truncated = finishReason === "MAX_TOKENS";
+    if (truncated) {
+      console.warn(`[gemini] ⚠️ Response TRUNCATED (MAX_TOKENS) for model=${model}. Increase max_tokens for this call.`);
+    }
+
+    // Extract usage — include thinking tokens for accurate cost tracking
     const usageMetadata = response.usageMetadata as Record<string, number> | undefined;
+    const thinkingTokens = usageMetadata?.thoughtsTokenCount || 0;
+
+    if (thinkingTokens > 0) {
+      console.log(`[gemini] Thinking tokens: ${thinkingTokens}, Output tokens: ${usageMetadata?.candidatesTokenCount || 0}`);
+    }
 
     return {
       content,
@@ -247,7 +259,9 @@ export const geminiProvider: AIProvider = {
       usage: {
         input_tokens: usageMetadata?.promptTokenCount || 0,
         output_tokens: usageMetadata?.candidatesTokenCount || 0,
+        thinking_tokens: thinkingTokens,
       },
+      truncated,
       groundingMetadata,
       imageData,
     };

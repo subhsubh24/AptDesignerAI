@@ -49,7 +49,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 4000,
+      max_tokens: 8000,
       temperature: 0.3,
       responseMimeType: "application/json",
     });
@@ -64,7 +64,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
         missing_categories: parsed.missing_categories || [],
         action_list: parsed.action_list || [],
       },
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (error) {

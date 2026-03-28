@@ -31,7 +31,9 @@ export interface AIResponse {
   usage: {
     input_tokens: number;
     output_tokens: number;
+    thinking_tokens: number;
   };
+  truncated?: boolean;
   groundingMetadata?: {
     sources: GroundingSource[];
   };

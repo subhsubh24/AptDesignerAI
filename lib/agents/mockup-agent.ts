@@ -59,7 +59,7 @@ export async function generateMockupPrompt(
     return {
       success: true,
       data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (error) {

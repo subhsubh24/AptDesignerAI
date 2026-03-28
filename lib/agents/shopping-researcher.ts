@@ -146,16 +146,20 @@ export async function generateSearchBrief(
         model,
         system,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 4000,
+        max_tokens: 8000,
         temperature: 0.3,
         responseMimeType: "application/json",
       });
+
+      if (response.truncated) {
+        console.error("[search-brief] Response was truncated! Need more output tokens.");
+      }
 
       const parsed = JSON.parse(response.content) as SearchBrief;
       return {
         success: true,
         data: parsed,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (error) {

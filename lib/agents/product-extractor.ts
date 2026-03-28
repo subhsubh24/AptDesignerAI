@@ -109,7 +109,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
     return {
       success: true,
       data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (firstError) {
@@ -133,7 +133,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       return {
         success: true,
         data: parsed,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (retryError) {
@@ -178,7 +178,7 @@ export async function extractFromImage(imageUrl: string): Promise<AgentResult<Ex
     return {
       success: true,
       data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
   } catch (error) {
