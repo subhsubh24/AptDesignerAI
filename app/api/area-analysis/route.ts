@@ -4,7 +4,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
-import { validateAnalysis } from "@/lib/agents/validation-agent";
+import { validateRoomHarmony } from "@/lib/agents/validation-agent";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 
@@ -292,30 +292,69 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     let analysis = JSON.parse(response.content);
 
-    // Post-diagnosis validation — check analysis for consistency
-    const validationResult = await validateAnalysis(
-      "room_diagnosis",
-      analysis,
-      {
-        buildingResearch: project?.building_research as Record<string, unknown> | undefined,
-        apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
-        roomImages: (room.room_images || []).map((img: { image_url: string }) => img.image_url),
-      }
-    );
+    // ── Harmony validation ──────────────────────────────────────────
+    // Before outputting, validate every recommended item for:
+    //  - harmony with existing "keep" items
+    //  - harmony with other recommendations (do they work as a set?)
+    //  - apartment-wide aesthetic coherence
+    //  - specificity of search titles
+    // Uses room photos so it can judge visually, not just from text.
+    const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
+    const harmonyResult = await validateRoomHarmony(analysis, {
+      roomType: room.room_type,
+      roomName: room.name,
+      roomImageUrls,
+      buildingResearch: project?.building_research as Record<string, unknown> | undefined,
+      apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
+      designProfile: profile,
+    });
 
     let validation = null;
-    if (validationResult.success && validationResult.data) {
+    if (harmonyResult.success && harmonyResult.data) {
+      const harmony = harmonyResult.data;
       validation = {
-        isValid: validationResult.data.isValid,
-        confidence: validationResult.data.confidence,
-        issues: validationResult.data.issues,
-        suggestions: validationResult.data.suggestions,
+        confidence: harmony.confidence,
+        overall_cohesion: harmony.overall_cohesion,
+        palette_coherence: harmony.palette_coherence,
+        material_coherence: harmony.material_coherence,
+        issues: harmony.issues,
+        item_scores: harmony.item_scores,
       };
 
-      // If validation confidence is low and we got a revised analysis, use it
-      if (validationResult.data.confidence < 7 && validationResult.data.revisedAnalysis) {
-        console.log(`[area-analysis] Validation confidence ${validationResult.data.confidence}/10 — using revised analysis`);
-        analysis = validationResult.data.revisedAnalysis;
+      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}`);
+
+      // If confidence is low and we got a full revised analysis, use it
+      if (harmony.confidence < 7 && harmony.revisedAnalysis) {
+        console.log(`[area-analysis] Harmony confidence ${harmony.confidence}/10 — using revised analysis`);
+        analysis = harmony.revisedAnalysis;
+      } else {
+        // Apply per-item fixes: drop clashing items, revise mediocre ones
+        const needs = (analysis.what_it_needs || []) as Array<Record<string, unknown>>;
+        const revised: Array<Record<string, unknown>> = [];
+
+        for (const item of needs) {
+          const score = harmony.item_scores.find(
+            (s) => s.category === item.category
+          );
+
+          if (score?.drop) {
+            console.log(`[area-analysis] Dropping "${item.category}" — harmony score ${score.harmony_score}/10: ${score.reason}`);
+            continue;
+          }
+
+          if (score && score.harmony_score <= 6 && score.revised_search_title) {
+            console.log(`[area-analysis] Revising "${item.category}" — harmony score ${score.harmony_score}/10: ${score.reason}`);
+            revised.push({
+              ...item,
+              search_title: score.revised_search_title,
+              specs: score.revised_specs || item.specs,
+            });
+          } else {
+            revised.push(item);
+          }
+        }
+
+        analysis.what_it_needs = revised;
       }
     }
 

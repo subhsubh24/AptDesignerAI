@@ -13,67 +13,155 @@ export interface ValidationResult {
   revisedAnalysis?: Record<string, unknown>;
 }
 
+export interface HarmonyValidationResult {
+  confidence: number;
+  item_scores: Array<{
+    category: string;
+    harmony_score: number;
+    keeps_well_with: string[];
+    clashes_with: string[];
+    revised_search_title?: string;
+    revised_specs?: string;
+    drop: boolean;
+    reason: string;
+  }>;
+  overall_cohesion: number;
+  palette_coherence: string;
+  material_coherence: string;
+  issues: string[];
+  revisedAnalysis?: Record<string, unknown>;
+}
+
 /**
- * Validation agent that checks analysis consistency and confidence.
- * Uses Gemini with high thinking level for deep reasoning.
+ * Harmony validation: checks that every recommended item fits with the room's
+ * existing items (what_works), the apartment aesthetic, and each other.
+ * Sees the actual room photos so it can judge visually, not just from text.
+ * Uses Flash with high thinking for deep design reasoning.
  */
-export async function validateAnalysis(
-  analysisType: "room_diagnosis" | "product_search" | "bundle",
+export async function validateRoomHarmony(
   analysis: Record<string, unknown>,
   context: {
+    roomType: string;
+    roomName: string;
+    roomImageUrls: string[];
     buildingResearch?: Record<string, unknown>;
     apartmentAnalysis?: Record<string, unknown>;
-    roomImages?: string[];
-    userAesthetic?: string;
+    designProfile?: DynamicDesignProfile;
   }
-): Promise<AgentResult<ValidationResult>> {
+): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(context.designProfile);
 
-  const validationPrompt = `You are a validation agent. Your job is to critically review an AI analysis for consistency, accuracy, and holistic sense.
+  const whatWorks = (analysis.what_works as string[]) || [];
+  const whatShouldGo = (analysis.what_should_go as string[]) || [];
+  const whatItNeeds = (analysis.what_it_needs as Array<Record<string, unknown>>) || [];
+  const designDirection = (analysis.design_direction as string) || "";
 
-## ANALYSIS TYPE
-${analysisType}
+  // Build the content with room images for visual validation
+  const content: AIContentBlock[] = [];
 
-## ANALYSIS TO VALIDATE
-${JSON.stringify(analysis, null, 2)}
+  // Send room photos so the model can SEE what's already there
+  for (const url of context.roomImageUrls.slice(0, 4)) {
+    content.push({ type: "image", source: { type: "url", url } });
+  }
 
-## CONTEXT
-${context.buildingResearch ? `Building research: ${JSON.stringify(context.buildingResearch)}` : ""}
-${context.apartmentAnalysis ? `Apartment analysis: ${JSON.stringify(context.apartmentAnalysis)}` : ""}
-${context.userAesthetic ? `User aesthetic: ${context.userAesthetic}` : ""}
+  const buildingCtx = context.buildingResearch
+    ? `\nBuilding: ${JSON.stringify({
+        style: (context.buildingResearch as Record<string, unknown>).building_style,
+        finishes: (context.buildingResearch as Record<string, unknown>).finishes,
+        aesthetic: (context.buildingResearch as Record<string, unknown>).design_aesthetic,
+      })}`
+    : "";
 
-## VALIDATION CHECKLIST
-1. Does the analysis make holistic sense? Are there internal contradictions?
-2. Are recommendations consistent with the user's aesthetic preferences?
-3. Are item descriptions specific enough? (materials, colors, dimensions, finishes)
-4. Do the recommended items actually fit together as a cohesive set?
-5. Are there any hallucinated or unrealistic recommendations?
-6. Is the confidence justified given the available information?
-7. Would a professional interior designer agree with this analysis?
+  const apartmentCtx = context.apartmentAnalysis
+    ? `\nApartment overview: ${(context.apartmentAnalysis as Record<string, unknown>).overall || ""}`
+    : "";
+
+  content.push({
+    type: "text",
+    text: `You are a senior interior designer doing a HARMONY CHECK on recommended items before they go to product search.
+
+## ROOM
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}
+
+## DESIGN DIRECTION
+${designDirection}
+
+## ITEMS TO KEEP (already in the room — new items MUST harmonize with these)
+${whatWorks.length > 0 ? whatWorks.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None specified"}
+
+## ITEMS BEING REMOVED
+${whatShouldGo.length > 0 ? whatShouldGo.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None"}
+
+## RECOMMENDED NEW ITEMS (to validate)
+${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title}
+   Specs: ${item.specs}
+   Priority: ${item.priority}
+   Why: ${item.description}`).join("\n\n")}
+
+## YOUR JOB
+Look at the room photos. Look at the items being kept. Now evaluate EACH recommended item:
+
+1. **Harmony with keeps**: Does this item's material, color, and style work with the existing items staying in the room? A walnut coffee table next to existing oak furniture = clash. A brass lamp with existing chrome fixtures = clash.
+
+2. **Harmony with other recommendations**: Do ALL the new items work together as a set? If you're recommending a warm cream rug AND cool gray throw pillows, that's a palette conflict.
+
+3. **Apartment coherence**: Does this fit the overall apartment aesthetic and building finishes?
+
+4. **Specificity check**: Is the search_title specific enough to find the RIGHT product? Does it include material, color, size, and style?
+
+5. **Scale/proportion**: Based on what you see in the photos, will this item be the right size for the space?
+
+## SCORING (per item)
+- **harmony_score** (1-10): How well does this item fit with keeps + other recommendations + apartment?
+  - 9-10: Perfect harmony — same material family, complementary colors, cohesive style
+  - 7-8: Good fit — works well, minor adjustments might help
+  - 5-6: Acceptable but could be better — slightly off palette or material family
+  - 3-4: Conflict — clashes with keeps or other recommendations
+  - 1-2: Wrong — completely out of place
+
+- **drop**: true if harmony_score ≤ 3 (remove from recommendations entirely)
+
+- If harmony_score is 4-6, provide a **revised_search_title** and **revised_specs** that would harmonize better
 
 ## OUTPUT FORMAT
 Return JSON:
 {
-  "isValid": true/false,
-  "confidence": 0-10 (how confident you are the analysis is correct),
-  "issues": ["list of specific problems found"],
-  "suggestions": ["list of specific improvements"],
-  "revisedAnalysis": null or { revised version if confidence < 7 }
-}`;
+  "confidence": 0-10 (overall confidence in this recommendation set),
+  "item_scores": [
+    {
+      "category": "the category slug",
+      "harmony_score": number,
+      "keeps_well_with": ["which existing items it pairs well with"],
+      "clashes_with": ["which existing items or other recommendations it conflicts with"],
+      "revised_search_title": "only if score 4-6, a better search title that harmonizes",
+      "revised_specs": "only if score 4-6, revised specs",
+      "drop": true/false,
+      "reason": "1-2 sentence explanation"
+    }
+  ],
+  "overall_cohesion": 0-10 (do ALL items work together as a complete room?),
+  "palette_coherence": "1 sentence: does the color palette across all items + keeps make sense?",
+  "material_coherence": "1 sentence: do the materials across all items + keeps create a cohesive texture story?",
+  "issues": ["any cross-cutting problems — e.g. too many warm tones, no contrast, missing texture variety"],
+  "revisedAnalysis": null or { the full revised analysis object if confidence < 7 — with corrected what_it_needs entries }
+}
+
+BE STRICT. A professional designer would reject items that clash. Don't let mediocre harmony pass — the product search will spend real money finding these items.`,
+  });
 
   try {
     const response = await geminiProvider.chat({
       model,
       system,
-      messages: [{ role: "user", content: validationPrompt }],
-      max_tokens: 10000,
+      messages: [{ role: "user", content }],
+      max_tokens: 16000,
       temperature: 0.2,
       thinkingConfig: { thinkingLevel: "high" },
       responseMimeType: "application/json",
     });
 
-    const parsed = JSON.parse(response.content) as ValidationResult;
+    const parsed = JSON.parse(response.content) as HarmonyValidationResult;
     return {
       success: true,
       data: parsed,
@@ -83,7 +171,7 @@ Return JSON:
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Validation failed",
+      error: error instanceof Error ? error.message : "Harmony validation failed",
     };
   }
 }
