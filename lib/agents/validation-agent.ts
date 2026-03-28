@@ -30,12 +30,14 @@ export interface HarmonyValidationResult {
     clashes_with: string[];
     revised_search_title?: string;
     revised_specs?: string;
+    revised_placement?: string;
     drop: boolean;
     reason: string;
   }>;
   overall_cohesion: number;
   palette_coherence: string;
   material_coherence: string;
+  spatial_flow: string;
   issues: string[];
   revisedAnalysis?: Record<string, unknown>;
 }
@@ -55,6 +57,7 @@ export async function validateRoomHarmony(
     buildingResearch?: Record<string, unknown>;
     apartmentAnalysis?: Record<string, unknown>;
     designProfile?: DynamicDesignProfile;
+    floorPlan?: Record<string, unknown>;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -64,6 +67,7 @@ export async function validateRoomHarmony(
   const whatShouldGo = (analysis.what_should_go as string[]) || [];
   const whatItNeeds = (analysis.what_it_needs as Array<Record<string, unknown>>) || [];
   const designDirection = (analysis.design_direction as string) || "";
+  const spatialLayout = (analysis.spatial_layout as string) || "";
 
   // Build the content with room images for visual validation
   const content: AIContentBlock[] = [];
@@ -85,17 +89,30 @@ export async function validateRoomHarmony(
     ? `\nApartment overview: ${(context.apartmentAnalysis as Record<string, unknown>).overall || ""}`
     : "";
 
+  // Floor plan context for spatial validation
+  const floorPlanCtx = context.floorPlan
+    ? `\n\n## FLOOR PLAN / ROOM DIMENSIONS
+Total sqft: ${context.floorPlan.total_sqft || "unknown"}
+Room dimensions: ${JSON.stringify(context.floorPlan.room_dimensions || {})}
+Room layout: ${context.floorPlan.room_layout || "unknown"}
+Living/dining combined: ${context.floorPlan.living_dining_combined ?? "unknown"}
+Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? context.floorPlan.notable_spatial_features.join(", ") : "unknown"}`
+    : "";
+
   content.push({
     type: "text",
-    text: `You are a senior interior designer doing a HARMONY CHECK on recommended items before they go to product search.
+    text: `You are a senior interior designer doing a HARMONY + SPATIAL CHECK on recommended items before they go to product search.
 
 ## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}
 
-## ITEMS TO KEEP (already in the room — new items MUST harmonize with these)
+## SPATIAL LAYOUT PLAN
+${spatialLayout || "Not specified — you should infer from the room photos"}
+
+## ITEMS TO KEEP (already in the room — note their CURRENT POSITIONS)
 ${whatWorks.length > 0 ? whatWorks.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None specified"}
 
 ## ITEMS BEING REMOVED
@@ -104,12 +121,14 @@ ${whatShouldGo.length > 0 ? whatShouldGo.map((item, i) => `${i + 1}. ${item}`).j
 ## RECOMMENDED NEW ITEMS (to validate)
 ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title}
    Specs: ${item.specs}
+   Placement: ${item.placement || "not specified"}
    Priority: ${item.priority}
    Why: ${item.description}`).join("\n\n")}
 
 ## YOUR JOB
-Look at the room photos. Look at the items being kept. Now evaluate EACH recommended item:
+Look at the room photos carefully. Estimate the room's dimensions and layout. Note where existing items sit. Now evaluate EACH recommended item on BOTH harmony AND spatial fit:
 
+### HARMONY CHECKS
 1. **Harmony with keeps**: Does this item's material, color, and style work with the existing items staying in the room? A walnut coffee table next to existing oak furniture = clash. A brass lamp with existing chrome fixtures = clash.
 
 2. **Harmony with other recommendations**: Do ALL the new items work together as a set? If you're recommending a warm cream rug AND cool gray throw pillows, that's a palette conflict.
@@ -118,19 +137,30 @@ Look at the room photos. Look at the items being kept. Now evaluate EACH recomme
 
 4. **Specificity check**: Is the search_title specific enough to find the RIGHT product? Does it include material, color, size, and style?
 
-5. **Scale/proportion**: Based on what you see in the photos, will this item be the right size for the space?
+### SPATIAL CHECKS — CRITICAL
+5. **Placement validity**: Does the recommended placement make physical sense? Is there actually wall space, floor space, or clearance for this item where it's supposed to go? Look at the photos — if a floor lamp is supposed to go "next to the sofa" but there's no space between the sofa and the wall, that's a problem.
+
+6. **Scale/proportion**: Based on room photos (and floor plan dimensions if available), will this item be the right size? An 8x10 rug in a 9x10 room leaves no border. A 60-inch console on a 48-inch wall won't fit.
+
+7. **Traffic flow**: Does the placement of all items together create clear walkways? Can people move through the room naturally? Standard clearances: 36" main paths, 18" between coffee table and sofa, 24" behind dining chairs, 30" next to beds.
+
+8. **Spatial relationships**: Do items that belong together actually end up near each other? The floor lamp should be near the reading chair. Side tables should flank the sofa. The rug should anchor the seating area, not float randomly.
+
+9. **Orientation & sightlines**: Are items oriented to create natural conversation areas? Do they face logical focal points (TV, fireplace, window view)? Is there a clear visual anchor point when you enter the room?
+
+10. **Zone definition**: In multi-function rooms, do the items clearly define distinct zones (living vs dining, work vs relaxation) without blocking flow between them?
 
 ## SCORING (per item)
-- **harmony_score** (1-10): How well does this item fit with keeps + other recommendations + apartment?
-  - 9-10: Perfect harmony — same material family, complementary colors, cohesive style
-  - 7-8: Good fit — works well, minor adjustments might help
-  - 5-6: Acceptable but could be better — slightly off palette or material family
-  - 3-4: Conflict — clashes with keeps or other recommendations
-  - 1-2: Wrong — completely out of place
+- **harmony_score** (1-10): Combined harmony + spatial fit score
+  - 9-10: Perfect — harmonizes beautifully AND the placement/size makes perfect spatial sense
+  - 7-8: Good — works well aesthetically, placement is reasonable
+  - 5-6: Acceptable aesthetically but spatial issues (wrong size for the spot, awkward placement, blocks traffic)
+  - 3-4: Conflict — clashes with keeps OR serious spatial problem (won't physically fit, blocks doorway)
+  - 1-2: Wrong — completely out of place aesthetically AND spatially
 
-- **drop**: true if harmony_score ≤ 3 (remove from recommendations entirely)
+- **drop**: true if harmony_score ≤ 3
 
-- If harmony_score is 4-6, provide a **revised_search_title** and **revised_specs** that would harmonize better
+- If score 4-6, provide **revised_search_title**, **revised_specs**, AND **revised_placement** that fix the issues
 
 ## OUTPUT FORMAT
 Return JSON:
@@ -141,21 +171,23 @@ Return JSON:
       "category": "the category slug",
       "harmony_score": number,
       "keeps_well_with": ["which existing items it pairs well with"],
-      "clashes_with": ["which existing items or other recommendations it conflicts with"],
-      "revised_search_title": "only if score 4-6, a better search title that harmonizes",
-      "revised_specs": "only if score 4-6, revised specs",
+      "clashes_with": ["which existing items or other recommendations it conflicts with — include spatial conflicts like 'blocks path to dining area'"],
+      "revised_search_title": "only if score 4-6, a better search title",
+      "revised_specs": "only if score 4-6, revised specs (may include different dimensions)",
+      "revised_placement": "only if score 4-6, a better placement that works spatially",
       "drop": true/false,
-      "reason": "1-2 sentence explanation"
+      "reason": "1-2 sentence explanation covering BOTH aesthetic and spatial reasoning"
     }
   ],
   "overall_cohesion": 0-10 (do ALL items work together as a complete room?),
   "palette_coherence": "1 sentence: does the color palette across all items + keeps make sense?",
   "material_coherence": "1 sentence: do the materials across all items + keeps create a cohesive texture story?",
-  "issues": ["any cross-cutting problems — e.g. too many warm tones, no contrast, missing texture variety"],
-  "revisedAnalysis": null or { the full revised analysis object if confidence < 7 — with corrected what_it_needs entries }
+  "spatial_flow": "2-3 sentences: How does the overall furniture arrangement work? Are there clear pathways? Do the zones make sense? Is there a logical flow from entry to seating to dining? Any bottlenecks or dead zones?",
+  "issues": ["any cross-cutting problems — aesthetic OR spatial. E.g. 'traffic bottleneck between coffee table and TV console', 'no clear entry path', 'dining zone too cramped for chair pullback'"],
+  "revisedAnalysis": null or { the full revised analysis if confidence < 7 — with corrected placements }
 }
 
-BE STRICT. A professional designer would reject items that clash. Don't let mediocre harmony pass — the product search will spend real money finding these items.`,
+BE STRICT. A professional designer would walk the room mentally, placing each item, checking clearances, testing sightlines. Don't let a beautiful palette pass if the furniture arrangement doesn't work physically.`,
   });
 
   try {

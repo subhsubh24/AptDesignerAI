@@ -229,12 +229,14 @@ Return JSON:
       "search_title": "A highly specific search query — see SEARCH TITLE FORMAT below",
       "description": "Why this item is needed — what specific problem it solves from the diagnosis. 2-3 sentences.",
       "priority": "high | medium | low",
-      "specs": "Exact ideal dimensions (e.g. '48-54 inches wide, 20 inches deep'), preferred materials (e.g. 'solid walnut or oak'), color range (e.g. 'warm ivory, cream, or oatmeal'), approximate price range for the tier"
+      "specs": "Exact ideal dimensions (e.g. '48-54 inches wide, 20 inches deep'), preferred materials (e.g. 'solid walnut or oak'), color range (e.g. 'warm ivory, cream, or oatmeal'), approximate price range for the tier",
+      "placement": "WHERE in the room this item goes and HOW it's oriented. Be spatial and specific. Examples: 'Centered under the pendant light, between the sofa and TV wall, long edge parallel to the sofa' or 'Left of the sofa, angled 15° toward the window to create a reading nook with natural light' or 'On the wall opposite the entry, centered between the two windows at eye level (58 inches center)' or 'Under the dining table, extending 24 inches beyond the table on all sides for chair pullback'"
     }
   ],
-  "what_works": ["5-8 specific items that should stay — name each item with material + color"],
+  "what_works": ["5-8 specific items that should stay — name each item with material + color + WHERE it currently sits"],
   "what_should_go": ["specific items to replace or remove — name each item and explain why"],
-  "design_direction": "A detailed paragraph (4-6 sentences) describing the overall design direction — color strategy (name exact colors), material mixing strategy, texture layering plan, the feeling we're going for. Reference the apartment's finishes and overall coherence."
+  "design_direction": "A detailed paragraph (4-6 sentences) describing the overall design direction — color strategy (name exact colors), material mixing strategy, texture layering plan, the feeling we're going for. Reference the apartment's finishes and overall coherence.",
+  "spatial_layout": "A paragraph describing the overall furniture arrangement strategy — traffic flow, conversation zones, sightlines, focal points, how the zones connect. Think about how someone moves through the room and how groups of furniture relate to each other spatially."
 }
 
 ## SEARCH TITLE FORMAT — CRITICAL
@@ -292,21 +294,25 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     let analysis = JSON.parse(response.content);
 
-    // ── Harmony validation ──────────────────────────────────────────
+    // ── Harmony + Spatial validation ────────────────────────────────
     // Before outputting, validate every recommended item for:
     //  - harmony with existing "keep" items
     //  - harmony with other recommendations (do they work as a set?)
     //  - apartment-wide aesthetic coherence
-    //  - specificity of search titles
-    // Uses room photos so it can judge visually, not just from text.
+    //  - placement, orientation, and spatial flow
+    //  - traffic paths, clearances, and zone definition
+    // Uses room photos + floor plan so it can judge visually and spatially.
     const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
+    const br = project?.building_research as Record<string, unknown> | undefined;
+    const floorPlan = br?.floor_plan as Record<string, unknown> | undefined;
     const harmonyResult = await validateRoomHarmony(analysis, {
       roomType: room.room_type,
       roomName: room.name,
       roomImageUrls,
-      buildingResearch: project?.building_research as Record<string, unknown> | undefined,
+      buildingResearch: br,
       apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
       designProfile: profile,
+      floorPlan,
     });
 
     let validation = null;
@@ -317,6 +323,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         overall_cohesion: harmony.overall_cohesion,
         palette_coherence: harmony.palette_coherence,
         material_coherence: harmony.material_coherence,
+        spatial_flow: harmony.spatial_flow,
         issues: harmony.issues,
         item_scores: harmony.item_scores,
       };
@@ -342,12 +349,13 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
             continue;
           }
 
-          if (score && score.harmony_score <= 6 && score.revised_search_title) {
+          if (score && score.harmony_score <= 6 && (score.revised_search_title || score.revised_placement)) {
             console.log(`[area-analysis] Revising "${item.category}" — harmony score ${score.harmony_score}/10: ${score.reason}`);
             revised.push({
               ...item,
-              search_title: score.revised_search_title,
+              search_title: score.revised_search_title || item.search_title,
               specs: score.revised_specs || item.specs,
+              placement: score.revised_placement || item.placement,
             });
           } else {
             revised.push(item);
