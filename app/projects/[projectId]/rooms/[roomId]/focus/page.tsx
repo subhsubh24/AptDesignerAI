@@ -567,7 +567,7 @@ export default function FocusPage() {
               <div>
                 <h3 className="font-semibold text-sm mb-3">What to get</h3>
                 <div className="space-y-3">
-                  {areaAnalysis.what_it_needs.map((item, i) => (
+                  {(areaAnalysis.what_it_needs || []).map((item, i) => (
                     <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                       <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
                       <div>
@@ -584,7 +584,7 @@ export default function FocusPage() {
                 <div>
                   <h3 className="font-semibold text-sm mb-2 text-emerald-700">Keep</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    {areaAnalysis.what_works.map((item, i) => (
+                    {(areaAnalysis.what_works || []).map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />{item}</li>
                     ))}
                   </ul>
@@ -592,7 +592,7 @@ export default function FocusPage() {
                 <div>
                   <h3 className="font-semibold text-sm mb-2 text-amber-700">Replace or remove</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    {areaAnalysis.what_should_go.map((item, i) => (
+                    {(areaAnalysis.what_should_go || []).map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><ThumbsDown className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />{item}</li>
                     ))}
                   </ul>
