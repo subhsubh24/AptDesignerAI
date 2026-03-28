@@ -10,18 +10,68 @@ const TIER_LABELS: Record<PriceTier, string> = {
 
 const TIER_RETAILERS: Record<PriceTier, string[]> = {
   budget: [
-    "IKEA", "Target", "Amazon", "Wayfair", "H&M Home", "World Market",
-    "Overstock", "Walmart", "Sixpenny", "Zara Home",
+    // Big-box & mass market
+    "IKEA", "Target", "Amazon", "Wayfair", "Walmart", "Overstock",
+    "Home Depot", "Lowe's",
+    // Budget home decor
+    "World Market", "H&M Home", "Zara Home", "Kirkland's", "At Home", "Big Lots",
+    // Budget furniture brands
+    "Ashley Furniture", "Bob's Discount Furniture", "Rooms To Go",
+    // Budget rug specialists
+    "Rugs USA", "Boutique Rugs", "nuLOOM", "Well Woven", "eSaleRugs",
+    // Budget art
+    "Society6", "Redbubble", "iCanvas", "Desenio",
+    // Budget lighting
+    "Lamps Plus",
   ],
   balanced: [
-    "Article", "CB2", "West Elm", "Crate & Barrel", "AllModern",
-    "Joss & Main", "Ruggable", "Castlery", "EQ3", "Burrow",
-    "Floyd", "Interior Define", "Apt2B",
+    // Major mid-range retailers
+    "West Elm", "CB2", "Crate & Barrel", "Pottery Barn",
+    "Anthropologie Home", "Urban Outfitters Home",
+    // Wayfair premium brands
+    "AllModern", "Joss & Main", "Birch Lane",
+    // DTC furniture brands
+    "Article", "Castlery", "Burrow", "Joybird", "Apt2B", "Sixpenny",
+    "Floyd", "Interior Define", "Inside Weather", "Poly & Bark",
+    "Albany Park", "Sabai", "Benchmade Modern", "Maiden Home",
+    // Department stores
+    "Macy's Home", "Nordstrom Home", "Bloomingdale's Home",
+    // Mid-range decor
+    "Ballard Designs", "Grandin Road", "Z Gallerie", "Living Spaces",
+    "Ethan Allen", "Pier 1",
+    // Mid-range rugs
+    "Ruggable", "Loloi Rugs", "Dash & Albert", "Revival Rugs", "Surya",
+    // Mid-range lighting
+    "Schoolhouse", "Lumens", "YLighting", "Shades of Light", "Barn Light Electric",
+    // Mid-range art
+    "Minted", "Artfully Walls", "Juniper Print Shop", "Etsy", "Framebridge", "Saatchi Art",
+    // Curated marketplaces
+    "Burke Decor", "McGee & Co", "Amber Interiors", "Lulu and Georgia",
   ],
   high_end: [
-    "Restoration Hardware", "Pottery Barn", "Lulu and Georgia", "Arhaus",
-    "Room & Board", "Design Within Reach", "Serena & Lily", "McGee & Co",
-    "Rejuvenation", "Industry West",
+    // Luxury retailers
+    "Restoration Hardware", "Serena & Lily", "Arhaus", "Room & Board",
+    "Design Within Reach",
+    // Designer brands
+    "Jonathan Adler", "Kelly Wearstler", "Blu Dot", "Industry West",
+    "Hem", "Dims",
+    // European luxury
+    "Ligne Roset", "Roche Bobois", "B&B Italia", "Cassina",
+    "HAY", "Muuto", "Ferm Living", "Fritz Hansen",
+    "Tom Dixon", "Kartell", "FLOS",
+    // Premium home
+    "Rejuvenation", "McGee & Co", "Lulu and Georgia",
+    "Frontgate", "One Kings Lane", "Kathy Kuo Home", "Horchow", "Neiman Marcus Home",
+    // Luxury marketplaces
+    "Perigold", "Chairish", "1stDibs",
+    // Premium lighting
+    "Circa Lighting", "Visual Comfort", "Arteriors", "Louis Poulsen", "Artemide",
+    // Premium rugs
+    "The Rug Company", "Armadillo", "Stark Carpet",
+    // Premium art
+    "Artsy", "Uprise Art",
+    // Premium accents
+    "ABC Carpet & Home",
   ],
 };
 

@@ -37,90 +37,223 @@ export interface SearchCandidate {
 
 const TIER_DOMAINS: Record<PriceTier, string[]> = {
   budget: [
-    "ikea.com", "target.com", "amazon.com", "wayfair.com",
-    "hm.com", "worldmarket.com", "overstock.com",
-    "walmart.com", "sixpenny.com", "zarahome.com",
+    // Big-box & mass market
+    "ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com",
+    "overstock.com", "homedepot.com", "lowes.com",
+    // Budget home decor
+    "worldmarket.com", "hm.com", "zarahome.com", "kirklands.com",
+    "athome.com", "biglots.com",
+    // Budget furniture brands
+    "ashleyfurniture.com", "mybobs.com", "roomstogo.com", "walkeredison.com",
+    // Budget rug specialists
+    "rugsusa.com", "boutiquerugs.com", "nuloom.com", "wellwoven.com", "esalerugs.com",
+    // Budget art & decor
+    "society6.com", "redbubble.com", "icanvas.com", "desenio.com", "posterstore.com",
+    // Budget lighting
+    "lampsplus.com",
   ],
   balanced: [
-    "article.com", "cb2.com", "westelm.com", "crateandbarrel.com",
-    "allmodern.com", "jossandmain.com", "ruggable.com",
-    "castlery.com", "eq3.com", "burrow.com",
-    "floyddetroit.com", "interior-define.com", "apt2b.com",
+    // Major mid-range retailers
+    "westelm.com", "cb2.com", "crateandbarrel.com", "potterybarn.com",
+    "anthropologie.com", "urbanoutfitters.com",
+    // Wayfair premium brands
+    "allmodern.com", "jossandmain.com", "birchlane.com",
+    // DTC furniture brands
+    "article.com", "castlery.com", "burrow.com", "joybird.com", "apt2b.com",
+    "sixpenny.com", "floyddetroit.com", "insideweather.com",
+    "interior-define.com", "polyandbark.com", "albanypark.com",
+    "sabai.design", "benchmademodern.com", "maidenhome.com",
+    // Department stores (home)
+    "macys.com", "nordstrom.com", "bloomingdales.com",
+    // Mid-range home decor
+    "ballarddesigns.com", "grandinroad.com", "zgallerie.com",
+    "livingspaces.com", "ethanallen.com", "pier1.com",
+    // Rug specialists
+    "ruggable.com", "loloirugs.com", "dashandalbert.com", "revivalrugs.com",
+    "surya.com",
+    // Lighting specialists
+    "schoolhouse.com", "lumens.com", "ylighting.com", "shadesoflight.com",
+    "barnlightelectric.com",
+    // Art & decor
+    "minted.com", "artfullywalls.com", "juniperprintshop.com", "etsy.com",
+    "framebridge.com", "saatchiart.com",
+    // Curated marketplaces
+    "burkedecor.com", "mcgeeandco.com", "shopamberinteriors.com",
+    "luluandgeorgia.com",
   ],
   high_end: [
-    "restorationhardware.com", "rh.com", "potterybarn.com",
-    "luluandgeorgia.com", "arhaus.com", "roomandboard.com",
-    "dwr.com", "serenaandlily.com", "mcgeeandco.com",
-    "rejuvenation.com", "industrywest.com",
+    // Luxury retailers
+    "rh.com", "restorationhardware.com", "serenaandlily.com", "arhaus.com",
+    "roomandboard.com", "dwr.com",
+    // Designer brands
+    "jonathanadler.com", "kellywearstler.com", "bludot.com",
+    "industrywest.com", "hem.com", "dims.com",
+    // European luxury
+    "ligne-roset.com", "roche-bobois.com", "bebitalia.com",
+    "cassina.com", "hay.com", "muuto.com", "fermliving.com",
+    "fritzhansen.com", "tomdixon.net", "kartell.com", "flos.com",
+    // Premium home
+    "rejuvenation.com", "mcgeeandco.com", "luluandgeorgia.com",
+    "frontgate.com", "onekingslane.com", "kathykuohome.com",
+    "horchow.com", "neimanmarcus.com",
+    // High-end curated marketplaces
+    "perigold.com", "chairish.com", "1stdibs.com",
+    // Premium lighting
+    "circalighting.com", "visualcomfort.com", "arteriorshome.com",
+    "louispoulsen.com", "artemide.com",
+    // Premium rugs
+    "therugcompany.com", "armadillo-co.com", "starkcarpet.com",
+    // Premium art
+    "artsy.net", "upriseart.com",
+    // Premium home accents
+    "abchome.com",
   ],
 };
 
-/** Best retailers per category — these get dedicated site: searches */
+/** Best retailers per category — used to build PRIORITY RETAILERS in search prompt */
 const CATEGORY_RETAILERS: Record<string, Record<PriceTier, string[]>> = {
+  // ── Rugs ──────────────────────────────────────────────────────
   rug: {
-    budget: ["rugsusa.com", "wayfair.com", "target.com", "ikea.com"],
-    balanced: ["ruggable.com", "westelm.com", "crateandbarrel.com", "article.com"],
-    high_end: ["luluandgeorgia.com", "serenaandlily.com", "restorationhardware.com", "roomandboard.com"],
+    budget: ["rugsusa.com", "boutiquerugs.com", "wayfair.com", "target.com", "ikea.com", "nuloom.com", "wellwoven.com", "esalerugs.com", "amazon.com", "overstock.com"],
+    balanced: ["ruggable.com", "loloirugs.com", "dashandalbert.com", "revivalrugs.com", "surya.com", "westelm.com", "crateandbarrel.com", "cb2.com", "luluandgeorgia.com", "article.com", "etsy.com"],
+    high_end: ["therugcompany.com", "armadillo-co.com", "serenaandlily.com", "rh.com", "luluandgeorgia.com", "roomandboard.com", "abchome.com", "perigold.com", "starkcarpet.com"],
   },
-  coffee_table: {
-    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
-    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com"],
-    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "restorationhardware.com"],
+  area_rug: {
+    budget: ["rugsusa.com", "boutiquerugs.com", "wayfair.com", "target.com", "ikea.com", "nuloom.com", "wellwoven.com", "esalerugs.com", "amazon.com", "overstock.com"],
+    balanced: ["ruggable.com", "loloirugs.com", "dashandalbert.com", "revivalrugs.com", "surya.com", "westelm.com", "crateandbarrel.com", "cb2.com", "luluandgeorgia.com", "article.com"],
+    high_end: ["therugcompany.com", "armadillo-co.com", "serenaandlily.com", "rh.com", "luluandgeorgia.com", "roomandboard.com", "abchome.com", "perigold.com"],
   },
-  dining_table: {
-    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
-    balanced: ["article.com", "westelm.com", "crateandbarrel.com", "castlery.com"],
-    high_end: ["roomandboard.com", "arhaus.com", "restorationhardware.com", "dwr.com"],
+  kitchen_runner: {
+    budget: ["rugsusa.com", "boutiquerugs.com", "wayfair.com", "target.com", "nuloom.com", "amazon.com"],
+    balanced: ["ruggable.com", "loloirugs.com", "dashandalbert.com", "westelm.com", "crateandbarrel.com"],
+    high_end: ["serenaandlily.com", "rh.com", "luluandgeorgia.com", "armadillo-co.com"],
+  },
+  // ── Seating ───────────────────────────────────────────────────
+  sofa: {
+    budget: ["ikea.com", "wayfair.com", "amazon.com", "ashleyfurniture.com", "mybobs.com", "roomstogo.com", "walmart.com"],
+    balanced: ["article.com", "burrow.com", "interior-define.com", "castlery.com", "joybird.com", "sixpenny.com", "albanypark.com", "benchmademodern.com", "westelm.com", "cb2.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "maidenhome.com", "ligne-roset.com", "roche-bobois.com", "bebitalia.com"],
   },
   accent_chair: {
-    budget: ["ikea.com", "wayfair.com", "target.com", "worldmarket.com"],
-    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com"],
-    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "restorationhardware.com"],
+    budget: ["ikea.com", "wayfair.com", "target.com", "worldmarket.com", "amazon.com", "overstock.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com", "joybird.com", "anthropologie.com", "allmodern.com", "polyandbark.com", "crateandbarrel.com"],
+    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "rh.com", "jonathanadler.com", "bludot.com", "industrywest.com", "hay.com", "fritzhansen.com"],
   },
-  sofa: {
-    budget: ["ikea.com", "wayfair.com", "amazon.com", "sixpenny.com"],
-    balanced: ["article.com", "burrow.com", "interior-define.com", "castlery.com"],
-    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+  dining_chairs: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "worldmarket.com", "overstock.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com", "allmodern.com", "crateandbarrel.com", "polyandbark.com", "livingspaces.com"],
+    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "rh.com", "hay.com", "muuto.com", "cassina.com", "kartell.com", "fritzhansen.com"],
+  },
+  // ── Tables ────────────────────────────────────────────────────
+  coffee_table: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "worldmarket.com", "overstock.com", "ashleyfurniture.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com", "allmodern.com", "crateandbarrel.com", "floyddetroit.com", "burkedecor.com"],
+    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "rh.com", "bludot.com", "industrywest.com", "jonathanadler.com", "perigold.com", "1stdibs.com"],
   },
   side_table: {
-    budget: ["ikea.com", "target.com", "wayfair.com", "amazon.com"],
-    balanced: ["cb2.com", "westelm.com", "article.com", "crateandbarrel.com"],
-    high_end: ["roomandboard.com", "dwr.com", "serenaandlily.com", "mcgeeandco.com"],
+    budget: ["ikea.com", "target.com", "wayfair.com", "amazon.com", "worldmarket.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "article.com", "crateandbarrel.com", "allmodern.com", "anthropologie.com", "mcgeeandco.com"],
+    high_end: ["roomandboard.com", "dwr.com", "serenaandlily.com", "mcgeeandco.com", "jonathanadler.com", "bludot.com", "hay.com", "perigold.com"],
+  },
+  dining_table: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "ashleyfurniture.com", "roomstogo.com"],
+    balanced: ["article.com", "westelm.com", "crateandbarrel.com", "castlery.com", "cb2.com", "floyddetroit.com", "livingspaces.com", "ethanallen.com"],
+    high_end: ["roomandboard.com", "arhaus.com", "rh.com", "dwr.com", "bludot.com", "ligne-roset.com", "perigold.com", "1stdibs.com"],
+  },
+  console_table: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "worldmarket.com"],
+    balanced: ["cb2.com", "westelm.com", "article.com", "crateandbarrel.com", "allmodern.com", "ballarddesigns.com", "mcgeeandco.com"],
+    high_end: ["roomandboard.com", "serenaandlily.com", "rh.com", "arhaus.com", "jonathanadler.com", "perigold.com"],
+  },
+  // ── Storage & Media ───────────────────────────────────────────
+  media_console: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "walkeredison.com", "ashleyfurniture.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "floyddetroit.com", "castlery.com", "crateandbarrel.com", "allmodern.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "bludot.com", "industrywest.com"],
+  },
+  storage_cabinet: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "article.com", "allmodern.com", "anthropologie.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "jonathanadler.com", "perigold.com"],
+  },
+  credenza: {
+    budget: ["ikea.com", "wayfair.com", "amazon.com", "overstock.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "allmodern.com", "castlery.com", "floyddetroit.com"],
+    high_end: ["roomandboard.com", "dwr.com", "rh.com", "bludot.com", "industrywest.com", "perigold.com"],
   },
   bookshelf: {
-    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
-    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "article.com"],
-    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "article.com", "allmodern.com", "birchlane.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "bludot.com"],
   },
+  // ── Lighting ──────────────────────────────────────────────────
   floor_lamp: {
-    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
-    balanced: ["cb2.com", "westelm.com", "allmodern.com", "article.com"],
-    high_end: ["rejuvenation.com", "dwr.com", "serenaandlily.com", "luluandgeorgia.com"],
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "lampsplus.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "allmodern.com", "article.com", "schoolhouse.com", "lumens.com", "ylighting.com", "shadesoflight.com"],
+    high_end: ["rejuvenation.com", "dwr.com", "serenaandlily.com", "luluandgeorgia.com", "flos.com", "artemide.com", "louispoulsen.com", "circalighting.com", "visualcomfort.com"],
   },
   table_lamp: {
-    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
-    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "allmodern.com"],
-    high_end: ["rejuvenation.com", "serenaandlily.com", "mcgeeandco.com", "luluandgeorgia.com"],
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "lampsplus.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "allmodern.com", "schoolhouse.com", "lumens.com", "anthropologie.com", "mcgeeandco.com"],
+    high_end: ["rejuvenation.com", "serenaandlily.com", "mcgeeandco.com", "luluandgeorgia.com", "circalighting.com", "visualcomfort.com", "arteriorshome.com", "jonathanadler.com"],
   },
-  media_console: {
-    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
-    balanced: ["article.com", "cb2.com", "westelm.com", "floyddetroit.com"],
-    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+  pendant_light: {
+    budget: ["ikea.com", "amazon.com", "wayfair.com", "lampsplus.com", "homedepot.com", "lowes.com"],
+    balanced: ["cb2.com", "westelm.com", "schoolhouse.com", "lumens.com", "ylighting.com", "barnlightelectric.com", "rejuvenation.com", "allmodern.com"],
+    high_end: ["circalighting.com", "visualcomfort.com", "rejuvenation.com", "flos.com", "louispoulsen.com", "tomdixon.net", "arteriorshome.com", "dwr.com"],
   },
-  art: {
-    budget: ["target.com", "society6.com", "amazon.com", "ikea.com"],
-    balanced: ["westelm.com", "cb2.com", "luluandgeorgia.com", "mcgeeandco.com"],
-    high_end: ["artdotcom.com", "luluandgeorgia.com", "serenaandlily.com", "mcgeeandco.com"],
-  },
-  curtains: {
-    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
-    balanced: ["westelm.com", "crateandbarrel.com", "potterybarn.com", "cb2.com"],
-    high_end: ["serenaandlily.com", "potterybarn.com", "restorationhardware.com", "mcgeeandco.com"],
+  // ── Soft Furnishings ──────────────────────────────────────────
+  throw_pillows: {
+    budget: ["target.com", "ikea.com", "hm.com", "amazon.com", "worldmarket.com", "wayfair.com"],
+    balanced: ["westelm.com", "cb2.com", "crateandbarrel.com", "mcgeeandco.com", "anthropologie.com", "luluandgeorgia.com", "etsy.com", "potterybarn.com"],
+    high_end: ["serenaandlily.com", "luluandgeorgia.com", "mcgeeandco.com", "shopamberinteriors.com", "rh.com", "jonathanadler.com"],
   },
   throw_pillow: {
-    budget: ["target.com", "ikea.com", "hm.com", "amazon.com"],
-    balanced: ["westelm.com", "cb2.com", "crateandbarrel.com", "mcgeeandco.com"],
-    high_end: ["serenaandlily.com", "luluandgeorgia.com", "mcgeeandco.com", "potterybarn.com"],
+    budget: ["target.com", "ikea.com", "hm.com", "amazon.com", "worldmarket.com", "wayfair.com"],
+    balanced: ["westelm.com", "cb2.com", "crateandbarrel.com", "mcgeeandco.com", "anthropologie.com", "luluandgeorgia.com", "etsy.com", "potterybarn.com"],
+    high_end: ["serenaandlily.com", "luluandgeorgia.com", "mcgeeandco.com", "shopamberinteriors.com", "rh.com", "jonathanadler.com"],
+  },
+  throw_blanket: {
+    budget: ["target.com", "ikea.com", "hm.com", "amazon.com", "worldmarket.com"],
+    balanced: ["westelm.com", "crateandbarrel.com", "cb2.com", "anthropologie.com", "mcgeeandco.com", "potterybarn.com", "etsy.com"],
+    high_end: ["serenaandlily.com", "rh.com", "luluandgeorgia.com", "mcgeeandco.com", "abchome.com"],
+  },
+  curtains: {
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com"],
+    balanced: ["westelm.com", "crateandbarrel.com", "potterybarn.com", "cb2.com", "anthropologie.com", "ballarddesigns.com"],
+    high_end: ["serenaandlily.com", "rh.com", "potterybarn.com", "mcgeeandco.com", "rejuvenation.com"],
+  },
+  // ── Wall Art & Decor ──────────────────────────────────────────
+  wall_art: {
+    budget: ["target.com", "society6.com", "amazon.com", "ikea.com", "icanvas.com", "desenio.com", "posterstore.com", "redbubble.com"],
+    balanced: ["minted.com", "artfullywalls.com", "juniperprintshop.com", "etsy.com", "westelm.com", "cb2.com", "luluandgeorgia.com", "mcgeeandco.com", "framebridge.com", "saatchiart.com"],
+    high_end: ["artsy.net", "upriseart.com", "saatchiart.com", "1stdibs.com", "luluandgeorgia.com", "serenaandlily.com", "mcgeeandco.com", "abchome.com"],
+  },
+  art: {
+    budget: ["target.com", "society6.com", "amazon.com", "ikea.com", "icanvas.com", "desenio.com", "posterstore.com"],
+    balanced: ["minted.com", "artfullywalls.com", "juniperprintshop.com", "etsy.com", "westelm.com", "cb2.com", "luluandgeorgia.com", "saatchiart.com"],
+    high_end: ["artsy.net", "upriseart.com", "saatchiart.com", "1stdibs.com", "luluandgeorgia.com", "serenaandlily.com"],
+  },
+  // ── Decorative Objects ────────────────────────────────────────
+  vase: {
+    budget: ["target.com", "ikea.com", "hm.com", "amazon.com", "worldmarket.com"],
+    balanced: ["cb2.com", "westelm.com", "anthropologie.com", "crateandbarrel.com", "mcgeeandco.com", "etsy.com"],
+    high_end: ["serenaandlily.com", "jonathanadler.com", "luluandgeorgia.com", "abchome.com", "rh.com", "fermliving.com"],
+  },
+  tray: {
+    budget: ["target.com", "ikea.com", "amazon.com", "worldmarket.com", "hm.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "anthropologie.com", "mcgeeandco.com"],
+    high_end: ["serenaandlily.com", "jonathanadler.com", "rh.com", "luluandgeorgia.com"],
+  },
+  plant: {
+    budget: ["amazon.com", "homedepot.com", "lowes.com", "ikea.com", "target.com"],
+    balanced: ["bloomscape.com", "thesill.com", "westelm.com", "terrain.com", "etsy.com"],
+    high_end: ["terrain.com", "thesill.com", "bloomscape.com", "anthropologie.com"],
+  },
+  mirror: {
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "anthropologie.com", "allmodern.com", "ballarddesigns.com"],
+    high_end: ["rh.com", "serenaandlily.com", "arhaus.com", "rejuvenation.com", "jonathanadler.com", "perigold.com"],
   },
 };
 
