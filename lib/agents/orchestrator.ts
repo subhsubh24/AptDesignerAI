@@ -644,6 +644,51 @@ export async function runAgenticSearch(
         confidence: validationResult.data.confidence,
         issues: validationResult.data.issues,
       };
+
+      // Act on per-product harmony flags — demote products that clash with the set
+      const flags = validationResult.data.product_flags;
+      if (flags && flags.length > 0) {
+        const clashingProducts = flags.filter((f) => f.harmony_score <= 3);
+        const weakProducts = flags.filter((f) => f.harmony_score >= 4 && f.harmony_score <= 5);
+
+        // Remove products that actively clash (score ≤ 3)
+        for (const flag of clashingProducts) {
+          for (const [category, products] of Object.entries(candidatesByCategory)) {
+            const idx = products.findIndex(
+              (p) => p.title?.toLowerCase() === flag.title.toLowerCase() || p.category === flag.category
+            );
+            if (idx !== -1) {
+              console.log(`[orchestrator] Removing "${flag.title}" — harmony ${flag.harmony_score}/10: ${flag.reason}`);
+              tracer.traceFilter("validation", products[idx].id, products[idx].product_url || "", `harmony ${flag.harmony_score}/10: ${flag.reason}`);
+              candidatesByCategory[category].splice(idx, 1);
+              stats.totalFinal--;
+            }
+          }
+        }
+
+        // Penalize weak-fit products (score 4-5) by reducing their individual score
+        for (const flag of weakProducts) {
+          for (const products of Object.values(candidatesByCategory)) {
+            const product = products.find(
+              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
+            );
+            if (product) {
+              const existing = evaluations.get(product.id);
+              if (existing) {
+                const penalty = (5 - flag.harmony_score) * 0.5; // 0.5 or 1.0 point penalty
+                const penalized = Math.max(0, existing.final_item_score - penalty);
+                console.log(`[orchestrator] Penalizing "${flag.title}" by ${penalty} (harmony ${flag.harmony_score}/10) — ${existing.final_item_score.toFixed(1)} → ${penalized.toFixed(1)}`);
+                evaluations.set(product.id, { ...existing, final_item_score: penalized });
+              }
+            }
+          }
+        }
+
+        if (clashingProducts.length > 0 || weakProducts.length > 0) {
+          console.log(`[orchestrator] Validation enforcement: dropped ${clashingProducts.length}, penalized ${weakProducts.length}`);
+        }
+      }
+
       reportStep({ step: "Validating all recommendations", status: "completed", data: validationData });
     } else {
       reportStep({ step: "Validating all recommendations", status: "failed" });
@@ -857,6 +902,101 @@ export async function runAgenticSearch(
 
       await Promise.all(backfillPromises);
       reportStep({ step: `Backfilling ${weakTiers.length} weak tier(s)`, status: "completed" });
+
+      // Re-run bundle evaluation for tiers that got backfill products
+      if (!tokenBudget.exceeded) {
+        const backfilledTiers = new Set(weakTiers.map((wt) => wt.tier));
+        reportStep({ step: "Re-evaluating bundles after backfill", status: "running" });
+
+        for (const tier of backfilledTiers) {
+          const topByCategory: CandidateProduct[][] = [];
+          for (const products of Object.values(candidatesByCategory)) {
+            const tierFiltered = products.filter(
+              (p) => (p.metadata as { price_tier: string })?.price_tier === tier
+            );
+            tierFiltered.sort((a, b) => {
+              const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+              const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+              return scoreB - scoreA;
+            });
+            if (tierFiltered.length > 0) topByCategory.push(tierFiltered.slice(0, 3));
+          }
+
+          if (topByCategory.length === 0) continue;
+
+          // Simplified cartesian for backfill re-eval (same logic, capped at 27)
+          function cartesianBackfill(arrays: CandidateProduct[][]): CandidateProduct[][] {
+            if (arrays.length === 0) return [[]];
+            const [first, ...rest] = arrays;
+            const restCombos = cartesianBackfill(rest);
+            const result: CandidateProduct[][] = [];
+            for (const item of first) {
+              for (const combo of restCombos) {
+                result.push([item, ...combo]);
+              }
+            }
+            return result;
+          }
+
+          let combos = cartesianBackfill(topByCategory);
+          if (combos.length > 27) {
+            combos.sort((a, b) => {
+              const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
+              const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
+              return avgB - avgA;
+            });
+            combos = combos.slice(0, 27);
+          }
+
+          const bundleEvalLimit2 = pLimit(3);
+          const comboResults = await Promise.all(
+            combos.map((combo) =>
+              bundleEvalLimit2(async () => {
+                if (tokenBudget.exceeded) return null;
+                const result = await evaluateBundle(combo, bundleCtx);
+                if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; }
+                if (result.success && result.data) {
+                  return { products: combo, ...result.data };
+                }
+                return null;
+              })
+            )
+          );
+
+          const validResults = comboResults.filter(Boolean) as Array<{
+            products: CandidateProduct[];
+            scores: unknown;
+            final_bundle_score: number;
+            verdict: string;
+            analysis: unknown;
+          }>;
+
+          if (validResults.length > 0) {
+            validResults.sort((a, b) => b.final_bundle_score - a.final_bundle_score);
+            const best = validResults[0];
+            // Replace existing bundle for this tier
+            const existingIdx = bundles.findIndex((b) => (b as { tier: string }).tier === tier);
+            const newBundle = {
+              tier,
+              scores: best.scores,
+              final_bundle_score: best.final_bundle_score,
+              verdict: best.verdict,
+              analysis: best.analysis,
+              product_ids: best.products.map((p) => p.id),
+              combos_evaluated: validResults.length,
+              backfill_reeval: true,
+            };
+            if (existingIdx >= 0) {
+              bundles[existingIdx] = newBundle;
+            } else {
+              bundles.push(newBundle);
+            }
+            tracer.trace({ phase: "bundle", action: "backfill_reeval", tier, score: best.final_bundle_score });
+          }
+        }
+
+        reportStep({ step: "Re-evaluating bundles after backfill", status: "completed" });
+      }
     }
 
     return {

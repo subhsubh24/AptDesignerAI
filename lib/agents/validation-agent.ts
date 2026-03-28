@@ -11,6 +11,14 @@ export interface ValidationResult {
   issues: string[];
   suggestions: string[];
   revisedAnalysis?: Record<string, unknown>;
+  /** Per-product harmony scores — returned by validateProductSet */
+  product_flags?: Array<{
+    title: string;
+    category: string;
+    harmony_score: number;
+    clashes_with: string[];
+    reason: string;
+  }>;
 }
 
 export interface HarmonyValidationResult {
@@ -204,7 +212,7 @@ export async function validateProductSet(
   const model = selectModel("validation");
   const system = getSystemPrompt(roomContext.designProfile);
 
-  const promptText = `Validate this set of product search results. You have room photos and product images — use them to verify visual coherence.
+  const promptText = `Validate this set of product search results AS A COLLECTIVE SET. You have room photos and product images — use them to verify visual coherence.
 
 ## VALIDATION CHECKLIST
 1. **Visual cohesion**: Do the product images ACTUALLY look like they belong together? Check real colors, textures, and styles in the images — not just text descriptions.
@@ -214,21 +222,38 @@ export async function validateProductSet(
 5. Budget/Middle/Luxury tiers have appropriate price differentiation
 6. No duplicate or near-duplicate products across tiers
 7. Scale and proportion: Do these items look like they'd work at the right scale for the room shown?
+8. **Harmony with existing items**: Do the products work with the items being KEPT in the room?
 
 ## ROOM CONTEXT
 - Room type: ${roomContext.roomType}
 - Design direction: ${roomContext.designDirection}
-- Existing items: ${roomContext.existingItems.join(", ")}
+- Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}
 
 ## PRODUCTS TO VALIDATE
 ${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
 
+## PER-PRODUCT SCORING
+For EACH product, score its harmony with the rest of the set AND the existing items:
+- 8-10: Excellent fit — works beautifully with the set and room
+- 6-7: Good fit — works well, no real issues
+- 4-5: Questionable — might clash with something or feel slightly off
+- 1-3: Poor fit — actively clashes with existing items or other products in the set
+
 Return JSON:
 {
   "isValid": true/false,
-  "confidence": 0-10,
+  "confidence": 0-10 (overall set confidence),
   "issues": ["specific problems — reference what you SEE in the images"],
-  "suggestions": ["specific improvements"]
+  "suggestions": ["specific improvements"],
+  "product_flags": [
+    {
+      "title": "product title",
+      "category": "category slug",
+      "harmony_score": number (1-10),
+      "clashes_with": ["names of items it clashes with — existing or other products"],
+      "reason": "why it fits or doesn't fit"
+    }
+  ]
 }`;
 
   const content: AIContentBlock[] = [];
