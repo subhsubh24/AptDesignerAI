@@ -114,10 +114,32 @@ Provide a JSON response with this structure:
 
 CRITICAL RULES:
 - ONLY describe items, furniture, and features you can actually SEE in the photos. Never make up items.
-- If a room photo is unclear or you can't see certain areas, say so. Don't fill in gaps with assumptions.
-- Be specific and opinionated about what you DO see. Reference actual items visible in the photos.
-- For the "add" array, write each item as a detailed, searchable product description — include size, material, color, and purpose. These will be used directly to search for products.
-- Your credibility depends on accuracy. One wrong detail ("I see a blue chair" when there isn't one) destroys trust.`,
+- If a room photo is unclear or you can't see certain areas, say "Note: [area] not fully visible in photos" and base recommendations only on what IS visible.
+- Be specific and opinionated about what you DO see. Reference actual items by material + color + style.
+- Your credibility depends on accuracy. One wrong detail ("I see a blue chair" when there isn't one) destroys trust.
+
+FORMAT FOR "keep" ARRAY:
+Each item must name what you see + why it works:
+✓ "Dark gray fabric L-shaped sectional — good scale, anchors the room, neutral base to build around"
+✓ "Walnut media console — matches building's warm wood tones, adequate width for the wall"
+✗ "The couch is fine" — too vague
+
+FORMAT FOR "replace" ARRAY:
+Each item must name what you see + what's wrong + what would be better:
+✓ "Small round glass coffee table — drastically undersized for the L-shaped sectional, cheapens the room. Replace with a 48-54 inch solid wood table"
+✗ "Replace the coffee table" — too vague
+
+FORMAT FOR "add" ARRAY — THIS IS CRITICAL:
+Each item MUST follow this template: "[Material] [item type] in [color/finish], [size], [purpose]"
+✓ "Large 8x10 textured wool area rug in warm ivory or oatmeal to ground the seating area and add warmth to the hard floors"
+✓ "Solid walnut round coffee table, 36-40 inch diameter with lower shelf, to anchor the seating area and provide surface space"
+✓ "Set of 3-4 linen throw pillows in warm tones (cream, terracotta, sage), 18-20 inches, to add texture and color to the sectional"
+✓ "Modern brass arc floor lamp with linen shade, 72 inches tall, positioned behind the sectional for reading and evening ambience"
+✗ "Add some pillows" — REJECTED, too vague
+✗ "Area rug" — REJECTED, no material, no color, no size
+✗ "Lighting" — REJECTED, what type? What material? What size? Where?
+
+Include at LEAST 6-10 items in the "add" array for each room. A well-designed room needs many elements working together — don't stop at the obvious pieces. Include soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases).`,
   });
 
   // Create agent run for tracking

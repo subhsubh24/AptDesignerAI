@@ -87,7 +87,23 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
 
 7. **value_fit_score**: How strong is the value relative to impact and price? ${budgetMode === "budget" ? "Weight this heavily." : budgetMode === "best_possible" ? "Weight this less — quality over price." : "Balance quality and price."}
 
-8. **confidence_score**: How confident are you based on evidence quality (image quality, metadata, dimensions, product details)?
+8. **confidence_score**: How confident are you in this evaluation? Based on evidence quality:
+   - 9-10: Complete data — price, exact dimensions, materials list, multiple clear images, lifestyle photo
+   - 7-8: Most data present but missing one element (e.g., no lifestyle image or no exact dimensions)
+   - 5-6: Partial data — have price and title but unclear dimensions, materials, or colors
+   - 3-4: Minimal data — substantial guessing required, poor images
+   - 1-2: Almost no reliable data — product details are vague or missing
+
+## SCORE CALIBRATION — READ THIS CAREFULLY
+- **9-10**: Exceptional. This product is clearly the right choice — solves specific diagnosed problems, perfect scale, materials and palette match, high quality.
+- **7-8**: Strong. Genuinely good fit with minor concerns (e.g., color is close but not perfect, slightly outside ideal size range).
+- **6**: Acceptable but uninspiring. It works but doesn't solve any specific problem particularly well.
+- **5**: Mediocre. It's safe but has obvious gaps or doesn't address diagnosed issues.
+- **4 or below**: Problems outweigh benefits. Wrong scale, clashing style, poor value, or actively worsens a diagnosed issue.
+
+Do NOT cluster all scores in the 6-8 range. Use the full 0-10 scale. A 5 is genuinely mediocre. A 3 has real problems.
+
+If the room diagnosis lists scale_proportion_issues, you MUST check this product's dimensions against those issues and penalize heavily if it repeats the same problem (e.g., another undersized rug, another oversized table).
 
 ## LAYER 2: AREA FIT
 How does this product work with the other pieces already in or planned for this specific area? Does it enhance the overall area or create conflict?
@@ -118,13 +134,20 @@ Return a JSON object:
     "confidence_score": number
   },
   "reasoning": {
-    "top_reasons": ["3 strongest reasons it works or fails"],
-    "risks": ["specific risks or concerns"],
-    "suggestions": ["what would make it better, or alternatives"]
+    "top_reasons": ["3-5 strongest reasons it works or fails — be specific, reference actual product attributes and room diagnosis"],
+    "risks": ["2-4 specific risks — e.g. 'rug is 5x7 but seating area needs at least 8x10', 'brass legs may clash with chrome kitchen fixtures'"],
+    "suggestions": ["1-3 alternatives or modifications — e.g. 'the 8x10 version of this rug would be a better fit', 'consider the walnut finish instead of oak'"]
   },
-  "area_fit_note": "1-2 sentences on how it works with the rest of this area",
-  "apartment_fit_note": "1-2 sentences on apartment-wide coherence"
+  "area_fit_note": "2-3 sentences on how it works with other pieces in this area. Reference specific existing furniture and how this product relates to them.",
+  "apartment_fit_note": "1-2 sentences on apartment-wide coherence — does it match the building's finishes and other rooms?"
 }
+
+## FINAL CHECKLIST before returning scores:
+- Did I check the product's dimensions against the room's scale issues?
+- Did I verify the product's colors against the recommended palette?
+- Did I verify the product's materials against the recommended materials?
+- Did I consider how the client actually LIVES (hosting, daily use, comfort)?
+- Am I using the full 0-10 scale, not clustering everything in 6-8?
 
 Be honest and specific. Do not inflate scores. A 7+ means it's genuinely strong. A 5 is mediocre. Below 4 means real problems.`;
 }

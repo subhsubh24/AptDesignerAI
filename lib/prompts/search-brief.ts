@@ -80,14 +80,20 @@ For each category, generate search queries for THREE price tiers:
 3. **High End** — premium/investment pieces from ${TIER_RETAILERS.high_end.join(", ")}
 
 ## QUERY DIVERSITY REQUIREMENT
-You MUST generate exactly **5 queries per tier**, each approaching the search from a different angle:
-1. **product_specific** — Target a specific known product by name: "Article Seno walnut coffee table"
-2. **style_material** — Describe the style + material + color using the design direction above: "modern walnut coffee table tapered legs cream"
-3. **retailer_browse** — Browse a specific retailer's selection: "West Elm coffee tables under $800"
-4. **comparison** — Find comparison/roundup articles: "best mid-century modern coffee tables 2025"
-5. **brand_collection** — Target a specific brand or collection: "Floyd coffee table walnut"
+You MUST generate **at least 6 queries per tier** (up to 8 for broad categories like rugs or lighting), each approaching the search from a different angle:
 
-Each query angle finds different products that the others miss. This diversity is critical.
+1. **product_specific** — Target a specific known product by exact name: "Article Seno walnut coffee table" or "West Elm Mid-Century Pop-Up Storage Coffee Table"
+2. **style_material** — Describe the style + material + color + size using the design direction: "modern solid walnut coffee table tapered legs 48 inch"
+3. **retailer_browse** — Browse a specific retailer's filtered selection: "West Elm coffee tables walnut under $800"
+4. **comparison** — Find recent comparison/roundup articles: "best mid-century walnut coffee tables 2025 review"
+5. **brand_collection** — Target a specific brand or designer collection: "Floyd The Coffee Table walnut"
+6. **alternative_style** — Search for a slightly different interpretation of the design direction: "japandi minimalist wood coffee table natural finish" (ensures we don't miss great options that match the vibe but use different search terms)
+
+For broad categories (rugs, lighting, seating), add 1-2 more:
+7. **size_specific** — Search with exact size requirements: "8x10 wool area rug cream textured"
+8. **material_variant** — Try a different material that fits the palette: "jute area rug 8x10 natural" alongside wool
+
+Each query MUST return meaningfully different results. Test mentally: would these 6+ queries surface 6+ different products? If not, rewrite.
 
 ## OUTPUT FORMAT
 Return a JSON object:
@@ -98,31 +104,38 @@ Return a JSON object:
       "tiers": {
         "budget": {
           "search_queries": [
-            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" },
-            { "query": "...", "angle": "..." },
-            { "query": "...", "angle": "..." },
-            { "query": "...", "angle": "..." },
-            { "query": "...", "angle": "..." }
+            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection | alternative_style | size_specific | material_variant" },
+            ... at least 6 queries, up to 8 for broad categories
           ],
           "price_range": { "min": number, "max": number },
-          "retailers_to_target": ["retailer1", "retailer2", "retailer3"]
+          "retailers_to_target": ["retailer1", "retailer2", "retailer3", "retailer4"]
         },
         "balanced": { ... same structure ... },
         "high_end": { ... same structure ... }
       },
-      "key_requirements": ["specific requirements for this category"]
+      "key_requirements": ["at least 4-6 specific requirements for this category — include size, material, color, style, and functional requirements"]
     }
   ]
 }
 
-CRITICAL RULES for search queries:
+## CRITICAL RULES for search queries:
 - Each query MUST target a SPECIFIC PRODUCT or specific retailer page, not a generic category.
 - Include brand/retailer name + product type + material + color in product_specific and brand_collection queries.
 - Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic.
-- Good: "Article Texa rug 8x10 cream wool" or "CB2 Dondra walnut media console"
-- Bad: "modern rugs" or "TV stands" (too generic, will return category pages)
+- GOOD queries (specific, will find product pages):
+  "Article Texa rug 8x10 cream wool"
+  "CB2 Dondra teak media console 64 inch"
+  "West Elm Mid-Century coffee table walnut under $600"
+  "Castlery Miso round dining table 47 inch"
+  "best walnut coffee tables with shelf 2025"
+- BAD queries (generic, will return category pages):
+  "modern rugs" ← too vague, no size/material/color
+  "TV stands" ← no style, no material, no retailer
+  "affordable coffee tables" ← no specifics
+  "nice dining chairs" ← useless
 - Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers.
-- For high end, include retailer name to find specific products.
-- NEVER repeat the same query across different angles — each must find genuinely different results.
-- For comparison queries, include the current year to find recent roundups.`;
+- For high end, include retailer name to find specific premium products.
+- NEVER repeat the same search terms across different angles — each must surface genuinely different products.
+- For comparison queries, include "2025" or "2026" to find recent roundups.
+- For key_requirements: include at least 4-6 requirements covering size constraints, material preferences, color range, style direction, and functional needs.`;
 }

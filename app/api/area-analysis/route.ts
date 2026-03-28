@@ -180,30 +180,60 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
 
   contentBlocks.push({
     type: "text",
-    text: `\nDo a deep analysis of the ${room.name}. You know the owner's preferences (see system prompt). Also consider the other rooms so everything stays cohesive across the apartment.
+    text: `\nDo a deep, thorough analysis of the ${room.name}. You know the owner's preferences (see system prompt). Also consider the other rooms so everything stays cohesive across the apartment.
+
+IMPORTANT — MULTI-FUNCTION ROOMS: If this room serves multiple functions (e.g. a living room with a dining area, or a combined living/dining space), you MUST include items for ALL zones — dining table, dining chairs, lighting for the dining zone, seating for the living zone, etc. Do NOT limit recommendations to just the primary function. A living/dining combo typically needs 8-15 items across both zones.
 
 Return JSON:
 {
-  "summary": "2-3 sentence assessment of the current state of this area",
+  "summary": "3-4 sentence assessment of the current state — mention dominant colors, materials, what's working, what's broken. Be specific.",
   "what_it_needs": [
     {
-      "category": "snake_case category slug, e.g. area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light",
-      "search_title": "A detailed, specific product title that could be used as a search query on a furniture website. Include material, color/finish, approximate size, and style. Examples: 'Large 8x10 hand-knotted wool area rug in warm ivory with subtle texture', 'Solid walnut round coffee table 36-40 inch diameter with tapered legs', 'Woven rattan credenza with closed doors in natural finish 60 inches wide'",
-      "description": "Why this item is needed and how it fits the design direction — be specific about what problem it solves",
+      "category": "snake_case category slug: area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, media_console, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light, throw_blanket, plant, vase, tray, kitchen_runner",
+      "search_title": "A highly specific search query — see SEARCH TITLE FORMAT below",
+      "description": "Why this item is needed — what specific problem it solves from the diagnosis. 2-3 sentences.",
       "priority": "high | medium | low",
-      "specs": "Ideal dimensions, material, color range, price range"
+      "specs": "Exact ideal dimensions (e.g. '48-54 inches wide, 20 inches deep'), preferred materials (e.g. 'solid walnut or oak'), color range (e.g. 'warm ivory, cream, or oatmeal'), approximate price range for the tier"
     }
   ],
-  "what_works": ["Specific things that should stay - reference actual items you see"],
-  "what_should_go": ["Specific things that should be replaced or removed — say what the item is and why it should go"],
-  "design_direction": "A paragraph describing the overall design direction - color strategy, material mixing, the feeling we're going for. Reference the apartment's overall coherence."
+  "what_works": ["5-8 specific items that should stay — name each item with material + color"],
+  "what_should_go": ["specific items to replace or remove — name each item and explain why"],
+  "design_direction": "A detailed paragraph (4-6 sentences) describing the overall design direction — color strategy (name exact colors), material mixing strategy, texture layering plan, the feeling we're going for. Reference the apartment's finishes and overall coherence."
 }
 
-IMPORTANT for search_title: Write each title as if you're typing it into a furniture store search bar. Be extremely specific about material, color, dimensions, and style. These titles will be used to find real products, so vague titles like "Coffee Table" will return bad results. Instead write "Solid wood rectangular coffee table 48 inch with shelf in walnut or warm oak finish".
+## SEARCH TITLE FORMAT — CRITICAL
+Each search_title will be used to find real products on furniture websites. Before writing each one, verify it includes:
+✓ Material (required for all furniture): "solid walnut", "linen", "wool", "bouclé", "brass"
+✓ Color or finish (required): "warm ivory", "natural oak", "matte black"
+✓ Size/dimensions (required except small decor): "8x10", "48 inch", "36 inch diameter"
+✓ Style descriptor (required): "mid-century", "modern", "organic", "minimalist"
+✓ Product type (required): "area rug", "coffee table", "floor lamp"
 
-Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.
+GOOD search_title examples:
+✓ "Large 8x10 hand-knotted wool area rug in warm cream with subtle geometric texture"
+✓ "Solid walnut round coffee table 36-40 inch diameter with tapered legs and lower shelf"
+✓ "Modern arc floor lamp in brushed brass with linen drum shade 72 inches tall"
+✓ "Set of 2 mid-century upholstered dining chairs walnut frame cream fabric"
+✓ "Woven rattan media console 60-70 inches wide with closed storage natural finish"
 
-IMPORTANT: If this room serves multiple functions (e.g. a living room with a dining area, or a combined living/dining space), make sure to include items for ALL zones — dining table, dining chairs, lighting for the dining zone, etc. Don't limit your recommendations to just the primary function.`,
+BAD search_title examples (will return category pages, not products):
+✗ "Coffee table" — no material, no color, no size
+✗ "Area rug in cream" — no size, no material, no texture description
+✗ "Modern lamp" — no material, no size, no specific type
+✗ "Throw pillows" — no material, no color, no size, no quantity
+✗ "Wall art" — no medium, no size, no color palette, no style
+
+## HOW MANY ITEMS TO RECOMMEND
+Be thorough. A typical living room needs 8-12 items. A combined living/dining room needs 12-18. Include:
+- Large anchor pieces (rug, sofa, dining table) — high priority
+- Functional pieces (coffee table, side tables, media console, storage) — high/medium priority
+- Lighting (floor lamp, table lamp, pendant) — medium/high priority
+- Soft furnishings (throw pillows, throw blanket, curtains) — medium priority
+- Decorative elements (art, plants, vases, trays, candles) — low/medium priority
+
+Do NOT stop at 5 items. Include everything the room needs to feel complete and intentional.
+
+Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.`,
   });
 
   const agentRun = await createAgentRun(supabase, {
@@ -218,7 +248,6 @@ IMPORTANT: If this room serves multiple functions (e.g. a living room with a din
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 4096,
       temperature: 0.3,
       responseMimeType: "application/json",
     });

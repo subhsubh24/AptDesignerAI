@@ -362,11 +362,18 @@ Requirements: ${requirements.join(", ")}${styleContext}
 ## CANDIDATES
 ${candidateList}
 
-## RATING CRITERIA
-- 5: Clearly a specific product page for the right category and price tier, style-compatible
-- 4: Likely a product page, right category, might be right tier
-- 3: Possibly relevant — could be a product page or very targeted listing
-- 2: Probably a category page, blog, wrong product type, or clearly wrong style
+## STEP 1: CHECK THE URL STRUCTURE
+Before rating, examine each URL:
+- If URL contains /collections, /categories, /browse, /shop-all, /search, /blog, /magazine, /reviews, /inspiration, /ideas → rate 1-2 (these are listing/content pages, NOT product pages)
+- If URL is a site homepage (e.g., just "article.com" or "westelm.com") → rate 1
+- If URL has product identifiers in path (e.g., /products/walnut-coffee-table, /p/SKU-12345, /dp/B0xxx) → likely product page, rate 4-5
+- If URL contains a specific product slug (hyphenated product name) → likely product page
+
+## STEP 2: RATING CRITERIA
+- 5: URL structure confirms product page + title clearly matches ${category} + snippet mentions price/materials + style-compatible with design direction
+- 4: URL looks like a product page + title matches ${category}, snippet is somewhat relevant
+- 3: Uncertain — could be a product page or a targeted subcategory listing. Title seems relevant.
+- 2: Probably a category listing, blog post, roundup article, or wrong product type
 - 1: Definitely not relevant — review article, unrelated product, broken URL
 
 Return JSON:

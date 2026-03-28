@@ -226,10 +226,27 @@ Design direction: ${aesthetic}
 ## PRODUCTS
 ${productList}
 
-## SCORING (each 0-10)
-- **style_fit**: Does this match the design direction above? Penalize products that clash with the specified palette, materials, or style.
-- **value_fit**: Is the price reasonable for what you get? ${budgetMode === "budget" ? "Weight heavily." : "Balance quality and price."}
-- **confidence**: How confident are you based on the available information?
+## SCORING (each 0-10) — USE THE FULL SCALE
+
+**style_fit** — Does this match the design direction above?
+- 9-10: Perfect match — materials, colors, and style align with the design direction
+- 7-8: Good match — mostly aligned, minor deviations
+- 5-6: Acceptable but not ideal — generic or slightly off-direction
+- 3-4: Poor match — wrong style family or clashing materials/colors
+- 1-2: Completely wrong — industrial when we need mid-century, chrome when we need brass, etc.
+
+**value_fit** — Is the price reasonable for what you get?
+- ${budgetMode === "budget" ? "Weight this HEAVILY. Products over the tier's price range should score 3 or below." : "Balance quality and price. Premium materials at fair prices score highest."}
+- If price is missing, score 5 (neutral) — do NOT assume it's good value.
+
+**confidence** — How reliable is the product data?
+- 9-10: Complete info — title, price, materials, colors, dimensions, description all present
+- 7-8: Mostly complete — missing one field
+- 5-6: Partial — have title and maybe price, but materials/colors unclear
+- 3-4: Minimal — only title and retailer, everything else missing or vague
+
+## IMPORTANT: SCORE RELATIVE TO EACH OTHER
+Within this batch, use the full 0-10 range. The best product should score 7+. The worst should score 4 or below. Do NOT give everything 5-7 — differentiate clearly.
 
 Return JSON:
 {
@@ -268,13 +285,13 @@ Return JSON:
             await new Promise((r) => setTimeout(r, 1000));
             continue;
           }
-          // On second failure, give all products a passing score (fail open)
+          // On second failure, give all products a conservative score (fail open but cautious)
           return batch.map((p) => ({
             productId: p.id,
-            quickScore: 6,
-            styleFit: 6,
-            valueFit: 6,
-            confidence: 5,
+            quickScore: 5,
+            styleFit: 5,
+            valueFit: 5,
+            confidence: 3,
           }));
         }
       }
