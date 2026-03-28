@@ -7,7 +7,9 @@ export function getBundleEvalPrompt(
   designDirection?: DesignDirection,
   spatialLayout?: string,
   placementMap?: Record<string, string>,
-  floorPlan?: Record<string, unknown>
+  floorPlan?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string
 ): string {
   // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
@@ -43,6 +45,14 @@ export function getBundleEvalPrompt(
     ? `\n\n## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, placement]) => `- **${cat}**: ${placement}`).join("\n")}`
     : "";
 
+  const lightingCtx = lightingConditions
+    ? `\n\n## LIGHTING CONDITIONS\n${lightingConditions}`
+    : "";
+
+  const windowDoorCtx = windowDoorPositions
+    ? `\n\n## WINDOW & DOOR POSITIONS\n${windowDoorPositions}`
+    : "";
+
   return `Evaluate this bundle of products as a complete room concept. You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
 ## ROOM CONTEXT
@@ -55,7 +65,7 @@ ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 ## WHAT'S ALREADY IN THE ROOM
 ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}
+${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}
 
 ## SCORING DIMENSIONS (each 0-10)
 
@@ -70,10 +80,12 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
 2. **material_balance_score**: Is there a healthy mix of textures and materials?
    - Count distinct material types: wood, textile/fabric, metal, stone/ceramic, glass, leather
    - A good bundle has at least 3-4 distinct material types
-   - 9-10: Rich material variety — wood + textile + metal + organic creates visual depth
-   - 7-8: Good variety with 3+ materials, minor gaps
-   - 5-6: Too monotone — everything is wood, or everything is fabric
-   - Below 5: Material conflict or jarring mismatch (e.g., all cheap-looking particleboard)
+   - **Durability/maintenance**: Are materials practical for the room's use? White boucle in a pet-friendly home, glass with toddlers, or delicate fabrics in high-traffic zones should lower the score.
+   - **Climate suitability**: Heavy wool in tropical climates, cold metal in northern apartments without nearby textiles, velvet in humid environments — all mismatches.
+   - 9-10: Rich material variety — wood + textile + metal + organic creates visual depth, ALL durable and climate-appropriate
+   - 7-8: Good variety with 3+ materials, minor gaps or one questionable durability choice
+   - 5-6: Too monotone — everything is wood, or everything is fabric. Or good variety but poor durability choices.
+   - Below 5: Material conflict, jarring mismatch, or fundamentally impractical material choices
 
 3. **scale_balance_score**: Are pieces correctly proportioned relative to each other AND the room?
    - Check rug size: should cover at least 60-80% of seating area footprint
@@ -107,10 +119,12 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
    - Check sightlines: is there a clear focal point? Can people see each other in conversation?
    - Check relationships: are items that should be near each other actually near each other? (lamp by reading chair, side table within reach of sofa arm)
    - Check orientation: do seating pieces face each other or a focal point, not the wall?
-   - 9-10: Every piece has a clear home, flow is natural, zones are well-defined, the room feels intentional
+   - **Window/door clearance**: Do any items block windows (reducing natural light), obstruct door swings, or crowd doorways? A tall bookshelf in front of a window = penalize. A console table blocking a closet door = penalize.
+   - **Outlet access**: Do powered items (lamps, media consoles) have realistic outlet access in their intended positions? A floor lamp placed far from any wall outlet = impractical.
+   - 9-10: Every piece has a clear home, flow is natural, zones are well-defined, nothing blocks windows/doors, the room feels intentional
    - 7-8: Arrangement mostly works, one piece feels slightly awkward in position
-   - 5-6: Some spatial issues — crowded zone, unclear path, pieces that seem to float without purpose
-   - Below 5: Significant spatial problems — items blocking paths, no clear arrangement logic, zones collide
+   - 5-6: Some spatial issues — crowded zone, unclear path, pieces that seem to float without purpose, or one item blocking a window/door
+   - Below 5: Significant spatial problems — items blocking paths/windows/doors, no clear arrangement logic, zones collide
 
 7. **practicality_score**: Is this livable? Think about how the client ACTUALLY uses this room:
    - Can they host guests? Count total seating capacity vs. client's hosting needs
@@ -118,9 +132,11 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
    - Can they walk through easily? Check clearances (30+ inches for walkways)
    - Are pieces durable for daily use? (Fragile glass with kids? White fabric with pets?)
    - Does the total bundle price make sense for the tier?
-   - 9-10: Perfectly serves the client's actual life — hosting, daily routines, comfort
-   - 7-8: Mostly practical, one minor concern
-   - 5-6: Some impractical elements — e.g., beautiful but not enough seating for hosting
+   - **Lighting adequacy**: Does this bundle include enough lighting for the room's needs? Consider natural light direction and time of day. A north-facing room with only one table lamp = under-lit. Dark corners without task lighting = penalize. Glossy/reflective surfaces near windows creating glare = penalize.
+   - **Acoustic balance**: Is there enough soft material to absorb sound? In rooms with hardwood floors, concrete walls, or large glass windows, the bundle MUST include textile elements (rug, curtains, upholstered seating) for acoustic comfort. All-hard-surface bundles in open floor plans are acoustically harsh — penalize.
+   - 9-10: Perfectly serves the client's actual life — hosting, daily routines, comfort, adequate lighting, acoustically balanced
+   - 7-8: Mostly practical, one minor concern (e.g., could use one more light source, or slightly under-textiled)
+   - 5-6: Some impractical elements — e.g., beautiful but not enough seating for hosting, or acoustically harsh with no soft surfaces
    - Below 5: Fundamentally impractical for how the client lives
 
 ## OUTPUT FORMAT

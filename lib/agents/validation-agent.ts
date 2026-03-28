@@ -150,13 +150,24 @@ Look at the room photos carefully. Estimate the room's dimensions and layout. No
 
 10. **Zone definition**: In multi-function rooms, do the items clearly define distinct zones (living vs dining, work vs relaxation) without blocking flow between them?
 
+### ENVIRONMENTAL CHECKS
+11. **Lighting adequacy**: Look at the room photos — which direction do windows face? How much natural light is there? Do the recommended items include sufficient lighting for dark areas? If the room is north-facing with limited light, it needs MORE light sources. Are any glossy/reflective items placed where they'd create glare from windows?
+
+12. **Window & door clearance**: From the photos, identify all windows and doors. Do any recommended items block windows (reducing natural light)? Do any obstruct door swings or crowd doorways? A tall bookshelf in front of a window or a console table blocking a closet door = must revise placement or drop.
+
+13. **Acoustic balance**: Look at the room's surfaces — hardwood floors, concrete walls, large windows. Is there enough soft material in the recommendation set (rug, curtains, upholstered furniture, throw pillows) to create acoustic comfort? An open floor plan with all hard surfaces needs textile elements. If the set lacks soft materials, flag it.
+
+14. **Durability & maintenance**: Consider the client's lifestyle (pets, kids, hosting, daily use). Are the recommended materials practical? White boucle with pets, glass with toddlers, delicate silk in high-traffic areas = flag as impractical.
+
+15. **Outlet access for powered items**: If recommending lamps, media consoles, or other powered items — is there likely an outlet near the intended placement? A floor lamp in the center of the room with no nearby wall = impractical placement.
+
 ## SCORING (per item)
-- **harmony_score** (1-10): Combined harmony + spatial fit score
-  - 9-10: Perfect — harmonizes beautifully AND the placement/size makes perfect spatial sense
-  - 7-8: Good — works well aesthetically, placement is reasonable
-  - 5-6: Acceptable aesthetically but spatial issues (wrong size for the spot, awkward placement, blocks traffic)
-  - 3-4: Conflict — clashes with keeps OR serious spatial problem (won't physically fit, blocks doorway)
-  - 1-2: Wrong — completely out of place aesthetically AND spatially
+- **harmony_score** (1-10): Combined harmony + spatial + environmental fit score
+  - 9-10: Perfect — harmonizes beautifully, placement/size makes perfect spatial sense, lighting/acoustics/durability all good
+  - 7-8: Good — works well aesthetically, placement is reasonable, no major environmental issues
+  - 5-6: Acceptable aesthetically but has issues (wrong size, blocks window/door, impractical material, creates acoustic harshness, no outlet access)
+  - 3-4: Conflict — clashes with keeps OR serious spatial problem (won't fit, blocks doorway) OR fundamentally impractical (wrong material for lifestyle)
+  - 1-2: Wrong — completely out of place aesthetically AND spatially AND environmentally
 
 - **drop**: true if harmony_score ≤ 3
 
@@ -171,7 +182,7 @@ Return JSON:
       "category": "the category slug",
       "harmony_score": number,
       "keeps_well_with": ["which existing items it pairs well with"],
-      "clashes_with": ["which existing items or other recommendations it conflicts with — include spatial conflicts like 'blocks path to dining area'"],
+      "clashes_with": ["which existing items or other recommendations it conflicts with — include spatial conflicts like 'blocks path to dining area', environmental issues like 'blocks south window', 'no outlet nearby for floor lamp', 'adds more hard surface to acoustically harsh room'"],
       "revised_search_title": "only if score 4-6, a better search title",
       "revised_specs": "only if score 4-6, revised specs (may include different dimensions)",
       "revised_placement": "only if score 4-6, a better placement that works spatially",
@@ -187,7 +198,7 @@ Return JSON:
   "revisedAnalysis": null or { the full revised analysis if confidence < 7 — with corrected placements }
 }
 
-BE STRICT. A professional designer would walk the room mentally, placing each item, checking clearances, testing sightlines. Don't let a beautiful palette pass if the furniture arrangement doesn't work physically.`,
+BE STRICT. A professional designer would walk the room mentally, placing each item, checking clearances, testing sightlines, verifying outlet access, ensuring nothing blocks windows or doors, and confirming the acoustic and lighting balance works. Don't let a beautiful palette pass if the furniture arrangement doesn't work physically or the materials are impractical for the client's lifestyle.`,
   });
 
   try {
@@ -255,6 +266,9 @@ export async function validateProductSet(
 6. No duplicate or near-duplicate products across tiers
 7. Scale and proportion: Do these items look like they'd work at the right scale for the room shown?
 8. **Harmony with existing items**: Do the products work with the items being KEPT in the room?
+9. **Material durability**: Are materials practical for daily use? (White boucle + pets = problem, glass + kids = risk, delicate fabrics in high-traffic areas = impractical)
+10. **Acoustic balance**: Does the set include enough soft materials (rugs, curtains, upholstery) for rooms with hard surfaces?
+11. **Lighting coverage**: Does the set adequately address the room's lighting needs? Dark corners should have light sources.
 
 ## ROOM CONTEXT
 - Room type: ${roomContext.roomType}

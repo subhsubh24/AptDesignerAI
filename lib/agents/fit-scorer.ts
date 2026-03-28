@@ -26,6 +26,12 @@ export interface ScoringContext {
   spatialLayout?: string;
   /** Floor plan dimensions if available */
   floorPlan?: Record<string, unknown>;
+  /** Lighting conditions description */
+  lightingConditions?: string;
+  /** Window and door positions */
+  windowDoorPositions?: string;
+  /** Outlet locations */
+  outletPositions?: string;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -68,7 +74,10 @@ export async function scoreProduct(
     scoringCtx.designDirection,
     scoringCtx.placement,
     scoringCtx.spatialLayout,
-    scoringCtx.floorPlan
+    scoringCtx.floorPlan,
+    scoringCtx.lightingConditions,
+    scoringCtx.windowDoorPositions,
+    scoringCtx.outletPositions
   );
 
   // Extract visual metadata from product metadata
@@ -173,6 +182,7 @@ export interface QuickScoreEntry {
   productId: string;
   quickScore: number;
   styleFit: number;
+  scaleFit: number;
   valueFit: number;
   confidence: number;
 }
@@ -187,7 +197,9 @@ export async function quickScoreProducts(
   category: string,
   roomType: string,
   budgetMode: string,
-  designDirection?: DesignDirection
+  designDirection?: DesignDirection,
+  placement?: string,
+  floorPlan?: Record<string, unknown>
 ): Promise<AgentResult<QuickScoreEntry[]>> {
   if (products.length === 0) {
     return { success: true, data: [] };
@@ -211,6 +223,7 @@ export async function quickScoreProducts(
             `[${i}] ${p.title || "Unknown"}`,
             p.retailer && `  Retailer: ${p.retailer}`,
             p.price && `  Price: $${p.price}`,
+            p.dimensions && `  Dimensions: ${JSON.stringify(p.dimensions)}`,
             p.materials?.length && `  Materials: ${p.materials.join(", ")}`,
             p.colors?.length && `  Colors: ${p.colors.join(", ")}`,
             vTags.length > 0 && `  Visual style: ${vTags.join(", ")}`,
@@ -229,9 +242,17 @@ export async function quickScoreProducts(
           ].filter(Boolean).join(". ")
         : "Based on apartment photos and building context";
 
+      // Build spatial context for scale checking
+      const spatialHint = [
+        placement && `Intended placement: ${placement}`,
+        floorPlan?.room_dimensions && `Room dimensions: ${JSON.stringify(floorPlan.room_dimensions)}`,
+        floorPlan?.total_sqft && `Apartment: ~${floorPlan.total_sqft} sqft`,
+      ].filter(Boolean).join("\n");
+
       const prompt = `Quick-score these ${category} products for a ${roomType}. Budget mode: ${budgetMode}.
 
 Design direction: ${aesthetic}
+${spatialHint ? `\n## SPATIAL CONTEXT\n${spatialHint}` : ""}
 
 ## PRODUCTS
 ${productList}
@@ -244,6 +265,15 @@ ${productList}
 - 5-6: Acceptable but not ideal — generic or slightly off-direction
 - 3-4: Poor match — wrong style family or clashing materials/colors
 - 1-2: Completely wrong — industrial when we need mid-century, chrome when we need brass, etc.
+
+**scale_fit** — Will this physically fit in the intended space?
+- Check product dimensions against room dimensions and placement context above
+- 9-10: Perfect size for the space — rug covers seating area, table seats the right number, fits the wall/floor area
+- 7-8: Close — might be slightly over/under but workable
+- 5-6: Questionable — dimensions seem tight or product might be too small/large for the space
+- 3-4: Likely wrong — product is obviously too large for the room or way too small for the area
+- 1-2: Definitely wrong — e.g., king bed dimensions for a small bedroom, 5x7 rug for a large living room
+- If no dimensions listed, score 5 (neutral)
 
 **value_fit** — Is the price reasonable for what you get?
 - ${budgetMode === "budget" ? "Weight this HEAVILY. Products over the tier's price range should score 3 or below." : "Balance quality and price. Premium materials at fair prices score highest."}
@@ -261,7 +291,7 @@ Within this batch, use the full 0-10 range. The best product should score 7+. Th
 Return JSON:
 {
   "scores": [
-    { "index": number, "style_fit": number, "value_fit": number, "confidence": number }
+    { "index": number, "style_fit": number, "scale_fit": number, "value_fit": number, "confidence": number }
   ]
 }`;
 
@@ -280,11 +310,13 @@ Return JSON:
           const entries: QuickScoreEntry[] = [];
           for (const score of parsed.scores || []) {
             if (score.index >= 0 && score.index < batch.length) {
-              const avg = (score.style_fit + score.value_fit + score.confidence) / 3;
+              const scaleFit = score.scale_fit ?? 5;
+              const avg = (score.style_fit + scaleFit + score.value_fit + score.confidence) / 4;
               entries.push({
                 productId: batch[score.index].id,
                 quickScore: Math.round(avg * 10) / 10,
                 styleFit: score.style_fit,
+                scaleFit,
                 valueFit: score.value_fit,
                 confidence: score.confidence,
               });
@@ -301,6 +333,7 @@ Return JSON:
             productId: p.id,
             quickScore: 5,
             styleFit: 5,
+            scaleFit: 5,
             valueFit: 5,
             confidence: 3,
           }));
@@ -311,6 +344,7 @@ Return JSON:
         productId: p.id,
         quickScore: 6,
         styleFit: 6,
+        scaleFit: 6,
         valueFit: 6,
         confidence: 5,
       }));

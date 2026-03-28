@@ -19,6 +19,8 @@ export interface BundleContext {
   spatialLayout?: string;
   placementMap?: Record<string, string>;
   floorPlan?: Record<string, unknown>;
+  lightingConditions?: string;
+  windowDoorPositions?: string;
 }
 
 export async function evaluateBundle(
@@ -34,7 +36,9 @@ export async function evaluateBundle(
     bundleCtx.designDirection,
     bundleCtx.spatialLayout,
     bundleCtx.placementMap,
-    bundleCtx.floorPlan
+    bundleCtx.floorPlan,
+    bundleCtx.lightingConditions,
+    bundleCtx.windowDoorPositions
   );
 
   // Build bundle context with visual metadata

@@ -100,6 +100,11 @@ export async function POST(request: Request) {
   // Extract floor plan from building research
   const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
 
+  // Extract environmental context from diagnosis
+  const lightingConditions = diagnosisJson?.lighting_conditions as string | undefined;
+  const windowDoorPositions = diagnosisJson?.window_door_positions as string | undefined;
+  const outletPositions = diagnosisJson?.outlet_positions as string | undefined;
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -116,6 +121,9 @@ export async function POST(request: Request) {
     spatialLayout: spatialLayout || undefined,
     placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
     floorPlan: floorPlan || undefined,
+    lightingConditions: lightingConditions || undefined,
+    windowDoorPositions: windowDoorPositions || undefined,
+    outletPositions: outletPositions || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

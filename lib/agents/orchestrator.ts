@@ -471,7 +471,7 @@ export async function runAgenticSearch(
 
         quickScorePromises.push(
           (async () => {
-            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection);
+            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection, ctx.placementMap?.[category], ctx.floorPlan);
             if (result.success && result.data) {
               for (const entry of result.data) {
                 quickScoresByProduct.set(entry.productId, entry.quickScore);
@@ -547,6 +547,9 @@ export async function runAgenticSearch(
                 placement: ctx.placementMap?.[product.category || ""],
                 spatialLayout: ctx.spatialLayout,
                 floorPlan: ctx.floorPlan,
+                lightingConditions: ctx.lightingConditions,
+                windowDoorPositions: ctx.windowDoorPositions,
+                outletPositions: ctx.outletPositions,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -711,6 +714,8 @@ export async function runAgenticSearch(
       spatialLayout: ctx.spatialLayout,
       placementMap: ctx.placementMap,
       floorPlan: ctx.floorPlan,
+      lightingConditions: ctx.lightingConditions,
+      windowDoorPositions: ctx.windowDoorPositions,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
@@ -893,6 +898,9 @@ export async function runAgenticSearch(
                 placement: ctx.placementMap?.[product.category || ""],
                 spatialLayout: ctx.spatialLayout,
                 floorPlan: ctx.floorPlan,
+                lightingConditions: ctx.lightingConditions,
+                windowDoorPositions: ctx.windowDoorPositions,
+                outletPositions: ctx.outletPositions,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);

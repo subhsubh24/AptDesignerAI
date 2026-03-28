@@ -11,7 +11,10 @@ export function getProductEvalPrompt(
   designDirection?: DesignDirection,
   placement?: string,
   spatialLayout?: string,
-  floorPlan?: Record<string, unknown>
+  floorPlan?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string,
+  outletPositions?: string
 ): string {
   // Build dynamic design direction from diagnosis — no hardcoded values
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -58,6 +61,12 @@ export function getProductEvalPrompt(
     ? `\n\n## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}\nSpatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
     : "";
 
+  const environmentContext = [
+    lightingConditions && `\n\n## LIGHTING CONDITIONS\n${lightingConditions}`,
+    windowDoorPositions && `\n\n## WINDOW & DOOR POSITIONS\n${windowDoorPositions}`,
+    outletPositions && `\n\n## OUTLET POSITIONS\n${outletPositions}`,
+  ].filter(Boolean).join("");
+
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.
 
 Evaluate the following product using THREE LAYERS of analysis:
@@ -74,7 +83,7 @@ ${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\
 ${paletteInfo}
 ${materialsInfo}
 ${styleInfo}
-${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}
+${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}${environmentContext}
 
 ## LAYER 1: INDIVIDUAL ITEM FIT (8 dimensions, each 0-10)
 
@@ -83,6 +92,8 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
 2. **palette_fit_score**: Does it complement the apartment's actual palette? Consider the building finishes (floors, cabinetry, countertops) from the system prompt and the colors visible in the room photos.
 
 3. **material_fit_score**: Does the material work with the apartment's existing finishes? Consider what you SEE in the room photos — the flooring, the cabinetry, any existing furniture materials.
+   - Also consider **durability and maintenance**: Is this material practical for the room's use? White boucle with pets = problem. Glass coffee table with toddlers = risk. Velvet in humid climates degrades. Light fabrics in high-traffic areas stain. Outdoor-adjacent rooms need weather-resistant materials.
+   - Consider **climate suitability**: Does the material suit the local climate? Heavy wool rugs in tropical apartments feel wrong. Metal furniture in cold climates feels harsh without textile warmth nearby.
 
 4. **scale_fit_score**: Is it correctly scaled for its intended placement? Use the floor plan dimensions and room photos. Consider:
    - Will it PHYSICALLY FIT in the intended placement? Check dimensions against available space.
@@ -92,6 +103,7 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
    - Art too small for the wall space: penalize
    - Oversized pieces that would block walkways or crowd adjacent furniture: penalize
    - Check the intended placement description — does the product's size work in that specific spot?
+   - **Window/door clearance**: Would this item block a window (reducing natural light), obstruct a door swing, or crowd a doorway? Check placement against known window/door positions.
 
 5. **function_fit_score**: Does it solve a real problem AND work in its intended position? Consider:
    - Seating capacity — does the client need to host guests? Is there enough seating for entertaining?
@@ -100,6 +112,9 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
    - Lighting — does it solve a lighting gap? If it's a reading lamp, is it placed near the reading spot?
    - Comfort — is it actually comfortable for daily use, not just pretty?
    - Flow — does it work with the room's traffic patterns and spatial layout? Does the placement make functional sense (e.g., side table within arm's reach of seating, lamp near a task area)?
+   - **Lighting suitability** — If it's a lamp, does it address a known lighting gap (dark corner, reading area, task zone)? For reflective/glossy surfaces, will they create glare near windows? For light-colored textiles, do they work with the room's natural light direction?
+   - **Acoustic impact** — In rooms with all hard surfaces (hardwood + glass + concrete), textiles (rugs, curtains, upholstery) are critical for sound absorption. In open floor plans, soft materials matter even more. Penalize adding MORE hard surfaces to an already acoustically harsh room.
+   - **Outlet proximity** — For lamps, media consoles, and powered items: is there a likely outlet near the intended placement? A floor lamp in the middle of the room with no nearby outlet = impractical.
 
 6. **cohesion_fit_score**: Does it work with what's already in the room? Look at the room photos — consider the existing furniture, finishes, and overall vibe. Don't assume what's there; base this on what you SEE.
 
@@ -165,6 +180,10 @@ Return a JSON object:
 - Did I verify the product's colors against the recommended palette?
 - Did I verify the product's materials against the recommended materials?
 - Did I consider how the client actually LIVES (hosting, daily use, comfort)?
+- Did I check durability/maintenance for the material given the room's use patterns?
+- Did I check if this blocks windows, doors, or natural light paths?
+- Did I verify outlet access for powered items (lamps, media consoles)?
+- Did I consider acoustic impact (more hard surfaces in an already hard room)?
 - Am I using the full 0-10 scale, not clustering everything in 6-8?
 
 Be honest and specific. Do not inflate scores. A 7+ means it's genuinely strong. A 5 is mediocre. Below 4 means real problems.`;

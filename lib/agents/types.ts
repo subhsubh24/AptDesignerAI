@@ -25,6 +25,11 @@ export interface AgentContext {
   spatialLayout?: string;
   placementMap?: Record<string, string>;
   floorPlan?: Record<string, unknown>;
+
+  // Environmental context — lighting, windows/doors, outlets
+  lightingConditions?: string;
+  windowDoorPositions?: string;
+  outletPositions?: string;
 }
 
 export interface AgentResult<T = unknown> {
