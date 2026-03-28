@@ -74,8 +74,10 @@ function parseJsonResponse<T>(raw: string): T {
  * Deep-crawls the product page: reads all content, examines product images,
  * checks color/finish variants, and captures lifestyle photography.
  *
- * Retries once on API errors (transient 400s from urlContext are common).
- * Falls back to extraction without urlContext if both attempts fail.
+ * Strategy:
+ *  1. Try with urlContext tool (lets Gemini fetch + read the page)
+ *  2. If that 400s, retry with urlContext once (transient errors are common)
+ *  3. If still failing, fall back to plain text prompt without urlContext
  */
 export async function extractFromUrl(url: string): Promise<AgentResult<ExtractedProduct>> {
   // Check cache first
@@ -96,7 +98,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       model,
       system,
       messages: [{ role: "user", content: userContent }],
-      max_tokens: 2000,
+      max_tokens: 3000,
       temperature: 0.1,
       tools: [{ urlContext: {} }],
     });
@@ -113,14 +115,14 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       model: response.model,
     };
   } catch (firstError) {
-    // Attempt 2: retry after brief delay (transient rate limit / API errors)
+    // Attempt 2: retry with urlContext after brief delay (transient errors)
     await new Promise((r) => setTimeout(r, 1500));
     try {
       const response = await geminiProvider.chat({
         model,
         system,
         messages: [{ role: "user", content: userContent }],
-        max_tokens: 2000,
+        max_tokens: 3000,
         temperature: 0.1,
         tools: [{ urlContext: {} }],
       });
@@ -136,11 +138,38 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
-    } catch (retryError) {
-      return {
-        success: false,
-        error: retryError instanceof Error ? retryError.message : "Extraction failed (all attempts)",
-      };
+    } catch {
+      // Attempt 3: fall back to plain prompt WITHOUT urlContext
+      // Flash Lite can still extract from the URL if given just the text prompt
+      console.warn(`[extractor] urlContext failed for ${url}, falling back to plain extraction`);
+      try {
+        const fallbackContent = `${extractionPrompt}\n\nI need you to extract product information from this URL: ${url}\n\nBased on the URL structure and any information you can infer from it, provide your best extraction. If the URL contains a product slug, use it to infer the product name. Set confidence fields low if you're uncertain.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: fallbackContent }],
+          max_tokens: 3000,
+          temperature: 0.1,
+        });
+
+        const raw = response.content.trim();
+        if (!raw) throw new Error("Empty response from fallback extraction");
+
+        const parsed = parseJsonResponse<ExtractedProduct>(raw);
+        cacheExtraction(url, parsed);
+        return {
+          success: true,
+          data: parsed,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+          model: response.model,
+        };
+      } catch (fallbackError) {
+        return {
+          success: false,
+          error: fallbackError instanceof Error ? fallbackError.message : "Extraction failed (all attempts)",
+        };
+      }
     }
   }
 }

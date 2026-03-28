@@ -39,7 +39,14 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     return { data: buffer.toString("base64"), mimeType };
   }
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "Referer": new URL(url).origin + "/",
+    },
+    signal: AbortSignal.timeout(10000),
+  });
   if (!response.ok) {
     throw new Error(`Image fetch failed: ${response.status} ${response.statusText} for ${url}`);
   }
