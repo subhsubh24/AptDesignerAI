@@ -80,20 +80,15 @@ For each category, generate search queries for THREE price tiers:
 3. **High End** — premium/investment pieces from ${TIER_RETAILERS.high_end.join(", ")}
 
 ## QUERY DIVERSITY REQUIREMENT
-You MUST generate **at least 6 queries per tier** (up to 8 for broad categories like rugs or lighting), each approaching the search from a different angle:
+Generate exactly **5 high-quality queries per tier**, each from a different angle. Quality over quantity — each query must be highly specific and likely to return actual product pages:
 
 1. **product_specific** — Target a specific known product by exact name: "Article Seno walnut coffee table" or "West Elm Mid-Century Pop-Up Storage Coffee Table"
-2. **style_material** — Describe the style + material + color + size using the design direction: "modern solid walnut coffee table tapered legs 48 inch"
+2. **style_material** — Describe style + material + color + size using design direction: "modern solid walnut coffee table tapered legs 48 inch"
 3. **retailer_browse** — Browse a specific retailer's filtered selection: "West Elm coffee tables walnut under $800"
 4. **comparison** — Find recent comparison/roundup articles: "best mid-century walnut coffee tables 2025 review"
 5. **brand_collection** — Target a specific brand or designer collection: "Floyd The Coffee Table walnut"
-6. **alternative_style** — Search for a slightly different interpretation of the design direction: "japandi minimalist wood coffee table natural finish" (ensures we don't miss great options that match the vibe but use different search terms)
 
-For broad categories (rugs, lighting, seating), add 1-2 more:
-7. **size_specific** — Search with exact size requirements: "8x10 wool area rug cream textured"
-8. **material_variant** — Try a different material that fits the palette: "jute area rug 8x10 natural" alongside wool
-
-Each query MUST return meaningfully different results. Test mentally: would these 6+ queries surface 6+ different products? If not, rewrite.
+Each query MUST return meaningfully different results. Test mentally: would these 5 queries surface 5 different products? If two queries would find the same products, rewrite one.
 
 ## OUTPUT FORMAT
 Return a JSON object:
@@ -104,8 +99,8 @@ Return a JSON object:
       "tiers": {
         "budget": {
           "search_queries": [
-            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection | alternative_style | size_specific | material_variant" },
-            ... at least 6 queries, up to 8 for broad categories
+            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" },
+            ... exactly 5 queries
           ],
           "price_range": { "min": number, "max": number },
           "retailers_to_target": ["retailer1", "retailer2", "retailer3", "retailer4"]

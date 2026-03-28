@@ -195,31 +195,22 @@ export async function searchProducts(
     ? TIER_DOMAINS[tier]
     : [...TIER_DOMAINS.budget, ...TIER_DOMAINS.balanced, ...TIER_DOMAINS.high_end];
 
-  // Build the list of queries to run: the original + targeted site: searches
-  const queries: string[] = [query];
-
-  // Add targeted site: searches for the best retailers for this category+tier
+  // Build retailer focus list — prioritize category-specific retailers
+  let retailerFocus = "";
   if (category && tier) {
     const categoryKey = category.toLowerCase().replace(/\s+/g, "_");
     const retailers = CATEGORY_RETAILERS[categoryKey]?.[tier];
     if (retailers) {
-      // Pick top 2 retailers for dedicated site: searches
-      for (const retailer of retailers.slice(0, 2)) {
-        queries.push(`site:${retailer} ${query}`);
-      }
+      retailerFocus = `\nPRIORITY RETAILERS (search these first): ${retailers.join(", ")}`;
     }
   }
 
-  const allCandidates: SearchCandidate[] = [];
+  // Single search call per query — retailer targeting baked into the prompt
+  const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.${retailerFocus}
 
-  // Run all queries in parallel
-  const results = await Promise.all(
-    queries.map(async (searchQuery) => {
-      const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.
+Search query: "${query}"
 
-Search query: "${searchQuery}"
-
-Find up to ${maxResults} relevant product pages. For each, provide title, URL, brief snippet, and retailer.
+Find at least ${maxResults} relevant product pages. Prioritize the PRIORITY RETAILERS above if listed. For each, provide title, URL, brief snippet, and retailer.
 
 Return ONLY a valid JSON object — no text before or after:
 {
@@ -233,71 +224,65 @@ Return ONLY a valid JSON object — no text before or after:
   ]
 }`;
 
+  try {
+    const response = await geminiProvider.chat({
+      model: selectModel("search"),
+      system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
+      messages: [{ role: "user", content: searchPrompt }],
+      max_tokens: 2000,
+      temperature: 0.2,
+      tools: [{ googleSearch: {} }],
+    });
+
+    try {
+      const raw = response.content.trim();
+      let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
       try {
-        const response = await geminiProvider.chat({
-          model: selectModel("search"),
-          system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-          messages: [{ role: "user", content: searchPrompt }],
-          max_tokens: 2000,
-          temperature: 0.2,
-          tools: [{ googleSearch: {} }],
-        });
-
-        try {
-          const raw = response.content.trim();
-          let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
-          try {
-            parsed = JSON.parse(raw);
-          } catch {
-            const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (jsonMatch) {
-              parsed = JSON.parse(jsonMatch[1].trim());
-            } else {
-              const braceStart = raw.indexOf("{");
-              const braceEnd = raw.lastIndexOf("}");
-              if (braceStart !== -1 && braceEnd > braceStart) {
-                parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
-              } else {
-                parsed = {};
-              }
-            }
-          }
-          return (parsed.products || []).map(
-            (r: { title: string; url: string; snippet: string; source: string }) => ({
-              title: r.title || "",
-              url: r.url || "",
-              snippet: (r.snippet || "").slice(0, 500),
-              source: r.source || "",
-            })
-          );
-        } catch {
-          // Fallback: use grounding metadata sources
-          if (response.groundingMetadata?.sources) {
-            return response.groundingMetadata.sources
-              .filter((s) => s.uri)
-              .map((s) => {
-                let source = "";
-                try {
-                  source = new URL(s.uri).hostname.replace("www.", "");
-                } catch {
-                  source = s.uri;
-                }
-                return { title: s.title, url: s.uri, snippet: "", source };
-              });
-          }
-          return [];
-        }
+        parsed = JSON.parse(raw);
       } catch {
-        return [];
+        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[1].trim());
+        } else {
+          const braceStart = raw.indexOf("{");
+          const braceEnd = raw.lastIndexOf("}");
+          if (braceStart !== -1 && braceEnd > braceStart) {
+            parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+          } else {
+            parsed = {};
+          }
+        }
       }
-    })
-  );
-
-  for (const candidates of results) {
-    allCandidates.push(...candidates);
+      const candidates = (parsed.products || []).map(
+        (r: { title: string; url: string; snippet: string; source: string }) => ({
+          title: r.title || "",
+          url: r.url || "",
+          snippet: (r.snippet || "").slice(0, 500),
+          source: r.source || "",
+        })
+      );
+      return { success: true, data: candidates };
+    } catch {
+      // Fallback: use grounding metadata sources
+      if (response.groundingMetadata?.sources) {
+        const candidates = response.groundingMetadata.sources
+          .filter((s) => s.uri)
+          .map((s) => {
+            let source = "";
+            try {
+              source = new URL(s.uri).hostname.replace("www.", "");
+            } catch {
+              source = s.uri;
+            }
+            return { title: s.title, url: s.uri, snippet: "", source };
+          });
+        return { success: true, data: candidates };
+      }
+      return { success: true, data: [] };
+    }
+  } catch {
+    return { success: false, error: "Search failed" };
   }
-
-  return { success: true, data: allCandidates };
 }
 
 /**

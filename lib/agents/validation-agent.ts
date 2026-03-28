@@ -165,9 +165,9 @@ Return JSON:
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0.2,
-      thinkingConfig: { thinkingLevel: "medium" },
+      thinkingConfig: { thinkingLevel: "high" },
       responseMimeType: "application/json",
     });
 

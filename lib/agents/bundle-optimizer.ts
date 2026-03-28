@@ -79,9 +79,10 @@ export async function evaluateBundle(
         model,
         system,
         messages: [{ role: "user", content }],
-        max_tokens: 2500,
+        max_tokens: 10000,
         temperature: 0.3,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "high" },
       });
 
       const parsed = JSON.parse(response.content);

@@ -117,10 +117,10 @@ export async function scoreProduct(
         model,
         system,
         messages: [{ role: "user", content }],
-        max_tokens: 8000,
+        max_tokens: 16000,
         temperature: 0.2,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "medium" },
+        thinkingConfig: { thinkingLevel: "high" },
       });
 
       const parsed = JSON.parse(response.content);
