@@ -117,6 +117,7 @@ export async function scoreProduct(
         model,
         system,
         messages: [{ role: "user", content }],
+        max_tokens: 3000,
         temperature: 0.2,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "medium" },
@@ -259,8 +260,9 @@ Return JSON:
         try {
           const response = await geminiProvider.chat({
             model: selectModel("quick_score"),
-            system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good.",
+            system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. Return ONLY the JSON scores, no explanations.",
             messages: [{ role: "user", content: prompt }],
+            max_tokens: 1500,
             temperature: 0.1,
             responseMimeType: "application/json",
           });

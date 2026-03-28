@@ -159,7 +159,7 @@ ${jsonSchema}`;
 
 When researching floor plans, be thorough: navigate to the building's floor plans page, filter for the user's unit type (${unitLabel}), and click through each individual floor plan option. Most apartment websites have multiple layout variants per bed/bath count — examine each one. Capture floor plan image URLs when available.`,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 8192,
+      max_tokens: 5000,
       temperature: 0.2,
       tools: [{ googleSearch: {} }, { urlContext: {} }],
       responseMimeType: "application/json",

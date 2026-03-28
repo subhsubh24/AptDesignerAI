@@ -49,6 +49,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
       model,
       system,
       messages: [{ role: "user", content }],
+      max_tokens: 4000,
       temperature: 0.3,
       responseMimeType: "application/json",
     });

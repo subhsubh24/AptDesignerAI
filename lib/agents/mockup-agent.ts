@@ -50,6 +50,7 @@ export async function generateMockupPrompt(
       model,
       system,
       messages: [{ role: "user", content: prompt }],
+      max_tokens: 2000,
       temperature: 0.4,
       responseMimeType: "application/json",
     });

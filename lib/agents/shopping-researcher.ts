@@ -146,6 +146,7 @@ export async function generateSearchBrief(
         model,
         system,
         messages: [{ role: "user", content: prompt }],
+        max_tokens: 4000,
         temperature: 0.3,
         responseMimeType: "application/json",
       });
@@ -214,15 +215,15 @@ export async function searchProducts(
 
 Search query: "${searchQuery}"
 
-For each product found, provide the title, URL, a brief description, and the retailer name. Find up to ${maxResults} relevant product pages.
+Find up to ${maxResults} relevant product pages. For each, provide title, URL, brief snippet, and retailer.
 
-Return JSON:
+Return ONLY a valid JSON object — no text before or after:
 {
   "products": [
     {
       "title": "Product name",
       "url": "https://...",
-      "snippet": "Brief description of the product including price, material, color if visible",
+      "snippet": "Brief description — price, material, color if visible (max 1 sentence)",
       "source": "retailer domain"
     }
   ]
@@ -231,8 +232,9 @@ Return JSON:
       try {
         const response = await geminiProvider.chat({
           model: selectModel("search"),
-          system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages.",
+          system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
           messages: [{ role: "user", content: searchPrompt }],
+          max_tokens: 2000,
           temperature: 0.2,
           tools: [{ googleSearch: {} }],
         });
@@ -386,8 +388,9 @@ Return JSON:
       try {
         const response = await geminiProvider.chat({
           model: selectModel("quick_screen"),
-          system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category.",
+          system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category. Return ONLY the JSON ratings array.",
           messages: [{ role: "user", content: prompt }],
+          max_tokens: 2000,
           temperature: 0.1,
           responseMimeType: "application/json",
         });

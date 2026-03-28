@@ -79,6 +79,7 @@ export async function evaluateBundle(
         model,
         system,
         messages: [{ role: "user", content }],
+        max_tokens: 2500,
         temperature: 0.3,
         responseMimeType: "application/json",
       });
