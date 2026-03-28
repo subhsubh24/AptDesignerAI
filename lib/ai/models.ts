@@ -1,13 +1,16 @@
 /**
  * Model configuration for the AI pipeline.
- * All pipeline tasks use Gemini 3.1 Pro for reliability.
- * Flash was too unreliable (400 errors with urlContext, JSON truncation,
- * token limit exceeded, intermittent 500s).
+ * Uses Gemini 3.1 Flash Lite for all tasks — fastest and cheapest model
+ * ($0.25/1M input, $1.50/1M output) with full tool support
+ * (googleSearch, urlContext, responseMimeType, 1M context, 64K output).
+ *
+ * Note: gemini-3-flash-preview (the old Flash) was unreliable.
+ * gemini-3.1-flash-lite-preview is a newer, different model.
  */
 
 export const MODELS = {
   /** Primary model for all pipeline tasks */
-  primary: "gemini-3.1-pro-preview",
+  primary: "gemini-3.1-flash-lite-preview",
   /** Image generation model */
   image: "gemini-3.1-flash-image-preview",
 } as const;

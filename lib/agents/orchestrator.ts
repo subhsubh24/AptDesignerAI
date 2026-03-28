@@ -213,8 +213,8 @@ export async function runAgenticSearch(
 
     stats.totalSearchQueries = searchTasks.length;
 
-    // Run all searches with concurrency limit of 10 (Pro model is slower than Flash)
-    const searchLimit = pLimit(10);
+    // Run all searches with concurrency limit of 15 (Flash Lite is fast)
+    const searchLimit = pLimit(15);
     const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
     let searchesCompleted = 0;
 
@@ -330,7 +330,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(6);
+    const extractLimit = pLimit(10);
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
     const totalToExtract = Object.values(screenedByCategory).reduce(
