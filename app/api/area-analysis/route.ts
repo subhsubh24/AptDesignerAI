@@ -137,9 +137,15 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. For example, if they say to ignore something, don't include it in your assessment or recommendations.`
     : "";
 
+  // ── TARGET ROOM PHOTOS (clearly labeled) ──
+  const targetImageCount = (room.room_images || []).length;
   contentBlocks.push({
     type: "text",
-    text: `Focus area: ${room.name} (${room.room_type})${userContextNote}\n\nHere are the photos of this area:`,
+    text: `═══════════════════════════════════════════════════════════
+>>> TARGET ROOM: ${room.name} (${room.room_type}) — THIS IS THE ROOM YOU ARE ANALYZING <<<
+═══════════════════════════════════════════════════════════${userContextNote}
+
+The next ${targetImageCount} photo(s) are ALL from the ${room.name}. Your analysis, recommendations, and "what_it_needs" must be ONLY about this room.`,
   });
 
   for (const img of room.room_images || []) {
@@ -149,28 +155,62 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     });
   }
 
-  // Add cross-room context as TEXT ONLY — no images from other rooms
-  // Sending other rooms' photos causes the model to confuse which room it's analyzing
+  contentBlocks.push({
+    type: "text",
+    text: `═══ END OF ${room.name.toUpperCase()} PHOTOS ═══`,
+  });
+
+  // ── APARTMENT CONTEXT PHOTOS (for overall feel/materials/aesthetic) ──
+  // Include photos from other rooms so the model sees the full apartment vibe,
+  // but with extremely clear labeling so it doesn't confuse rooms.
   if (otherRooms && otherRooms.length > 0) {
+    contentBlocks.push({
+      type: "text",
+      text: `\n═══════════════════════════════════════════════════════════
+APARTMENT CONTEXT — OTHER ROOMS (for overall feel & material palette ONLY)
+═══════════════════════════════════════════════════════════
+These photos show the REST of the apartment. Study them to understand:
+- The apartment's overall material palette (floors, countertops, trim)
+- The existing color scheme and finishes throughout the home
+- The aesthetic thread that ties the rooms together
+- What furniture/decor choices have already been made elsewhere
+
+⚠️ DO NOT analyze these rooms. DO NOT recommend items for these rooms.
+⚠️ DO NOT confuse items in these photos with items in the ${room.name}.
+⚠️ Your ENTIRE analysis must be about the ${room.name} above — these photos are CONTEXT ONLY.`,
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const otherRoomSummaries = otherRooms.map((otherRoom: any) => {
+    for (const otherRoom of otherRooms as any[]) {
       const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown> }> | undefined;
       const otherDiagnosis = diagnoses?.[diagnoses.length - 1];
       const djson = otherDiagnosis?.diagnosis_json;
       const summary = djson?.summary as string | undefined;
       const direction = djson?.design_direction as string | undefined;
-      const works = djson?.what_works as string[] | undefined;
-      const lines = [`**${otherRoom.name}** (${otherRoom.room_type}):`];
-      if (summary) lines.push(`  Summary: ${summary}`);
-      if (direction) lines.push(`  Design direction: ${direction}`);
-      if (works?.length) lines.push(`  Key items: ${works.slice(0, 5).join("; ")}`);
-      if (!summary) lines.push(`  Status: not yet analyzed`);
-      return lines.join("\n");
-    }).join("\n\n");
+      const otherImages = (otherRoom.room_images || []) as Array<{ image_url: string }>;
+
+      // Label each other room clearly
+      const contextLines = [`── ${otherRoom.name} (${otherRoom.room_type}) ──`];
+      if (summary) contextLines.push(`Summary: ${summary}`);
+      if (direction) contextLines.push(`Design direction: ${direction}`);
+
+      contentBlocks.push({
+        type: "text",
+        text: contextLines.join("\n"),
+      });
+
+      // Include up to 2 photos per other room for visual context
+      for (const img of otherImages.slice(0, 2)) {
+        contentBlocks.push({
+          type: "image",
+          source: { type: "url", url: img.image_url },
+        });
+      }
+    }
 
     contentBlocks.push({
       type: "text",
-      text: `\n--- OTHER ROOMS IN THIS APARTMENT (text context only — for cross-room coherence) ---\nUse this context to ensure your recommendations are cohesive with the rest of the apartment. Do NOT confuse these descriptions with the room you are analyzing above.\n\n${otherRoomSummaries}`,
+      text: `═══ END OF APARTMENT CONTEXT ═══\n\nRemember: You are analyzing the **${room.name}** ONLY. The apartment context photos above are just for understanding the overall aesthetic and materials.`,
     });
   }
 
