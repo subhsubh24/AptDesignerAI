@@ -213,15 +213,15 @@ export async function runAgenticSearch(
 
     stats.totalSearchQueries = searchTasks.length;
 
-    // Run all searches with concurrency limit of 15
-    const searchLimit = pLimit(15);
+    // Run all searches with concurrency limit of 10 (Pro model is slower than Flash)
+    const searchLimit = pLimit(10);
     const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
     let searchesCompleted = 0;
 
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
         tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
-        const result = await searchProducts(task.query, 10, task.tier);
+        const result = await searchProducts(task.query, 10, task.tier, task.category);
         const candidates = result.success ? (result.data || []) : [];
         for (const c of candidates) {
           tracer.trace({ phase: "search", action: "found", url: c.url, category: task.category, tier: task.tier });
@@ -330,7 +330,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(10);
+    const extractLimit = pLimit(6);
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
     const totalToExtract = Object.values(screenedByCategory).reduce(
@@ -787,7 +787,7 @@ export async function runAgenticSearch(
         backfillSearchLimit(async () => {
           const styleHint = ctx.designDirection?.style_notes || "modern apartment";
           const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price 2025`;
-          const searchResult = await searchProducts(backfillQuery, 10, wt.tier);
+          const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category);
           if (!searchResult.success || !searchResult.data) return;
 
           const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));

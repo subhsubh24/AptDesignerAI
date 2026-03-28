@@ -55,6 +55,75 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
   ],
 };
 
+/** Best retailers per category — these get dedicated site: searches */
+const CATEGORY_RETAILERS: Record<string, Record<PriceTier, string[]>> = {
+  rug: {
+    budget: ["rugsusa.com", "wayfair.com", "target.com", "ikea.com"],
+    balanced: ["ruggable.com", "westelm.com", "crateandbarrel.com", "article.com"],
+    high_end: ["luluandgeorgia.com", "serenaandlily.com", "restorationhardware.com", "roomandboard.com"],
+  },
+  coffee_table: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com"],
+    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "restorationhardware.com"],
+  },
+  dining_table: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
+    balanced: ["article.com", "westelm.com", "crateandbarrel.com", "castlery.com"],
+    high_end: ["roomandboard.com", "arhaus.com", "restorationhardware.com", "dwr.com"],
+  },
+  accent_chair: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "worldmarket.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "castlery.com"],
+    high_end: ["roomandboard.com", "dwr.com", "arhaus.com", "restorationhardware.com"],
+  },
+  sofa: {
+    budget: ["ikea.com", "wayfair.com", "amazon.com", "sixpenny.com"],
+    balanced: ["article.com", "burrow.com", "interior-define.com", "castlery.com"],
+    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+  },
+  side_table: {
+    budget: ["ikea.com", "target.com", "wayfair.com", "amazon.com"],
+    balanced: ["cb2.com", "westelm.com", "article.com", "crateandbarrel.com"],
+    high_end: ["roomandboard.com", "dwr.com", "serenaandlily.com", "mcgeeandco.com"],
+  },
+  bookshelf: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "article.com"],
+    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+  },
+  floor_lamp: {
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
+    balanced: ["cb2.com", "westelm.com", "allmodern.com", "article.com"],
+    high_end: ["rejuvenation.com", "dwr.com", "serenaandlily.com", "luluandgeorgia.com"],
+  },
+  table_lamp: {
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
+    balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "allmodern.com"],
+    high_end: ["rejuvenation.com", "serenaandlily.com", "mcgeeandco.com", "luluandgeorgia.com"],
+  },
+  media_console: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "floyddetroit.com"],
+    high_end: ["roomandboard.com", "restorationhardware.com", "arhaus.com", "dwr.com"],
+  },
+  art: {
+    budget: ["target.com", "society6.com", "amazon.com", "ikea.com"],
+    balanced: ["westelm.com", "cb2.com", "luluandgeorgia.com", "mcgeeandco.com"],
+    high_end: ["artdotcom.com", "luluandgeorgia.com", "serenaandlily.com", "mcgeeandco.com"],
+  },
+  curtains: {
+    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com"],
+    balanced: ["westelm.com", "crateandbarrel.com", "potterybarn.com", "cb2.com"],
+    high_end: ["serenaandlily.com", "potterybarn.com", "restorationhardware.com", "mcgeeandco.com"],
+  },
+  throw_pillow: {
+    budget: ["target.com", "ikea.com", "hm.com", "amazon.com"],
+    balanced: ["westelm.com", "cb2.com", "crateandbarrel.com", "mcgeeandco.com"],
+    high_end: ["serenaandlily.com", "luluandgeorgia.com", "mcgeeandco.com", "potterybarn.com"],
+  },
+};
+
 /**
  * Generate a shopping brief based on room diagnosis — now with 5 diverse queries per tier.
  */
@@ -107,19 +176,43 @@ export async function generateSearchBrief(
 /**
  * Search the web for products using Gemini Google Search grounding.
  * Returns up to maxResults candidates per query.
+ *
+ * When a category is provided, also generates targeted `site:` searches
+ * against the best retailers for that category+tier from CATEGORY_RETAILERS.
  */
 export async function searchProducts(
   query: string,
   maxResults: number = 10,
-  tier?: PriceTier
+  tier?: PriceTier,
+  category?: string
 ): Promise<AgentResult<SearchCandidate[]>> {
   const domains = tier
     ? TIER_DOMAINS[tier]
     : [...TIER_DOMAINS.budget, ...TIER_DOMAINS.balanced, ...TIER_DOMAINS.high_end];
 
-  const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.
+  // Build the list of queries to run: the original + targeted site: searches
+  const queries: string[] = [query];
 
-Search query: "${query}"
+  // Add targeted site: searches for the best retailers for this category+tier
+  if (category && tier) {
+    const categoryKey = category.toLowerCase().replace(/\s+/g, "_");
+    const retailers = CATEGORY_RETAILERS[categoryKey]?.[tier];
+    if (retailers) {
+      // Pick top 2 retailers for dedicated site: searches
+      for (const retailer of retailers.slice(0, 2)) {
+        queries.push(`site:${retailer} ${query}`);
+      }
+    }
+  }
+
+  const allCandidates: SearchCandidate[] = [];
+
+  // Run all queries in parallel
+  const results = await Promise.all(
+    queries.map(async (searchQuery) => {
+      const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.
+
+Search query: "${searchQuery}"
 
 For each product found, provide the title, URL, a brief description, and the retailer name. Find up to ${maxResults} relevant product pages.
 
@@ -135,70 +228,70 @@ Return JSON:
   ]
 }`;
 
-  try {
-    const response = await geminiProvider.chat({
-      model: selectModel("search"),
-      system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages.",
-      messages: [{ role: "user", content: searchPrompt }],
-      temperature: 0.2,
-      tools: [{ googleSearch: {} }],
-    });
-
-    let candidates: SearchCandidate[] = [];
-
-    try {
-      // gemini-3-flash-preview doesn't support responseMimeType + tools,
-      // so we parse JSON from the text response
-      const raw = response.content.trim();
-      let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
       try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[1].trim());
-        } else {
-          const braceStart = raw.indexOf("{");
-          const braceEnd = raw.lastIndexOf("}");
-          if (braceStart !== -1 && braceEnd > braceStart) {
-            parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
-          } else {
-            parsed = {};
-          }
-        }
-      }
-      candidates = (parsed.products || []).map(
-        (r: { title: string; url: string; snippet: string; source: string }) => ({
-          title: r.title || "",
-          url: r.url || "",
-          snippet: (r.snippet || "").slice(0, 500),
-          source: r.source || "",
-        })
-      );
-    } catch {
-      // Fallback: use grounding metadata sources
-      if (response.groundingMetadata?.sources) {
-        candidates = response.groundingMetadata.sources
-          .filter((s) => s.uri)
-          .map((s) => {
-            let source = "";
-            try {
-              source = new URL(s.uri).hostname.replace("www.", "");
-            } catch {
-              source = s.uri;
-            }
-            return { title: s.title, url: s.uri, snippet: "", source };
-          });
-      }
-    }
+        const response = await geminiProvider.chat({
+          model: selectModel("search"),
+          system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages.",
+          messages: [{ role: "user", content: searchPrompt }],
+          temperature: 0.2,
+          tools: [{ googleSearch: {} }],
+        });
 
-    return { success: true, data: candidates };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Search failed",
-    };
+        try {
+          const raw = response.content.trim();
+          let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (jsonMatch) {
+              parsed = JSON.parse(jsonMatch[1].trim());
+            } else {
+              const braceStart = raw.indexOf("{");
+              const braceEnd = raw.lastIndexOf("}");
+              if (braceStart !== -1 && braceEnd > braceStart) {
+                parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+              } else {
+                parsed = {};
+              }
+            }
+          }
+          return (parsed.products || []).map(
+            (r: { title: string; url: string; snippet: string; source: string }) => ({
+              title: r.title || "",
+              url: r.url || "",
+              snippet: (r.snippet || "").slice(0, 500),
+              source: r.source || "",
+            })
+          );
+        } catch {
+          // Fallback: use grounding metadata sources
+          if (response.groundingMetadata?.sources) {
+            return response.groundingMetadata.sources
+              .filter((s) => s.uri)
+              .map((s) => {
+                let source = "";
+                try {
+                  source = new URL(s.uri).hostname.replace("www.", "");
+                } catch {
+                  source = s.uri;
+                }
+                return { title: s.title, url: s.uri, snippet: "", source };
+              });
+          }
+          return [];
+        }
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  for (const candidates of results) {
+    allCandidates.push(...candidates);
   }
+
+  return { success: true, data: allCandidates };
 }
 
 /**

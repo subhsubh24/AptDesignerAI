@@ -1,13 +1,12 @@
 /**
  * Model configuration for the AI pipeline.
- * Gemini 3 Flash for fast tasks, Gemini 3.1 Pro for deep analysis,
- * Gemini 3.1 Flash Image for image generation.
+ * All pipeline tasks use Gemini 3.1 Pro for reliability.
+ * Flash was too unreliable (400 errors with urlContext, JSON truncation,
+ * token limit exceeded, intermittent 500s).
  */
 
 export const MODELS = {
-  /** Fast model for extraction, normalization, search briefs */
-  fast: "gemini-3-flash-preview",
-  /** Primary analysis model for diagnosis, scoring, evaluation, validation */
+  /** Primary model for all pipeline tasks */
   primary: "gemini-3.1-pro-preview",
   /** Image generation model */
   image: "gemini-3.1-flash-image-preview",
@@ -33,25 +32,8 @@ export function selectModel(
     | "quick_score"
     | "quick_screen"
 ): string {
-  switch (task) {
-    case "diagnosis":
-    case "apartment_analysis":
-    case "area_analysis":
-    case "scoring":
-    case "bundle":
-    case "validation":
-    case "apartment_research":
-    case "search_brief":
-      return MODELS.primary;
-    case "image_generation":
-      return MODELS.image;
-    case "extraction":
-    case "mockup_prompt":
-    case "search":
-    case "quick_score":
-    case "quick_screen":
-      return MODELS.fast;
-    default:
-      return MODELS.fast;
+  if (task === "image_generation") {
+    return MODELS.image;
   }
+  return MODELS.primary;
 }
