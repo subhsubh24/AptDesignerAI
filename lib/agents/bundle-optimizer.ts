@@ -82,7 +82,7 @@ export async function evaluateBundle(
         max_tokens: 10000,
         temperature: 0.3,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "high" },
+        thinkingConfig: { thinkingLevel: "medium" },
       });
 
       const parsed = JSON.parse(response.content);

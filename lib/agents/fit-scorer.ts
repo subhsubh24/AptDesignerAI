@@ -120,7 +120,7 @@ export async function scoreProduct(
         max_tokens: 16000,
         temperature: 0.2,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "high" },
+        thinkingConfig: { thinkingLevel: "medium" },
       });
 
       const parsed = JSON.parse(response.content);
