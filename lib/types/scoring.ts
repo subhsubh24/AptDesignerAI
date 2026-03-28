@@ -15,6 +15,7 @@ export interface BundleScores {
   scale_balance_score: number;
   style_consistency_score: number;
   room_completion_score: number;
+  spatial_arrangement_score?: number;
   practicality_score: number;
 }
 

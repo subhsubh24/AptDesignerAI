@@ -16,6 +16,9 @@ export interface BundleContext {
   designProfile?: DynamicDesignProfile;
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
+  spatialLayout?: string;
+  placementMap?: Record<string, string>;
+  floorPlan?: Record<string, unknown>;
 }
 
 export async function evaluateBundle(
@@ -28,7 +31,10 @@ export async function evaluateBundle(
     bundleCtx.roomType,
     bundleCtx.priorities,
     bundleCtx.diagnosis,
-    bundleCtx.designDirection
+    bundleCtx.designDirection,
+    bundleCtx.spatialLayout,
+    bundleCtx.placementMap,
+    bundleCtx.floorPlan
   );
 
   // Build bundle context with visual metadata

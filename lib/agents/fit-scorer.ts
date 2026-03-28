@@ -20,6 +20,12 @@ export interface ScoringContext {
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
   userFeedbackContext?: string;
+  /** Where this specific product is intended to go in the room */
+  placement?: string;
+  /** Overall spatial layout plan for the room */
+  spatialLayout?: string;
+  /** Floor plan dimensions if available */
+  floorPlan?: Record<string, unknown>;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -59,7 +65,10 @@ export async function scoreProduct(
     scoringCtx.otherRoomsContext,
     scoringCtx.priorities,
     scoringCtx.diagnosis,
-    scoringCtx.designDirection
+    scoringCtx.designDirection,
+    scoringCtx.placement,
+    scoringCtx.spatialLayout,
+    scoringCtx.floorPlan
   );
 
   // Extract visual metadata from product metadata

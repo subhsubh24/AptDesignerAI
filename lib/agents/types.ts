@@ -20,6 +20,11 @@ export interface AgentContext {
 
   // Cross-session learning — user feedback from accepted/rejected products
   userFeedbackContext?: string;
+
+  // Spatial context — per-item placement and overall layout plan
+  spatialLayout?: string;
+  placementMap?: Record<string, string>;
+  floorPlan?: Record<string, unknown>;
 }
 
 export interface AgentResult<T = unknown> {

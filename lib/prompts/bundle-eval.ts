@@ -4,7 +4,10 @@ export function getBundleEvalPrompt(
   roomType: string,
   priorities?: string[],
   diagnosis?: DiagnosisData,
-  designDirection?: DesignDirection
+  designDirection?: DesignDirection,
+  spatialLayout?: string,
+  placementMap?: Record<string, string>,
+  floorPlan?: Record<string, unknown>
 ): string {
   // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
@@ -27,6 +30,19 @@ export function getBundleEvalPrompt(
     ? `Client priorities: ${priorities.join(", ")}`
     : "";
 
+  // Build spatial context
+  const spatialCtx = spatialLayout
+    ? `\n\n## SPATIAL LAYOUT PLAN\n${spatialLayout}`
+    : "";
+
+  const floorPlanCtx = floorPlan
+    ? `\n\n## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}`
+    : "";
+
+  const placementCtx = placementMap && Object.keys(placementMap).length > 0
+    ? `\n\n## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, placement]) => `- **${cat}**: ${placement}`).join("\n")}`
+    : "";
+
   return `Evaluate this bundle of products as a complete room concept. You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
 ## ROOM CONTEXT
@@ -39,7 +55,7 @@ ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 ## WHAT'S ALREADY IN THE ROOM
 ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}
+${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}
 
 ## SCORING DIMENSIONS (each 0-10)
 
@@ -84,7 +100,19 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}
    - 5-6: Addresses some issues but leaves major gaps (e.g., still no rug, still no art)
    - Below 5: Fails to address the main diagnosed problems
 
-6. **practicality_score**: Is this livable? Think about how the client ACTUALLY uses this room:
+6. **spatial_arrangement_score**: Does this bundle work as a physical arrangement?
+   - Mentally place every item in its intended position (see INTENDED PLACEMENTS above)
+   - Check traffic flow: can someone walk through the room naturally? 36" for main paths, 18" between coffee table and sofa
+   - Check zone clarity: in multi-function rooms, do items define clear zones (living, dining, work)?
+   - Check sightlines: is there a clear focal point? Can people see each other in conversation?
+   - Check relationships: are items that should be near each other actually near each other? (lamp by reading chair, side table within reach of sofa arm)
+   - Check orientation: do seating pieces face each other or a focal point, not the wall?
+   - 9-10: Every piece has a clear home, flow is natural, zones are well-defined, the room feels intentional
+   - 7-8: Arrangement mostly works, one piece feels slightly awkward in position
+   - 5-6: Some spatial issues — crowded zone, unclear path, pieces that seem to float without purpose
+   - Below 5: Significant spatial problems — items blocking paths, no clear arrangement logic, zones collide
+
+7. **practicality_score**: Is this livable? Think about how the client ACTUALLY uses this room:
    - Can they host guests? Count total seating capacity vs. client's hosting needs
    - Can they eat meals with friends? Is the dining setup adequate for their lifestyle?
    - Can they walk through easily? Check clearances (30+ inches for walkways)
@@ -104,6 +132,7 @@ Return a JSON object:
     "scale_balance_score": number,
     "style_consistency_score": number,
     "room_completion_score": number,
+    "spatial_arrangement_score": number,
     "practicality_score": number
   },
   "analysis": {

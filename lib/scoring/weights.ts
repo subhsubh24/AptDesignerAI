@@ -14,11 +14,12 @@ export const PRODUCT_WEIGHTS = {
 } as const;
 
 export const BUNDLE_WEIGHTS = {
-  palette_harmony: 0.22,
-  material_balance: 0.16,
-  scale_balance: 0.18,
-  style_consistency: 0.20,
-  room_completion: 0.14,
+  palette_harmony: 0.18,
+  material_balance: 0.14,
+  scale_balance: 0.14,
+  style_consistency: 0.16,
+  room_completion: 0.12,
+  spatial_arrangement: 0.16,
   practicality: 0.10,
 } as const;
 

@@ -8,7 +8,10 @@ export function getProductEvalPrompt(
   otherRoomsContext?: string,
   priorities?: string[],
   diagnosis?: DiagnosisData,
-  designDirection?: DesignDirection
+  designDirection?: DesignDirection,
+  placement?: string,
+  spatialLayout?: string,
+  floorPlan?: Record<string, unknown>
 ): string {
   // Build dynamic design direction from diagnosis — no hardcoded values
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -42,6 +45,19 @@ export function getProductEvalPrompt(
     ? `User priorities: ${priorities.join(", ")}`
     : "";
 
+  // Build spatial context
+  const placementContext = placement
+    ? `\n- **Intended placement**: ${placement}`
+    : "";
+
+  const spatialContext = spatialLayout
+    ? `\n\n## SPATIAL LAYOUT PLAN\n${spatialLayout}`
+    : "";
+
+  const floorPlanContext = floorPlan
+    ? `\n\n## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}\nSpatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
+    : "";
+
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.
 
 Evaluate the following product using THREE LAYERS of analysis:
@@ -50,7 +66,7 @@ Evaluate the following product using THREE LAYERS of analysis:
 - Room type: ${roomType}
 - Product category: ${category}
 - Budget mode: ${budgetMode}
-- Existing items in room: ${existingItems.length > 0 ? existingItems.join(", ") : "See apartment context in system prompt and room photos"}
+- Existing items in room: ${existingItems.length > 0 ? existingItems.join(", ") : "See apartment context in system prompt and room photos"}${placementContext}
 ${prioritiesContext ? `\n${prioritiesContext}` : ""}
 ${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\n${otherRoomsContext}` : ""}
 
@@ -58,7 +74,7 @@ ${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\
 ${paletteInfo}
 ${materialsInfo}
 ${styleInfo}
-${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}
+${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}
 
 ## LAYER 1: INDIVIDUAL ITEM FIT (8 dimensions, each 0-10)
 
@@ -68,20 +84,22 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
 
 3. **material_fit_score**: Does the material work with the apartment's existing finishes? Consider what you SEE in the room photos — the flooring, the cabinetry, any existing furniture materials.
 
-4. **scale_fit_score**: Is it correctly scaled for this specific room? Use the floor plan dimensions from the system prompt. Rules:
+4. **scale_fit_score**: Is it correctly scaled for its intended placement? Use the floor plan dimensions and room photos. Consider:
+   - Will it PHYSICALLY FIT in the intended placement? Check dimensions against available space.
    - Rugs too small for the seating area: heavily penalize
    - Coffee tables too small or too large for the sofa arrangement: penalize
-   - Dining tables: must seat the right number for the space and the client's needs
-   - Art too small for the wall: penalize
-   - Oversized pieces in a small room: penalize
+   - Dining tables: must seat the right number AND leave 24" pullback for chairs
+   - Art too small for the wall space: penalize
+   - Oversized pieces that would block walkways or crowd adjacent furniture: penalize
+   - Check the intended placement description — does the product's size work in that specific spot?
 
-5. **function_fit_score**: Does it solve a real problem identified in the room diagnosis? Consider:
+5. **function_fit_score**: Does it solve a real problem AND work in its intended position? Consider:
    - Seating capacity — does the client need to host guests? Is there enough seating for entertaining?
    - Dining — can they host dinner parties? Is the table big enough?
    - Storage — does it address clutter or organization needs?
-   - Lighting — does it solve a lighting gap?
+   - Lighting — does it solve a lighting gap? If it's a reading lamp, is it placed near the reading spot?
    - Comfort — is it actually comfortable for daily use, not just pretty?
-   - Flow — does it work with the room's traffic patterns and layout?
+   - Flow — does it work with the room's traffic patterns and spatial layout? Does the placement make functional sense (e.g., side table within arm's reach of seating, lamp near a task area)?
 
 6. **cohesion_fit_score**: Does it work with what's already in the room? Look at the room photos — consider the existing furniture, finishes, and overall vibe. Don't assume what's there; base this on what you SEE.
 

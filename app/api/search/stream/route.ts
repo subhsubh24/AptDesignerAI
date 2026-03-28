@@ -82,6 +82,24 @@ export async function POST(request: Request) {
   // Load cross-session user feedback (accepted/rejected products)
   const userFeedbackContext = await loadUserFeedbackContext(supabase, room_id, room.project_id);
 
+  // Extract spatial context from diagnosis and building research
+  const diagnosisJson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
+  const spatialLayout = diagnosisJson?.spatial_layout as string | undefined;
+
+  // Build placement map from what_it_needs items
+  const placementMap: Record<string, string> = {};
+  const whatItNeeds = diagnosisJson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
+  if (whatItNeeds) {
+    for (const item of whatItNeeds) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
+
+  // Extract floor plan from building research
+  const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -95,6 +113,9 @@ export async function POST(request: Request) {
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
     userFeedbackContext: userFeedbackContext || undefined,
+    spatialLayout: spatialLayout || undefined,
+    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+    floorPlan: floorPlan || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

@@ -544,6 +544,9 @@ export async function runAgenticSearch(
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
                 userFeedbackContext: ctx.userFeedbackContext,
+                placement: ctx.placementMap?.[product.category || ""],
+                spatialLayout: ctx.spatialLayout,
+                floorPlan: ctx.floorPlan,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -705,6 +708,9 @@ export async function runAgenticSearch(
       designProfile: ctx.designProfile,
       diagnosis: ctx.diagnosis,
       designDirection: ctx.designDirection,
+      spatialLayout: ctx.spatialLayout,
+      placementMap: ctx.placementMap,
+      floorPlan: ctx.floorPlan,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
@@ -884,6 +890,9 @@ export async function runAgenticSearch(
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
                 userFeedbackContext: ctx.userFeedbackContext,
+                placement: ctx.placementMap?.[product.category || ""],
+                spatialLayout: ctx.spatialLayout,
+                floorPlan: ctx.floorPlan,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
