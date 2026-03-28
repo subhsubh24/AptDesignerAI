@@ -71,29 +71,38 @@ export async function generateSearchBrief(
   const system = getSystemPrompt(designProfile);
   const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities);
 
-  try {
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 4096,
-      temperature: 0.3,
-      responseMimeType: "application/json",
-    });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 4096,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
 
-    const parsed = JSON.parse(response.content) as SearchBrief;
-    return {
-      success: true,
-      data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-      model: response.model,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Search brief generation failed",
-    };
+      const parsed = JSON.parse(response.content) as SearchBrief;
+      return {
+        success: true,
+        data: parsed,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        model: response.model,
+      };
+    } catch (error) {
+      console.error(`[search-brief] Attempt ${attempt + 1} failed:`, error instanceof Error ? error.message : error);
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Search brief generation failed",
+      };
+    }
   }
+
+  return { success: false, error: "Search brief generation failed after retries" };
 }
 
 /**

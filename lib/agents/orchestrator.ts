@@ -176,8 +176,9 @@ export async function runAgenticSearch(
       ctx.designProfile, ctx.designDirection, ctx.priorities
     );
     if (!briefResult.success || !briefResult.data) {
-      reportStep({ step: "Generating intensive search brief", status: "failed" });
-      return { success: false, error: "Failed to generate search brief" };
+      reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
+      console.error("[orchestrator] Search brief failed:", briefResult.error);
+      return { success: false, error: briefResult.error || "Failed to generate search brief" };
     }
     const brief: SearchBrief = briefResult.data;
     reportStep({ step: "Generating intensive search brief", status: "completed", data: brief });
