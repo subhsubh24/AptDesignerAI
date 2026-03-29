@@ -134,7 +134,13 @@ async function convertMessages(
  */
 function convertTools(tools?: GeminiTool[]): Record<string, unknown>[] | undefined {
   if (!tools || tools.length === 0) return undefined;
-  return tools as Record<string, unknown>[];
+  // Gemini SDK expects each Tool object to hold multiple tool types as properties,
+  // not separate objects per tool. Merge all tool entries into a single object.
+  const merged: Record<string, unknown> = {};
+  for (const tool of tools) {
+    Object.assign(merged, tool);
+  }
+  return [merged];
 }
 
 export const geminiProvider: AIProvider = {

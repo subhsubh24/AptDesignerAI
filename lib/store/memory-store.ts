@@ -101,15 +101,26 @@ class QueryBuilder {
 
   insert(data: Row | Row[]) {
     this.insertData = data;
-    return { select: () => this._returnSelectAfterInsert() };
+    return {
+      select: () => this._returnSelectAfterInsert(),
+      // Support bare .insert() without .select() — still need to persist data
+      then: (resolve: (value: { data: any; error: any }) => void) => {
+        resolve(this._doInsert(false));
+      },
+    };
   }
 
   private _returnSelectAfterInsert() {
     this.returnSelect = true;
-    return {
+    // Support both .insert().select().single() AND bare .insert().select()
+    const result = {
       single: () => this._doInsert(true),
       maybeSingle: () => this._doInsert(true),
+      then: (resolve: (value: { data: any; error: any }) => void) => {
+        resolve(this._doInsert(false));
+      },
     };
+    return result;
   }
 
   private _doInsert(asSingle: boolean): { data: any; error: any } {

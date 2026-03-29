@@ -216,7 +216,7 @@ When researching floor plans, be thorough: navigate to the building's floor plan
       max_tokens: 8000,
       temperature: 0.2,
       tools: [{ googleSearch: {} }, { urlContext: {} }],
-      responseMimeType: "application/json",
+      // Note: responseMimeType is incompatible with built-in tools (googleSearch, urlContext)
     });
 
     // Gemini 3 models support structured output + built-in tools,
