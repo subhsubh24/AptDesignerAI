@@ -173,7 +173,8 @@ export async function runAgenticSearch(
     reportStep({ step: "Generating intensive search brief", status: "running" });
     const briefResult = await generateSearchBrief(
       ctx.roomType, missingCategories, ctx.budgetMode, categoryHints,
-      ctx.designProfile, ctx.designDirection, ctx.priorities
+      ctx.designProfile, ctx.designDirection, ctx.priorities,
+      ctx.keepItems, ctx.spatialLayout, ctx.roomSummary
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
@@ -471,7 +472,7 @@ export async function runAgenticSearch(
 
         quickScorePromises.push(
           (async () => {
-            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection, ctx.placementMap?.[category], ctx.floorPlan);
+            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection, ctx.placementMap?.[category], ctx.floorPlan, ctx.diagnosis as Record<string, unknown> | undefined, ctx.priorities, ctx.keepItems);
             if (result.success && result.data) {
               for (const entry of result.data) {
                 quickScoresByProduct.set(entry.productId, entry.quickScore);
@@ -540,6 +541,7 @@ export async function runAgenticSearch(
                 existingItems: ctx.keepItems,
                 roomImageUrls: ctx.imageUrls,
                 priorities: ctx.priorities,
+                otherRoomsContext: ctx.otherRoomsContext,
                 designProfile: ctx.designProfile,
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
@@ -640,6 +642,13 @@ export async function runAgenticSearch(
         existingItems: ctx.keepItems,
         roomImageUrls: ctx.imageUrls,
         designProfile: ctx.designProfile,
+        placementMap: ctx.placementMap,
+        spatialLayout: ctx.spatialLayout,
+        floorPlan: ctx.floorPlan,
+        lightingConditions: ctx.lightingConditions,
+        windowDoorPositions: ctx.windowDoorPositions,
+        outletPositions: ctx.outletPositions,
+        priorities: ctx.priorities,
       }
     );
 
@@ -708,6 +717,7 @@ export async function runAgenticSearch(
       roomType: ctx.roomType,
       roomImageUrls: ctx.imageUrls,
       priorities: ctx.priorities,
+      existingItems: ctx.keepItems,
       designProfile: ctx.designProfile,
       diagnosis: ctx.diagnosis,
       designDirection: ctx.designDirection,
@@ -716,6 +726,7 @@ export async function runAgenticSearch(
       floorPlan: ctx.floorPlan,
       lightingConditions: ctx.lightingConditions,
       windowDoorPositions: ctx.windowDoorPositions,
+      outletPositions: ctx.outletPositions,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
@@ -891,6 +902,7 @@ export async function runAgenticSearch(
                 existingItems: ctx.keepItems,
                 roomImageUrls: ctx.imageUrls,
                 priorities: ctx.priorities,
+                otherRoomsContext: ctx.otherRoomsContext,
                 designProfile: ctx.designProfile,
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,

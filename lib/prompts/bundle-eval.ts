@@ -9,7 +9,9 @@ export function getBundleEvalPrompt(
   placementMap?: Record<string, string>,
   floorPlan?: Record<string, unknown>,
   lightingConditions?: string,
-  windowDoorPositions?: string
+  windowDoorPositions?: string,
+  outletPositions?: string,
+  existingItems?: string[]
 ): string {
   // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
@@ -53,6 +55,14 @@ export function getBundleEvalPrompt(
     ? `\n\n## WINDOW & DOOR POSITIONS\n${windowDoorPositions}`
     : "";
 
+  const outletCtx = outletPositions
+    ? `\n\n## OUTLET POSITIONS\n${outletPositions}\nCheck that powered items (lamps, media consoles, smart devices) have realistic outlet access in their intended positions.`
+    : "";
+
+  const existingItemsCtx = existingItems?.length
+    ? `\n\n## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.`
+    : "";
+
   return `Evaluate this bundle of products as a complete room concept. You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
 ## ROOM CONTEXT
@@ -65,7 +75,7 @@ ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 ## WHAT'S ALREADY IN THE ROOM
 ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}
+${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}
 
 ## SCORING DIMENSIONS (each 0-10)
 

@@ -88,14 +88,34 @@ export async function POST(request: Request) {
 
   // Build placement map from what_it_needs items
   const placementMap: Record<string, string> = {};
-  const whatItNeeds = diagnosisJson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
-  if (whatItNeeds) {
-    for (const item of whatItNeeds) {
+  const whatItNeedsRaw = diagnosisJson?.what_it_needs as Array<{
+    category?: string;
+    search_title?: string;
+    description?: string;
+    priority?: "high" | "medium" | "low";
+    specs?: string;
+    placement?: string;
+  }> | undefined;
+  if (whatItNeedsRaw) {
+    for (const item of whatItNeedsRaw) {
       if (item.category && item.placement) {
         placementMap[item.category] = item.placement;
       }
     }
   }
+
+  // Extract structured area-analysis outputs
+  const roomSummary = diagnosisJson?.summary as string | undefined;
+  const whatItNeeds = whatItNeedsRaw?.map((item) => ({
+    category: item.category || "unknown",
+    search_title: item.search_title,
+    description: item.description,
+    priority: item.priority,
+    specs: item.specs,
+    placement: item.placement,
+  }));
+  const whatWorks = diagnosisJson?.what_works as string[] | undefined;
+  const whatShouldGo = diagnosisJson?.what_should_go as string[] | undefined;
 
   // Extract floor plan from building research
   const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
@@ -105,9 +125,39 @@ export async function POST(request: Request) {
   const windowDoorPositions = diagnosisJson?.window_door_positions as string | undefined;
   const outletPositions = diagnosisJson?.outlet_positions as string | undefined;
 
+  // Build other-rooms context for cross-room coherence
+  let otherRoomsContext: string | undefined;
+  if (project) {
+    const { data: otherRooms } = await supabase
+      .from("rooms")
+      .select("name, room_type")
+      .eq("project_id", room.project_id)
+      .neq("id", room_id);
+    if (otherRooms && otherRooms.length > 0) {
+      // Get diagnoses for other rooms that have been analyzed
+      const { data: otherDiagnoses } = await supabase
+        .from("room_diagnoses")
+        .select("room_id, design_direction_json");
+      const otherRoomSummaries: string[] = [];
+      for (const otherRoom of otherRooms) {
+        const otherDiag = otherDiagnoses?.find(
+          (d: { room_id: string }) => d.room_id === otherRoom.id
+        );
+        const dd = otherDiag?.design_direction_json as { style_notes?: string } | undefined;
+        otherRoomSummaries.push(
+          `${otherRoom.name} (${otherRoom.room_type})${dd?.style_notes ? `: ${dd.style_notes}` : ""}`
+        );
+      }
+      if (otherRoomSummaries.length > 0) {
+        otherRoomsContext = `Other rooms in apartment:\n${otherRoomSummaries.join("\n")}`;
+      }
+    }
+  }
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
+    roomName: room.name || undefined,
     keepItems: room.keep_items || [],
     replaceItems: room.replace_items || [],
     priorities: room.priorities || [],
@@ -117,7 +167,12 @@ export async function POST(request: Request) {
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
+    roomSummary: roomSummary || undefined,
+    whatItNeeds: whatItNeeds && whatItNeeds.length > 0 ? whatItNeeds : undefined,
+    whatWorks: whatWorks && whatWorks.length > 0 ? whatWorks : undefined,
+    whatShouldGo: whatShouldGo && whatShouldGo.length > 0 ? whatShouldGo : undefined,
     userFeedbackContext: userFeedbackContext || undefined,
+    otherRoomsContext: otherRoomsContext || undefined,
     spatialLayout: spatialLayout || undefined,
     placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
     floorPlan: floorPlan || undefined,

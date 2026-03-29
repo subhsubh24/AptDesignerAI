@@ -199,7 +199,10 @@ export async function quickScoreProducts(
   budgetMode: string,
   designDirection?: DesignDirection,
   placement?: string,
-  floorPlan?: Record<string, unknown>
+  floorPlan?: Record<string, unknown>,
+  diagnosis?: Record<string, unknown>,
+  priorities?: string[],
+  existingItems?: string[],
 ): Promise<AgentResult<QuickScoreEntry[]>> {
   if (products.length === 0) {
     return { success: true, data: [] };
@@ -249,10 +252,37 @@ export async function quickScoreProducts(
         floorPlan?.total_sqft && `Apartment: ~${floorPlan.total_sqft} sqft`,
       ].filter(Boolean).join("\n");
 
+      // Build diagnosis context
+      const diagnosisHint = (() => {
+        if (!diagnosis) return "";
+        const parts: string[] = [];
+        if (diagnosis.summary) parts.push(`Room assessment: ${diagnosis.summary}`);
+        const issues = [
+          ...(diagnosis.scale_proportion_issues as string[] || []),
+          ...(diagnosis.color_issues as string[] || []),
+          ...(diagnosis.texture_material_issues as string[] || []),
+        ];
+        if (issues.length > 0) parts.push(`Known issues to solve: ${issues.join("; ")}`);
+        return parts.length > 0 ? parts.join("\n") : "";
+      })();
+
+      // Build existing items context
+      const existingHint = existingItems && existingItems.length > 0
+        ? `Existing items to harmonize with: ${existingItems.join(", ")}`
+        : "";
+
+      // Build priorities context
+      const prioritiesHint = priorities && priorities.length > 0
+        ? `Client priorities: ${priorities.join(", ")}`
+        : "";
+
       const prompt = `Quick-score these ${category} products for a ${roomType}. Budget mode: ${budgetMode}.
 
 Design direction: ${aesthetic}
 ${spatialHint ? `\n## SPATIAL CONTEXT\n${spatialHint}` : ""}
+${diagnosisHint ? `\n## ROOM DIAGNOSIS\n${diagnosisHint}` : ""}
+${existingHint ? `\n## EXISTING ITEMS\n${existingHint}` : ""}
+${prioritiesHint ? `\n## CLIENT PRIORITIES\n${prioritiesHint}` : ""}
 
 ## PRODUCTS
 ${productList}

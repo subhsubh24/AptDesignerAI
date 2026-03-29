@@ -267,11 +267,14 @@ export async function generateSearchBrief(
   categoryHints?: Record<string, string>,
   designProfile?: DynamicDesignProfile,
   designDirection?: DesignDirection,
-  priorities?: string[]
+  priorities?: string[],
+  keepItems?: string[],
+  spatialLayout?: string,
+  roomSummary?: string
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
   const system = getSystemPrompt(designProfile);
-  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities);
+  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, spatialLayout, roomSummary);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

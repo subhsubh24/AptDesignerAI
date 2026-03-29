@@ -81,7 +81,10 @@ export function getSearchBriefPrompt(
   budgetMode: string,
   categoryHints?: Record<string, string>,
   designDirection?: DesignDirection,
-  priorities?: string[]
+  priorities?: string[],
+  keepItems?: string[],
+  spatialLayout?: string,
+  roomSummary?: string
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -116,12 +119,27 @@ export function getSearchBriefPrompt(
     ? `\n\n## CLIENT PRIORITIES & LIFESTYLE\n${priorities.map((p) => `- ${p}`).join("\n")}\nIMPORTANT: Search for pieces that serve these priorities. If hosting is important, search for dining tables that seat enough guests and extra seating options. If comfort is key, search for deeply comfortable seating. The search should reflect how the client actually lives.`
     : "";
 
+  // Build existing items section
+  const keepSection = keepItems?.length
+    ? `\n\n## EXISTING ITEMS TO WORK WITH\n${keepItems.map((item) => `- ${item}`).join("\n")}\nIMPORTANT: Search results must complement these existing items. Consider their materials, colors, and scale when crafting queries.`
+    : "";
+
+  // Build spatial context
+  const spatialSection = spatialLayout
+    ? `\n\n## SPATIAL LAYOUT\n${spatialLayout}\nUse this to size items correctly — e.g. compact pieces for tight spaces, full-size for open layouts.`
+    : "";
+
+  // Build room assessment
+  const summarySection = roomSummary
+    ? `\n\n## ROOM ASSESSMENT\n${roomSummary}`
+    : "";
+
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${spatialSection}${summarySection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

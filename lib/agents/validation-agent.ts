@@ -250,10 +250,30 @@ export async function validateProductSet(
     existingItems: string[];
     roomImageUrls?: string[];
     designProfile?: DynamicDesignProfile;
+    placementMap?: Record<string, string>;
+    spatialLayout?: string;
+    floorPlan?: Record<string, unknown>;
+    lightingConditions?: string;
+    windowDoorPositions?: string;
+    outletPositions?: string;
+    priorities?: string[];
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
   const system = getSystemPrompt(roomContext.designProfile);
+
+  // Build environmental context section
+  const envContext = [
+    roomContext.spatialLayout && `Spatial layout: ${roomContext.spatialLayout}`,
+    roomContext.floorPlan?.room_dimensions && `Room dimensions: ${JSON.stringify(roomContext.floorPlan.room_dimensions)}`,
+    roomContext.floorPlan?.total_sqft && `Apartment: ~${roomContext.floorPlan.total_sqft} sqft`,
+    roomContext.lightingConditions && `Lighting: ${roomContext.lightingConditions}`,
+    roomContext.windowDoorPositions && `Windows/doors: ${roomContext.windowDoorPositions}`,
+    roomContext.outletPositions && `Outlets: ${roomContext.outletPositions}`,
+    roomContext.priorities?.length && `Client priorities: ${roomContext.priorities.join(", ")}`,
+    roomContext.placementMap && Object.keys(roomContext.placementMap).length > 0 &&
+      `Intended placements:\n${Object.entries(roomContext.placementMap).map(([cat, pl]) => `  ${cat}: ${pl}`).join("\n")}`,
+  ].filter(Boolean).join("\n");
 
   const promptText = `Validate this set of product search results AS A COLLECTIVE SET. You have room photos and product images — use them to verify visual coherence.
 
@@ -269,11 +289,14 @@ export async function validateProductSet(
 9. **Material durability**: Are materials practical for daily use? (White boucle + pets = problem, glass + kids = risk, delicate fabrics in high-traffic areas = impractical)
 10. **Acoustic balance**: Does the set include enough soft materials (rugs, curtains, upholstery) for rooms with hard surfaces?
 11. **Lighting coverage**: Does the set adequately address the room's lighting needs? Dark corners should have light sources.
+12. **Window/door clearance**: Do any items at their intended placements block windows or door swings?
+13. **Outlet access**: Do powered items (lamps, media consoles) have outlets near their intended placement?
 
 ## ROOM CONTEXT
 - Room type: ${roomContext.roomType}
 - Design direction: ${roomContext.designDirection}
 - Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}
+${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}
 
 ## PRODUCTS TO VALIDATE
 ${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}

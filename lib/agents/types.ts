@@ -1,9 +1,19 @@
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
+export interface DiagnosisItem {
+  category: string;
+  search_title?: string;
+  description?: string;
+  priority?: "high" | "medium" | "low";
+  specs?: string;
+  placement?: string;
+}
+
 export interface AgentContext {
   roomId: string;
   roomType: string;
+  roomName?: string;
   keepItems: string[];
   replaceItems: string[];
   priorities: string[];
@@ -18,8 +28,17 @@ export interface AgentContext {
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
 
+  // Area-analysis outputs — structured recommendations
+  roomSummary?: string;
+  whatItNeeds?: DiagnosisItem[];
+  whatWorks?: string[];
+  whatShouldGo?: string[];
+
   // Cross-session learning — user feedback from accepted/rejected products
   userFeedbackContext?: string;
+
+  // Cross-room coherence — other rooms' design direction for apartment consistency
+  otherRoomsContext?: string;
 
   // Spatial context — per-item placement and overall layout plan
   spatialLayout?: string;

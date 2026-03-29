@@ -13,6 +13,7 @@ export interface BundleContext {
   roomType: string;
   roomImageUrls: string[];
   priorities?: string[];
+  existingItems?: string[];
   designProfile?: DynamicDesignProfile;
   diagnosis?: DiagnosisData;
   designDirection?: DesignDirection;
@@ -21,6 +22,7 @@ export interface BundleContext {
   floorPlan?: Record<string, unknown>;
   lightingConditions?: string;
   windowDoorPositions?: string;
+  outletPositions?: string;
 }
 
 export async function evaluateBundle(
@@ -38,7 +40,9 @@ export async function evaluateBundle(
     bundleCtx.placementMap,
     bundleCtx.floorPlan,
     bundleCtx.lightingConditions,
-    bundleCtx.windowDoorPositions
+    bundleCtx.windowDoorPositions,
+    bundleCtx.outletPositions,
+    bundleCtx.existingItems
   );
 
   // Build bundle context with visual metadata
