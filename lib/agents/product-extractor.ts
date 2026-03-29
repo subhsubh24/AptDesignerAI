@@ -56,9 +56,16 @@ export interface ExtractedProduct {
  */
 async function validateImageUrl(url: string | null | undefined): Promise<string | null> {
   if (!url) return null;
+  // Reject obviously invalid URLs before making a network request
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+  try {
+    new URL(url); // validate URL structure
+  } catch {
+    return null;
+  }
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       method: "HEAD",
       signal: controller.signal,

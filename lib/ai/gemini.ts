@@ -93,8 +93,14 @@ async function convertMessages(
               },
             });
           } else if (block.source.type === "url" && block.source.url) {
+            // Skip obviously invalid URLs to avoid 400 errors
+            const imgUrl = block.source.url;
+            if (!imgUrl.startsWith("http://") && !imgUrl.startsWith("https://")) {
+              failedImages++;
+              continue;
+            }
             try {
-              const { data, mimeType } = await fetchImageAsBase64(block.source.url);
+              const { data, mimeType } = await fetchImageAsBase64(imgUrl);
               parts.push({
                 inlineData: { mimeType, data },
               });

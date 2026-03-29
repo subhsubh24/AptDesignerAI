@@ -359,7 +359,14 @@ export async function runAgenticSearch(
                   extractedSoFar++;
                   return;
                 }
-                if (!extractResult.data.title && !extractResult.data.price) {
+                // Filter sentinel values from extraction — these are error/category pages, not products
+                const title = extractResult.data.title || "";
+                if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
+                  tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
+                  extractedSoFar++;
+                  return;
+                }
+                if (!title && !extractResult.data.price) {
                   tracer.traceFilter("extract", "", candidate.url, "no title or price");
                   extractedSoFar++;
                   return;
