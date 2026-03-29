@@ -13,7 +13,7 @@ export function getBundleEvalPrompt(
   outletPositions?: string,
   existingItems?: string[]
 ): string {
-  // Build dynamic context from diagnosis
+  // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
     ? `What's already working in this room: ${diagnosis.what_is_working.join("; ")}`
     : "Refer to the room photos and building context in the system prompt for existing elements.";
@@ -44,7 +44,7 @@ export function getBundleEvalPrompt(
     : "";
 
   const placementCtx = placementMap && Object.keys(placementMap).length > 0
-    ? `\n\n## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, p]) => `- **${cat}**: ${p}`).join("\n")}`
+    ? `\n\n## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, placement]) => `- **${cat}**: ${placement}`).join("\n")}`
     : "";
 
   const lightingCtx = lightingConditions
@@ -56,19 +56,20 @@ export function getBundleEvalPrompt(
     : "";
 
   const outletCtx = outletPositions
-    ? `\n\n## OUTLET POSITIONS\n${outletPositions}\nCheck that powered items (lamps, media consoles) have realistic outlet access.`
+    ? `\n\n## OUTLET POSITIONS\n${outletPositions}\nCheck that powered items (lamps, media consoles, smart devices) have realistic outlet access in their intended positions.`
     : "";
 
   const existingItemsCtx = existingItems?.length
     ? `\n\n## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.`
     : "";
 
-  return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. Score how well these items work TOGETHER as a set, not just individually.
+  return `Evaluate this bundle of products as a complete room concept. You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
-- Study the room photos to understand existing furniture and finishes
+- Consider how ALL items work together as a set, not just individually
 - Use the building finishes, floor plan, and apartment context from the system prompt
+- Study the room photos to understand existing furniture and finishes
 ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 
 ## WHAT'S ALREADY IN THE ROOM
@@ -76,86 +77,80 @@ ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
 ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}
 
-## SCORING PROCESS — For each dimension, follow these steps:
-1. List the relevant attributes of ALL products in the bundle
-2. Compare them against each other AND the room context
-3. Identify specific strengths and weaknesses
-4. Assign a score based on the evidence
+## SCORING DIMENSIONS (each 0-10)
 
-### 1. palette_harmony_score (0-10): Color coordination
-- Step 1: List each product's primary color(s)
-- Step 2: Map each to warm/cool/neutral
-- Step 3: Check against apartment finishes (floors, walls, cabinetry) from photos
-- Step 4: Do they form a cohesive palette or clash?
-- 9-10: All products share 2-3 coordinating color families that work with building finishes
-- 7-8: Colors compatible but not perfectly cohesive (slight warm/cool tension)
-- 5-6: Some color clashing — products feel from different rooms
-- Below 5: Colors actively conflict
+1. **palette_harmony_score**: Do the colors work together as a cohesive set?
+   - Map each product's color to warm/cool/neutral
+   - Check against the ACTUAL apartment finishes (floors, walls, cabinetry) from photos and system prompt
+   - 9-10: All products share 2-3 coordinating color families that work with building finishes
+   - 7-8: Colors are compatible but not perfectly cohesive (e.g., slight warm/cool tension)
+   - 5-6: Some color clashing — products feel like they came from different rooms
+   - Below 5: Colors actively conflict or ignore the apartment's existing finishes
 
-### 2. material_balance_score (0-10): Texture variety + practicality
-- Step 1: List each product's material(s)
-- Step 2: Count distinct material TYPES: wood, textile, metal, stone, glass, leather, ceramic
-- Step 3: A good bundle has 3-4+ distinct types. All-wood or all-fabric = too monotone.
-- Step 4: **Durability/maintenance**: white boucle with pets? Glass with kids? Delicate fabrics in high-traffic areas?
-- Step 5: **Climate suitability**: Heavy wool in tropical climates? Cold metal without nearby textiles?
-- 9-10: Rich variety (wood + textile + metal + organic), all durable and practical
-- 7-8: Good variety with 3+ materials, minor gaps
-- 5-6: Too monotone OR poor durability choices
-- Below 5: Material conflict or fundamentally impractical
+2. **material_balance_score**: Is there a healthy mix of textures and materials?
+   - Count distinct material types: wood, textile/fabric, metal, stone/ceramic, glass, leather
+   - A good bundle has at least 3-4 distinct material types
+   - **Durability/maintenance**: Are materials practical for the room's use? White boucle in a pet-friendly home, glass with toddlers, or delicate fabrics in high-traffic zones should lower the score.
+   - **Climate suitability**: Heavy wool in tropical climates, cold metal in northern apartments without nearby textiles, velvet in humid environments — all mismatches.
+   - 9-10: Rich material variety — wood + textile + metal + organic creates visual depth, ALL durable and climate-appropriate
+   - 7-8: Good variety with 3+ materials, minor gaps or one questionable durability choice
+   - 5-6: Too monotone — everything is wood, or everything is fabric. Or good variety but poor durability choices.
+   - Below 5: Material conflict, jarring mismatch, or fundamentally impractical material choices
 
-### 3. scale_balance_score (0-10): Proportions
-- Step 1: Note each product's dimensions
-- Step 2: Check rug covers 60-80% of seating area
-- Step 3: Check coffee table is ⅔ to full width of sofa, no taller than sofa seat
-- Step 4: Check dining table seats enough + 24" chair pullback
-- Step 5: Will everything fit without crowding?
-- 9-10: Every piece correctly scaled, anchored by dominant piece
-- 7-8: Most right, one slightly over/under
-- 5-6: One or more feels wrong for the space
-- Below 4: Clearly wrong sizes
+3. **scale_balance_score**: Are pieces correctly proportioned relative to each other AND the room?
+   - Check rug size: should cover at least 60-80% of seating area footprint
+   - Check coffee table: should be ⅔ to full width of sofa, no taller than sofa seat
+   - Check dining table: must accommodate the seating the client needs
+   - 9-10: Every piece is correctly scaled; dominant piece (sofa/table) anchors without overwhelming
+   - 7-8: Most pieces are right, one might be slightly over/under sized
+   - 5-6: One or more pieces feel wrong for the space
+   - Below 4: Clearly wrong — e.g., 5x7 rug under an L-shaped sectional, or oversized table cramming the room
 
-### 4. style_consistency_score (0-10): Aesthetic unity
-- Step 1: Identify each product's style family (mid-century, contemporary, traditional, etc.)
-- Step 2: Do they all belong to same family or a deliberate curated mix?
-- Step 3: Cross-reference with the design direction
-- 9-10: Looks professionally designed — every piece intentional
-- 7-8: Mostly cohesive, one piece slightly off but still works
-- 5-6: Mixed signals (some mid-century, some farmhouse, some industrial)
-- Below 5: Random collection feel
+4. **style_consistency_score**: Is the aesthetic unified?
+   - All pieces should belong to the same style family or a deliberate, curated mix
+   - Cross-reference with the design direction from the room diagnosis
+   - 9-10: Looks like a professional designed this room — every piece is intentional
+   - 7-8: Mostly cohesive with one piece that's slightly off but still works
+   - 5-6: Mixed signals — some pieces are mid-century, some are farmhouse, some are industrial
+   - Below 5: Jarring style clash — furniture looks randomly collected
 
-### 5. room_completion_score (0-10): Does it solve the diagnosed problems?
-- Step 1: List every diagnosed problem from above
-- Step 2: Check off which ones this bundle addresses
-- Step 3: What's still missing?
-- 9-10: Every diagnosed issue addressed, room will feel complete
-- 7-8: Most issues addressed, 1-2 minor gaps (plant, tray)
-- 5-6: Some gaps — still missing major elements (no rug, no art)
-- Below 5: Fails to address main problems
+5. **room_completion_score**: Does this bundle solve the room's diagnosed problems?
+   - Check the diagnosis: are all identified issues addressed?
+   - List what's still missing after this bundle
+   - 9-10: Every diagnosed issue is addressed, room will feel complete
+   - 7-8: Most issues addressed, 1-2 minor gaps remain (e.g., still needs a plant or tray)
+   - 5-6: Addresses some issues but leaves major gaps (e.g., still no rug, still no art)
+   - Below 5: Fails to address the main diagnosed problems
 
-### 6. spatial_arrangement_score (0-10): Physical arrangement
-- Step 1: Mentally place every item in its intended position
-- Step 2: Check traffic flow (36" main paths, 18" coffee table to sofa gap)
-- Step 3: Check zone clarity in multi-function rooms
-- Step 4: Check sightlines and focal points
-- Step 5: **Window/door clearance**: Does anything block windows (reducing light) or door swings?
-- Step 6: **Outlet access**: Do powered items (lamps, media consoles) have realistic outlet access?
-- 9-10: Every piece has a clear home, flow is natural, nothing blocked
-- 7-8: Arrangement mostly works, one piece slightly awkward
-- 5-6: Some spatial issues (crowded zone, blocked path)
-- Below 5: Significant problems (blocked paths, colliding zones)
+6. **spatial_arrangement_score**: Does this bundle work as a physical arrangement?
+   - Mentally place every item in its intended position (see INTENDED PLACEMENTS above)
+   - Check traffic flow: can someone walk through the room naturally? 36" for main paths, 18" between coffee table and sofa
+   - Check zone clarity: in multi-function rooms, do items define clear zones (living, dining, work)?
+   - Check sightlines: is there a clear focal point? Can people see each other in conversation?
+   - Check relationships: are items that should be near each other actually near each other? (lamp by reading chair, side table within reach of sofa arm)
+   - Check orientation: do seating pieces face each other or a focal point, not the wall?
+   - **Window/door clearance**: Do any items block windows (reducing natural light), obstruct door swings, or crowd doorways? A tall bookshelf in front of a window = penalize. A console table blocking a closet door = penalize.
+   - **Outlet access**: Do powered items (lamps, media consoles) have realistic outlet access in their intended positions? A floor lamp placed far from any wall outlet = impractical.
+   - 9-10: Every piece has a clear home, flow is natural, zones are well-defined, nothing blocks windows/doors, the room feels intentional
+   - 7-8: Arrangement mostly works, one piece feels slightly awkward in position
+   - 5-6: Some spatial issues — crowded zone, unclear path, pieces that seem to float without purpose, or one item blocking a window/door
+   - Below 5: Significant spatial problems — items blocking paths/windows/doors, no clear arrangement logic, zones collide
 
-### 7. practicality_score (0-10): Real-world livability
-- Step 1: Can the client host guests? Count seating.
-- Step 2: Check clearances (30"+ walkways)
-- Step 3: Are pieces durable for daily use?
-- Step 4: **Lighting adequacy**: Enough light sources for evening use? Dark corners without task lighting?
-- Step 5: **Acoustic balance**: Enough soft materials (rug, curtains, upholstery) to absorb sound in rooms with hard surfaces?
-- 9-10: Perfectly serves client's actual life
-- 7-8: Mostly practical, one minor concern
-- 5-6: Some impractical elements
-- Below 5: Fundamentally impractical
+7. **practicality_score**: Is this livable? Think about how the client ACTUALLY uses this room:
+   - Can they host guests? Count total seating capacity vs. client's hosting needs
+   - Can they eat meals with friends? Is the dining setup adequate for their lifestyle?
+   - Can they walk through easily? Check clearances (30+ inches for walkways)
+   - Are pieces durable for daily use? (Fragile glass with kids? White fabric with pets?)
+   - Does the total bundle price make sense for the tier?
+   - **Lighting adequacy**: Does this bundle include enough lighting for the room's needs? Consider natural light direction and time of day. A north-facing room with only one table lamp = under-lit. Dark corners without task lighting = penalize. Glossy/reflective surfaces near windows creating glare = penalize.
+   - **Acoustic balance**: Is there enough soft material to absorb sound? In rooms with hardwood floors, concrete walls, or large glass windows, the bundle MUST include textile elements (rug, curtains, upholstered seating) for acoustic comfort. All-hard-surface bundles in open floor plans are acoustically harsh — penalize.
+   - 9-10: Perfectly serves the client's actual life — hosting, daily routines, comfort, adequate lighting, acoustically balanced
+   - 7-8: Mostly practical, one minor concern (e.g., could use one more light source, or slightly under-textiled)
+   - 5-6: Some impractical elements — e.g., beautiful but not enough seating for hosting, or acoustically harsh with no soft surfaces
+   - Below 5: Fundamentally impractical for how the client lives
 
-## OUTPUT FORMAT — Return this exact JSON:
+## OUTPUT FORMAT
+Return a JSON object:
 {
   "scores": {
     "palette_harmony_score": number,
@@ -167,17 +162,14 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
     "practicality_score": number
   },
   "analysis": {
-    "strongest_aspect": "What works best — name the specific items and why they work together",
-    "weakest_aspect": "The single biggest weakness — name the item and the problem",
-    "what_feels_missing": "Specific categories or elements still needed after this bundle",
-    "what_should_be_swapped_first": "Which item to replace first, what to replace it with, and why"
+    "strongest_aspect": "what works best about this combination — be specific, name the items",
+    "weakest_aspect": "the single biggest weakness — name the item and the problem",
+    "what_feels_missing": "specific categories or elements still needed after this bundle",
+    "what_should_be_swapped_first": "which specific item should be replaced first, what it should be replaced with, and why"
   },
-  "verdict": "2-3 sentence summary. Would a professional designer recommend this to a client? Be honest."
+  "verdict": "2-3 sentence summary of this bundle's quality. Would a professional designer recommend this to a client?"
 }
 
-## CRITICAL REMINDERS
-- Score the COMBINATION, not individual items. Two beautiful pieces that clash = low scores.
-- Use the FULL 0-10 scale. Not everything is 6-8.
-- Every claim in analysis must reference a specific product by name.
-- If you're unsure about dimensions fitting, say so and lower spatial_arrangement_score.`;
+## IMPORTANT
+A product can score well individually but FAIL in the bundle context (e.g., two beautiful pieces that clash with each other). Focus on relationships between items, not just individual quality. Score the COMBINATION, not the average of individual scores.`;
 }

@@ -7,114 +7,78 @@ export function getDiagnosisPrompt(roomType: string, keepItems: string[], replac
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}
 
-## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
+## INSTRUCTIONS
+Examine the room photos carefully and thoroughly. Analyze EVERY visible element:
+1. The architectural context (floors — material, color, condition; walls — color, texture; windows — size, treatment; ceiling — height, features; built-in lighting)
+2. Every piece of existing furniture — name it, describe its material/color, assess its condition and fit
+3. What's working well AND what's not — be specific, reference actual items by name + color + material
+4. Scale and proportion — is each piece correctly sized for the room? Too big? Too small?
+5. Color balance — map out the current color palette (warm vs cool, saturated vs neutral)
+6. Texture and material variety — count the distinct textures. Is there enough variety or too monotone?
+7. Layout and traffic flow — can someone walk through easily? Are zones clearly defined?
+8. Lighting — natural light direction, artificial lighting gaps, evening ambience
+9. What's MISSING for a complete, intentional room — think like a designer, not a minimalist
 
-### Step 1: OBSERVE the room (spend the most time here)
-Look at EVERY photo carefully. For each photo, note:
-- Floor: What material? What color? (e.g., "medium-tone oak engineered hardwood" not just "wood floor")
-- Walls: What color exactly? (e.g., "warm off-white, close to Benjamin Moore Swiss Coffee" not just "white")
-- Windows: How many? What size? What direction might they face based on light? Any treatments (curtains/blinds)?
-- Ceiling: Height estimate? Any features (molding, beams, recessed lights)?
-- Every piece of furniture: Name it, describe its material, color, condition, and approximate size
-- Lighting: What fixtures exist? Where are dark corners? How much natural light?
+## ARRAY SIZE REQUIREMENTS
+- what_is_working: List **at least 5-8 items**. Every room has things working — find them all.
+- what_is_not_working: List **at least 5-8 issues**. Be thorough — don't stop at the obvious.
+- biggest_improvement_opportunities: List **5-7 changes** ranked by impact.
+- missing_furniture_categories: List **ALL missing categories** (typically 6-12). Include often-forgotten items like throw pillows, plants, art, table lamps, runners, trays.
+- color_issues: List **3-5 observations**. Map the actual colors you see.
+- texture_material_issues: List **3-5 observations**. Count distinct textures.
+- scale_proportion_issues: List **3-5 observations**. Reference specific items.
+- layout_issues: List **3-5 observations**. Note traffic paths, dead zones, awkward gaps.
+- lighting_issues: List **3-5 observations**. Note natural light direction and artificial gaps.
+- clutter_editing_issues: List items to remove or edit. Can be 0 if room is clean.
 
-### Step 2: ASSESS what's working
-For each item you're keeping or that works well, explain specifically WHY it works:
-- "The dark gray fabric sectional (approx 95" wide) — good scale for the room width (~12ft), neutral enough to build around, provides ample seating for 4-5 people"
-- NOT: "The sofa works well" (too vague)
+## SPECIFICITY REQUIREMENT
+Every item in every array MUST reference a specific visible object. Examples:
+- GOOD: "Dark gray fabric sectional — good scale for the room, anchors the seating area, neutral enough to build around"
+- BAD: "The sofa works well" (too vague — which sofa? what about it works?)
+- GOOD: "Small round glass coffee table is drastically undersized for the L-shaped sectional — should be at least 48 inches"
+- BAD: "Coffee table is too small" (too vague — what material? what size should it be?)
 
-### Step 3: IDENTIFY what's NOT working
-For each problem, be specific about WHAT and WHY:
-- "Small round glass coffee table (approx 24" diameter) is drastically undersized for the L-shaped sectional — should be at least 48" long rectangular or 36" round to anchor the seating area"
-- NOT: "Coffee table is too small" (too vague)
-
-### Step 4: DETERMINE what's MISSING
-Think like a designer completing a room. Common things people forget:
-- Layered lighting (floor lamp + table lamp + overhead)
-- Textiles (throw pillows, blankets, curtains)
-- Wall art/decor
-- Area rug (properly sized!)
-- Plants
-- Side tables / surfaces near seating
-- Storage solutions
-
-### Step 5: DESIGN DIRECTION
-Based on the existing finishes (floors, walls, fixed elements), recommend:
-- Specific color palette (name 6-10 actual colors like "warm ivory", "walnut brown", "muted sage")
-- Specific materials (name 5-8 like "solid walnut", "linen", "bouclé", "brushed brass")
-- Style direction in 3-4 sentences
-
-## EXAMPLE of a good diagnosis entry:
-\`\`\`
-"what_is_working": [
-  "Wide-plank light oak hardwood floors — warm undertone that pairs well with natural materials, good condition, sets a warm-modern foundation",
-  "Large south-facing window (~5ft wide) — excellent natural light, makes the space feel open, good opportunity for a reading nook nearby",
-  "Charcoal gray linen sofa (approx 84\" wide) — appropriate scale for the room, neutral base that works with warm or cool accent palettes, appears comfortable"
-]
-\`\`\`
-
-## EXAMPLE of a bad diagnosis entry (DO NOT do this):
-\`\`\`
-"what_is_working": [
-  "The sofa works",
-  "Good natural light",
-  "Nice floors"
-]
-\`\`\`
-
-## ARRAY SIZE REQUIREMENTS — THESE ARE MINIMUMS
-- what_is_working: **at least 5-8 items**. Every room has things working — find them all.
-- what_is_not_working: **at least 5-8 issues**. Be thorough — don't stop at the obvious.
-- biggest_improvement_opportunities: **5-7 changes** ranked by visual impact.
-- missing_furniture_categories: **ALL missing categories** (typically 6-12). Include throw pillows, plants, art, lamps, runners, trays, etc.
-- color_issues: **3-5 observations**. Name the actual colors you see (e.g., "the cool gray throw clashes with the warm oak floors").
-- texture_material_issues: **3-5 observations**. Count distinct textures present.
-- scale_proportion_issues: **3-5 observations**. Reference specific items and their approximate sizes.
-- layout_issues: **3-5 observations**. Note traffic paths, dead zones, awkward gaps.
-- lighting_issues: **3-5 observations**. Note natural light direction and artificial gaps.
-- clutter_editing_issues: Items to remove or edit. Can be 0 if room is clean.
-
-## OUTPUT FORMAT — Return this exact JSON structure:
+## OUTPUT FORMAT
+Return a JSON object with this exact structure:
 {
   "diagnosis": {
-    "current_vibe_summary": "3-4 sentences: dominant colors, materials, current style, overall feel. Be specific — name colors and materials.",
-    "what_is_working": ["at least 5-8 entries, each with item name + material + color + WHY it works"],
-    "what_is_not_working": ["at least 5-8 entries, each with item name + material + color + WHY it fails"],
-    "biggest_improvement_opportunities": ["5-7 highest-impact changes, ranked by visual impact. Each entry = specific action + expected result"],
-    "missing_furniture_categories": ["ALL missing categories — be thorough, typically 6-12"],
-    "color_issues": ["3-5 specific observations — name actual colors you see and explain conflicts/gaps"],
-    "texture_material_issues": ["3-5 observations — count textures, identify gaps or monotony"],
-    "scale_proportion_issues": ["3-5 observations — reference actual item sizes vs. room size"],
-    "layout_issues": ["3-5 observations — traffic flow, dead zones, furniture arrangement problems"],
-    "lighting_issues": ["3-5 observations — natural light, artificial light gaps, dark corners"],
-    "clutter_editing_issues": ["things to remove — be specific about what and why"]
+    "current_vibe_summary": "string - 3-4 sentences describing the current feel, including dominant colors, materials, and style. Be specific.",
+    "what_is_working": ["at least 5-8 specific items with reasoning — name the item + material + color"],
+    "what_is_not_working": ["at least 5-8 specific issues with reasoning"],
+    "biggest_improvement_opportunities": ["5-7 highest-impact changes, ranked"],
+    "missing_furniture_categories": ["ALL missing categories — be thorough, typically 6-12 items"],
+    "color_issues": ["3-5 specific color/palette observations — name actual colors you see"],
+    "texture_material_issues": ["3-5 texture/material gaps or conflicts"],
+    "scale_proportion_issues": ["3-5 specific scale issues — reference actual item dimensions"],
+    "layout_issues": ["3-5 traffic flow, furniture arrangement, zoning issues"],
+    "lighting_issues": ["3-5 natural light, artificial light, evening ambience needs"],
+    "clutter_editing_issues": ["things that should be removed or edited — be specific"]
   },
   "design_direction": {
-    "recommended_palette": ["6-10 specific named colors — e.g. 'warm ivory', 'walnut brown', 'muted sage', 'soft blush', 'charcoal'. NOT just 'neutral' or 'warm'."],
-    "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen upholstery', 'bouclé fabric', 'brushed brass hardware', 'natural marble'. NOT just 'wood' or 'fabric'."],
-    "recommended_textures": ["4-6 textures to introduce — e.g. 'high-low pile wool rug', 'ribbed knit throw', 'woven rattan basket', 'smooth matte ceramic'"],
-    "recommended_furniture_types": ["every needed furniture type with specific notes — e.g. 'Area rug — at least 8x10, wool or wool-blend, warm neutral with subtle texture, must extend under front legs of sofa'"],
-    "style_notes": "3-4 sentences on overall style direction, referencing the building's finishes and the client's life. Be opinionated."
+    "recommended_palette": ["6-10 specific colors/tones — e.g. 'warm ivory', 'walnut brown', 'muted sage', not just 'neutral'"],
+    "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen', 'bouclé', 'brushed brass', 'marble'"],
+    "recommended_textures": ["4-6 textures to introduce — e.g. 'high-low pile wool', 'ribbed knit', 'woven rattan'"],
+    "recommended_furniture_types": ["list every needed furniture type with specific notes — e.g. 'Area rug — at least 8x10, wool or wool-blend, warm neutral with subtle texture'"],
+    "style_notes": "string - 3-4 sentences on overall style direction, referencing the building's finishes and the client's life"
   },
-  "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", "side_table", "plant", etc.],
+  "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", etc.],
   "action_list": [
     {
       "priority": 1,
-      "action": "specific action — include material, color, size guidance (e.g., 'Add 8x10 wool area rug in warm cream/ivory to anchor the seating area')",
-      "category": "furniture category slug",
-      "reasoning": "why this matters — what specific problem it solves (e.g., 'The seating area floats on the hardwood without definition. A properly sized rug will anchor the sofa and chair arrangement and add warmth + acoustic comfort.')"
+      "action": "specific action — include material, color, size guidance",
+      "category": "furniture category",
+      "reasoning": "why this matters — what problem it solves"
     }
   ]
 }
 
-## FINAL CHECKLIST — Verify EACH of these before returning:
-1. Did I list at least 5 items in what_is_working? Each with name + material + color + reasoning?
-2. Did I list at least 5 items in what_is_not_working? Each specific and actionable?
-3. Did I name specific colors (not just "neutral") in recommended_palette?
-4. Did I name specific materials (not just "wood") in recommended_materials?
-5. Did I include 6+ missing categories?
-6. Does every action_list entry include material, color, AND size guidance?
-7. Did I reference actual items I can see in the photos throughout?
+## FINAL CHECKLIST before returning:
+- Did I list at least 5 items in what_is_working?
+- Did I list at least 5 items in what_is_not_working?
+- Did I reference specific items by name, material, and color in every array?
+- Did I list ALL missing furniture categories (usually 6-12)?
+- Did I provide specific color names (not just "neutral" or "warm")?
+- Did I include 6+ recommended_palette colors, 5+ materials, 4+ textures?
 
 Be specific and opinionated. Reference actual items visible in the photos. This is not a generic analysis — it is tailored to this specific apartment and space.`;
 }

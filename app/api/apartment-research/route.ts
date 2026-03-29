@@ -211,12 +211,7 @@ ${jsonSchema}`;
       model: selectModel("apartment_research"),
       system: `You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations.
 
-PROCESS:
-1. Visit the building's website and read ALL relevant pages (amenities, gallery, floor plans, finishes).
-2. For floor plans: navigate to the floor plans page, filter for ${unitLabel}, click through EACH layout variant. Most buildings have multiple layouts per bed/bath count.
-3. Capture floor plan image URLs when available.
-4. Note all finishes: flooring material+color, countertop material, cabinetry style+color, appliance brand, fixtures finish.
-5. Return ONLY facts you found on the website or via search. Never guess finishes or features.`,
+When researching floor plans, be thorough: navigate to the building's floor plans page, filter for the user's unit type (${unitLabel}), and click through each individual floor plan option. Most apartment websites have multiple layout variants per bed/bath count — examine each one. Capture floor plan image URLs when available.`,
       messages: [{ role: "user", content: prompt }],
       max_tokens: 8000,
       temperature: 0.2,

@@ -218,14 +218,6 @@ These photos show the REST of the apartment. Study them to understand:
     type: "text",
     text: `\nDo a deep, thorough analysis of the ${room.name}. You know the owner's preferences (see system prompt). Also consider the other rooms so everything stays cohesive across the apartment.
 
-## ANALYSIS PROCESS — Follow these steps in order:
-Step 1: Study ALL room photos carefully. Note every piece of furniture, every finish, every lighting condition, every window/door.
-Step 2: Identify what's working (keep) and what's not (replace/remove). Be specific — name items with material + color.
-Step 3: Determine the design direction based on the apartment's existing finishes and the client's preferences.
-Step 4: List EVERY item the room needs, starting with the highest-impact pieces.
-Step 5: For each recommended item, specify EXACT placement in the room with spatial reasoning.
-Step 6: Verify that all items work together as a set — consistent palette, varied materials, correct scale.
-
 IMPORTANT — MULTI-FUNCTION ROOMS: If this room serves multiple functions (e.g. a living room with a dining area, or a combined living/dining space), you MUST include items for ALL zones — dining table, dining chairs, lighting for the dining zone, seating for the living zone, etc. Do NOT limit recommendations to just the primary function. A living/dining combo typically needs 8-15 items across both zones.
 
 Return JSON:

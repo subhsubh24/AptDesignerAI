@@ -103,8 +103,6 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
     type: "text",
     text: `You are a senior interior designer doing a HARMONY + SPATIAL CHECK on recommended items before they go to product search.
 
-IMPORTANT: Think step-by-step through each item. For each recommended item, evaluate it against EVERY existing item and EVERY other recommendation.
-
 ## ROOM
 ${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}
 
@@ -114,7 +112,7 @@ ${designDirection}
 ## SPATIAL LAYOUT PLAN
 ${spatialLayout || "Not specified — you should infer from the room photos"}
 
-## ITEMS TO KEEP (already in the room — note their CURRENT POSITIONS in the photos)
+## ITEMS TO KEEP (already in the room — note their CURRENT POSITIONS)
 ${whatWorks.length > 0 ? whatWorks.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None specified"}
 
 ## ITEMS BEING REMOVED
@@ -127,12 +125,8 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
    Priority: ${item.priority}
    Why: ${item.description}`).join("\n\n")}
 
-## YOUR JOB — STEP BY STEP
-Step 1: Look at the room photos carefully. Note: floor material+color, wall color, ceiling height, window positions, door positions, existing furniture and their positions.
-Step 2: Estimate the room's dimensions from photos (or use floor plan if provided).
-Step 3: For EACH recommended item below, work through the harmony and spatial checks:
-
-Evaluate EACH recommended item on BOTH harmony AND spatial fit:
+## YOUR JOB
+Look at the room photos carefully. Estimate the room's dimensions and layout. Note where existing items sit. Now evaluate EACH recommended item on BOTH harmony AND spatial fit:
 
 ### HARMONY CHECKS
 1. **Harmony with keeps**: Does this item's material, color, and style work with the existing items staying in the room? A walnut coffee table next to existing oak furniture = clash. A brass lamp with existing chrome fixtures = clash.
@@ -283,9 +277,7 @@ export async function validateProductSet(
 
   const promptText = `Validate this set of product search results AS A COLLECTIVE SET. You have room photos and product images — use them to verify visual coherence.
 
-IMPORTANT: Think step-by-step. First examine the room photos. Then examine each product image. Then evaluate each product against the room AND against every other product in the set.
-
-## VALIDATION CHECKLIST — Check EVERY item on this list:
+## VALIDATION CHECKLIST
 1. **Visual cohesion**: Do the product images ACTUALLY look like they belong together? Check real colors, textures, and styles in the images — not just text descriptions.
 2. Every item description is detailed enough (specific materials, exact colors with undertones, dimensions)
 3. All items within each tier work together aesthetically

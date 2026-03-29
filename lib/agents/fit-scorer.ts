@@ -38,20 +38,19 @@ export interface ScoringContext {
 // Few-shot examples so the model has concrete reference points for what each score level means.
 const CALIBRATION_ANCHORS = `
 ## SCORE CALIBRATION — USE THESE AS ANCHORS
-Before scoring, calibrate against these reference examples. Read ALL of them first, then score.
+Before scoring, calibrate against these reference examples:
 
-**9-10 (Exceptional)**: A walnut coffee table with tapered legs for a mid-century living room that already has a walnut media console and warm rug. Materials match exactly, scale is perfect (48" table for 84" sofa), style is cohesive, price is fair. THIS IS RARE — reserve 9-10 for near-perfect matches.
+**9-10 (Exceptional fit)**: A walnut coffee table with tapered legs for a mid-century modern living room that already has a walnut media console and warm-toned rug. Materials match, scale is perfect for the seating area, style is cohesive, price is fair.
 
-**7-8 (Strong)**: A linen accent chair in warm ivory for a room with a leather sofa and oak floors. Style works, palette compatible, good scale. Minor concern: the exact shade might lean slightly cool vs. the warm oak — but overall a solid choice.
+**7-8 (Strong fit)**: A linen upholstered accent chair in a warm neutral tone for a room with a leather sofa and wood floors. Style works, palette compatible, but the specific shade might not be ideal — needs to be seen in person.
 
-**5-6 (Mediocre)**: A generic gray fabric ottoman for a room that needs warmth and texture. It doesn't clash, but it doesn't solve any problems. Safe but uninspired. THIS IS AVERAGE — most okay-but-not-great products belong here.
+**5-6 (Mediocre)**: A generic gray fabric ottoman for a room that needs warmth and texture. It doesn't clash, but it doesn't solve any problems either. It's safe but uninspired — a missed opportunity.
 
-**3-4 (Poor)**: A glossy white lacquer side table in a room with warm wood tones and matte finishes. The finish actively clashes. Or: a 5x7 rug under an L-shaped sectional that needs an 8x10. Scale is wrong.
+**3-4 (Poor fit)**: A glossy white lacquer side table in a room with warm wood tones and matte finishes. The material and finish actively clash with the existing palette. It would look out of place.
 
-**1-2 (Wrong)**: A farmhouse distressed dining table for a sleek modern apartment. Completely wrong style family. Or: a 4-person dining table when the client hosts dinner parties of 8.
+**1-2 (Wrong)**: A farmhouse-style distressed wood dining table for a sleek modern apartment with clean lines and contemporary finishes. Completely wrong style family.
 
-CRITICAL: Use the FULL range. If a product is just okay, score it 5-6. If it has real problems, score it 3-4. Do NOT give everything 6-8 out of politeness.`;
-
+Use these anchors to ensure your scores are grounded and consistent.`;
 
 /**
  * Score a single product with the Pro model using extended thinking.
@@ -278,12 +277,6 @@ export async function quickScoreProducts(
         : "";
 
       const prompt = `Quick-score these ${category} products for a ${roomType}. Budget mode: ${budgetMode}.
-
-PROCESS: For each product, think step-by-step:
-1. Does the product's style/material/color match the design direction? → style_fit
-2. Will it physically fit in the intended space? Compare dimensions. → scale_fit
-3. Is the price reasonable for what you get? → value_fit
-4. How complete is the product data? → confidence
 
 Design direction: ${aesthetic}
 ${spatialHint ? `\n## SPATIAL CONTEXT\n${spatialHint}` : ""}
