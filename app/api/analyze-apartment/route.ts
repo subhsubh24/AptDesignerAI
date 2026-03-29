@@ -97,6 +97,12 @@ Summary: ${br.summary || ""}
     type: "text",
     text: `\nAnalyze this entire apartment holistically. You know everything about the owner (see your system prompt). ${project?.building_research ? "Use the building research context above to understand the apartment finishes and architectural style." : ""}
 
+PROCESS — Follow these steps:
+Step 1: Look at EVERY photo. For each, note: room type, floor material+color, wall color, existing furniture (name + material + color), lighting, windows.
+Step 2: Identify the apartment's overall aesthetic thread — what materials, colors, and style connect the rooms?
+Step 3: For each room, score its current state and determine what to keep, replace, and add.
+Step 4: Ensure recommendations across rooms are COHERENT — same palette, complementary materials.
+
 Provide a JSON response with this structure:
 {
   "overall": "A 2-3 sentence personalized summary of the apartment's current state, what's working, and the overall vibe. ONLY describe things you can actually see in the photos. Do NOT invent or assume items that aren't visible.",

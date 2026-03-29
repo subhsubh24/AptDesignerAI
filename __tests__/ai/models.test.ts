@@ -2,44 +2,34 @@ import { describe, it, expect } from "vitest";
 import { MODELS, selectModel } from "@/lib/ai/models";
 
 describe("MODELS", () => {
-  it("should have fast, reasoning, and image tiers", () => {
-    expect(MODELS).toHaveProperty("fast");
-    expect(MODELS).toHaveProperty("reasoning");
+  it("should have primary and image tiers", () => {
+    expect(MODELS).toHaveProperty("primary");
     expect(MODELS).toHaveProperty("image");
   });
 
-  it("should use distinct models for each tier", () => {
-    const models = new Set([MODELS.fast, MODELS.reasoning, MODELS.image]);
-    expect(models.size).toBe(3);
+  it("should use distinct models for primary and image", () => {
+    expect(MODELS.primary).not.toBe(MODELS.image);
   });
 
   it("should use gemini model identifiers", () => {
-    expect(MODELS.fast).toMatch(/^gemini-/);
-    expect(MODELS.reasoning).toMatch(/^gemini-/);
+    expect(MODELS.primary).toMatch(/^gemini-/);
     expect(MODELS.image).toMatch(/^gemini-/);
+  });
+
+  it("should use flash lite for primary model", () => {
+    expect(MODELS.primary).toContain("flash-lite");
   });
 });
 
 describe("selectModel", () => {
-  describe("reasoning tasks → Flash (complex reasoning)", () => {
-    const reasoningTasks = [
+  describe("all non-image tasks → primary model (flash lite)", () => {
+    const allTasks = [
       "area_analysis",
       "scoring",
       "bundle",
       "validation",
       "diagnosis",
       "apartment_analysis",
-    ] as const;
-
-    for (const task of reasoningTasks) {
-      it(`should route "${task}" to reasoning model`, () => {
-        expect(selectModel(task)).toBe(MODELS.reasoning);
-      });
-    }
-  });
-
-  describe("fast tasks → Flash Lite (high-volume)", () => {
-    const fastTasks = [
       "extraction",
       "search_brief",
       "search",
@@ -49,9 +39,9 @@ describe("selectModel", () => {
       "apartment_research",
     ] as const;
 
-    for (const task of fastTasks) {
-      it(`should route "${task}" to fast model`, () => {
-        expect(selectModel(task)).toBe(MODELS.fast);
+    for (const task of allTasks) {
+      it(`should route "${task}" to primary model`, () => {
+        expect(selectModel(task)).toBe(MODELS.primary);
       });
     }
   });
