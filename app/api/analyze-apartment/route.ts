@@ -63,9 +63,13 @@ export async function POST(request: Request) {
     const images = room.room_images || [];
     if (images.length === 0) continue;
 
+    const userNote = room.user_context
+      ? `\nUSER NOTES: "${room.user_context}" — Respect these notes (e.g. if they say to ignore something, don't include it in your assessment).`
+      : "";
+
     contentBlocks.push({
       type: "text",
-      text: `\n--- ${room.name} (${room.room_type}) ---`,
+      text: `\n--- ${room.name} (${room.room_type}) ---${userNote}`,
     });
 
     for (const img of images) {

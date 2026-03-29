@@ -355,7 +355,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
     };
 
-    const MAX_HARMONY_ROUNDS = 3;
+    const MAX_HARMONY_ROUNDS = 10;
     let validation = null;
 
     for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {

@@ -176,6 +176,7 @@ export async function POST(request: Request) {
     designDirection,
     replaceItems: room.replace_items || [],
     floorPlan,
+    userContext: (room.user_context as string) || undefined,
   };
 
   const scoringResults: Array<{
@@ -288,6 +289,7 @@ export async function POST(request: Request) {
     designDirection,
     replaceItems: room.replace_items || [],
     floorPlan,
+    userContext: (room.user_context as string) || undefined,
   };
 
   // Evaluate bundles — up to 3 concurrently
