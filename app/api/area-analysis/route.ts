@@ -357,24 +357,23 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     const MAX_HARMONY_ROUNDS = 10;
     let validation = null;
+    // Track which items were revised in previous rounds to detect oscillation
+    const previouslyRevised = new Set<string>();
 
     for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
       const harmonyResult = await validateRoomHarmony(analysis, harmonyCtx);
 
       if (!harmonyResult.success || !harmonyResult.data) {
         if (round === 1) {
-          // First round failure is fatal — we have no validation at all
           console.error(`[area-analysis] Harmony validation failed on round 1: ${harmonyResult.error}`);
           throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
         }
-        // Later rounds: use last good validation state and stop
         console.warn(`[area-analysis] Harmony round ${round} failed (${harmonyResult.error}), using last good state from round ${round - 1}`);
         break;
       }
 
       const harmony = harmonyResult.data;
 
-      // Validate harmony response has required fields
       if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) {
         if (round === 1) {
           throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}.`);
@@ -394,12 +393,26 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         rounds_completed: round,
       };
 
-      const imperfectItems = harmony.item_scores.filter((s) => s.harmony_score < 10);
-      console.log(`[area-analysis] Harmony round ${round}: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}, imperfect=${imperfectItems.length}`);
+      // Items that genuinely need fixing: score < 10 AND not already revised
+      // (if it was revised last round and still scores 8+, the validator is
+      // just nitpicking different angles — accept it to prevent oscillation)
+      const needsRevision = harmony.item_scores.filter((s) => {
+        if (s.harmony_score >= 10) return false;
+        if (s.drop) return true; // Always honor drops
+        // If this item was revised before and still scores 8+, it's converged
+        if (previouslyRevised.has(s.category) && s.harmony_score >= 8) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10 but was already revised — accepting (converged)`);
+          return false;
+        }
+        return true;
+      });
 
-      // All items 10/10 with high confidence — done
-      if (imperfectItems.length === 0 && harmony.confidence >= 9 && harmony.overall_cohesion >= 9) {
-        console.log(`[area-analysis] All items 10/10 — harmony complete after ${round} round(s)`);
+      const imperfectItems = harmony.item_scores.filter((s) => s.harmony_score < 10);
+      console.log(`[area-analysis] Harmony round ${round}: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}, imperfect=${imperfectItems.length}, actionable=${needsRevision.length}`);
+
+      // All items converged (either 10/10 or accepted after revision)
+      if (needsRevision.length === 0) {
+        console.log(`[area-analysis] All items converged — harmony complete after ${round} round(s)`);
         break;
       }
 
@@ -407,23 +420,25 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       if (harmony.confidence < 7 && harmony.revisedAnalysis) {
         console.log(`[area-analysis] Round ${round}: confidence ${harmony.confidence}/10 — using full revised analysis`);
         analysis = harmony.revisedAnalysis;
+        // Reset tracking since we got a completely new analysis
+        previouslyRevised.clear();
       } else {
-        // Apply per-item fixes: drop clashing items, revise any item < 10
         const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
         const revised: Array<Record<string, unknown>> = [];
         let revisedCount = 0;
+        const actionableCategories = new Set(needsRevision.map((s) => s.category));
 
         for (const item of needs) {
           const score = harmony.item_scores.find(
             (s) => s.category === item.category
           );
 
-          if (score?.drop) {
+          if (score?.drop && actionableCategories.has(score.category)) {
             console.log(`[area-analysis] Round ${round}: dropping "${item.category}" — score ${score.harmony_score}/10 | root cause: ${score.root_cause || score.reason}`);
             continue;
           }
 
-          if (score && score.harmony_score < 10 && (score.revised_search_title || score.revised_placement || score.revised_specs)) {
+          if (score && actionableCategories.has(score.category) && (score.revised_search_title || score.revised_placement || score.revised_specs)) {
             console.log(`[area-analysis] Round ${round}: revising "${item.category}" — score ${score.harmony_score}/10 | root cause: ${score.root_cause || score.reason}`);
             revised.push({
               ...item,
@@ -431,6 +446,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
               specs: score.revised_specs || item.specs,
               placement: score.revised_placement || item.placement,
             });
+            previouslyRevised.add(item.category as string);
             revisedCount++;
           } else {
             revised.push(item);
@@ -439,9 +455,8 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
         analysis.what_it_needs = revised;
 
-        // If nothing was actually revised, no point re-validating
         if (revisedCount === 0) {
-          console.log(`[area-analysis] Round ${round}: no revisions available — stopping`);
+          console.log(`[area-analysis] Round ${round}: no actionable revisions — stopping`);
           break;
         }
       }
