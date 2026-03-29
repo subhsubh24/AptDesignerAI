@@ -272,11 +272,15 @@ export async function generateSearchBrief(
   replaceItems?: string[],
   spatialLayout?: string,
   roomSummary?: string,
-  userContext?: string
+  userContext?: string,
+  diagnosis?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string,
+  outletPositions?: string
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
   const system = getSystemPrompt(designProfile);
-  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext);
+  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext, diagnosis, lightingConditions, windowDoorPositions, outletPositions);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

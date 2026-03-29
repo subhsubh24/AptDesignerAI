@@ -175,7 +175,8 @@ export async function runAgenticSearch(
       ctx.roomType, missingCategories, ctx.budgetMode, categoryHints,
       ctx.designProfile, ctx.designDirection, ctx.priorities,
       ctx.keepItems, ctx.replaceItems, ctx.spatialLayout, ctx.roomSummary,
-      ctx.userContext
+      ctx.userContext, ctx.diagnosis as Record<string, unknown> | undefined,
+      ctx.lightingConditions, ctx.windowDoorPositions, ctx.outletPositions
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });

@@ -58,13 +58,44 @@ export async function POST(request: Request) {
     input_json: { bundle_id, product_count: products.length },
   });
 
+  // Extract spatial and environmental context from diagnosis
+  const diagJson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
+  const spatialLayout = diagJson?.spatial_layout as string | undefined;
+  const lightingConditions = diagJson?.lighting_conditions as string | undefined;
+  const windowDoorPositions = diagJson?.window_door_positions as string | undefined;
+  const outletPositions = diagJson?.outlet_positions as string | undefined;
+
+  // Build placement map from what_it_needs items
+  const placementMap: Record<string, string> = {};
+  const whatItNeeds = diagJson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
+  if (whatItNeeds) {
+    for (const item of whatItNeeds) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
+
+  // Extract floor plan from building research
+  const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
+
   const result = await evaluateBundle(products, {
     roomType: room?.room_type || "living_room",
     roomImageUrls,
     priorities: room?.priorities || [],
+    existingItems: room?.keep_items || [],
+    replaceItems: room?.replace_items || [],
+    whatShouldGo: diagJson?.what_should_go as string[] | undefined,
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
+    spatialLayout: spatialLayout || undefined,
+    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+    floorPlan: floorPlan || undefined,
+    lightingConditions: lightingConditions || undefined,
+    windowDoorPositions: windowDoorPositions || undefined,
+    outletPositions: outletPositions || undefined,
+    userContext: (room?.user_context as string) || undefined,
   });
 
   if (!result.success || !result.data) {

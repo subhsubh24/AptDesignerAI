@@ -86,7 +86,11 @@ export function getSearchBriefPrompt(
   replaceItems?: string[],
   spatialLayout?: string,
   roomSummary?: string,
-  userContext?: string
+  userContext?: string,
+  diagnosis?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string,
+  outletPositions?: string
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -141,6 +145,42 @@ export function getSearchBriefPrompt(
     ? `\n\n## ROOM ASSESSMENT\n${roomSummary}`
     : "";
 
+  // Build diagnosed problems section — helps target search queries at specific issues
+  const diagnosedProblems: string[] = [];
+  if (diagnosis) {
+    const d = diagnosis as Record<string, unknown>;
+    if (Array.isArray(d.scale_proportion_issues) && d.scale_proportion_issues.length > 0) {
+      diagnosedProblems.push(`Scale/proportion issues: ${d.scale_proportion_issues.join("; ")}`);
+    }
+    if (Array.isArray(d.color_issues) && d.color_issues.length > 0) {
+      diagnosedProblems.push(`Color issues: ${d.color_issues.join("; ")}`);
+    }
+    if (Array.isArray(d.texture_material_issues) && d.texture_material_issues.length > 0) {
+      diagnosedProblems.push(`Material/texture issues: ${d.texture_material_issues.join("; ")}`);
+    }
+    if (Array.isArray(d.lighting_issues) && d.lighting_issues.length > 0) {
+      diagnosedProblems.push(`Lighting issues: ${d.lighting_issues.join("; ")}`);
+    }
+    if (Array.isArray(d.layout_issues) && d.layout_issues.length > 0) {
+      diagnosedProblems.push(`Layout issues: ${d.layout_issues.join("; ")}`);
+    }
+    if (d.biggest_improvement_opportunities && Array.isArray(d.biggest_improvement_opportunities)) {
+      diagnosedProblems.push(`Biggest opportunities: ${(d.biggest_improvement_opportunities as string[]).join("; ")}`);
+    }
+  }
+  const diagnosisSection = diagnosedProblems.length > 0
+    ? `\n\n## DIAGNOSED ROOM PROBLEMS (search queries MUST address these)\n${diagnosedProblems.map((p) => `- ${p}`).join("\n")}\nIMPORTANT: Your search queries should find products that SOLVE these specific problems. If scale is off, search for correctly sized pieces. If materials clash, search for harmonious materials. If lighting is poor, include appropriate lighting searches.`
+    : "";
+
+  // Environmental context
+  const envParts: string[] = [];
+  if (lightingConditions) envParts.push(`Lighting: ${lightingConditions}`);
+  if (windowDoorPositions) envParts.push(`Windows/doors: ${windowDoorPositions}`);
+  if (outletPositions) envParts.push(`Outlets: ${outletPositions}`);
+  const environmentSection = envParts.length > 0
+    ? `\n\n## ENVIRONMENTAL CONTEXT\n${envParts.join("\n")}\nUse this to size items and search for appropriate lighting (dark corners need lamps, outlets determine powered item placement).`
+    : "";
+
   // User's notes about their room
   const userContextSection = userContext
     ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account. If they say to ignore something, exclude it from search considerations. If they describe something not visible in photos, incorporate that information.`
@@ -157,7 +197,7 @@ export function getSearchBriefPrompt(
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

@@ -202,7 +202,7 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
             {result.failed_extractions.length} URL{result.failed_extractions.length !== 1 ? "s" : ""} could not be extracted
           </p>
           {result.failed_extractions.map((f, i) => (
-            <p key={i} className="text-xs text-red-600 truncate">
+            <p key={i} className="text-xs text-red-600 break-all">
               {f.url}: {f.error}
             </p>
           ))}
@@ -233,7 +233,7 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
             </div>
 
             {result.best_combination.scores && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                 {BUNDLE_DIMENSIONS.map((dim) => {
                   const value = (result.best_combination!.scores as Record<string, number>)?.[dim.key] ?? 0;
                   return (
@@ -241,8 +241,8 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
                       <div className={cn("text-lg font-bold", getScoreColor(value))}>
                         {value.toFixed(1)}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">{dim.label}</div>
-                      {dim.weight && <div className="text-[9px] text-muted-foreground/60">{dim.weight}</div>}
+                      <div className="text-xs text-muted-foreground">{dim.label}</div>
+                      {dim.weight && <div className="text-[10px] text-muted-foreground/60">{dim.weight}</div>}
                     </div>
                   );
                 })}
@@ -401,7 +401,7 @@ function ProductScorecard({
         {product.image_url && (
           <img
             src={product.image_url}
-            alt=""
+            alt={product.title || "Product image"}
             className="h-12 w-12 rounded-lg object-cover shrink-0"
           />
         )}
@@ -456,9 +456,9 @@ function ProductScorecard({
                 <div key={dim.key} className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Icon className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground">{dim.label}</span>
+                    <span className="text-xs text-muted-foreground">{dim.label}</span>
                     {dim.weight && (
-                      <span className="text-[9px] text-muted-foreground/60 ml-auto">{dim.weight}</span>
+                      <span className="text-[10px] text-muted-foreground/60 ml-auto">{dim.weight}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
