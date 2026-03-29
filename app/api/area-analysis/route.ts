@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   // Apartment-level diagnosis (keep/replace/add format) is too shallow — let
   // the focus page fall through to POST for a detailed area analysis.
   const djson = diagnosis.diagnosis_json as Record<string, unknown>;
-  if (djson.what_it_needs) {
+  if (Array.isArray(djson.what_it_needs) && djson.what_it_needs.length > 0) {
     return NextResponse.json({ analysis: djson });
   }
 
@@ -280,6 +280,8 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
     });
 
     let analysis = JSON.parse(response.content);
+
+    console.log(`[area-analysis] AI response keys: ${Object.keys(analysis).join(", ")}, what_it_needs count: ${analysis.what_it_needs?.length ?? "missing"}, what_works count: ${analysis.what_works?.length ?? "missing"}`);
 
     // ── Harmony + Spatial validation ────────────────────────────────
     // Before outputting, validate every recommended item for:
