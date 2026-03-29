@@ -538,9 +538,9 @@ Return JSON:
           }
         }
         return passed;
-      } catch {
-        // On failure, pass all candidates through (fail open)
-        return batch;
+      } catch (err) {
+        console.error(`[quick-screen] Batch ${batchIdx} failed, returning empty:`, err);
+        return [];
       }
     })
   );

@@ -584,7 +584,7 @@ export async function runAgenticSearch(
     await Promise.all(deepScorePromises);
 
     if (tokenBudget.exceeded) {
-      console.warn(`[orchestrator] Token budget exceeded (${stats.tokensUsed.toLocaleString()}/${DEFAULT_TOKEN_CAP.toLocaleString()}), skipping validation and bundles`);
+      console.warn(`[orchestrator] Token budget exceeded (${stats.tokensUsed.toLocaleString()}/${DEFAULT_TOKEN_CAP.toLocaleString()}). Deep scored ${stats.totalDeepScored}/${stats.totalQuickScored} candidates. Skipping validation and bundles.`);
       reportStep({ step: "Token budget exceeded — returning scored results", status: "completed" });
       return {
         success: true,
