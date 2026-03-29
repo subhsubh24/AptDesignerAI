@@ -168,17 +168,18 @@ Evaluate EACH recommended item on BOTH harmony AND spatial fit:
 
 15. **Outlet access for powered items**: If recommending lamps, media consoles, or other powered items — is there likely an outlet near the intended placement? A floor lamp in the center of the room with no nearby wall = impractical placement.
 
-## SCORING (per item)
+## SCORING (per item) — AIM FOR 10/10 ON EVERY ITEM
 - **harmony_score** (1-10): Combined harmony + spatial + environmental fit score
-  - 9-10: Perfect — harmonizes beautifully, placement/size makes perfect spatial sense, lighting/acoustics/durability all good
-  - 7-8: Good — works well aesthetically, placement is reasonable, no major environmental issues
-  - 5-6: Acceptable aesthetically but has issues (wrong size, blocks window/door, impractical material, creates acoustic harshness, no outlet access)
-  - 3-4: Conflict — clashes with keeps OR serious spatial problem (won't fit, blocks doorway) OR fundamentally impractical (wrong material for lifestyle)
-  - 1-2: Wrong — completely out of place aesthetically AND spatially AND environmentally
+  - 10: Flawless — perfect material/color harmony, ideal dimensions for the space, placement accounts for traffic/sightlines/outlets/acoustics, and it elevates the room as a whole. THIS is the target for every item.
+  - 9: Near-perfect — one very minor nitpick that barely matters (e.g. could be 2 inches narrower but still works great)
+  - 7-8: Good but has room for improvement — slightly off on color shade, could have better placement, or materials could be more specific
+  - 5-6: Mediocre — wrong size, blocks window/door, impractical material, acoustic harshness, missing outlet access
+  - 3-4: Conflict — clashes with keeps OR serious spatial problem OR fundamentally impractical
+  - 1-2: Wrong — completely out of place
 
 - **drop**: true if harmony_score ≤ 3
 
-- If score 4-6, provide **revised_search_title**, **revised_specs**, AND **revised_placement** that fix the issues
+- For ANY item scoring below 10, you MUST provide **revised_search_title**, **revised_specs**, AND **revised_placement** that would bring it to a 10. Even a score of 8 or 9 should include the small tweak needed to reach perfection.
 
 ## OUTPUT FORMAT
 Return JSON:
@@ -190,11 +191,11 @@ Return JSON:
       "harmony_score": number,
       "keeps_well_with": ["which existing items it pairs well with"],
       "clashes_with": ["which existing items or other recommendations it conflicts with — include spatial conflicts like 'blocks path to dining area', environmental issues like 'blocks south window', 'no outlet nearby for floor lamp', 'adds more hard surface to acoustically harsh room'"],
-      "revised_search_title": "only if score 4-6, a better search title",
-      "revised_specs": "only if score 4-6, revised specs (may include different dimensions)",
-      "revised_placement": "only if score 4-6, a better placement that works spatially",
+      "revised_search_title": "if score < 10, the improved search title that would score 10",
+      "revised_specs": "if score < 10, the improved specs that would score 10",
+      "revised_placement": "if score < 10, the improved placement that would score 10",
       "drop": true/false,
-      "reason": "1-2 sentence explanation covering BOTH aesthetic and spatial reasoning"
+      "reason": "1-2 sentence explanation — what specifically prevents this from being a 10? What did you fix in the revision?"
     }
   ],
   "overall_cohesion": 0-10 (do ALL items work together as a complete room?),
@@ -205,7 +206,7 @@ Return JSON:
   "revisedAnalysis": null or { the full revised analysis if confidence < 7 — with corrected placements }
 }
 
-BE STRICT. A professional designer would walk the room mentally, placing each item, checking clearances, testing sightlines, verifying outlet access, ensuring nothing blocks windows or doors, and confirming the acoustic and lighting balance works. Don't let a beautiful palette pass if the furniture arrangement doesn't work physically or the materials are impractical for the client's lifestyle.`,
+YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designer would accept nothing less than perfection. If a search title says "warm cream" but "ivory" would harmonize better with the existing floors, that's not a 10. If placement says "next to the sofa" but a specific "18 inches from the sofa arm, centered on the south wall outlet" would be better, that's not a 10. Optimize every detail.`,
   });
 
   try {

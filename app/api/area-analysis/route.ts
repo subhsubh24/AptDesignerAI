@@ -320,18 +320,13 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
 
-    // ── Harmony + Spatial validation ────────────────────────────────
-    // Before outputting, validate every recommended item for:
-    //  - harmony with existing "keep" items
-    //  - harmony with other recommendations (do they work as a set?)
-    //  - apartment-wide aesthetic coherence
-    //  - placement, orientation, and spatial flow
-    //  - traffic paths, clearances, and zone definition
-    // Uses room photos + floor plan so it can judge visually and spatially.
+    // ── Harmony + Spatial validation loop ────────────────────────────
+    // Validate every recommended item, apply revisions for any score < 10,
+    // then re-validate until all items score 10/10 or max rounds reached.
     const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
     const br = project?.building_research as Record<string, unknown> | undefined;
     const floorPlan = br?.floor_plan as Record<string, unknown> | undefined;
-    const harmonyResult = await validateRoomHarmony(analysis, {
+    const harmonyCtx = {
       roomType: room.room_type,
       roomName: room.name,
       roomImageUrls,
@@ -340,15 +335,27 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       designProfile: profile,
       floorPlan,
       userContext: room.user_context || undefined,
-    });
+    };
 
+    const MAX_HARMONY_ROUNDS = 3;
     let validation = null;
-    if (harmonyResult.success && harmonyResult.data) {
+
+    for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
+      const harmonyResult = await validateRoomHarmony(analysis, harmonyCtx);
+
+      if (!harmonyResult.success || !harmonyResult.data) {
+        if (harmonyResult.error) {
+          console.error(`[area-analysis] Harmony validation failed (round ${round}): ${harmonyResult.error}`);
+          throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
+        }
+        break;
+      }
+
       const harmony = harmonyResult.data;
 
       // Validate harmony response has required fields
       if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) {
-        console.error(`[area-analysis] Harmony validation returned without item_scores. Keys: ${Object.keys(harmony).join(", ")}`);
+        console.error(`[area-analysis] Harmony validation returned without item_scores (round ${round}). Keys: ${Object.keys(harmony).join(", ")}`);
         throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}. This is a model output format error — retrying should fix it.`);
       }
 
@@ -360,18 +367,27 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         spatial_flow: harmony.spatial_flow,
         issues: harmony.issues,
         item_scores: harmony.item_scores,
+        rounds_completed: round,
       };
 
-      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}`);
+      const imperfectItems = harmony.item_scores.filter((s) => s.harmony_score < 10);
+      console.log(`[area-analysis] Harmony round ${round}: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}, imperfect=${imperfectItems.length}`);
+
+      // All items 10/10 with high confidence — done
+      if (imperfectItems.length === 0 && harmony.confidence >= 9 && harmony.overall_cohesion >= 9) {
+        console.log(`[area-analysis] All items 10/10 — harmony complete after ${round} round(s)`);
+        break;
+      }
 
       // If confidence is low and we got a full revised analysis, use it
       if (harmony.confidence < 7 && harmony.revisedAnalysis) {
-        console.log(`[area-analysis] Harmony confidence ${harmony.confidence}/10 — using revised analysis`);
+        console.log(`[area-analysis] Round ${round}: confidence ${harmony.confidence}/10 — using full revised analysis`);
         analysis = harmony.revisedAnalysis;
       } else {
-        // Apply per-item fixes: drop clashing items, revise mediocre ones
+        // Apply per-item fixes: drop clashing items, revise any item < 10
         const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
         const revised: Array<Record<string, unknown>> = [];
+        let revisedCount = 0;
 
         for (const item of needs) {
           const score = harmony.item_scores.find(
@@ -379,28 +395,36 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           );
 
           if (score?.drop) {
-            console.log(`[area-analysis] Dropping "${item.category}" — harmony score ${score.harmony_score}/10: ${score.reason}`);
+            console.log(`[area-analysis] Round ${round}: dropping "${item.category}" — score ${score.harmony_score}/10: ${score.reason}`);
             continue;
           }
 
-          if (score && score.harmony_score <= 6 && (score.revised_search_title || score.revised_placement)) {
-            console.log(`[area-analysis] Revising "${item.category}" — harmony score ${score.harmony_score}/10: ${score.reason}`);
+          if (score && score.harmony_score < 10 && (score.revised_search_title || score.revised_placement || score.revised_specs)) {
+            console.log(`[area-analysis] Round ${round}: revising "${item.category}" — score ${score.harmony_score}/10: ${score.reason}`);
             revised.push({
               ...item,
               search_title: score.revised_search_title || item.search_title,
               specs: score.revised_specs || item.specs,
               placement: score.revised_placement || item.placement,
             });
+            revisedCount++;
           } else {
             revised.push(item);
           }
         }
 
         analysis.what_it_needs = revised;
+
+        // If nothing was actually revised, no point re-validating
+        if (revisedCount === 0) {
+          console.log(`[area-analysis] Round ${round}: no revisions available — stopping`);
+          break;
+        }
       }
-    } else if (harmonyResult.error) {
-      console.error(`[area-analysis] Harmony validation failed: ${harmonyResult.error}`);
-      throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
+
+      if (round === MAX_HARMONY_ROUNDS) {
+        console.log(`[area-analysis] Max harmony rounds (${MAX_HARMONY_ROUNDS}) reached — proceeding with best state`);
+      }
     }
 
     // Save as detailed diagnosis
