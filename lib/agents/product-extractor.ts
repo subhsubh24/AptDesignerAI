@@ -4,6 +4,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 // ─── Extraction Cache (24h TTL) ───────────────────────────────
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -270,7 +271,7 @@ function parseJsonResponse<T>(raw: string): T {
  *  2. If that 400s, retry with urlContext once (transient errors are common)
  *  3. If still failing, fall back to plain text prompt without urlContext
  */
-export async function extractFromUrl(url: string): Promise<AgentResult<ExtractedProduct>> {
+export async function extractFromUrl(url: string, designProfile?: DynamicDesignProfile): Promise<AgentResult<ExtractedProduct>> {
   // Check cache first
   const cached = getCachedExtraction(url);
   if (cached) {
@@ -278,7 +279,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
   }
 
   const model = selectModel("extraction");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(designProfile);
   const extractionPrompt = getExtractionPrompt();
 
   const userContent = `${extractionPrompt}\n\nExtract product information from this URL: ${url}\n\nVisit the page, read all the content, examine all product images carefully, and check for available color/material variants.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
@@ -371,9 +372,9 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
 /**
  * Extract product info from an image using Gemini vision.
  */
-export async function extractFromImage(imageUrl: string): Promise<AgentResult<ExtractedProduct>> {
+export async function extractFromImage(imageUrl: string, designProfile?: DynamicDesignProfile): Promise<AgentResult<ExtractedProduct>> {
   const model = selectModel("extraction");
-  const system = getSystemPrompt();
+  const system = getSystemPrompt(designProfile);
   const extractionPrompt = getExtractionPrompt();
 
   const content: AIContentBlock[] = [

@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   const extractionPromises = items.flatMap((item) =>
     item.urls.map(async (url) => {
       try {
-        const result = await extractFromUrl(url);
+        const result = await extractFromUrl(url, designProfile);
         if (!result.success || !result.data) {
           return { category: item.category, url, product: null, error: result.error || "Extraction failed" };
         }

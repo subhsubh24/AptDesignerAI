@@ -353,7 +353,7 @@ export async function runAgenticSearch(
           extractPromises.push(
             extractLimit(async () => {
               try {
-                const extractResult = await extractFromUrl(candidate.url);
+                const extractResult = await extractFromUrl(candidate.url, ctx.designProfile);
                 if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; }
                 if (!extractResult.success || !extractResult.data) {
                   tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
@@ -613,7 +613,13 @@ export async function runAgenticSearch(
       const kept: CandidateProduct[] = [];
 
       for (const tier of PRICE_TIERS) {
-        const products = tierResults[tier].filter((p) => evaluations.has(p.id));
+        const products = tierResults[tier].filter((p) => {
+          const ev = evaluations.get(p.id);
+          if (!ev) return false;
+          // Demote low-confidence deep scores — don't include in final results
+          if (ev.scores?.confidence_score !== undefined && ev.scores.confidence_score < 4) return false;
+          return true;
+        });
         products.sort((a, b) => {
           const scoreA = evaluations.get(a.id)?.final_item_score || 0;
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
@@ -644,6 +650,7 @@ export async function runAgenticSearch(
           price: p.price || undefined,
           description: p.description || undefined,
           image_url: p.image_url,
+          dimensions: p.dimensions || undefined,
           visual_style_tags: (pMeta?.visual_style_tags as string[]) || undefined,
         };
       }),
@@ -880,7 +887,7 @@ export async function runAgenticSearch(
           // Extract top 5 backfill candidates
           for (const candidate of deduped.slice(0, 5)) {
             try {
-              const extractResult = await extractFromUrl(candidate.url);
+              const extractResult = await extractFromUrl(candidate.url, ctx.designProfile);
               if (!extractResult.success || !extractResult.data) continue;
               if (!extractResult.data.title && !extractResult.data.price) continue;
 

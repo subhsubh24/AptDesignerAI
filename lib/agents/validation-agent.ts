@@ -265,6 +265,7 @@ export async function validateProductSet(
     price?: number;
     description?: string;
     image_url?: string | null;
+    dimensions?: { width?: number; depth?: number; height?: number; diameter?: number; unit?: string };
     visual_style_tags?: string[];
   }>,
   roomContext: {
