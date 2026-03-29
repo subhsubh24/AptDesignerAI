@@ -111,7 +111,10 @@ Return JSON:
   ],
   "what_works": ["Updated list — include items the client wants to keep"],
   "what_should_go": ["Updated list — remove items the client wants to keep"],
-  "design_direction": "Updated paragraph reflecting the client's feedback"
+  "design_direction": "Updated paragraph reflecting the client's feedback",
+  "recommended_palette": ["Updated list of 4-8 specific colors for this room"],
+  "recommended_materials": ["Updated list of 4-6 materials to use"],
+  "recommended_textures": ["Updated list of 3-5 textures to layer"]
 }
 
 IMPORTANT: Respect the client's preferences. If they want to keep something, keep it and make the design work around it — don't push back unless it genuinely creates a problem, and if so, explain the specific issue clearly. Think like a designer who LISTENS to the client and adapts.`,
@@ -144,23 +147,27 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
     await supabase.from("room_diagnoses").insert({
       room_id,
       diagnosis_json: analysis,
-      design_direction_json: { direction: analysis.design_direction },
+      design_direction_json: {
+        style_notes: analysis.design_direction || "",
+        recommended_palette: analysis.recommended_palette || [],
+        recommended_materials: analysis.recommended_materials || [],
+        recommended_textures: analysis.recommended_textures || [],
+        recommended_furniture_types: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
+      },
       missing_categories: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
       action_list: analysis.what_it_needs || [],
       model_used: selectModel("area_analysis"),
     });
 
-    // Update room keep_items if the user explicitly said to keep something
-    // (the AI's what_works list now reflects this)
+    // Update room keep_items and replace_items to reflect refined analysis
     const updatedKeepItems = analysis.what_works || [];
-    if (updatedKeepItems.length > 0) {
-      await supabase
-        .from("rooms")
-        .update({
-          keep_items: updatedKeepItems,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", room_id);
+    const updatedReplaceItems = analysis.what_should_go || [];
+    const roomUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (updatedKeepItems.length > 0) roomUpdate.keep_items = updatedKeepItems;
+    if (updatedReplaceItems.length > 0) roomUpdate.replace_items = updatedReplaceItems;
+
+    if (Object.keys(roomUpdate).length > 1) {
+      await supabase.from("rooms").update(roomUpdate).eq("id", room_id);
     }
 
     await completeAgentRun(supabase, agentRun.id, {
