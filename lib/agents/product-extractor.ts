@@ -50,6 +50,57 @@ export interface ExtractedProduct {
 }
 
 /**
+ * Validate that an image URL actually resolves to an image.
+ * Uses a HEAD request with a short timeout to avoid blocking.
+ * Returns the URL if valid, null if it's dead/non-image.
+ */
+async function validateImageUrl(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "image/*",
+      },
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.startsWith("image/")) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate image URLs in an extracted product and null out any that are dead.
+ * Runs both checks in parallel for speed.
+ */
+async function validateExtractedImages(product: ExtractedProduct): Promise<ExtractedProduct> {
+  const [validMain, validLifestyle] = await Promise.all([
+    validateImageUrl(product.image_url),
+    validateImageUrl(product.lifestyle_image_url),
+  ]);
+  if (validMain !== product.image_url || validLifestyle !== product.lifestyle_image_url) {
+    console.log(
+      `[extractor] Image validation: main=${validMain ? "ok" : "DEAD"}, lifestyle=${validLifestyle ? "ok" : "DEAD"} for "${product.title}"`
+    );
+  }
+  return {
+    ...product,
+    image_url: validMain,
+    lifestyle_image_url: validLifestyle,
+  };
+}
+
+/**
  * Parse JSON from a potentially messy LLM response (may have markdown, extra text, etc.)
  */
 function parseJsonResponse<T>(raw: string): T {
@@ -106,7 +157,8 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
     const raw = response.content.trim();
     if (!raw) throw new Error("Empty response from extraction");
 
-    const parsed = parseJsonResponse<ExtractedProduct>(raw);
+    let parsed = parseJsonResponse<ExtractedProduct>(raw);
+    parsed = await validateExtractedImages(parsed);
     cacheExtraction(url, parsed);
     return {
       success: true,
@@ -130,7 +182,8 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       const raw = response.content.trim();
       if (!raw) throw new Error("Empty response from extraction (retry)");
 
-      const parsed = parseJsonResponse<ExtractedProduct>(raw);
+      let parsed = parseJsonResponse<ExtractedProduct>(raw);
+      parsed = await validateExtractedImages(parsed);
       cacheExtraction(url, parsed);
       return {
         success: true,
@@ -156,7 +209,8 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         const raw = response.content.trim();
         if (!raw) throw new Error("Empty response from fallback extraction");
 
-        const parsed = parseJsonResponse<ExtractedProduct>(raw);
+        let parsed = parseJsonResponse<ExtractedProduct>(raw);
+        parsed = await validateExtractedImages(parsed);
         cacheExtraction(url, parsed);
         return {
           success: true,

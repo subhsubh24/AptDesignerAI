@@ -32,14 +32,18 @@ export function getExtractionPrompt(): string {
    - For dining tables: note seating capacity if mentioned
 
 5. **Capture the BEST product image URL**:
+   - **CRITICAL: You MUST extract the EXACT URL from the page's HTML (img src, data-src, srcset, og:image meta tag). NEVER construct, guess, or invent an image URL.** If you cannot find a real image URL in the page content, set image_url to null.
    - Choose the highest-resolution, full-color, well-lit image showing the complete product
    - Look at img src, data-src, or srcset attributes — get the largest version
+   - Check the page's <meta property="og:image"> tag — this is often the most reliable high-res product image URL
    - REJECT: thumbnails (under 400px), cropped images, lifestyle crops, swatch images
    - The URL should end in .jpg, .png, .webp or contain /images/ in the path
+   - **Do NOT fabricate URLs by combining a domain with a guessed path. If you didn't read the exact URL from the page, use null.**
 
 6. **Capture a lifestyle/room image URL**:
    - Find an image showing the product IN a room setting with other furniture visible
    - This reveals scale, style compatibility, and real-world appearance
+   - **Same rule: only use URLs you actually found on the page. Never invent a URL. Use null if none found.**
    - If no lifestyle image exists, set to null
 
 ## OUTPUT FORMAT
@@ -66,9 +70,10 @@ Return a JSON object with ALL fields populated (use null only when truly unavail
 }
 
 ## RULES — READ CAREFULLY
-- Be accurate — do NOT hallucinate dimensions, prices, or materials. If you can't find it on the page, use null.
+- Be accurate — do NOT hallucinate dimensions, prices, materials, or image URLs. If you can't find it on the page, use null.
+- **NEVER fabricate image URLs.** Every image_url and lifestyle_image_url MUST be copied verbatim from the page's HTML. URLs you make up will return 404 errors and break the app. When in doubt, use null — a missing image is far better than a fake URL.
 - Extract the COMPLETE materials list. "Solid oak frame with linen upholstery and brass ferrules" = ["solid oak", "linen upholstery", "brass ferrules"], NOT just ["wood"].
-- For image URLs, get the FULL-SIZE version. Look at src, data-src, srcset attributes. Reject URLs containing "thumb", "small", "150x", "200x".
+- For image URLs, get the FULL-SIZE version. Look at src, data-src, srcset, og:image attributes. Reject URLs containing "thumb", "small", "150x", "200x".
 - The description MUST reflect what you actually SEE in the images, not just marketing copy. Describe the real color (not the name), the texture, the proportions.
 - If the page is a category/listing page (not a single product), return null for all fields except set title to "NOT_A_PRODUCT_PAGE".
 - If the page is behind a paywall, login wall, or returns an error, set title to "PAGE_NOT_ACCESSIBLE".`;
