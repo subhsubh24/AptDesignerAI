@@ -219,6 +219,23 @@ BE STRICT. A professional designer would walk the room mentally, placing each it
     });
 
     const parsed = JSON.parse(response.content) as HarmonyValidationResult;
+
+    // Validate required fields
+    if (!parsed.item_scores || !Array.isArray(parsed.item_scores)) {
+      console.error(`[harmony-validation] Response missing item_scores. Keys: ${Object.keys(parsed).join(", ")}`);
+      return {
+        success: false,
+        error: `Harmony validation response missing item_scores. Got keys: ${Object.keys(parsed).join(", ")}`,
+      };
+    }
+    if (typeof parsed.confidence !== "number" || typeof parsed.overall_cohesion !== "number") {
+      console.error(`[harmony-validation] Response missing confidence or overall_cohesion. Keys: ${Object.keys(parsed).join(", ")}`);
+      return {
+        success: false,
+        error: `Harmony validation response missing confidence/overall_cohesion. Got keys: ${Object.keys(parsed).join(", ")}`,
+      };
+    }
+
     return {
       success: true,
       data: parsed,

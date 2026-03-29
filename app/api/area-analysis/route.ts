@@ -45,6 +45,24 @@ export async function POST(request: Request) {
   const { room_id, project_id } = await request.json();
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
+  // Dedup: if a valid area-analysis already exists for this room, return it
+  // (prevents duplicate work from React StrictMode double-mount)
+  const { data: existingDiagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("*")
+    .eq("room_id", room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingDiagnosis) {
+    const existingJson = existingDiagnosis.diagnosis_json as Record<string, unknown>;
+    if (Array.isArray(existingJson.what_it_needs) && existingJson.what_it_needs.length > 0) {
+      console.log(`[area-analysis] Returning existing analysis (dedup) for room ${room_id}`);
+      return NextResponse.json({ analysis: existingJson });
+    }
+  }
+
   // Load this room with images
   const { data: room } = await supabase
     .from("rooms")
@@ -281,7 +299,26 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     let analysis = JSON.parse(response.content);
 
-    console.log(`[area-analysis] AI response keys: ${Object.keys(analysis).join(", ")}, what_it_needs count: ${analysis.what_it_needs?.length ?? "missing"}, what_works count: ${analysis.what_works?.length ?? "missing"}`);
+    // If the AI returned a truncated response, the JSON may be incomplete
+    if (response.truncated) {
+      throw new Error("AI response was truncated (MAX_TOKENS). The analysis was too long to complete. Try with fewer room photos.");
+    }
+
+    // Validate the response is an object with required fields — not an array or malformed
+    if (Array.isArray(analysis)) {
+      throw new Error(`AI returned an array instead of an object. Keys found: ${Object.keys(analysis[0] || {}).join(", ")}. This is a model output format error — retrying should fix it.`);
+    }
+    if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
+      throw new Error(`AI response missing required field "what_it_needs". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error — retrying should fix it.`);
+    }
+    if (!analysis.what_works || !Array.isArray(analysis.what_works)) {
+      throw new Error(`AI response missing required field "what_works". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error.`);
+    }
+    if (!analysis.design_direction || typeof analysis.design_direction !== "string") {
+      throw new Error(`AI response missing required field "design_direction". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error.`);
+    }
+
+    console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
 
     // ── Harmony + Spatial validation ────────────────────────────────
     // Before outputting, validate every recommended item for:
@@ -307,6 +344,13 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
     let validation = null;
     if (harmonyResult.success && harmonyResult.data) {
       const harmony = harmonyResult.data;
+
+      // Validate harmony response has required fields
+      if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) {
+        console.error(`[area-analysis] Harmony validation returned without item_scores. Keys: ${Object.keys(harmony).join(", ")}`);
+        throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}. This is a model output format error — retrying should fix it.`);
+      }
+
       validation = {
         confidence: harmony.confidence,
         overall_cohesion: harmony.overall_cohesion,
@@ -317,7 +361,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         item_scores: harmony.item_scores,
       };
 
-      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores?.length ?? 0}`);
+      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}`);
 
       // If confidence is low and we got a full revised analysis, use it
       if (harmony.confidence < 7 && harmony.revisedAnalysis) {
@@ -325,11 +369,11 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         analysis = harmony.revisedAnalysis;
       } else {
         // Apply per-item fixes: drop clashing items, revise mediocre ones
-        const needs = (analysis.what_it_needs || []) as Array<Record<string, unknown>>;
+        const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
         const revised: Array<Record<string, unknown>> = [];
 
         for (const item of needs) {
-          const score = (harmony.item_scores || []).find(
+          const score = harmony.item_scores.find(
             (s) => s.category === item.category
           );
 
@@ -353,6 +397,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
         analysis.what_it_needs = revised;
       }
+    } else if (harmonyResult.error) {
+      console.error(`[area-analysis] Harmony validation failed: ${harmonyResult.error}`);
+      throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
     }
 
     // Save as detailed diagnosis
@@ -360,14 +407,14 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       room_id,
       diagnosis_json: { ...analysis, validation },
       design_direction_json: {
-        style_notes: analysis.design_direction || "",
+        style_notes: analysis.design_direction,
         recommended_palette: analysis.recommended_palette || [],
         recommended_materials: analysis.recommended_materials || [],
         recommended_textures: analysis.recommended_textures || [],
-        recommended_furniture_types: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
+        recommended_furniture_types: analysis.what_it_needs.map((n: { category: string }) => n.category),
       },
-      missing_categories: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
-      action_list: analysis.what_it_needs || [],
+      missing_categories: analysis.what_it_needs.map((n: { category: string }) => n.category),
+      action_list: analysis.what_it_needs,
       model_used: selectModel("area_analysis"),
     });
 

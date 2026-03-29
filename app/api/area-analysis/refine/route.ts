@@ -132,12 +132,24 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.3,
       responseMimeType: "application/json",
     });
 
+    if (response.truncated) {
+      throw new Error("AI response was truncated (MAX_TOKENS). The refinement response was too long.");
+    }
+
     const analysis = JSON.parse(response.content);
+
+    // Validate response structure
+    if (Array.isArray(analysis)) {
+      throw new Error(`AI returned an array instead of an object. This is a model output format error — retrying should fix it.`);
+    }
+    if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
+      throw new Error(`AI response missing required field "what_it_needs". Got keys: ${Object.keys(analysis).join(", ")}`);
+    }
 
     // Extract refinement-specific fields
     const impactSummary = analysis.impact_summary;
@@ -152,10 +164,10 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
         recommended_palette: analysis.recommended_palette || [],
         recommended_materials: analysis.recommended_materials || [],
         recommended_textures: analysis.recommended_textures || [],
-        recommended_furniture_types: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
+        recommended_furniture_types: analysis.what_it_needs.map((n: { category: string }) => n.category),
       },
-      missing_categories: analysis.what_it_needs?.map((n: { category: string }) => n.category) || [],
-      action_list: analysis.what_it_needs || [],
+      missing_categories: analysis.what_it_needs.map((n: { category: string }) => n.category),
+      action_list: analysis.what_it_needs,
       model_used: selectModel("area_analysis"),
     });
 
