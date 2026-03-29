@@ -362,10 +362,13 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       const harmonyResult = await validateRoomHarmony(analysis, harmonyCtx);
 
       if (!harmonyResult.success || !harmonyResult.data) {
-        if (harmonyResult.error) {
-          console.error(`[area-analysis] Harmony validation failed (round ${round}): ${harmonyResult.error}`);
+        if (round === 1) {
+          // First round failure is fatal — we have no validation at all
+          console.error(`[area-analysis] Harmony validation failed on round 1: ${harmonyResult.error}`);
           throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
         }
+        // Later rounds: use last good validation state and stop
+        console.warn(`[area-analysis] Harmony round ${round} failed (${harmonyResult.error}), using last good state from round ${round - 1}`);
         break;
       }
 
@@ -373,8 +376,11 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
       // Validate harmony response has required fields
       if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) {
-        console.error(`[area-analysis] Harmony validation returned without item_scores (round ${round}). Keys: ${Object.keys(harmony).join(", ")}`);
-        throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}. This is a model output format error — retrying should fix it.`);
+        if (round === 1) {
+          throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}.`);
+        }
+        console.warn(`[area-analysis] Harmony round ${round} returned invalid data, using last good state from round ${round - 1}`);
+        break;
       }
 
       validation = {

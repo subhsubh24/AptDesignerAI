@@ -229,47 +229,65 @@ Return JSON:
 YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designer would accept nothing less than perfection. If a search title says "warm cream" but "ivory" would harmonize better with the existing floors, that's not a 10. If placement says "next to the sofa" but a specific "18 inches from the sofa arm, centered on the south wall outlet" would be better, that's not a 10. Optimize every detail.`,
   });
 
-  try {
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content }],
-      max_tokens: 16000,
-      temperature: 0.2,
-      thinkingConfig: { thinkingLevel: "high" },
-      responseMimeType: "application/json",
-    });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content }],
+        max_tokens: 32000,
+        temperature: 0.2,
+        thinkingConfig: { thinkingLevel: attempt === 0 ? "high" : "medium" },
+        responseMimeType: "application/json",
+      });
 
-    const parsed = JSON.parse(response.content) as HarmonyValidationResult;
+      if (response.truncated) {
+        console.warn(`[harmony-validation] Response truncated (attempt ${attempt + 1}), retrying with lower thinking...`);
+        continue;
+      }
 
-    // Validate required fields
-    if (!parsed.item_scores || !Array.isArray(parsed.item_scores)) {
-      console.error(`[harmony-validation] Response missing item_scores. Keys: ${Object.keys(parsed).join(", ")}`);
+      const parsed = JSON.parse(response.content) as HarmonyValidationResult;
+
+      // Handle array response (AI sometimes wraps in array)
+      const result = Array.isArray(parsed) ? (parsed[0] as HarmonyValidationResult) : parsed;
+
+      // Validate required fields
+      if (!result.item_scores || !Array.isArray(result.item_scores)) {
+        console.error(`[harmony-validation] Response missing item_scores (attempt ${attempt + 1}). Keys: ${Object.keys(result).join(", ")}`);
+        if (attempt === 0) continue; // Retry
+        return {
+          success: false,
+          error: `Harmony validation response missing item_scores. Got keys: ${Object.keys(result).join(", ")}`,
+        };
+      }
+      if (typeof result.confidence !== "number" || typeof result.overall_cohesion !== "number") {
+        console.error(`[harmony-validation] Response missing confidence or overall_cohesion (attempt ${attempt + 1}). Keys: ${Object.keys(result).join(", ")}`);
+        if (attempt === 0) continue; // Retry
+        return {
+          success: false,
+          error: `Harmony validation response missing confidence/overall_cohesion. Got keys: ${Object.keys(result).join(", ")}`,
+        };
+      }
+
+      return {
+        success: true,
+        data: result,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+        model: response.model,
+      };
+    } catch (error) {
+      if (attempt === 0) {
+        console.warn(`[harmony-validation] Attempt 1 failed, retrying:`, error);
+        continue;
+      }
       return {
         success: false,
-        error: `Harmony validation response missing item_scores. Got keys: ${Object.keys(parsed).join(", ")}`,
+        error: error instanceof Error ? error.message : "Harmony validation failed",
       };
     }
-    if (typeof parsed.confidence !== "number" || typeof parsed.overall_cohesion !== "number") {
-      console.error(`[harmony-validation] Response missing confidence or overall_cohesion. Keys: ${Object.keys(parsed).join(", ")}`);
-      return {
-        success: false,
-        error: `Harmony validation response missing confidence/overall_cohesion. Got keys: ${Object.keys(parsed).join(", ")}`,
-      };
-    }
-
-    return {
-      success: true,
-      data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-      model: response.model,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Harmony validation failed",
-    };
   }
+
+  return { success: false, error: "Harmony validation failed after 2 attempts" };
 }
 
 /**
