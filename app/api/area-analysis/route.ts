@@ -357,7 +357,8 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     const MAX_HARMONY_ROUNDS = 10;
     let validation = null;
-    // Track which items were revised in previous rounds to detect oscillation
+    // Track best score each item has ever achieved + whether it was revised
+    const bestScores = new Map<string, number>();
     const previouslyRevised = new Set<string>();
 
     for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
@@ -382,6 +383,12 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         break;
       }
 
+      // Update best-ever scores
+      for (const s of harmony.item_scores) {
+        const prev = bestScores.get(s.category) || 0;
+        if (s.harmony_score > prev) bestScores.set(s.category, s.harmony_score);
+      }
+
       validation = {
         confidence: harmony.confidence,
         overall_cohesion: harmony.overall_cohesion,
@@ -393,13 +400,18 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         rounds_completed: round,
       };
 
-      // Items that genuinely need fixing: score < 10 AND not already revised
-      // (if it was revised last round and still scores 8+, the validator is
-      // just nitpicking different angles — accept it to prevent oscillation)
+      // Determine which items genuinely need revision:
+      // - Skip items that already hit 10 in any previous round (locked in)
+      // - Skip items revised before that still score 8+ (converged, just nitpicking)
       const needsRevision = harmony.item_scores.filter((s) => {
         if (s.harmony_score >= 10) return false;
-        if (s.drop) return true; // Always honor drops
-        // If this item was revised before and still scores 8+, it's converged
+        if (s.drop) return true;
+        // Item hit 10 in a prior round — validator is now nitpicking, lock it in
+        if (bestScores.get(s.category) === 10) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" was 10 before, now ${s.harmony_score} — locked in`);
+          return false;
+        }
+        // Item was revised before and still 8+ — converged
         if (previouslyRevised.has(s.category) && s.harmony_score >= 8) {
           console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10 but was already revised — accepting (converged)`);
           return false;
