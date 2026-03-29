@@ -317,7 +317,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         item_scores: harmony.item_scores,
       };
 
-      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}`);
+      console.log(`[area-analysis] Harmony validation: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores?.length ?? 0}`);
 
       // If confidence is low and we got a full revised analysis, use it
       if (harmony.confidence < 7 && harmony.revisedAnalysis) {
@@ -329,7 +329,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         const revised: Array<Record<string, unknown>> = [];
 
         for (const item of needs) {
-          const score = harmony.item_scores.find(
+          const score = (harmony.item_scores || []).find(
             (s) => s.category === item.category
           );
 
