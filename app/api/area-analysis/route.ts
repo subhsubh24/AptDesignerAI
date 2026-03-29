@@ -339,6 +339,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
       designProfile: profile,
       floorPlan,
+      userContext: room.user_context || undefined,
     });
 
     let validation = null;

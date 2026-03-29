@@ -58,6 +58,7 @@ export async function validateRoomHarmony(
     apartmentAnalysis?: Record<string, unknown>;
     designProfile?: DynamicDesignProfile;
     floorPlan?: Record<string, unknown>;
+    userContext?: string;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -106,7 +107,7 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
 IMPORTANT: Think step-by-step through each item. For each recommended item, evaluate it against EVERY existing item and EVERY other recommendation.
 
 ## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.` : ""}
 
 ## DESIGN DIRECTION
 ${designDirection}
