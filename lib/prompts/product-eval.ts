@@ -14,7 +14,8 @@ export function getProductEvalPrompt(
   floorPlan?: Record<string, unknown>,
   lightingConditions?: string,
   windowDoorPositions?: string,
-  outletPositions?: string
+  outletPositions?: string,
+  userContext?: string
 ): string {
   // Build dynamic design direction from diagnosis — no hardcoded values
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -88,7 +89,7 @@ ${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\
 ${paletteInfo}
 ${materialsInfo}
 ${styleInfo}
-${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}${environmentContext}
+${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}${environmentContext}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when scoring. If they mention something not visible in photos, incorporate that information. If they say to ignore something, exclude it from scoring considerations.` : ""}
 
 ## LAYER 1: INDIVIDUAL ITEM FIT (8 dimensions, each 0-10)
 

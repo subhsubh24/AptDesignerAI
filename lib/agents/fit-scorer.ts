@@ -32,6 +32,8 @@ export interface ScoringContext {
   windowDoorPositions?: string;
   /** Outlet locations */
   outletPositions?: string;
+  /** User's free-text notes about their room */
+  userContext?: string;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -77,7 +79,8 @@ export async function scoreProduct(
     scoringCtx.floorPlan,
     scoringCtx.lightingConditions,
     scoringCtx.windowDoorPositions,
-    scoringCtx.outletPositions
+    scoringCtx.outletPositions,
+    scoringCtx.userContext
   );
 
   // Extract visual metadata from product metadata

@@ -172,6 +172,7 @@ export async function POST(request: Request) {
     whatWorks: whatWorks && whatWorks.length > 0 ? whatWorks : undefined,
     whatShouldGo: whatShouldGo && whatShouldGo.length > 0 ? whatShouldGo : undefined,
     userFeedbackContext: userFeedbackContext || undefined,
+    userContext: (room.user_context as string) || undefined,
     otherRoomsContext: otherRoomsContext || undefined,
     spatialLayout: spatialLayout || undefined,
     placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,

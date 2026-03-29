@@ -37,6 +37,9 @@ export interface AgentContext {
   // Cross-session learning — user feedback from accepted/rejected products
   userFeedbackContext?: string;
 
+  // User's free-text notes about their room photos (e.g., "ignore the boxes", "couch is being replaced")
+  userContext?: string;
+
   // Cross-room coherence — other rooms' design direction for apartment consistency
   otherRoomsContext?: string;
 

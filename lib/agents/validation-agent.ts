@@ -263,6 +263,7 @@ export async function validateProductSet(
     windowDoorPositions?: string;
     outletPositions?: string;
     priorities?: string[];
+    userContext?: string;
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
@@ -304,7 +305,7 @@ IMPORTANT: Think step-by-step. First examine the room photos. Then examine each 
 - Room type: ${roomContext.roomType}
 - Design direction: ${roomContext.designDirection}
 - Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}
-${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}
+${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${roomContext.userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${roomContext.userContext}"\nIMPORTANT: Factor these notes into validation. If the user mentions constraints or preferences not visible in photos, consider them when checking product fit.` : ""}
 
 ## PRODUCTS TO VALIDATE
 ${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}

@@ -174,7 +174,8 @@ export async function runAgenticSearch(
     const briefResult = await generateSearchBrief(
       ctx.roomType, missingCategories, ctx.budgetMode, categoryHints,
       ctx.designProfile, ctx.designDirection, ctx.priorities,
-      ctx.keepItems, ctx.spatialLayout, ctx.roomSummary
+      ctx.keepItems, ctx.spatialLayout, ctx.roomSummary,
+      ctx.userContext
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
@@ -552,6 +553,7 @@ export async function runAgenticSearch(
                 lightingConditions: ctx.lightingConditions,
                 windowDoorPositions: ctx.windowDoorPositions,
                 outletPositions: ctx.outletPositions,
+                userContext: ctx.userContext,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -649,6 +651,7 @@ export async function runAgenticSearch(
         windowDoorPositions: ctx.windowDoorPositions,
         outletPositions: ctx.outletPositions,
         priorities: ctx.priorities,
+        userContext: ctx.userContext,
       }
     );
 
@@ -727,6 +730,7 @@ export async function runAgenticSearch(
       lightingConditions: ctx.lightingConditions,
       windowDoorPositions: ctx.windowDoorPositions,
       outletPositions: ctx.outletPositions,
+      userContext: ctx.userContext,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
@@ -913,6 +917,7 @@ export async function runAgenticSearch(
                 lightingConditions: ctx.lightingConditions,
                 windowDoorPositions: ctx.windowDoorPositions,
                 outletPositions: ctx.outletPositions,
+                userContext: ctx.userContext,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);

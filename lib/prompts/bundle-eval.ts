@@ -11,7 +11,8 @@ export function getBundleEvalPrompt(
   lightingConditions?: string,
   windowDoorPositions?: string,
   outletPositions?: string,
-  existingItems?: string[]
+  existingItems?: string[],
+  userContext?: string
 ): string {
   // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
@@ -83,7 +84,7 @@ ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 ## WHAT'S ALREADY IN THE ROOM
 ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}
+${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` : ""}
 
 ## SCORING DIMENSIONS (each 0-10)
 

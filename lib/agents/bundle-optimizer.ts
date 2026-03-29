@@ -23,6 +23,7 @@ export interface BundleContext {
   lightingConditions?: string;
   windowDoorPositions?: string;
   outletPositions?: string;
+  userContext?: string;
 }
 
 export async function evaluateBundle(
@@ -42,7 +43,8 @@ export async function evaluateBundle(
     bundleCtx.lightingConditions,
     bundleCtx.windowDoorPositions,
     bundleCtx.outletPositions,
-    bundleCtx.existingItems
+    bundleCtx.existingItems,
+    bundleCtx.userContext
   );
 
   // Build bundle context with visual metadata

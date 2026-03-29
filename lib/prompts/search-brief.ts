@@ -84,7 +84,8 @@ export function getSearchBriefPrompt(
   priorities?: string[],
   keepItems?: string[],
   spatialLayout?: string,
-  roomSummary?: string
+  roomSummary?: string,
+  userContext?: string
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -134,6 +135,11 @@ export function getSearchBriefPrompt(
     ? `\n\n## ROOM ASSESSMENT\n${roomSummary}`
     : "";
 
+  // User's notes about their room
+  const userContextSection = userContext
+    ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account. If they say to ignore something, exclude it from search considerations. If they describe something not visible in photos, incorporate that information.`
+    : "";
+
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
 ## PROCESS — Think through this step by step:
@@ -145,7 +151,7 @@ export function getSearchBriefPrompt(
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${spatialSection}${summarySection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${spatialSection}${summarySection}${userContextSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:
