@@ -874,7 +874,7 @@ export default function FocusPage() {
               {validationInfo.confidence >= 7 ? <ShieldCheck className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
               <div>
                 <span className="font-medium">Confidence: {validationInfo.confidence}/10</span>
-                {validationInfo.issues.length > 0 && (
+                {validationInfo.issues?.length > 0 && (
                   <p className="text-xs mt-0.5 opacity-80">{validationInfo.issues.slice(0, 2).join(" • ")}</p>
                 )}
               </div>
