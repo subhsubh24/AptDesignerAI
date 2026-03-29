@@ -28,7 +28,10 @@ import {
   MessageSquare,
   RefreshCw,
   ArrowRight,
+  LinkIcon,
 } from "lucide-react";
+import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingForm";
+import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
@@ -78,7 +81,7 @@ interface ProductResult {
 }
 
 type PriceTier = "budget" | "balanced" | "high_end";
-type Step = "analyzing" | "analysis" | "vision" | "sourcing" | "results" | "mockup";
+type Step = "analyzing" | "analysis" | "vision" | "sourcing" | "results" | "mockup" | "manual_sourcing" | "manual_results";
 
 const TIER_LABELS: Record<PriceTier, string> = {
   budget: "Budget",
@@ -166,6 +169,10 @@ export default function FocusPage() {
   const [mockupUrl, setMockupUrl] = useState<string | null>(null);
   const [generatingMockup, setGeneratingMockup] = useState(false);
   const [showMockupOverlay, setShowMockupOverlay] = useState(false);
+
+  // Manual sourcing state
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualResult, setManualResult] = useState<EvaluateSetResult | null>(null);
 
   // Elapsed time counter during search
   useEffect(() => {
@@ -440,6 +447,29 @@ export default function FocusPage() {
     setGeneratingMockup(false);
   };
 
+  // Manual sourcing — evaluate user-provided URLs
+  const handleManualSubmit = async (items: Array<{ category: string; urls: string[] }>) => {
+    setManualLoading(true);
+    try {
+      const res = await fetch("/api/products/evaluate-set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_id: roomId, items }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setManualResult(data);
+        setStep("manual_results");
+      } else {
+        const err = await res.json().catch(() => ({ error: "Failed to evaluate" }));
+        console.error("Manual sourcing error:", err);
+      }
+    } catch (err) {
+      console.error("Manual sourcing error:", err);
+    }
+    setManualLoading(false);
+  };
+
   const handleSaveAndContinue = async () => {
     await fetch(`/api/rooms/${roomId}`, {
       method: "PATCH",
@@ -690,6 +720,16 @@ export default function FocusPage() {
               <Search className="h-5 w-5 mr-2" />
               Find pieces for this room
             </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="flex-1 h-14 text-base"
+              onClick={() => setStep("manual_sourcing")}
+              disabled={refining}
+            >
+              <LinkIcon className="h-5 w-5 mr-2" />
+              I&apos;ll find my own
+            </Button>
             <Button size="lg" variant="outline" className="h-14" onClick={handleGenerateVision} disabled={generatingVision || refining}>
               {generatingVision ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Eye className="h-5 w-5 mr-2" />}
               Preview the vision
@@ -901,6 +941,24 @@ export default function FocusPage() {
             </Button>
           </div>
         </>
+      )}
+
+      {/* ─── Step: Manual Sourcing Form ─── */}
+      {step === "manual_sourcing" && areaAnalysis && (
+        <ManualSourcingForm
+          categories={areaAnalysis.what_it_needs || []}
+          onSubmit={handleManualSubmit}
+          loading={manualLoading}
+          onCancel={() => setStep("analysis")}
+        />
+      )}
+
+      {/* ─── Step: Manual Results Scorecard ─── */}
+      {step === "manual_results" && manualResult && (
+        <ManualScorecardView
+          result={manualResult}
+          onBack={() => setStep("analysis")}
+        />
       )}
 
       {/* ─── Vision Overlay ─── */}
