@@ -61,6 +61,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ analysis: converted });
   }
 
+  // Fall back: apartment-level diagnosis with keep/replace/add format
+  if (djson.add && Array.isArray(djson.add)) {
+    const converted = {
+      summary: (djson.summary as string) || "Analysis available",
+      what_it_needs: (djson.add as string[]).map((item: string) => {
+        const raw = item.split("—")[0].split("–")[0].trim();
+        const cleaned = raw
+          .replace(/^(replace|add|get|remove|swap|upgrade|buy|find|consider)\s+(the\s+|a\s+|an\s+|or\s+remove\s+the\s+)?/i, "")
+          .trim();
+        const shortName = cleaned.split(/\s+/).slice(0, 3).join("_").toLowerCase()
+          .replace(/[^a-z0-9_]/g, "");
+        return {
+          category: shortName || "other",
+          search_title: item,
+          description: item,
+          priority: "medium" as const,
+          specs: "",
+        };
+      }),
+      what_works: (djson.keep as string[]) || [],
+      what_should_go: (djson.replace as string[]) || [],
+      design_direction: "",
+    };
+    return NextResponse.json({ analysis: converted });
+  }
+
   return NextResponse.json({ analysis: null });
 }
 

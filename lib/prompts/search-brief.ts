@@ -83,6 +83,7 @@ export function getSearchBriefPrompt(
   designDirection?: DesignDirection,
   priorities?: string[],
   keepItems?: string[],
+  replaceItems?: string[],
   spatialLayout?: string,
   roomSummary?: string,
   userContext?: string
@@ -125,6 +126,11 @@ export function getSearchBriefPrompt(
     ? `\n\n## EXISTING ITEMS TO WORK WITH\n${keepItems.map((item) => `- ${item}`).join("\n")}\nIMPORTANT: Search results must complement these existing items. Consider their materials, colors, and scale when crafting queries.`
     : "";
 
+  // Build replace items section
+  const replaceSection = replaceItems?.length
+    ? `\n\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nIMPORTANT: Search for REPLACEMENTS for these items. The new pieces should solve the same functional need but better match the design direction. If replacing a rug, search for a rug. If replacing a coffee table, search for a coffee table.`
+    : "";
+
   // Build spatial context
   const spatialSection = spatialLayout
     ? `\n\n## SPATIAL LAYOUT\n${spatialLayout}\nUse this to size items correctly — e.g. compact pieces for tight spaces, full-size for open layouts.`
@@ -151,7 +157,7 @@ export function getSearchBriefPrompt(
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${spatialSection}${summarySection}${userContextSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

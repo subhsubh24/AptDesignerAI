@@ -15,7 +15,8 @@ export function getProductEvalPrompt(
   lightingConditions?: string,
   windowDoorPositions?: string,
   outletPositions?: string,
-  userContext?: string
+  userContext?: string,
+  replaceItems?: string[]
 ): string {
   // Build dynamic design direction from diagnosis — no hardcoded values
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -84,6 +85,7 @@ Evaluate the following product using THREE LAYERS of analysis:
 - Existing items in room: ${existingItems.length > 0 ? existingItems.join(", ") : "See apartment context in system prompt and room photos"}${placementContext}
 ${prioritiesContext ? `\n${prioritiesContext}` : ""}
 ${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\n${otherRoomsContext}` : ""}
+${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThis product may be a REPLACEMENT for one of these items. If so, it should solve the same functional need but better match the design direction.` : ""}
 
 ## DESIGN DIRECTION (from room diagnosis)
 ${paletteInfo}

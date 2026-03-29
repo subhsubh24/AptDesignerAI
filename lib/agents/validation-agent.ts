@@ -264,6 +264,8 @@ export async function validateProductSet(
     outletPositions?: string;
     priorities?: string[];
     userContext?: string;
+    replaceItems?: string[];
+    whatShouldGo?: string[];
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
@@ -304,7 +306,7 @@ IMPORTANT: Think step-by-step. First examine the room photos. Then examine each 
 ## ROOM CONTEXT
 - Room type: ${roomContext.roomType}
 - Design direction: ${roomContext.designDirection}
-- Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}
+- Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}${roomContext.replaceItems?.length ? `\n- Items being replaced/removed: ${roomContext.replaceItems.join(", ")}` : ""}${roomContext.whatShouldGo?.length ? `\n- From diagnosis — items that should go: ${roomContext.whatShouldGo.join("; ")}` : ""}
 ${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${roomContext.userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${roomContext.userContext}"\nIMPORTANT: Factor these notes into validation. If the user mentions constraints or preferences not visible in photos, consider them when checking product fit.` : ""}
 
 ## PRODUCTS TO VALIDATE

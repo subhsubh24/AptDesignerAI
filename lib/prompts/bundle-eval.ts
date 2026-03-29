@@ -12,7 +12,9 @@ export function getBundleEvalPrompt(
   windowDoorPositions?: string,
   outletPositions?: string,
   existingItems?: string[],
-  userContext?: string
+  userContext?: string,
+  replaceItems?: string[],
+  whatShouldGo?: string[]
 ): string {
   // Build dynamic context from diagnosis — no hardcoded apartment references
   const existingContext = diagnosis?.what_is_working?.length
@@ -84,7 +86,7 @@ ${prioritiesContext ? `- ${prioritiesContext}` : ""}
 ## WHAT'S ALREADY IN THE ROOM
 ${existingContext}
 ${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` : ""}
+${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}${replaceItems?.length ? `\n\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThe bundle should include adequate replacements for these items. Verify the bundle addresses these removals.` : ""}${whatShouldGo?.length ? `\n\n## FROM DIAGNOSIS — ITEMS THAT SHOULD GO\n${whatShouldGo.map((item) => `- ${item}`).join("\n")}\nVerify this bundle doesn't repeat the same problems these items had.` : ""}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` : ""}
 
 ## SCORING DIMENSIONS (each 0-10)
 

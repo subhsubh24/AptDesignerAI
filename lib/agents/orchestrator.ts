@@ -174,7 +174,7 @@ export async function runAgenticSearch(
     const briefResult = await generateSearchBrief(
       ctx.roomType, missingCategories, ctx.budgetMode, categoryHints,
       ctx.designProfile, ctx.designDirection, ctx.priorities,
-      ctx.keepItems, ctx.spatialLayout, ctx.roomSummary,
+      ctx.keepItems, ctx.replaceItems, ctx.spatialLayout, ctx.roomSummary,
       ctx.userContext
     );
     if (!briefResult.success || !briefResult.data) {
@@ -554,6 +554,7 @@ export async function runAgenticSearch(
                 windowDoorPositions: ctx.windowDoorPositions,
                 outletPositions: ctx.outletPositions,
                 userContext: ctx.userContext,
+                replaceItems: ctx.replaceItems,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -652,6 +653,8 @@ export async function runAgenticSearch(
         outletPositions: ctx.outletPositions,
         priorities: ctx.priorities,
         userContext: ctx.userContext,
+        replaceItems: ctx.replaceItems,
+        whatShouldGo: ctx.whatShouldGo,
       }
     );
 
@@ -731,6 +734,8 @@ export async function runAgenticSearch(
       windowDoorPositions: ctx.windowDoorPositions,
       outletPositions: ctx.outletPositions,
       userContext: ctx.userContext,
+      replaceItems: ctx.replaceItems,
+      whatShouldGo: ctx.whatShouldGo,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
@@ -918,6 +923,7 @@ export async function runAgenticSearch(
                 windowDoorPositions: ctx.windowDoorPositions,
                 outletPositions: ctx.outletPositions,
                 userContext: ctx.userContext,
+                replaceItems: ctx.replaceItems,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);

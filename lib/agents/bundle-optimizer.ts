@@ -24,6 +24,8 @@ export interface BundleContext {
   windowDoorPositions?: string;
   outletPositions?: string;
   userContext?: string;
+  replaceItems?: string[];
+  whatShouldGo?: string[];
 }
 
 export async function evaluateBundle(
@@ -44,7 +46,9 @@ export async function evaluateBundle(
     bundleCtx.windowDoorPositions,
     bundleCtx.outletPositions,
     bundleCtx.existingItems,
-    bundleCtx.userContext
+    bundleCtx.userContext,
+    bundleCtx.replaceItems,
+    bundleCtx.whatShouldGo
   );
 
   // Build bundle context with visual metadata
