@@ -80,23 +80,156 @@ async function validateImageUrl(url: string | null | undefined): Promise<string 
 }
 
 /**
- * Validate image URLs in an extracted product and null out any that are dead.
- * Runs both checks in parallel for speed.
+ * Scrape a product page's HTML to extract real image URLs.
+ * Uses og:image, twitter:image meta tags, and JSON-LD structured data.
+ * These are reliable, standardized sources that every major retailer uses.
  */
-async function validateExtractedImages(product: ExtractedProduct): Promise<ExtractedProduct> {
-  const [validMain, validLifestyle] = await Promise.all([
+async function scrapeProductImages(
+  pageUrl: string
+): Promise<{ ogImage: string | null; productImages: string[] }> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(pageUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return { ogImage: null, productImages: [] };
+
+    const html = await res.text();
+    const images: string[] = [];
+
+    // 1. og:image — the single best product image on virtually every retailer
+    const ogMatch = html.match(
+      /<meta\s+(?:property|name)=["']og:image["']\s+content=["']([^"']+)["']/i
+    ) || html.match(
+      /<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["']og:image["']/i
+    );
+    const ogImage = ogMatch ? ogMatch[1] : null;
+    if (ogImage) images.push(ogImage);
+
+    // 2. twitter:image — often same as og:image but sometimes different/higher-res
+    const twMatch = html.match(
+      /<meta\s+(?:property|name)=["']twitter:image["']\s+content=["']([^"']+)["']/i
+    ) || html.match(
+      /<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["']twitter:image["']/i
+    );
+    if (twMatch && twMatch[1] !== ogImage) images.push(twMatch[1]);
+
+    // 3. JSON-LD structured data — Product schema has "image" field
+    const jsonLdBlocks = html.match(
+      /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+    );
+    if (jsonLdBlocks) {
+      for (const block of jsonLdBlocks) {
+        try {
+          const content = block.replace(
+            /<script\s+type=["']application\/ld\+json["'][^>]*>/i,
+            ""
+          ).replace(/<\/script>/i, "");
+          const ld = JSON.parse(content);
+          // Handle both single objects and @graph arrays
+          const items = ld["@graph"] ? ld["@graph"] : [ld];
+          for (const item of items) {
+            if (
+              item["@type"] === "Product" ||
+              item["@type"]?.includes?.("Product")
+            ) {
+              const ldImages = Array.isArray(item.image)
+                ? item.image
+                : item.image
+                  ? [item.image]
+                  : [];
+              for (const img of ldImages) {
+                const url = typeof img === "string" ? img : img?.url || img?.contentUrl;
+                if (url && !images.includes(url)) images.push(url);
+              }
+            }
+          }
+        } catch {
+          // JSON parse failure in LD block — skip
+        }
+      }
+    }
+
+    return { ogImage, productImages: images };
+  } catch (err) {
+    console.warn(`[extractor] Failed to scrape images from ${pageUrl}:`, err instanceof Error ? err.message : err);
+    return { ogImage: null, productImages: [] };
+  }
+}
+
+/**
+ * Validate and fix image URLs in an extracted product.
+ *
+ * Strategy:
+ *  1. Scrape real image URLs from the product page (og:image, JSON-LD)
+ *  2. If the AI-extracted URL is valid, keep it
+ *  3. If not, replace with the scraped og:image or first JSON-LD image
+ *  4. Validate the final URL to ensure it actually serves an image
+ */
+async function validateExtractedImages(
+  product: ExtractedProduct,
+  pageUrl: string
+): Promise<ExtractedProduct> {
+  // Scrape ground-truth images from the page in parallel with validating AI's URLs
+  const [scraped, validMain, validLifestyle] = await Promise.all([
+    scrapeProductImages(pageUrl),
     validateImageUrl(product.image_url),
     validateImageUrl(product.lifestyle_image_url),
   ]);
-  if (validMain !== product.image_url || validLifestyle !== product.lifestyle_image_url) {
+
+  let finalMain = validMain;
+  let finalLifestyle = validLifestyle;
+
+  // If AI's main image is dead, use scraped og:image
+  if (!finalMain && scraped.ogImage) {
+    finalMain = await validateImageUrl(scraped.ogImage);
+    if (finalMain) {
+      console.log(`[extractor] Replaced dead image_url with og:image for "${product.title}"`);
+    }
+  }
+
+  // If still no main image, try other scraped images
+  if (!finalMain && scraped.productImages.length > 0) {
+    for (const candidate of scraped.productImages) {
+      if (candidate === scraped.ogImage) continue; // already tried
+      finalMain = await validateImageUrl(candidate);
+      if (finalMain) {
+        console.log(`[extractor] Replaced dead image_url with JSON-LD image for "${product.title}"`);
+        break;
+      }
+    }
+  }
+
+  // If no lifestyle image, try additional scraped images (skip the one used for main)
+  if (!finalLifestyle && scraped.productImages.length > 1) {
+    for (const candidate of scraped.productImages) {
+      if (candidate === finalMain) continue;
+      finalLifestyle = await validateImageUrl(candidate);
+      if (finalLifestyle) {
+        console.log(`[extractor] Found lifestyle image from page scrape for "${product.title}"`);
+        break;
+      }
+    }
+  }
+
+  if (finalMain !== product.image_url || finalLifestyle !== product.lifestyle_image_url) {
     console.log(
-      `[extractor] Image validation: main=${validMain ? "ok" : "DEAD"}, lifestyle=${validLifestyle ? "ok" : "DEAD"} for "${product.title}"`
+      `[extractor] Image fix-up for "${product.title}": main=${finalMain ? "✓" : "null"}, lifestyle=${finalLifestyle ? "✓" : "null"}`
     );
   }
+
   return {
     ...product,
-    image_url: validMain,
-    lifestyle_image_url: validLifestyle,
+    image_url: finalMain,
+    lifestyle_image_url: finalLifestyle,
   };
 }
 
@@ -158,7 +291,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
     if (!raw) throw new Error("Empty response from extraction");
 
     let parsed = parseJsonResponse<ExtractedProduct>(raw);
-    parsed = await validateExtractedImages(parsed);
+    parsed = await validateExtractedImages(parsed, url);
     cacheExtraction(url, parsed);
     return {
       success: true,
@@ -183,7 +316,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
       if (!raw) throw new Error("Empty response from extraction (retry)");
 
       let parsed = parseJsonResponse<ExtractedProduct>(raw);
-      parsed = await validateExtractedImages(parsed);
+      parsed = await validateExtractedImages(parsed, url);
       cacheExtraction(url, parsed);
       return {
         success: true,
@@ -210,7 +343,7 @@ export async function extractFromUrl(url: string): Promise<AgentResult<Extracted
         if (!raw) throw new Error("Empty response from fallback extraction");
 
         let parsed = parseJsonResponse<ExtractedProduct>(raw);
-        parsed = await validateExtractedImages(parsed);
+        parsed = await validateExtractedImages(parsed, url);
         cacheExtraction(url, parsed);
         return {
           success: true,
