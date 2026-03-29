@@ -150,11 +150,18 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
 
   // Create agent run for tracking
   const firstRoom = rooms[0];
-  const agentRun = await createAgentRun(supabase, {
-    room_id: firstRoom.id,
-    agent_type: "apartment_analyzer",
-    input_json: { project_id, room_count: rooms.length },
-  });
+  let agentRun;
+  try {
+    agentRun = await createAgentRun(supabase, {
+      room_id: firstRoom.id,
+      agent_type: "diagnostician",
+      input_json: { project_id, room_count: rooms.length, type: "apartment_analysis" },
+    });
+  } catch (err) {
+    console.error("[analyze-apartment] Failed to create agent run:", err);
+    // Continue without tracking if agent run fails
+    agentRun = { id: "none" };
+  }
 
   try {
     const profile = buildDesignProfile(project);
@@ -212,11 +219,13 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
 
     return NextResponse.json({ summary: analysis });
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    console.error("[analyze-apartment] Error:", errorMessage, err);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
-      error_message: err instanceof Error ? err.message : "Unknown error",
+      error_message: errorMessage,
     });
-    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
+    return NextResponse.json({ error: `Analysis failed: ${errorMessage}` }, { status: 500 });
   }
 }
 
