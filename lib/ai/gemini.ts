@@ -28,6 +28,7 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
   if (url.startsWith("/uploads/")) {
     const filePath = path.join(process.cwd(), "public", url);
     if (!fs.existsSync(filePath)) {
+      console.error(`[gemini] Local image not found at: ${filePath} (url: ${url}, cwd: ${process.cwd()})`);
       throw new Error(`Local image not found: ${filePath}`);
     }
     const buffer = fs.readFileSync(filePath);
@@ -106,7 +107,7 @@ async function convertMessages(
               });
             } catch (err) {
               failedImages++;
-              console.error(`[gemini] Failed to fetch image: ${block.source.url}`, err instanceof Error ? err.message : err);
+              console.error(`[gemini] Failed to fetch image (${failedImages}/${totalImages}): ${block.source.url}`, err instanceof Error ? err.message : err);
             }
           }
         } else if (block.type === "text" && block.text) {

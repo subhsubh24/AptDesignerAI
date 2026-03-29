@@ -303,6 +303,7 @@ class StorageBucket {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(await (data as Blob).arrayBuffer());
       fs.writeFileSync(fullPath, buffer);
 
+      console.log(`[storage] Saved ${buffer.byteLength} bytes to ${fullPath}`);
       return { data: { path: filePath }, error: null };
     } catch (err) {
       return {
@@ -313,8 +314,10 @@ class StorageBucket {
   }
 
   getPublicUrl(filePath: string): { data: { publicUrl: string } } {
+    const publicUrl = `/uploads/${this.bucket}/${filePath}`;
+    console.log(`[storage] Public URL: ${publicUrl} → ${path.join(UPLOAD_DIR, this.bucket, filePath)}`);
     return {
-      data: { publicUrl: `/uploads/${this.bucket}/${filePath}` },
+      data: { publicUrl },
     };
   }
 }

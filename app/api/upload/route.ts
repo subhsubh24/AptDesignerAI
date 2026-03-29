@@ -17,9 +17,13 @@ export async function POST(request: Request) {
   const fileExt = file.name.split(".").pop();
   const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
 
+  // Convert File to Buffer before uploading — some Next.js runtimes don't
+  // pass the Blob through correctly to downstream consumers
+  const fileBuffer = Buffer.from(await file.arrayBuffer());
+
   const { data, error } = await supabase.storage
     .from(bucket)
-    .upload(fileName, file, {
+    .upload(fileName, fileBuffer, {
       contentType: file.type,
       upsert: false,
     });
