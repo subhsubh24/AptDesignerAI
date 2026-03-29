@@ -94,9 +94,9 @@ async function convertMessages(
               },
             });
           } else if (block.source.type === "url" && block.source.url) {
-            // Skip obviously invalid URLs to avoid 400 errors
             const imgUrl = block.source.url;
-            if (!imgUrl.startsWith("http://") && !imgUrl.startsWith("https://")) {
+            // Skip obviously invalid URLs (but allow /uploads/ local paths)
+            if (!imgUrl.startsWith("http://") && !imgUrl.startsWith("https://") && !imgUrl.startsWith("/uploads/")) {
               failedImages++;
               continue;
             }
