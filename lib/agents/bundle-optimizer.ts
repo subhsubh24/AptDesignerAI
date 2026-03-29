@@ -94,7 +94,7 @@ export async function evaluateBundle(
         system,
         messages: [{ role: "user", content }],
         max_tokens: 10000,
-        temperature: 0.3,
+        temperature: 0.2,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "high" },
       });

@@ -51,6 +51,12 @@ ${keepItems}
 - New products to visualize:
 ${productDescriptions.map((d, i) => `  ${i + 1}. ${d}`).join("\n")}
 
+## PROCESS — Follow these steps:
+Step 1: Study the room photos. Note exact floor material+color, wall color, window positions, ceiling height.
+Step 2: Note which existing furniture stays and where it sits.
+Step 3: Plan where each new product goes — specific position, size, material, color.
+Step 4: Write the prompt starting with room shell, then existing furniture, then new products, then lighting.
+
 ## INSTRUCTIONS
 Create a detailed, specific prompt for an AI image generator that will produce a photorealistic mockup of this room with the new products placed in it.
 

@@ -1,11 +1,13 @@
 export function getExtractionPrompt(): string {
   return `You are extracting detailed product information from a retailer website page. Use the URL Context tool to visit the page and examine it thoroughly.
 
-## DEEP CRAWL INSTRUCTIONS — READ EVERY SECTION OF THE PAGE
+## EXTRACTION PROCESS — Follow these steps in order:
 
-1. **Read ALL page content top to bottom**: product title, price (check for sale price vs. regular price), full description, ALL specification tabs (Dimensions, Materials, Care, Shipping), reviews summary if visible. Do NOT stop at the hero section — scroll down.
+### Step 1: READ the entire page
+Scan the FULL page, not just the top. Look at: product title, price (check for sale price vs. regular price), full description, ALL specification tabs (Dimensions, Materials, Care, Shipping), reviews summary if visible. Do NOT stop at the hero section — scroll down and read all sections.
 
-2. **Examine EVERY product image on the page**: Most product pages have 4-10+ images. You MUST examine each one:
+### Step 2: EXAMINE every product image
+Most product pages have 4-10+ images. For each one, note what it shows:
    - **Hero/main shot**: The primary product photo — use this for image_url
    - **Lifestyle/room shots**: Product styled in a real room — use the BEST one for lifestyle_image_url
    - **Detail/texture close-ups**: Reveals material quality, grain, weave, finish
@@ -15,13 +17,14 @@ export function getExtractionPrompt(): string {
 
    For each image, note what it reveals about the product's actual appearance, quality, and scale.
 
-3. **Check for ALL color/finish/size variants**: Look for:
+### Step 3: FIND all variants
+Look for:
    - Color swatches (clickable dots or squares)
    - Dropdown menus for finish, fabric, size, configuration
    - "Also available in..." sections
    - List EVERY variant, not just the default. This is critical for matching design palettes.
 
-4. **Extract dimensions precisely**:
+### Step 4: EXTRACT dimensions precisely
    - Check the Specifications/Dimensions tab (often hidden behind a click)
    - Check further down the page — many retailers list specs in a table below the fold
    - Look for dimension diagram images
@@ -31,7 +34,7 @@ export function getExtractionPrompt(): string {
    - For rugs: record as width × depth (e.g., 96 × 120 for 8x10)
    - For dining tables: note seating capacity if mentioned
 
-5. **Capture the BEST product image URL**:
+### Step 5: CAPTURE image URLs
    - **CRITICAL: You MUST extract the EXACT URL from the page's HTML (img src, data-src, srcset, og:image meta tag). NEVER construct, guess, or invent an image URL.** If you cannot find a real image URL in the page content, set image_url to null.
    - Choose the highest-resolution, full-color, well-lit image showing the complete product
    - Look at img src, data-src, or srcset attributes — get the largest version
@@ -40,7 +43,7 @@ export function getExtractionPrompt(): string {
    - The URL should end in .jpg, .png, .webp or contain /images/ in the path
    - **Do NOT fabricate URLs by combining a domain with a guessed path. If you didn't read the exact URL from the page, use null.**
 
-6. **Capture a lifestyle/room image URL**:
+### Step 6: CAPTURE lifestyle image
    - Find an image showing the product IN a room setting with other furniture visible
    - This reveals scale, style compatibility, and real-world appearance
    - **Same rule: only use URLs you actually found on the page. Never invent a URL. Use null if none found.**
@@ -76,5 +79,11 @@ Return a JSON object with ALL fields populated (use null only when truly unavail
 - For image URLs, get the FULL-SIZE version. Look at src, data-src, srcset, og:image attributes. Reject URLs containing "thumb", "small", "150x", "200x".
 - The description MUST reflect what you actually SEE in the images, not just marketing copy. Describe the real color (not the name), the texture, the proportions.
 - If the page is a category/listing page (not a single product), return null for all fields except set title to "NOT_A_PRODUCT_PAGE".
-- If the page is behind a paywall, login wall, or returns an error, set title to "PAGE_NOT_ACCESSIBLE".`;
+- If the page is behind a paywall, login wall, or returns an error, set title to "PAGE_NOT_ACCESSIBLE".
+
+## COMMON MISTAKES TO AVOID:
+1. NEVER fabricate image URLs — this breaks the app. Use null if you can't find a real URL.
+2. NEVER say materials are just "wood" or "fabric" — be specific: "solid oak", "linen blend".
+3. NEVER guess dimensions — use null if not explicitly on the page.
+4. NEVER use marketing language in description — describe what you SEE.`;
 }

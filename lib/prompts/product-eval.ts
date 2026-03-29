@@ -69,6 +69,11 @@ export function getProductEvalPrompt(
 
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.
 
+## SCORING PROCESS — For each dimension below, follow these steps:
+1. What specific evidence supports a high score?
+2. What specific evidence supports a low score?
+3. Based on the balance of evidence, what score is fair?
+
 Evaluate the following product using THREE LAYERS of analysis:
 
 ## ROOM CONTEXT
@@ -88,8 +93,10 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
 ## LAYER 1: INDIVIDUAL ITEM FIT (8 dimensions, each 0-10)
 
 1. **style_fit_score**: Does it match the design direction above? Score based on the ACTUAL style direction for this apartment — not generic assumptions.
+   - Example: If direction is "warm modern" and product is "industrial chrome wire shelf" → score 2-3. If product is "walnut shelf with clean lines" → score 8-9.
 
 2. **palette_fit_score**: Does it complement the apartment's actual palette? Consider the building finishes (floors, cabinetry, countertops) from the system prompt and the colors visible in the room photos.
+   - Example: Product is "warm oak" in a room with cool gray floors and chrome fixtures → score 4-5 (undertone clash). Product is "warm walnut" in a room with warm oak floors and brass → score 8-9.
 
 3. **material_fit_score**: Does the material work with the apartment's existing finishes? Consider what you SEE in the room photos — the flooring, the cabinetry, any existing furniture materials.
    - Also consider **durability and maintenance**: Is this material practical for the room's use? White boucle with pets = problem. Glass coffee table with toddlers = risk. Velvet in humid climates degrades. Light fabrics in high-traffic areas stain. Outdoor-adjacent rooms need weather-resistant materials.
@@ -127,14 +134,14 @@ ${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisCont
    - 3-4: Minimal data — substantial guessing required, poor images
    - 1-2: Almost no reliable data — product details are vague or missing
 
-## SCORE CALIBRATION — READ THIS CAREFULLY
-- **9-10**: Exceptional. This product is clearly the right choice — solves specific diagnosed problems, perfect scale, materials and palette match, high quality.
-- **7-8**: Strong. Genuinely good fit with minor concerns (e.g., color is close but not perfect, slightly outside ideal size range).
-- **6**: Acceptable but uninspiring. It works but doesn't solve any specific problem particularly well.
-- **5**: Mediocre. It's safe but has obvious gaps or doesn't address diagnosed issues.
-- **4 or below**: Problems outweigh benefits. Wrong scale, clashing style, poor value, or actively worsens a diagnosed issue.
+## SCORE CALIBRATION — READ ALL EXAMPLES, THEN SCORE
+- **9-10 (Exceptional)**: Product solves specific diagnosed problems, perfect scale, materials and palette match exactly. Example: A walnut coffee table with tapered legs for a mid-century room that already has a walnut media console and warm rug — materials match, scale is perfect (48" table for 84" sofa), style is cohesive. THIS IS RARE.
+- **7-8 (Strong)**: Genuinely good fit with minor concerns. Example: A linen accent chair in warm ivory for a room with a leather sofa and oak floors — style works, palette compatible, good scale. Minor: exact shade might lean slightly cool.
+- **5-6 (Mediocre)**: Safe but doesn't solve problems well. Example: A generic gray fabric ottoman for a room that needs warmth and texture — doesn't clash but doesn't help either. THIS IS AVERAGE.
+- **3-4 (Poor)**: Actively conflicts. Example: A glossy white lacquer side table in a room with warm wood tones and matte finishes. Or: a 5x7 rug under an L-shaped sectional that needs an 8x10.
+- **1-2 (Wrong)**: Completely wrong style/scale. Example: A farmhouse distressed dining table for a sleek modern apartment. Or: a 4-person table when client hosts parties of 8.
 
-Do NOT cluster all scores in the 6-8 range. Use the full 0-10 scale. A 5 is genuinely mediocre. A 3 has real problems.
+CRITICAL: Do NOT cluster all scores in the 6-8 range. Use the full 0-10 scale. If something is mediocre, score it 5. If it has problems, score 3-4.
 
 If the room diagnosis lists scale_proportion_issues, you MUST check this product's dimensions against those issues and penalize heavily if it repeats the same problem (e.g., another undersized rug, another oversized table).
 

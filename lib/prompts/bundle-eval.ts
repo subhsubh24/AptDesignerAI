@@ -63,7 +63,15 @@ export function getBundleEvalPrompt(
     ? `\n\n## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.`
     : "";
 
-  return `Evaluate this bundle of products as a complete room concept. You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
+  return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. Score how well these items work TOGETHER as a set, not just individually.
+
+## SCORING PROCESS — For each dimension, follow these steps:
+1. List the relevant attributes of ALL products in the bundle
+2. Compare them against each other AND the room context
+3. Identify specific strengths and weaknesses
+4. Assign a score based on the evidence
+
+You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
@@ -80,16 +88,19 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
 ## SCORING DIMENSIONS (each 0-10)
 
 1. **palette_harmony_score**: Do the colors work together as a cohesive set?
-   - Map each product's color to warm/cool/neutral
-   - Check against the ACTUAL apartment finishes (floors, walls, cabinetry) from photos and system prompt
+   - Step 1: List each product's primary color(s)
+   - Step 2: Map each to warm/cool/neutral
+   - Step 3: Check against the ACTUAL apartment finishes (floors, walls, cabinetry) from photos and system prompt
+   - Step 4: Do they form a cohesive palette or clash?
    - 9-10: All products share 2-3 coordinating color families that work with building finishes
    - 7-8: Colors are compatible but not perfectly cohesive (e.g., slight warm/cool tension)
    - 5-6: Some color clashing — products feel like they came from different rooms
    - Below 5: Colors actively conflict or ignore the apartment's existing finishes
 
 2. **material_balance_score**: Is there a healthy mix of textures and materials?
-   - Count distinct material types: wood, textile/fabric, metal, stone/ceramic, glass, leather
-   - A good bundle has at least 3-4 distinct material types
+   - Step 1: List each product's material(s)
+   - Step 2: Count distinct material TYPES: wood, textile/fabric, metal, stone/ceramic, glass, leather
+   - Step 3: A good bundle has at least 3-4 distinct material types. All-wood or all-fabric = too monotone.
    - **Durability/maintenance**: Are materials practical for the room's use? White boucle in a pet-friendly home, glass with toddlers, or delicate fabrics in high-traffic zones should lower the score.
    - **Climate suitability**: Heavy wool in tropical climates, cold metal in northern apartments without nearby textiles, velvet in humid environments — all mismatches.
    - 9-10: Rich material variety — wood + textile + metal + organic creates visual depth, ALL durable and climate-appropriate
@@ -123,11 +134,11 @@ ${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatial
    - Below 5: Fails to address the main diagnosed problems
 
 6. **spatial_arrangement_score**: Does this bundle work as a physical arrangement?
-   - Mentally place every item in its intended position (see INTENDED PLACEMENTS above)
-   - Check traffic flow: can someone walk through the room naturally? 36" for main paths, 18" between coffee table and sofa
-   - Check zone clarity: in multi-function rooms, do items define clear zones (living, dining, work)?
-   - Check sightlines: is there a clear focal point? Can people see each other in conversation?
-   - Check relationships: are items that should be near each other actually near each other? (lamp by reading chair, side table within reach of sofa arm)
+   - Step 1: Mentally place every item in its intended position (see INTENDED PLACEMENTS above)
+   - Step 2: Check traffic flow: can someone walk through the room naturally? 36" for main paths, 18" between coffee table and sofa
+   - Step 3: Check zone clarity: in multi-function rooms, do items define clear zones (living, dining, work)?
+   - Step 4: Check sightlines: is there a clear focal point? Can people see each other in conversation?
+   - Step 5: Check relationships: are items that should be near each other actually near each other? (lamp by reading chair, side table within reach of sofa arm)
    - Check orientation: do seating pieces face each other or a focal point, not the wall?
    - **Window/door clearance**: Do any items block windows (reducing natural light), obstruct door swings, or crowd doorways? A tall bookshelf in front of a window = penalize. A console table blocking a closet door = penalize.
    - **Outlet access**: Do powered items (lamps, media consoles) have realistic outlet access in their intended positions? A floor lamp placed far from any wall outlet = impractical.
@@ -170,6 +181,9 @@ Return a JSON object:
   "verdict": "2-3 sentence summary of this bundle's quality. Would a professional designer recommend this to a client?"
 }
 
-## IMPORTANT
-A product can score well individually but FAIL in the bundle context (e.g., two beautiful pieces that clash with each other). Focus on relationships between items, not just individual quality. Score the COMBINATION, not the average of individual scores.`;
+## CRITICAL REMINDERS
+- A product can score well individually but FAIL in the bundle context (e.g., two beautiful pieces that clash with each other). Focus on relationships between items, not just individual quality. Score the COMBINATION, not the average of individual scores.
+- Use the FULL 0-10 scale. Not everything is 6-8.
+- Every claim in analysis must reference a specific product by name.
+- If you're unsure about dimensions fitting, say so and lower spatial_arrangement_score.`;
 }

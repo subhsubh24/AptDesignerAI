@@ -7,17 +7,38 @@ export function getDiagnosisPrompt(roomType: string, keepItems: string[], replac
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}
 
-## INSTRUCTIONS
-Examine the room photos carefully and thoroughly. Analyze EVERY visible element:
-1. The architectural context (floors — material, color, condition; walls — color, texture; windows — size, treatment; ceiling — height, features; built-in lighting)
-2. Every piece of existing furniture — name it, describe its material/color, assess its condition and fit
-3. What's working well AND what's not — be specific, reference actual items by name + color + material
-4. Scale and proportion — is each piece correctly sized for the room? Too big? Too small?
-5. Color balance — map out the current color palette (warm vs cool, saturated vs neutral)
-6. Texture and material variety — count the distinct textures. Is there enough variety or too monotone?
-7. Layout and traffic flow — can someone walk through easily? Are zones clearly defined?
-8. Lighting — natural light direction, artificial lighting gaps, evening ambience
-9. What's MISSING for a complete, intentional room — think like a designer, not a minimalist
+## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
+
+### Step 1: OBSERVE the room (spend the most time here)
+Look at EVERY photo carefully. For each photo, note:
+- Floor: What material? What color? (e.g., "medium-tone oak engineered hardwood" not just "wood floor")
+- Walls: What color exactly? (e.g., "warm off-white, close to Benjamin Moore Swiss Coffee" not just "white")
+- Windows: How many? What size? What direction might they face based on light? Any treatments (curtains/blinds)?
+- Ceiling: Height estimate? Any features (molding, beams, recessed lights)?
+- Every piece of furniture: Name it, describe its material, color, condition, and approximate size
+- Lighting: What fixtures exist? Where are dark corners? How much natural light?
+
+### Step 2: ASSESS what's working
+For each item you're keeping or that works well, explain specifically WHY it works.
+
+### Step 3: IDENTIFY what's NOT working
+For each problem, be specific about WHAT and WHY.
+
+### Step 4: DETERMINE what's MISSING
+Think like a designer completing a room. Common things people forget:
+- Layered lighting (floor lamp + table lamp + overhead)
+- Textiles (throw pillows, blankets, curtains)
+- Wall art/decor
+- Area rug (properly sized!)
+- Plants
+- Side tables / surfaces near seating
+- Storage solutions
+
+### Step 5: DESIGN DIRECTION
+Based on the existing finishes (floors, walls, fixed elements), recommend:
+- Specific color palette (name 6-10 actual colors like "warm ivory", "walnut brown", "muted sage")
+- Specific materials (name 5-8 like "solid walnut", "linen", "bouclé", "brushed brass")
+- Style direction in 3-4 sentences
 
 ## ARRAY SIZE REQUIREMENTS
 - what_is_working: List **at least 5-8 items**. Every room has things working — find them all.
@@ -32,9 +53,27 @@ Examine the room photos carefully and thoroughly. Analyze EVERY visible element:
 - clutter_editing_issues: List items to remove or edit. Can be 0 if room is clean.
 
 ## SPECIFICITY REQUIREMENT
-Every item in every array MUST reference a specific visible object. Examples:
-- GOOD: "Dark gray fabric sectional — good scale for the room, anchors the seating area, neutral enough to build around"
-- BAD: "The sofa works well" (too vague — which sofa? what about it works?)
+Every item in every array MUST reference a specific visible object.
+
+### EXAMPLE of a good diagnosis entry:
+\`\`\`
+"what_is_working": [
+  "Wide-plank light oak hardwood floors — warm undertone that pairs well with natural materials, good condition, sets a warm-modern foundation",
+  "Large south-facing window (~5ft wide) — excellent natural light, makes the space feel open, good opportunity for a reading nook nearby",
+  "Charcoal gray linen sofa (approx 84\" wide) — appropriate scale for the room, neutral base that works with warm or cool accent palettes"
+]
+\`\`\`
+
+### EXAMPLE of a bad diagnosis entry (DO NOT do this):
+\`\`\`
+"what_is_working": [
+  "The sofa works",
+  "Good natural light",
+  "Nice floors"
+]
+\`\`\`
+
+More examples:
 - GOOD: "Small round glass coffee table is drastically undersized for the L-shaped sectional — should be at least 48 inches"
 - BAD: "Coffee table is too small" (too vague — what material? what size should it be?)
 

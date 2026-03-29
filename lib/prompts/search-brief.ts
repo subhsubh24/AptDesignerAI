@@ -136,6 +136,12 @@ export function getSearchBriefPrompt(
 
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
+## PROCESS — Think through this step by step:
+1. For each category, understand what SPECIFICALLY is needed (size, material, color, style from the design direction)
+2. For each price tier, think about which REAL BRANDS AND PRODUCTS would match
+3. Craft each query to find a SPECIFIC product page, not a generic category page
+4. Mentally test: "If I typed this into Google, would it return a real product page?" If no, rewrite.
+
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
@@ -200,5 +206,27 @@ Return a JSON object:
 - For high end, include retailer name to find specific premium products.
 - NEVER repeat the same search terms across different angles — each must surface genuinely different products.
 - For comparison queries, include "2025" or "2026" to find recent roundups.
-- For key_requirements: include at least 4-6 requirements covering size constraints, material preferences, color range, style direction, and functional needs.`;
+- For key_requirements: include at least 4-6 requirements covering size constraints, material preferences, color range, style direction, and functional needs.
+
+## EXAMPLE — For "coffee_table" category in a warm modern living room:
+\`\`\`json
+{
+  "category": "coffee_table",
+  "tiers": {
+    "budget": {
+      "search_queries": [
+        { "query": "IKEA Stockholm walnut coffee table", "angle": "product_specific" },
+        { "query": "modern walnut coffee table with shelf under $200 48 inch", "angle": "style_material" },
+        { "query": "Target threshold coffee tables wood under $250", "angle": "retailer_browse" },
+        { "query": "best budget mid-century coffee tables 2025 under $300", "angle": "comparison" },
+        { "query": "Walker Edison mid century coffee table walnut", "angle": "brand_collection" }
+      ],
+      "price_range": { "min": 80, "max": 300 },
+      "retailers_to_target": ["IKEA", "Target", "Amazon", "Wayfair"]
+    }
+  },
+  "key_requirements": ["48-54 inch length to match 84 inch sofa", "walnut or warm wood tone", "clean lines / mid-century style", "shelf or storage preferred", "under 18 inch height", "solid wood or wood veneer (not laminate)"]
+}
+\`\`\`
+Follow this level of specificity for all categories.`;
 }
