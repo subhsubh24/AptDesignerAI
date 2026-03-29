@@ -156,7 +156,7 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
       model: selectModel("apartment_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 4096,
+      max_tokens: 8000,
       temperature: 0.3,
       responseMimeType: "application/json",
     });

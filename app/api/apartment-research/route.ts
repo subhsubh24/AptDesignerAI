@@ -4,6 +4,60 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 
 /**
+ * Attempt to repair truncated or malformed JSON by closing unclosed braces/brackets.
+ */
+function repairAndParseJSON(raw: string): Record<string, unknown> {
+  let json = raw.trim();
+  // Remove trailing commas before } or ]
+  json = json.replace(/,\s*([}\]])/g, "$1");
+
+  // Track structure to close properly
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastNonWS = "";
+
+  for (const ch of json) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") stack.push("}");
+    else if (ch === "[") stack.push("]");
+    else if (ch === "}" || ch === "]") stack.pop();
+    if (ch.trim()) lastNonWS = ch;
+  }
+
+  // Close unclosed string
+  if (inString) json += '"';
+
+  // Remove trailing incomplete value (e.g., `"key": ` or `"key": "truncated`)
+  // by removing the last key-value if it ends with : or : "...
+  if (lastNonWS === ":" || lastNonWS === ",") {
+    // Try to remove incomplete key-value pair first
+    const repaired = json.replace(/,?\s*"[^"]*"\s*:\s*"?[^"]*"?\s*$/, "");
+    if (repaired !== json) {
+      json = repaired;
+    } else {
+      // Just a trailing comma — strip it
+      json = json.replace(/,\s*$/, "");
+    }
+  }
+
+  // Close unclosed structures in reverse order
+  while (stack.length > 0) {
+    json += stack.pop();
+  }
+
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("[apartment-research] JSON repair failed:", (e as Error).message, "\nTruncated input:", raw.slice(0, 300));
+    throw new Error("Could not parse building research response after repair attempt");
+  }
+}
+
+/**
  * Research an apartment building using Gemini Google Search + URL Context.
  * Gemini 3 models support combining these tools with structured JSON output.
  */
@@ -159,7 +213,7 @@ ${jsonSchema}`;
 
 When researching floor plans, be thorough: navigate to the building's floor plans page, filter for the user's unit type (${unitLabel}), and click through each individual floor plan option. Most apartment websites have multiple layout variants per bed/bath count — examine each one. Capture floor plan image URLs when available.`,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 5000,
+      max_tokens: 8000,
       temperature: 0.2,
       tools: [{ googleSearch: {} }, { urlContext: {} }],
       responseMimeType: "application/json",
@@ -178,12 +232,23 @@ When researching floor plans, be thorough: navigate to the building's floor plan
       // Fallback: extract JSON from markdown code blocks or raw braces
       const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
-        research = JSON.parse(jsonMatch[1].trim());
+        try {
+          research = JSON.parse(jsonMatch[1].trim());
+        } catch {
+          research = repairAndParseJSON(jsonMatch[1].trim());
+        }
       } else {
         const braceStart = raw.indexOf("{");
         const braceEnd = raw.lastIndexOf("}");
         if (braceStart !== -1 && braceEnd > braceStart) {
-          research = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+          try {
+            research = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+          } catch {
+            research = repairAndParseJSON(raw.slice(braceStart));
+          }
+        } else if (braceStart !== -1) {
+          // Truncated — only opening brace found, try to repair
+          research = repairAndParseJSON(raw.slice(braceStart));
         } else {
           console.error("[apartment-research] Unparseable response:", raw.slice(0, 500));
           throw new Error("Could not parse building research response");
