@@ -150,18 +150,11 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
 
   // Create agent run for tracking
   const firstRoom = rooms[0];
-  let agentRun;
-  try {
-    agentRun = await createAgentRun(supabase, {
-      room_id: firstRoom.id,
-      agent_type: "diagnostician",
-      input_json: { project_id, room_count: rooms.length, type: "apartment_analysis" },
-    });
-  } catch (err) {
-    console.error("[analyze-apartment] Failed to create agent run:", err);
-    // Continue without tracking if agent run fails
-    agentRun = { id: "none" };
-  }
+  const agentRun = await createAgentRun(supabase, {
+    room_id: firstRoom.id,
+    agent_type: "apartment_analyzer",
+    input_json: { project_id, room_count: rooms.length },
+  });
 
   try {
     const profile = buildDesignProfile(project);
