@@ -326,6 +326,23 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
     const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
     const br = project?.building_research as Record<string, unknown> | undefined;
     const floorPlan = br?.floor_plan as Record<string, unknown> | undefined;
+    // Build cross-room context for apartment-wide coherence checks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const otherRoomsForHarmony = (otherRooms || []).map((r: any) => {
+      const diagnoses = r.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; design_direction_json?: Record<string, unknown> }> | undefined;
+      const latestDiag = diagnoses?.[diagnoses.length - 1];
+      const dj = latestDiag?.diagnosis_json;
+      const dd = latestDiag?.design_direction_json as Record<string, unknown> | undefined;
+      return {
+        name: r.name as string,
+        roomType: r.room_type as string,
+        designDirection: (dj?.design_direction as string) || undefined,
+        palette: (dd?.recommended_palette as string[]) || (dj?.recommended_palette as string[]) || undefined,
+        materials: (dd?.recommended_materials as string[]) || (dj?.recommended_materials as string[]) || undefined,
+        keyItems: (dj?.what_works as string[])?.slice(0, 5) || undefined,
+      };
+    });
+
     const harmonyCtx = {
       roomType: room.room_type,
       roomName: room.name,
@@ -335,6 +352,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       designProfile: profile,
       floorPlan,
       userContext: room.user_context || undefined,
+      otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
     };
 
     const MAX_HARMONY_ROUNDS = 3;
@@ -395,12 +413,12 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           );
 
           if (score?.drop) {
-            console.log(`[area-analysis] Round ${round}: dropping "${item.category}" — score ${score.harmony_score}/10: ${score.reason}`);
+            console.log(`[area-analysis] Round ${round}: dropping "${item.category}" — score ${score.harmony_score}/10 | root cause: ${score.root_cause || score.reason}`);
             continue;
           }
 
           if (score && score.harmony_score < 10 && (score.revised_search_title || score.revised_placement || score.revised_specs)) {
-            console.log(`[area-analysis] Round ${round}: revising "${item.category}" — score ${score.harmony_score}/10: ${score.reason}`);
+            console.log(`[area-analysis] Round ${round}: revising "${item.category}" — score ${score.harmony_score}/10 | root cause: ${score.root_cause || score.reason}`);
             revised.push({
               ...item,
               search_title: score.revised_search_title || item.search_title,

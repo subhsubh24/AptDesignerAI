@@ -32,6 +32,7 @@ export interface HarmonyValidationResult {
     revised_specs?: string;
     revised_placement?: string;
     drop: boolean;
+    root_cause?: string;
     reason: string;
   }>;
   overall_cohesion: number;
@@ -59,6 +60,7 @@ export async function validateRoomHarmony(
     designProfile?: DynamicDesignProfile;
     floorPlan?: Record<string, unknown>;
     userContext?: string;
+    otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -86,8 +88,23 @@ export async function validateRoomHarmony(
       })}`
     : "";
 
-  const apartmentCtx = context.apartmentAnalysis
-    ? `\nApartment overview: ${(context.apartmentAnalysis as Record<string, unknown>).overall || ""}`
+  const aa = context.apartmentAnalysis as Record<string, unknown> | undefined;
+  const apartmentCtx = aa
+    ? `\nApartment overview: ${aa.overall || ""}${aa.rooms ? `\nPer-room summaries: ${JSON.stringify(aa.rooms)}` : ""}`
+    : "";
+
+  // Cross-room context: what's in the OTHER rooms so we ensure apartment-wide coherence
+  const otherRoomsCtx = context.otherRooms?.length
+    ? `\n\n## OTHER ROOMS IN THE APARTMENT (for cross-room coherence)
+${context.otherRooms.map((r) => {
+  const parts = [`- **${r.name}** (${r.roomType})`];
+  if (r.designDirection) parts.push(`  Direction: ${r.designDirection}`);
+  if (r.palette?.length) parts.push(`  Palette: ${r.palette.join(", ")}`);
+  if (r.materials?.length) parts.push(`  Materials: ${r.materials.join(", ")}`);
+  if (r.keyItems?.length) parts.push(`  Key items: ${r.keyItems.join("; ")}`);
+  return parts.join("\n");
+}).join("\n")}
+Items in THIS room must harmonize with the palette, materials, and style of the other rooms. The apartment should feel like one cohesive home, not a collection of unrelated rooms.`
     : "";
 
   // Floor plan context for spatial validation
@@ -107,7 +124,7 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
 IMPORTANT: Think step-by-step through each item. For each recommended item, evaluate it against EVERY existing item and EVERY other recommendation.
 
 ## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.` : ""}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.` : ""}
 
 ## DESIGN DIRECTION
 ${designDirection}
@@ -138,11 +155,13 @@ Evaluate EACH recommended item on BOTH harmony AND spatial fit:
 ### HARMONY CHECKS
 1. **Harmony with keeps**: Does this item's material, color, and style work with the existing items staying in the room? A walnut coffee table next to existing oak furniture = clash. A brass lamp with existing chrome fixtures = clash.
 
-2. **Harmony with other recommendations**: Do ALL the new items work together as a set? If you're recommending a warm cream rug AND cool gray throw pillows, that's a palette conflict.
+2. **Harmony with other recommendations**: Do ALL the new items work together as a set? If you're recommending a warm cream rug AND cool gray throw pillows, that's a palette conflict. Check EVERY pair of recommendations against each other.
 
-3. **Apartment coherence**: Does this fit the overall apartment aesthetic and building finishes?
+3. **Apartment-wide coherence**: Does this fit with the OTHER rooms in the apartment? Check against the other rooms' palettes, materials, and key items listed above. The entire apartment must feel like one cohesive home. If the bedroom uses warm walnut and brass, the living room shouldn't introduce cool chrome and ash wood.
 
 4. **Specificity check**: Is the search_title specific enough to find the RIGHT product? Does it include material, color, size, and style?
+
+5. **Root cause identification**: If ANY item scores below 10, you MUST identify the SPECIFIC root cause — is it a color clash (name the two clashing colors)? A material mismatch (name which materials conflict)? A spatial issue (name the exact clearance or dimension problem)? An arrangement issue (name which items are positioned wrong relative to each other)? Then your revised_search_title/specs/placement must fix THAT specific root cause.
 
 ### SPATIAL CHECKS — CRITICAL
 5. **Placement validity**: Does the recommended placement make physical sense? Is there actually wall space, floor space, or clearance for this item where it's supposed to go? Look at the photos — if a floor lamp is supposed to go "next to the sofa" but there's no space between the sofa and the wall, that's a problem.
@@ -195,6 +214,7 @@ Return JSON:
       "revised_specs": "if score < 10, the improved specs that would score 10",
       "revised_placement": "if score < 10, the improved placement that would score 10",
       "drop": true/false,
+      "root_cause": "if score < 10, the SPECIFIC root cause: 'color_clash: warm cream conflicts with cool gray pillows', 'material_mismatch: oak legs clash with walnut in bedroom', 'scale_issue: 48-inch table too wide for 52-inch wall leaving 2-inch clearance', 'arrangement: blocks path from entry to kitchen', 'cross_room_clash: chrome finish conflicts with brass used in bedroom and kitchen'",
       "reason": "1-2 sentence explanation — what specifically prevents this from being a 10? What did you fix in the revision?"
     }
   ],
