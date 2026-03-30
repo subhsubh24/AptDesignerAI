@@ -23,6 +23,8 @@
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -31,36 +33,69 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ─── Light Mode (default) ─── */
 :root {
-  --background: #f8f6f3;             /* warmer base — hint of linen */
-  --foreground: #1c1917;
+  --background: #faf9f7;
+  --foreground: #1a1614;
   --card: #ffffff;
-  --card-foreground: #1c1917;
+  --card-foreground: #1a1614;
   --popover: #ffffff;
-  --popover-foreground: #1c1917;
-  --primary: #292524;                 /* stone-900 — strong buttons */
-  --primary-foreground: #fafaf9;
-  --secondary: #f0ebe5;              /* warm cream — card fills, section backgrounds */
-  --secondary-foreground: #44403c;
-  --muted: #f5f2ee;                  /* between background and secondary */
-  --muted-foreground: #78716c;
-  --accent: #e8e0d6;                 /* distinctly darker — active states, hover fills */
-  --accent-foreground: #292524;
-  --accent-warm: #9a3412;            /* burnt sienna — richer and more refined than pure amber */
+  --popover-foreground: #1a1614;
+  --primary: #1a1614;
+  --primary-foreground: #faf9f7;
+  --secondary: #f2ede8;
+  --secondary-foreground: #3d3530;
+  --muted: #f5f2ee;
+  --muted-foreground: #7c7268;
+  --accent: #ebe4dc;
+  --accent-foreground: #1a1614;
+  --accent-warm: #b4501e;
   --destructive: #dc2626;
-  --destructive-foreground: #fafaf9;
-  --border: #e2dbd2;                 /* warm stone border */
-  --input: #d4ccc2;                  /* clear input edges */
-  --ring: #9a3412;                   /* matches accent-warm for consistency */
-  --sidebar: #f0ebe5;
-  --sidebar-foreground: #44403c;
-  --radius: 0.625rem;
+  --destructive-foreground: #faf9f7;
+  --border: #e8e1d9;
+  --input: #ddd5cb;
+  --ring: #b4501e;
+  --sidebar: #f5f2ee;
+  --sidebar-foreground: #3d3530;
+  --sidebar-accent: #ebe4dc;
+  --sidebar-border: #e8e1d9;
+  --radius: 0.75rem;
+}
+
+/* ─── Dark Mode ─── */
+.dark {
+  --background: #141211;
+  --foreground: #ede9e3;
+  --card: #1c1a17;
+  --card-foreground: #ede9e3;
+  --popover: #1c1a17;
+  --popover-foreground: #ede9e3;
+  --primary: #ede9e3;
+  --primary-foreground: #141211;
+  --secondary: #252220;
+  --secondary-foreground: #c5bdb3;
+  --muted: #1f1d1a;
+  --muted-foreground: #8a8077;
+  --accent: #2e2a26;
+  --accent-foreground: #ede9e3;
+  --accent-warm: #d4733e;
+  --destructive: #ef4444;
+  --destructive-foreground: #ede9e3;
+  --border: #2e2a26;
+  --input: #3a3530;
+  --ring: #d4733e;
+  --sidebar: #1a1816;
+  --sidebar-foreground: #c5bdb3;
+  --sidebar-accent: #2e2a26;
+  --sidebar-border: #2e2a26;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer base {
@@ -73,7 +108,7 @@ body {
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -84,11 +119,33 @@ body {
 @keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(12px);
+    transform: translateX(16px);
   }
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -97,26 +154,93 @@ body {
   50% { opacity: 0.7; }
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
 .animate-fade-in-up {
-  animation: fadeInUp 0.5s ease-out both;
+  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.4s ease-out both;
+  animation: slideInRight 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
 /* Smooth transitions for interactive elements */
 .transition-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .transition-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Glass effect utility */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass {
+  background: rgba(20, 18, 17, 0.7);
+}
+
+/* Subtle gradient backgrounds */
+.bg-gradient-warm {
+  background: linear-gradient(135deg, var(--background) 0%, var(--secondary) 100%);
+}
+
+.bg-gradient-hero {
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, var(--accent) 0%, transparent 70%);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
 }
 
 /* Mobile-optimized touch targets */
@@ -125,4 +249,9 @@ body {
     min-height: 44px;
     min-width: 44px;
   }
+}
+
+/* Smooth page transitions */
+main {
+  animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

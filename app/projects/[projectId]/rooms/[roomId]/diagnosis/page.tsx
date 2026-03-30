@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
 
 export default function DiagnosisPage() {
@@ -30,9 +30,7 @@ export default function DiagnosisPage() {
       if (res.ok) {
         const room = await res.json();
         if (room.status !== "setup") {
-          // Try to load existing diagnosis
           const diagRes = await fetch(`/api/diagnosis?room_id=${roomId}`);
-          // If there's a GET endpoint, load it. Otherwise, we know there's a diagnosis from status.
           setHasDiagnosis(room.status !== "setup");
         }
       }
@@ -71,7 +69,7 @@ export default function DiagnosisPage() {
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Room
@@ -83,7 +81,7 @@ export default function DiagnosisPage() {
               AI analysis of your room with actionable recommendations
             </p>
           </div>
-          <Button onClick={handleRunDiagnosis} disabled={loading}>
+          <Button onClick={handleRunDiagnosis} disabled={loading} variant={diagnosis ? "outline" : "warm"}>
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -100,20 +98,22 @@ export default function DiagnosisPage() {
       </div>
 
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-red-600" />
-            <p className="text-sm text-red-800">{error}</p>
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <p className="text-sm text-destructive">{error}</p>
           </CardContent>
         </Card>
       )}
 
       {!diagnosis && !loading && (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Stethoscope className="h-12 w-12 text-muted-foreground/50 mb-4" />
+        <Card className="border-dashed border-2">
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-5">
+              <Stethoscope className="h-8 w-8 text-muted-foreground/40" />
+            </div>
             <h3 className="text-lg font-semibold mb-2">No diagnosis yet</h3>
-            <p className="text-sm text-muted-foreground text-center max-w-sm mb-6">
+            <p className="text-sm text-muted-foreground text-center max-w-sm">
               Click &quot;Run Diagnosis&quot; to have the AI analyze your room photos and
               provide detailed recommendations.
             </p>
@@ -124,28 +124,31 @@ export default function DiagnosisPage() {
       {d && (
         <>
           {/* Vibe Summary */}
-          <Card>
+          <Card className="bg-secondary/30">
             <CardHeader>
-              <CardTitle>Current Vibe</CardTitle>
+              <CardTitle className="text-base">Current Vibe</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">{d.current_vibe_summary}</p>
+              <p className="text-muted-foreground leading-relaxed">{d.current_vibe_summary}</p>
             </CardContent>
           </Card>
 
           {/* What's Working / Not Working */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="border-emerald-200/50 dark:border-emerald-800/50">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <CardTitle className="flex items-center gap-2.5 text-base">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
                   What&apos;s Working
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {d.what_is_working.map((item, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
                       {item}
                     </li>
                   ))}
@@ -153,17 +156,20 @@ export default function DiagnosisPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-amber-200/50 dark:border-amber-800/50">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                <CardTitle className="flex items-center gap-2.5 text-base">
+                  <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
+                    <AlertCircle className="h-4.5 w-4.5 text-amber-600 dark:text-amber-400" />
+                  </div>
                   What&apos;s Not Working
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {d.what_is_not_working.map((item, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
                       {item}
                     </li>
                   ))}
@@ -178,13 +184,13 @@ export default function DiagnosisPage() {
               <CardTitle className="text-base">Biggest Improvement Opportunities</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {d.biggest_improvement_opportunities.map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-warm text-white text-xs font-bold">
                       {i + 1}
                     </span>
-                    <span className="text-muted-foreground pt-0.5">{item}</span>
+                    <span className="text-muted-foreground pt-1 leading-relaxed">{item}</span>
                   </li>
                 ))}
               </ul>
@@ -207,15 +213,16 @@ export default function DiagnosisPage() {
                 </CardHeader>
                 <CardContent>
                   {section.items.length > 0 ? (
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2">
                       {section.items.map((item, i) => (
-                        <li key={i} className="text-xs text-muted-foreground">
+                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                          <span className="h-1 w-1 rounded-full bg-border mt-1.5 shrink-0" />
                           {item}
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-muted-foreground/60">No issues found</p>
+                    <p className="text-xs text-muted-foreground/40 italic">No issues found</p>
                   )}
                 </CardContent>
               </Card>
@@ -230,7 +237,7 @@ export default function DiagnosisPage() {
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 {diagnosis.missing_categories.map((cat) => (
-                  <Badge key={cat} variant="secondary" className="capitalize">
+                  <Badge key={cat} variant="warning" className="capitalize">
                     {cat.replace(/_/g, " ")}
                   </Badge>
                 ))}
@@ -240,34 +247,34 @@ export default function DiagnosisPage() {
 
           {/* Design Direction */}
           {dd && (
-            <Card>
+            <Card className="bg-secondary/30">
               <CardHeader>
                 <CardTitle className="text-base">Recommended Design Direction</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5">
                 <div>
-                  <p className="text-sm font-medium mb-2">Palette</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Palette</p>
                   <div className="flex flex-wrap gap-2">
                     {dd.recommended_palette.map((color) => (
-                      <Badge key={color} variant="outline">
+                      <Badge key={color} variant="outline" className="py-1 px-3">
                         {color}
                       </Badge>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium mb-2">Materials</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Materials</p>
                   <div className="flex flex-wrap gap-2">
                     {dd.recommended_materials.map((m) => (
-                      <Badge key={m} variant="outline">
+                      <Badge key={m} variant="outline" className="py-1 px-3">
                         {m}
                       </Badge>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium mb-2">Style Notes</p>
-                  <p className="text-sm text-muted-foreground">{dd.style_notes}</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Style Notes</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{dd.style_notes}</p>
                 </div>
               </CardContent>
             </Card>
@@ -283,17 +290,17 @@ export default function DiagnosisPage() {
                 <div className="space-y-4">
                   {actions.map((action, i) => (
                     <div key={i} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-sm font-semibold">
                         {action.priority}
                       </span>
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm font-medium">{action.action}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          <Badge variant="outline" className="mr-2 capitalize">
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Badge variant="outline" className="capitalize text-xs">
                             {action.category.replace(/_/g, " ")}
                           </Badge>
-                          {action.reasoning}
-                        </p>
+                          <span className="text-xs text-muted-foreground">{action.reasoning}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -304,9 +311,10 @@ export default function DiagnosisPage() {
 
           {/* Next Step */}
           <div className="flex justify-end">
-            <Button asChild>
+            <Button asChild variant="warm">
               <Link href={`/projects/${projectId}/rooms/${roomId}/products`}>
                 Continue to Products
+                <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
             </Button>
           </div>

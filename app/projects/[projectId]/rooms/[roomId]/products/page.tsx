@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsUp, ThumbsDown, Bookmark } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 
@@ -122,7 +122,7 @@ export default function ProductsPage() {
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Room
@@ -135,16 +135,14 @@ export default function ProductsPage() {
 
       {/* Add Product */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add a Product</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="pt-6 space-y-4">
           <div className="flex gap-3">
             <Input
               placeholder="Paste a product URL..."
               value={ingestUrl}
               onChange={(e) => setIngestUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleIngest()}
+              className="flex-1"
             />
             <Button onClick={handleIngest} disabled={ingesting || !ingestUrl.trim()}>
               {ingesting ? (
@@ -152,47 +150,47 @@ export default function ProductsPage() {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              {ingesting ? "Extracting..." : "Add"}
+              {ingesting ? "Adding..." : "Add"}
             </Button>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleAgenticSearch} disabled={searching}>
-              {searching ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  AI Searching...
-                </>
-              ) : (
-                "AI Search for Products"
-              )}
-            </Button>
-          </div>
+          <Button variant="outline" onClick={handleAgenticSearch} disabled={searching} className="gap-2">
+            {searching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            {searching ? "Searching..." : "AI Search for Products"}
+          </Button>
         </CardContent>
       </Card>
 
       {/* Product Grid */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
         </div>
       ) : products.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <p className="text-muted-foreground">No products yet. Add a URL or run AI search.</p>
+        <Card className="border-dashed border-2">
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="h-14 w-14 rounded-2xl bg-secondary flex items-center justify-center mb-4">
+              <ShoppingBag className="h-7 w-7 text-muted-foreground/40" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No products yet</h3>
+            <p className="text-sm text-muted-foreground">Add a URL or run AI search.</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => {
             const evaluation = product.product_evaluations?.[0];
             return (
-              <Card key={product.id} className="overflow-hidden">
+              <Card key={product.id} className="overflow-hidden group hover:shadow-lg transition-all duration-300">
                 {product.image_url && (
                   <div className="aspect-square w-full overflow-hidden bg-muted">
                     <img
                       src={product.image_url}
                       alt={product.title || "Product"}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>
                 )}
@@ -201,12 +199,12 @@ export default function ProductsPage() {
                     <h3 className="font-semibold text-sm line-clamp-2">
                       {product.title || "Untitled Product"}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 mt-1.5">
                       {product.retailer && (
                         <span className="text-xs text-muted-foreground">{product.retailer}</span>
                       )}
                       {product.price && (
-                        <span className="text-xs font-medium">${product.price}</span>
+                        <span className="text-xs font-semibold">${product.price}</span>
                       )}
                     </div>
                   </div>
@@ -218,7 +216,7 @@ export default function ProductsPage() {
                   )}
 
                   {evaluation ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className={`text-lg font-bold ${getScoreColor(evaluation.final_item_score)}`}>
                           {evaluation.final_item_score.toFixed(1)}
@@ -228,7 +226,6 @@ export default function ProductsPage() {
                         </Badge>
                       </div>
 
-                      {/* Score breakdown mini */}
                       <div className="grid grid-cols-4 gap-1 text-xs">
                         {[
                           { label: "Style", score: evaluation.style_fit_score },
@@ -236,17 +233,17 @@ export default function ProductsPage() {
                           { label: "Scale", score: evaluation.scale_fit_score },
                           { label: "Cohesion", score: evaluation.cohesion_fit_score },
                         ].map((s) => (
-                          <div key={s.label} className="text-center">
-                            <div className={`font-medium ${getScoreColor(s.score)}`}>
+                          <div key={s.label} className="text-center p-1.5 rounded-lg bg-muted/50">
+                            <div className={`font-semibold ${getScoreColor(s.score)}`}>
                               {s.score.toFixed(0)}
                             </div>
-                            <div className="text-muted-foreground">{s.label}</div>
+                            <div className="text-muted-foreground text-[10px]">{s.label}</div>
                           </div>
                         ))}
                       </div>
 
                       {evaluation.reasoning.top_reasons[0] && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                           {evaluation.reasoning.top_reasons[0]}
                         </p>
                       )}
@@ -260,38 +257,38 @@ export default function ProductsPage() {
                       disabled={evaluating === product.id}
                     >
                       {evaluating === product.id ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                       ) : (
-                        <Star className="h-3 w-3 mr-1" />
+                        <Star className="h-3 w-3 mr-1.5" />
                       )}
                       Score Product
                     </Button>
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5 pt-1 border-t">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="flex-1"
+                      className="flex-1 text-xs"
                       onClick={() => handleStatusChange(product.id, "shortlisted")}
                     >
-                      <Bookmark className="h-3 w-3 mr-1" />
+                      <Bookmark className="h-3.5 w-3.5 mr-1" />
                       Save
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="flex-1"
+                      className="flex-1 text-xs"
                       onClick={() => handleStatusChange(product.id, "rejected")}
                     >
-                      <ThumbsDown className="h-3 w-3 mr-1" />
+                      <ThumbsDown className="h-3.5 w-3.5 mr-1" />
                       Reject
                     </Button>
                     {product.product_url && (
                       <Button size="sm" variant="ghost" asChild>
                         <a href={product.product_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-3 w-3" />
+                          <ExternalLink className="h-3.5 w-3.5" />
                         </a>
                       </Button>
                     )}

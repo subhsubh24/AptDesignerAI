@@ -327,20 +327,23 @@ export default function DashboardPage() {
   // ─── Step: Welcome ─────────────────────────────────────────────
   if (step === "welcome") {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 animate-fade-in-up">
-        <div className="text-center space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-20 animate-fade-in-up">
+        <div className="text-center space-y-8">
           <div className="flex justify-center">
-            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <LogoMark className="h-8 w-8 text-primary" />
+            <div className="h-20 w-20 rounded-3xl bg-secondary flex items-center justify-center shadow-sm animate-float">
+              <LogoMark className="h-10 w-10 text-foreground" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
-          <p className="text-lg text-muted-foreground max-w-md mx-auto">
-            Show us your apartment, and we&apos;ll help you furnish it — room by room, piece by piece.
-          </p>
+          <div className="space-y-3">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
+            <p className="text-lg text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Show us your apartment, and we&apos;ll help you furnish it — room by room, piece by piece.
+            </p>
+          </div>
           <Button
-            size="lg"
-            className="h-14 px-10 text-base mt-4"
+            size="xl"
+            variant="warm"
+            className="mt-4"
             onClick={() => setStep("layout")}
           >
             Let&apos;s go
@@ -371,10 +374,10 @@ export default function DashboardPage() {
                   key={opt.value}
                   onClick={() => setBedrooms(opt.value)}
                   className={cn(
-                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200",
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95",
                     bedrooms === opt.value
-                      ? "border-primary bg-primary text-primary-foreground shadow-md"
-                      : "border-border hover:border-primary/50 hover:bg-secondary"
+                      ? "border-accent-warm bg-accent-warm text-white shadow-md"
+                      : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >
                   {opt.label}
@@ -391,10 +394,10 @@ export default function DashboardPage() {
                   key={n}
                   onClick={() => setBathrooms(n)}
                   className={cn(
-                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200",
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95",
                     bathrooms === n
-                      ? "border-primary bg-primary text-primary-foreground shadow-md"
-                      : "border-border hover:border-primary/50 hover:bg-secondary"
+                      ? "border-accent-warm bg-accent-warm text-white shadow-md"
+                      : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >
                   {n}
@@ -444,7 +447,7 @@ export default function DashboardPage() {
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="Chicago"
-                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
               />
             </div>
             <div>
@@ -454,7 +457,7 @@ export default function DashboardPage() {
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 placeholder="IL"
-                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
               />
             </div>
           </div>
@@ -467,7 +470,7 @@ export default function DashboardPage() {
                 value={neighborhood}
                 onChange={(e) => setNeighborhood(e.target.value)}
                 placeholder="West Loop"
-                className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
               />
             </div>
           )}
@@ -518,7 +521,7 @@ export default function DashboardPage() {
                   value={buildingName}
                   onChange={(e) => setBuildingName(e.target.value)}
                   placeholder="e.g. Porte Apartments"
-                  className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
                 />
               </div>
               <div>
@@ -530,7 +533,7 @@ export default function DashboardPage() {
                   value={buildingUrl}
                   onChange={(e) => setBuildingUrl(e.target.value)}
                   placeholder="https://www.porteapts.com"
-                  className="w-full h-11 px-4 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
                 />
               </div>
             </div>
@@ -541,7 +544,7 @@ export default function DashboardPage() {
               const fp = br.floor_plan as Record<string, unknown> | undefined;
               const hasFloorPlan = fp?.found === true;
               return (
-                <div className="mt-3 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2 border border-green-200">
+                <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   <span>
                     Building researched — {String(br.building_style || "style identified")}
@@ -581,7 +584,7 @@ export default function DashboardPage() {
             disabled={totalImages === 0 || analyzing}
           >
             <Sparkles className="h-5 w-5" />
-            Analyze My Apartment ({totalImages} {totalImages === 1 ? "photo" : "photos"})
+            Analyze my apartment ({totalImages} {totalImages === 1 ? "photo" : "photos"})
           </Button>
         </div>
       </div>
@@ -596,7 +599,7 @@ export default function DashboardPage() {
 
     return (
       <div className="max-w-xl mx-auto px-4 py-24 text-center animate-fade-in-up">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+        <Loader2 className="h-12 w-12 animate-spin text-accent-warm mx-auto" />
         <h2 className="text-2xl font-bold mt-6">
           {analyzePhase === "building" ? "Researching your building..." : "Analyzing your rooms..."}
         </h2>
@@ -645,7 +648,7 @@ export default function DashboardPage() {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium mb-4">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Apartment analyzed
           </div>
@@ -737,7 +740,7 @@ export default function DashboardPage() {
                       setRoomContext((prev) => ({ ...prev, [selectedRoom]: e.target.value }))
                     }
                     placeholder={"e.g. \"Ignore the yoga mat, it won't be there\" or \"The clutter will be cleaned up — focus on the furniture and layout\""}
-                    className="w-full h-24 px-4 py-3 rounded-lg border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent-warm/30 focus:border-accent-warm transition-all"
+                    className="w-full h-24 px-4 py-3 rounded-xl border bg-background text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
                   />
                 </div>
 
@@ -779,29 +782,37 @@ function StepHeader({ step, total, title, subtitle }: { step: number; total: num
           <div
             key={i}
             className={cn(
-              "h-1 rounded-full flex-1 transition-all duration-500",
-              i < step ? "bg-primary" : "bg-border"
+              "h-1.5 rounded-full flex-1 transition-all duration-500",
+              i < step ? "bg-accent-warm" : "bg-border"
             )}
           />
         ))}
       </div>
-      <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-      <p className="text-muted-foreground mt-1">{subtitle}</p>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-accent-warm uppercase tracking-wider">Step {step} of {total}</p>
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <p className="text-muted-foreground">{subtitle}</p>
+      </div>
     </div>
   );
 }
 
 function StepIndicator({ done, active, label }: { done?: boolean; active?: boolean; label: string }) {
   return (
-    <div className={cn("flex items-center gap-2", done && "text-green-600", active && "text-primary font-medium")}>
+    <div className={cn(
+      "flex items-center gap-3 py-1",
+      done && "text-emerald-600 dark:text-emerald-400",
+      active && "text-accent-warm font-medium",
+      !done && !active && "text-muted-foreground/60"
+    )}>
       {done ? (
-        <CheckCircle2 className="h-4 w-4" />
+        <CheckCircle2 className="h-4.5 w-4.5" />
       ) : active ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4.5 w-4.5 animate-spin" />
       ) : (
-        <div className="h-4 w-4 rounded-full border-2" />
+        <div className="h-4.5 w-4.5 rounded-full border-2 border-border" />
       )}
-      {label}
+      <span className="text-sm">{label}</span>
     </div>
   );
 }
@@ -833,10 +844,10 @@ function RoomUploadSection({
     <Card className="transition-all duration-200 hover:shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <span className="text-xl">{section.icon}</span>
-          <CardTitle className="text-base">{section.label}</CardTitle>
+          <div className="h-9 w-9 rounded-xl bg-secondary flex items-center justify-center text-lg">{section.icon}</div>
+          <CardTitle className="text-base flex-1">{section.label}</CardTitle>
           {images.length > 0 && (
-            <Badge variant="secondary" className="ml-auto">
+            <Badge variant="success">
               {images.length} {images.length === 1 ? "photo" : "photos"}
             </Badge>
           )}
@@ -849,32 +860,32 @@ function RoomUploadSection({
               <img
                 src={img.url}
                 alt=""
-                className="h-24 w-24 rounded-lg object-cover border transition-transform duration-200 group-hover:scale-105"
+                className="h-24 w-24 rounded-xl object-cover border shadow-sm transition-transform duration-200 group-hover:scale-105"
               />
               <button
                 onClick={() => onRemove(img.id)}
-                className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-md"
               >
                 <X className="h-3 w-3" />
               </button>
             </div>
           ))}
 
-          {/* Upload zone — with mobile camera support */}
+          {/* Upload zone */}
           <div
             {...getRootProps()}
             className={cn(
-              "h-24 min-w-[6rem] rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all duration-200",
-              isDragActive ? "border-primary bg-primary/5 scale-105" : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-secondary/50",
+              "h-24 min-w-[6rem] rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all duration-200",
+              isDragActive ? "border-accent-warm bg-accent-warm/5 scale-105" : "border-muted-foreground/20 hover:border-accent-warm/40 hover:bg-secondary/50",
               uploading && "pointer-events-none opacity-50"
             )}
           >
             <input {...getInputProps()} capture="environment" />
             {uploading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-accent-warm" />
             ) : (
               <>
-                <Camera className="h-5 w-5 text-muted-foreground/50" />
+                <Camera className="h-5 w-5 text-muted-foreground/40" />
                 <span className="text-[10px] text-muted-foreground mt-1">
                   {images.length === 0 ? "Add photos" : "Add more"}
                 </span>

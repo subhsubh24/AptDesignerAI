@@ -42,17 +42,19 @@ export function Topbar({ user }: TopbarProps) {
     .slice(0, 2);
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background px-6">
+    <header className="flex h-16 items-center justify-between border-b bg-background/80 backdrop-blur-sm px-6">
       <div />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-            <Avatar className="h-9 w-9">
+            <Avatar className="h-9 w-9 ring-2 ring-border">
               <AvatarImage
                 src={user?.user_metadata?.avatar_url}
                 alt={name}
               />
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+              <AvatarFallback className="text-xs bg-secondary text-secondary-foreground font-medium">
+                {initials}
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>

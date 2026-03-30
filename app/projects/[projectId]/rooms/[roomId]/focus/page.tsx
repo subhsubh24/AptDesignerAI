@@ -525,10 +525,10 @@ export default function FocusPage() {
           {/* Validation banner */}
           {areaAnalysis.validation && (
             <div className={cn(
-              "flex items-center gap-3 p-3 rounded-lg text-sm",
+              "flex items-center gap-3 p-3 rounded-xl text-sm",
               areaAnalysis.validation.confidence >= 7
-                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                : "bg-amber-50 border border-amber-200 text-amber-800"
+                ? "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+                : "bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
             )}>
               {areaAnalysis.validation.confidence >= 7 ? (
                 <ShieldCheck className="h-5 w-5 shrink-0" />
@@ -547,13 +547,13 @@ export default function FocusPage() {
           {/* Floor plan context */}
           {floorPlanFound !== null && (
             <div className={cn(
-              "flex items-start gap-3 p-3 rounded-lg text-sm",
+              "flex items-start gap-3 p-3 rounded-xl text-sm",
               floorPlanFound
-                ? "bg-blue-50 border border-blue-200 text-blue-800"
+                ? "bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300"
                 : "bg-muted/50 border text-muted-foreground"
             )}>
               {floorPlanFound ? (
-                <Ruler className="h-5 w-5 shrink-0 mt-0.5 text-blue-600" />
+                <Ruler className="h-5 w-5 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
               ) : (
                 <LayoutGrid className="h-5 w-5 shrink-0 mt-0.5" />
               )}
@@ -598,7 +598,7 @@ export default function FocusPage() {
                 <h3 className="font-semibold text-sm mb-3">What to get</h3>
                 <div className="space-y-3">
                   {(areaAnalysis.what_it_needs || []).map((item, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/50">
                       <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
                       <div>
                         <p className="font-medium text-sm">{item.search_title || item.category.replace(/_/g, " ")}</p>
@@ -629,7 +629,7 @@ export default function FocusPage() {
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg border bg-primary/5">
+              <div className="p-3 rounded-xl border bg-primary/5">
                 <h3 className="font-semibold text-sm mb-1">Design Direction</h3>
                 <p className="text-sm text-muted-foreground">{areaAnalysis.design_direction}</p>
               </div>
@@ -638,8 +638,8 @@ export default function FocusPage() {
 
           {/* Impact summary — shown after refinement */}
           {impactSummary && (
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 animate-fade-in-up">
-              <RefreshCw className="h-5 w-5 shrink-0 mt-0.5 text-blue-600" />
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-300 animate-fade-in-up">
+              <RefreshCw className="h-5 w-5 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
               <div className="space-y-2">
                 <p className="text-sm font-medium">Analysis updated based on your feedback</p>
                 <p className="text-sm">{impactSummary}</p>
@@ -823,7 +823,7 @@ export default function FocusPage() {
                 }
                 return (
                   <div key={phase.key} className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                    "flex items-center gap-3 px-3 py-2 rounded-xl transition-colors",
                     isActive && "bg-accent/50",
                   )}>
                     <div className="w-5 flex justify-center">
@@ -876,7 +876,7 @@ export default function FocusPage() {
         <>
           {/* Error banner with retry */}
           {searchError && (
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive">
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-medium">Something went wrong during search</p>
@@ -890,7 +890,7 @@ export default function FocusPage() {
 
           {/* Stats bar */}
           {searchStats && (
-            <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-2">
               <span>{searchStats.totalSearchQueries} searches</span>
               <span className="text-border">|</span>
               <span>{searchStats.totalRawUrls} URLs found</span>
@@ -906,10 +906,10 @@ export default function FocusPage() {
           {/* Validation banner */}
           {validationInfo && (
             <div className={cn(
-              "flex items-center gap-3 p-3 rounded-lg text-sm",
+              "flex items-center gap-3 p-3 rounded-xl text-sm",
               validationInfo.confidence >= 7
-                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                : "bg-amber-50 border border-amber-200 text-amber-800"
+                ? "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+                : "bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
             )}>
               {validationInfo.confidence >= 7 ? <ShieldCheck className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
               <div>
@@ -1012,7 +1012,7 @@ function AnalysisSubstep({ label, delay }: { label: string; delay: number }) {
 
   return (
     <div className={cn(
-      "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300",
+      "flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300",
       state === "active" && "bg-accent/50",
     )}>
       <div className="w-5 flex justify-center">
@@ -1189,7 +1189,7 @@ function RecommendationTable({
                 if (!product) return null;
                 const eval0 = product.product_evaluations?.[0];
                 return (
-                  <div key={tier} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
+                  <div key={tier} className="flex items-center gap-3 p-2 rounded-xl bg-muted/30">
                     {product.image_url && (
                       <img src={product.image_url} alt="" className="h-12 w-12 rounded object-cover shrink-0" />
                     )}

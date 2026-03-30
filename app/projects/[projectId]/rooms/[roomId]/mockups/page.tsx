@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles } from "lucide-react";
 
 interface Mockup {
@@ -37,7 +37,6 @@ export default function MockupsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      // Get shortlisted/accepted products
       const productsRes = await fetch(`/api/products?room_id=${roomId}`);
       if (!productsRes.ok) return;
       const products = await productsRes.json();
@@ -65,8 +64,8 @@ export default function MockupsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
       </div>
     );
   }
@@ -76,7 +75,7 @@ export default function MockupsPage() {
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Room
@@ -88,7 +87,7 @@ export default function MockupsPage() {
               AI-generated room visualizations
             </p>
           </div>
-          <Button onClick={handleGenerate} disabled={generating}>
+          <Button onClick={handleGenerate} disabled={generating} variant="warm">
             {generating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -105,9 +104,11 @@ export default function MockupsPage() {
       </div>
 
       {mockups.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <ImageIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
+        <Card className="border-dashed border-2">
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-5">
+              <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
+            </div>
             <h3 className="text-lg font-semibold mb-2">No mockups yet</h3>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
               Shortlist products and click &quot;Generate Mockup&quot; to create a room visualization.
@@ -117,19 +118,22 @@ export default function MockupsPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           {mockups.map((mockup) => (
-            <Card key={mockup.id} className="overflow-hidden">
+            <Card key={mockup.id} className="overflow-hidden group hover:shadow-lg transition-all duration-300">
               {mockup.result_image_url ? (
                 <div className="aspect-video w-full overflow-hidden bg-muted">
                   <img
                     src={mockup.result_image_url}
                     alt="Room mockup"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 </div>
               ) : (
                 <div className="aspect-video w-full flex items-center justify-center bg-muted">
                   {mockup.status === "generating" ? (
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
+                      <span className="text-xs text-muted-foreground">Generating...</span>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       {mockup.status === "failed" ? "Generation failed" : "Pending"}
@@ -140,10 +144,10 @@ export default function MockupsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{new Date(mockup.created_at).toLocaleDateString()}</span>
-                  <span className="capitalize">{mockup.status}</span>
+                  <span className="capitalize font-medium">{mockup.status}</span>
                 </div>
                 {mockup.prompt && (
-                  <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-3 leading-relaxed">
                     {mockup.prompt}
                   </p>
                 )}

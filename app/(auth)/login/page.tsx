@@ -35,67 +35,73 @@ export default function LoginPage() {
     } else {
       router.push("/dashboard");
       router.refresh();
-      // Don't setLoading(false) — component will unmount on navigation
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-2">
-            <LogoMark className="h-8 w-8 text-primary" />
-          </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">
-            Apt<span className="text-accent-warm">Designer</span>
-          </CardTitle>
-          <CardDescription className="text-base">
-            Sign in to continue
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+      <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
+      <div className="relative w-full max-w-md animate-fade-in-up">
+        <Card className="border-border/60 shadow-lg">
+          <CardHeader className="text-center pb-2">
+            <div className="flex justify-center mb-4">
+              <div className="h-14 w-14 rounded-2xl bg-secondary flex items-center justify-center">
+                <LogoMark className="h-8 w-8 text-foreground" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+            <CardTitle className="text-2xl font-bold tracking-tight">
+              Apt<span className="text-accent-warm">Designer</span>
+            </CardTitle>
+            <CardDescription className="text-base mt-1">
+              Sign in to continue
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
 
-            {error && (
-              <p className="text-sm text-red-600">{error}</p>
-            )}
+              {error && (
+                <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
 
-            <Button type="submit" className="w-full h-11" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Sign In
-            </Button>
-          </form>
+              <Button type="submit" className="w-full h-11" disabled={loading}>
+                {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Sign In
+              </Button>
+            </form>
 
-          <p className="text-sm text-muted-foreground text-center mt-6">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary underline hover:no-underline">
-              Create one
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+            <p className="text-sm text-muted-foreground text-center mt-6">
+              Don&apos;t have an account?{" "}
+              <Link href="/signup" className="text-accent-warm font-medium hover:underline">
+                Create one
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
