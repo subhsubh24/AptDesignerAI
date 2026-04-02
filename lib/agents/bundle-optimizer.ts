@@ -116,6 +116,7 @@ export async function evaluateBundle(
           final_bundle_score: finalScore,
           verdict: parsed.verdict,
           analysis: parsed.analysis,
+          room_vibe: parsed.room_vibe,
         },
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,

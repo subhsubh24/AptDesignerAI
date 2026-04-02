@@ -43,6 +43,12 @@ export default function BundlesPage() {
         what_feels_missing: string;
         what_should_be_swapped_first: string;
       };
+      room_vibe?: {
+        vibe_summary: string;
+        style_keywords: string[];
+        color_story: string;
+        mood: string;
+      } | null;
     }>;
   }>>([]);
   const [loading, setLoading] = useState(true);
@@ -248,6 +254,36 @@ export default function BundlesPage() {
                             <span className="font-medium">Swap First: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.what_should_be_swapped_first}</span>
                           </div>
+                        </div>
+                      )}
+
+                      {evaluation.room_vibe && (
+                        <div className="space-y-3 border-t pt-5">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-semibold">Room Vibe</h4>
+                            {evaluation.room_vibe.mood && (
+                              <Badge variant="secondary" className="text-xs">
+                                {evaluation.room_vibe.mood}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {evaluation.room_vibe.vibe_summary}
+                          </p>
+                          {evaluation.room_vibe.style_keywords?.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {evaluation.room_vibe.style_keywords.map((kw) => (
+                                <Badge key={kw} variant="outline" className="text-xs">
+                                  {kw}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          {evaluation.room_vibe.color_story && (
+                            <p className="text-sm text-muted-foreground italic">
+                              {evaluation.room_vibe.color_story}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

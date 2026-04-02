@@ -144,4 +144,13 @@ describe("getBundleEvalPrompt", () => {
     expect(prompt).toContain('"strongest_aspect"');
     expect(prompt).toContain('"weakest_aspect"');
   });
+
+  it("should include room_vibe in the output format", () => {
+    const prompt = getBundleEvalPrompt("living_room");
+    expect(prompt).toContain('"room_vibe"');
+    expect(prompt).toContain('"vibe_summary"');
+    expect(prompt).toContain('"style_keywords"');
+    expect(prompt).toContain('"color_story"');
+    expect(prompt).toContain('"mood"');
+  });
 });

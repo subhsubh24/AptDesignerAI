@@ -140,6 +140,7 @@ export interface BundleEvaluation {
   final_bundle_score: number;
   verdict: string | null;
   analysis: BundleAnalysis;
+  room_vibe: RoomVibe | null;
   model_used: string | null;
   created_at: string;
 }
@@ -257,4 +258,11 @@ export interface BundleAnalysis {
   weakest_aspect: string;
   what_feels_missing: string;
   what_should_be_swapped_first: string;
+}
+
+export interface RoomVibe {
+  vibe_summary: string;
+  style_keywords: string[];
+  color_story: string;
+  mood: string;
 }

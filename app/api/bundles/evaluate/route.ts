@@ -115,6 +115,7 @@ export async function POST(request: Request) {
       final_bundle_score: result.data.final_bundle_score,
       verdict: result.data.verdict,
       analysis: result.data.analysis,
+      room_vibe: result.data.room_vibe || null,
       model_used: result.model,
     })
     .select()

@@ -32,6 +32,13 @@ export interface ProductEvaluationResult {
   };
 }
 
+export interface RoomVibe {
+  vibe_summary: string;
+  style_keywords: string[];
+  color_story: string;
+  mood: string;
+}
+
 export interface BundleEvaluationResult {
   scores: BundleScores;
   final_bundle_score: number;
@@ -42,4 +49,5 @@ export interface BundleEvaluationResult {
     what_feels_missing: string;
     what_should_be_swapped_first: string;
   };
+  room_vibe?: RoomVibe;
 }

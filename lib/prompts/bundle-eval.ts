@@ -181,6 +181,12 @@ Return a JSON object:
     "what_feels_missing": "specific categories or elements still needed after this bundle",
     "what_should_be_swapped_first": "which specific item should be replaced first, what it should be replaced with, and why"
   },
+  "room_vibe": {
+    "vibe_summary": "2-3 sentence description of the overall mood and feeling this room will have with these pieces. Describe it the way an interior designer would pitch it to a client — what does walking into this room FEEL like? Reference specific pieces that drive the vibe.",
+    "style_keywords": ["3-5 style keywords that capture the aesthetic, e.g. 'warm minimalist', 'lived-in modern', 'earthy calm', 'curated bohemian'"],
+    "color_story": "1-2 sentences describing the color narrative — what's the dominant tone, what accents pop, how does light interact with the palette?",
+    "mood": "one word or short phrase that captures the emotional quality of the room — e.g. 'cozy refuge', 'bright and energizing', 'calm sophistication', 'effortlessly cool'"
+  },
   "verdict": "2-3 sentence summary of this bundle's quality. Would a professional designer recommend this to a client?"
 }
 
