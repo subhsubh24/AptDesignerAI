@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
+import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
 describe("getProductEvalPrompt", () => {
   const baseArgs = {
@@ -192,7 +193,7 @@ describe("getProductEvalPrompt", () => {
       what_is_not_working: ["no rug", "poor lighting"],
       scale_proportion_issues: ["coffee table too small"],
       lighting_issues: ["dark corner by reading chair"],
-    };
+    } as DiagnosisData;
     const prompt = getProductEvalPrompt(
       baseArgs.roomType,
       baseArgs.category,
@@ -212,7 +213,7 @@ describe("getProductEvalPrompt", () => {
       recommended_palette: ["warm ivory", "walnut brown", "brass"],
       recommended_materials: ["walnut", "linen", "brass"],
       style_notes: "Mid-century modern with organic warmth",
-    };
+    } as DesignDirection;
     const prompt = getProductEvalPrompt(
       baseArgs.roomType,
       baseArgs.category,

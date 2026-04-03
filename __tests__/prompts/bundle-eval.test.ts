@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
+import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
 describe("getBundleEvalPrompt", () => {
   it("should generate a non-empty prompt with basic args", () => {
@@ -119,7 +120,7 @@ describe("getBundleEvalPrompt", () => {
     const diagnosis = {
       what_is_working: ["warm walnut floors"],
       what_is_not_working: ["no area rug", "harsh lighting"],
-    };
+    } as DiagnosisData;
     const prompt = getBundleEvalPrompt("living_room", undefined, diagnosis);
     expect(prompt).toContain("warm walnut floors");
     expect(prompt).toContain("no area rug");
@@ -130,7 +131,7 @@ describe("getBundleEvalPrompt", () => {
       recommended_palette: ["ivory", "walnut"],
       recommended_materials: ["wool", "walnut", "brass"],
       style_notes: "Urban organic warmth",
-    };
+    } as DesignDirection;
     const prompt = getBundleEvalPrompt("living_room", undefined, undefined, direction);
     expect(prompt).toContain("ivory");
     expect(prompt).toContain("Urban organic warmth");

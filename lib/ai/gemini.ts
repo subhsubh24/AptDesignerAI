@@ -166,6 +166,31 @@ export const geminiProvider: AIProvider = {
     const ai = getClient();
     const contents = await convertMessages(messages);
 
+    // ─── Prompt size monitoring ──────────────────────────────
+    // Rough token estimate: ~4 chars per token for English text.
+    // Warn when prompt is large so we can catch context window issues early.
+    const estimatedPromptTokens = (() => {
+      let textChars = 0;
+      let imageCount = 0;
+      if (system) textChars += system.length;
+      for (const msg of contents) {
+        for (const part of msg.parts) {
+          if (typeof (part as { text?: string }).text === "string") {
+            textChars += ((part as { text: string }).text).length;
+          }
+          if ((part as { inlineData?: unknown }).inlineData) {
+            imageCount++;
+          }
+        }
+      }
+      // Images are ~258 tokens per image (Gemini's default for inline images)
+      return Math.ceil(textChars / 4) + imageCount * 258;
+    })();
+
+    if (estimatedPromptTokens > 50000) {
+      console.warn(`[gemini] ⚠️ Large prompt: ~${estimatedPromptTokens.toLocaleString()} estimated tokens for model=${model}. Consider reducing context.`);
+    }
+
     // Build config
     const config: Record<string, unknown> = {
       maxOutputTokens: max_tokens,

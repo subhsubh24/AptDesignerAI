@@ -11,6 +11,7 @@ import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { PipelineTracer } from "./pipeline-trace";
+import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
@@ -41,6 +42,9 @@ export interface OrchestrationResult {
     totalDeepScored: number;
     totalFinal: number;
     tokensUsed: number;
+    conversionRates?: Record<string, number>;
+    bottlenecks?: string[];
+    driftWarnings?: string[];
   };
   trace?: ReturnType<PipelineTracer["getTrace"]>;
 }
@@ -1054,6 +1058,50 @@ export async function runAgenticSearch(
       }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // Pipeline conversion metrics + score drift check
+    // ═══════════════════════════════════════════════════════════
+    const conversionRates = {
+      searchToDedup: stats.totalRawUrls > 0 ? Math.round((stats.totalAfterDedup / stats.totalRawUrls) * 100) : 0,
+      dedupToScreen: stats.totalAfterDedup > 0 ? Math.round((stats.totalAfterScreen / stats.totalAfterDedup) * 100) : 0,
+      screenToExtract: stats.totalAfterScreen > 0 ? Math.round((stats.totalExtracted / stats.totalAfterScreen) * 100) : 0,
+      extractToQuickScore: stats.totalExtracted > 0 ? Math.round((stats.totalQuickScored / stats.totalExtracted) * 100) : 0,
+      quickToDeep: stats.totalQuickScored > 0 ? Math.round((stats.totalDeepScored / stats.totalQuickScored) * 100) : 0,
+      deepToFinal: stats.totalDeepScored > 0 ? Math.round((stats.totalFinal / stats.totalDeepScored) * 100) : 0,
+      overallYield: stats.totalRawUrls > 0 ? Math.round((stats.totalFinal / stats.totalRawUrls) * 100) : 0,
+    };
+
+    console.log(`[orchestrator] Pipeline conversion: ${JSON.stringify(conversionRates)}`);
+
+    // Identify bottlenecks — any stage dropping more than 80% is worth investigating
+    const bottlenecks: string[] = [];
+    if (conversionRates.screenToExtract < 20 && stats.totalAfterScreen > 10) {
+      bottlenecks.push(`Extraction success rate low (${conversionRates.screenToExtract}%) — product pages may be hard to scrape`);
+    }
+    if (conversionRates.deepToFinal < 30 && stats.totalDeepScored > 10) {
+      bottlenecks.push(`Deep score → final rate low (${conversionRates.deepToFinal}%) — scoring may be too strict or search queries are off-target`);
+    }
+    if (stats.totalFinal === 0 && stats.totalRawUrls > 20) {
+      bottlenecks.push(`Zero final products from ${stats.totalRawUrls} URLs — search queries may not match available products`);
+    }
+    if (bottlenecks.length > 0) {
+      console.warn(`[orchestrator] Pipeline bottlenecks:\n  ${bottlenecks.join("\n  ")}`);
+    }
+
+    // Check for score drift
+    const driftWarnings = checkForDrift();
+    if (driftWarnings.length > 0) {
+      console.warn(`[orchestrator] Score drift detected (${driftWarnings.length} warnings):`);
+      for (const w of driftWarnings) {
+        console.warn(`  ${w.message}`);
+      }
+    }
+
+    const distribution = getScoreDistributionSummary();
+    if (Object.keys(distribution).length > 0) {
+      console.log(`[orchestrator] Score distributions: ${JSON.stringify(distribution)}`);
+    }
+
     return {
       success: true,
       data: {
@@ -1063,7 +1111,7 @@ export async function runAgenticSearch(
         bundles,
         steps,
         validation: validationData,
-        stats,
+        stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message) },
         trace: tracer.getTrace(),
       },
     };

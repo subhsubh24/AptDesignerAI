@@ -3,6 +3,8 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
+import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types/schemas";
+import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
@@ -109,8 +111,8 @@ export async function scoreProduct(
 
   const content: AIContentBlock[] = [];
 
-  // Add room images for context
-  for (const url of scoringCtx.roomImageUrls.slice(0, 2)) {
+  // Add room images for context (up to 3 for better spatial understanding)
+  for (const url of scoringCtx.roomImageUrls.slice(0, 3)) {
     content.push({ type: "image", source: { type: "url", url } });
   }
 
@@ -134,26 +136,33 @@ export async function scoreProduct(
     text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
   });
 
-  // Attempt scoring with retry on failure
+  // Attempt scoring with retry on failure (retry includes error context + higher temp)
+  let lastError: string | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      // On retry: include previous error context and bump temperature slightly
+      const retryContent = attempt > 0 && lastError
+        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Please return ONLY valid JSON matching the exact schema above. Ensure all score fields are numbers 0-10.` }]
+        : content;
+
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content }],
+        messages: [{ role: "user", content: retryContent }],
         max_tokens: 16000,
-        temperature: 0.2,
+        temperature: attempt === 0 ? 0.2 : 0.35,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "high" },
       });
 
-      const parsed = JSON.parse(response.content);
-      const scores = parsed.scores;
-      if (!scores || typeof scores.confidence_score !== "number") {
-        throw new Error("Invalid scoring response: missing scores or confidence_score");
-      }
+      const raw = JSON.parse(response.content);
+      const validated = ProductEvalResponseSchema.parse(raw);
+      const scores = validated.scores;
       const finalScore = computeFinalItemScore(scores);
       const verdict = determineVerdict(finalScore, scores.confidence_score);
+
+      // Record scores for drift monitoring
+      recordProductScores(scores as unknown as Record<string, number>);
 
       return {
         success: true,
@@ -161,22 +170,23 @@ export async function scoreProduct(
           scores,
           final_item_score: finalScore,
           verdict,
-          reasoning: parsed.reasoning,
-          area_fit_note: parsed.area_fit_note,
-          apartment_fit_note: parsed.apartment_fit_note,
+          reasoning: validated.reasoning,
+          area_fit_note: validated.area_fit_note,
+          apartment_fit_note: validated.apartment_fit_note,
         },
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (error) {
+      lastError = error instanceof Error ? error.message : "Scoring failed";
       if (attempt === 0) {
-        // Retry after brief delay
+        console.warn(`[fit-scorer] Attempt 1 failed for "${product.title}": ${lastError}`);
         await new Promise((r) => setTimeout(r, 1500));
         continue;
       }
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Scoring failed",
+        error: lastError,
       };
     }
   }
@@ -337,58 +347,66 @@ Return JSON:
   ]
 }`;
 
+      let lastQsError: string | undefined;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          const retryHint = attempt > 0 && lastQsError
+            ? `\n\nPrevious response was invalid: "${lastQsError}". Return ONLY valid JSON with the exact schema above.`
+            : "";
+
           const response = await geminiProvider.chat({
             model: selectModel("quick_score"),
             system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. Return ONLY the JSON scores, no explanations.",
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: prompt + retryHint }],
             max_tokens: 1500,
-            temperature: 0.1,
+            temperature: attempt === 0 ? 0.1 : 0.2,
             responseMimeType: "application/json",
           });
 
-          const parsed = JSON.parse(response.content);
+          const raw = JSON.parse(response.content);
+          const validated = QuickScoreResponseSchema.parse(raw);
           const entries: QuickScoreEntry[] = [];
-          for (const score of parsed.scores || []) {
-            if (score.index >= 0 && score.index < batch.length) {
-              const scaleFit = score.scale_fit ?? 5;
-              const avg = (score.style_fit + scaleFit + score.value_fit + score.confidence) / 4;
+          for (const scoreEntry of validated.scores) {
+            if (scoreEntry.index >= 0 && scoreEntry.index < batch.length) {
+              const scaleFit = scoreEntry.scale_fit ?? 5;
+              const avg = (scoreEntry.style_fit + scaleFit + scoreEntry.value_fit + scoreEntry.confidence) / 4;
               entries.push({
-                productId: batch[score.index].id,
+                productId: batch[scoreEntry.index].id,
                 quickScore: Math.round(avg * 10) / 10,
-                styleFit: score.style_fit,
+                styleFit: scoreEntry.style_fit,
                 scaleFit,
-                valueFit: score.value_fit,
-                confidence: score.confidence,
+                valueFit: scoreEntry.value_fit,
+                confidence: scoreEntry.confidence,
               });
             }
           }
           return entries;
-        } catch {
+        } catch (qsErr) {
+          lastQsError = qsErr instanceof Error ? qsErr.message : "Quick score failed";
           if (attempt === 0) {
             await new Promise((r) => setTimeout(r, 1000));
             continue;
           }
-          // On second failure, give all products a conservative score (fail open but cautious)
+          // On second failure, conservative defaults — low scores so these don't pass through unchecked
+          console.warn(`[fit-scorer] Quick score failed for batch, applying conservative defaults: ${lastQsError}`);
           return batch.map((p) => ({
             productId: p.id,
-            quickScore: 5,
-            styleFit: 5,
-            scaleFit: 5,
-            valueFit: 5,
-            confidence: 3,
+            quickScore: 3,
+            styleFit: 3,
+            scaleFit: 3,
+            valueFit: 3,
+            confidence: 1,
           }));
         }
       }
-      // Unreachable but satisfies TypeScript
+      // Unreachable but satisfies TypeScript — conservative defaults
       return batch.map((p) => ({
         productId: p.id,
-        quickScore: 6,
-        styleFit: 6,
-        scaleFit: 6,
-        valueFit: 6,
-        confidence: 5,
+        quickScore: 3,
+        styleFit: 3,
+        scaleFit: 3,
+        valueFit: 3,
+        confidence: 1,
       }));
     })
   );

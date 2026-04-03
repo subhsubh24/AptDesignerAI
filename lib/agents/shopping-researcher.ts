@@ -2,6 +2,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
+import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -282,14 +283,19 @@ export async function generateSearchBrief(
   const system = getSystemPrompt(designProfile);
   const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext, diagnosis, lightingConditions, windowDoorPositions, outletPositions);
 
+  let lastError: string | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const retryHint = attempt > 0 && lastError
+        ? `\n\nPrevious response was invalid: "${lastError}". Return ONLY valid JSON with the exact schema above. Each category must have tiers with search_queries and price_range.`
+        : "";
+
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: prompt + retryHint }],
         max_tokens: 8000,
-        temperature: 0.3,
+        temperature: attempt === 0 ? 0.3 : 0.4,
         responseMimeType: "application/json",
       });
 
@@ -297,22 +303,24 @@ export async function generateSearchBrief(
         console.error("[search-brief] Response was truncated! Need more output tokens.");
       }
 
-      const parsed = JSON.parse(response.content) as SearchBrief;
+      const raw = JSON.parse(response.content);
+      const validated = SearchBriefResponseSchema.parse(raw);
       return {
         success: true,
-        data: parsed,
+        data: validated as SearchBrief,
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (error) {
-      console.error(`[search-brief] Attempt ${attempt + 1} failed:`, error instanceof Error ? error.message : error);
+      lastError = error instanceof Error ? error.message : "Search brief generation failed";
+      console.error(`[search-brief] Attempt ${attempt + 1} failed:`, lastError);
       if (attempt === 0) {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Search brief generation failed",
+        error: lastError,
       };
     }
   }
@@ -378,31 +386,30 @@ Return ONLY a valid JSON object — no text before or after:
 
     try {
       const raw = response.content.trim();
-      let parsed: { products?: { title: string; url: string; snippet: string; source: string }[] };
+      let jsonObj: unknown;
       try {
-        parsed = JSON.parse(raw);
+        jsonObj = JSON.parse(raw);
       } catch {
         const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[1].trim());
+          jsonObj = JSON.parse(jsonMatch[1].trim());
         } else {
           const braceStart = raw.indexOf("{");
           const braceEnd = raw.lastIndexOf("}");
           if (braceStart !== -1 && braceEnd > braceStart) {
-            parsed = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+            jsonObj = JSON.parse(raw.slice(braceStart, braceEnd + 1));
           } else {
-            parsed = {};
+            jsonObj = { products: [] };
           }
         }
       }
-      const candidates = (parsed.products || []).map(
-        (r: { title: string; url: string; snippet: string; source: string }) => ({
-          title: r.title || "",
-          url: r.url || "",
-          snippet: (r.snippet || "").slice(0, 500),
-          source: r.source || "",
-        })
-      );
+      const validated = SearchProductsResponseSchema.parse(jsonObj);
+      const candidates = validated.products.map((r) => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.snippet.slice(0, 500),
+        source: r.source,
+      }));
       return { success: true, data: candidates };
     } catch {
       // Fallback: use grounding metadata sources
@@ -526,9 +533,10 @@ Return JSON:
           responseMimeType: "application/json",
         });
 
-        const parsed = JSON.parse(response.content);
+        const raw = JSON.parse(response.content);
+        const validated = QuickScreenResponseSchema.parse(raw);
         const passed: SearchCandidate[] = [];
-        for (const rating of parsed.ratings || []) {
+        for (const rating of validated.ratings) {
           if (rating.rating >= 3) {
             const globalIdx = rating.index;
             const localIdx = globalIdx - batchIdx * BATCH_SIZE;

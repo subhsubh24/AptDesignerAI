@@ -1,6 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
+import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema } from "@/lib/types/schemas";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -229,45 +230,39 @@ Return JSON:
 YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designer would accept nothing less than perfection. If a search title says "warm cream" but "ivory" would harmonize better with the existing floors, that's not a 10. If placement says "next to the sofa" but a specific "18 inches from the sofa arm, centered on the south wall outlet" would be better, that's not a 10. Optimize every detail.`,
   });
 
+  let lastError: string | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      // On retry: include error context
+      const retryContent = attempt > 0 && lastError
+        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. Ensure confidence and overall_cohesion are numbers 0-10, and item_scores is a non-empty array.` }]
+        : content;
+
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content }],
+        messages: [{ role: "user", content: retryContent }],
         max_tokens: 32000,
-        temperature: 0.2,
+        temperature: attempt === 0 ? 0.2 : 0.3,
         thinkingConfig: { thinkingLevel: attempt === 0 ? "high" : "medium" },
         responseMimeType: "application/json",
       });
 
       if (response.truncated) {
+        lastError = "Response truncated (MAX_TOKENS)";
         console.warn(`[harmony-validation] Response truncated (attempt ${attempt + 1}), retrying with lower thinking...`);
         continue;
       }
 
-      const parsed = JSON.parse(response.content) as HarmonyValidationResult;
-
+      const raw = JSON.parse(response.content);
       // Handle array response (AI sometimes wraps in array)
-      const result = Array.isArray(parsed) ? (parsed[0] as HarmonyValidationResult) : parsed;
-
-      // Validate required fields
-      if (!result.item_scores || !Array.isArray(result.item_scores)) {
-        console.error(`[harmony-validation] Response missing item_scores (attempt ${attempt + 1}). Keys: ${Object.keys(result).join(", ")}`);
-        if (attempt === 0) continue; // Retry
-        return {
-          success: false,
-          error: `Harmony validation response missing item_scores. Got keys: ${Object.keys(result).join(", ")}`,
-        };
-      }
-      if (typeof result.confidence !== "number" || typeof result.overall_cohesion !== "number") {
-        console.error(`[harmony-validation] Response missing confidence or overall_cohesion (attempt ${attempt + 1}). Keys: ${Object.keys(result).join(", ")}`);
-        if (attempt === 0) continue; // Retry
-        return {
-          success: false,
-          error: `Harmony validation response missing confidence/overall_cohesion. Got keys: ${Object.keys(result).join(", ")}`,
-        };
-      }
+      const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+      const parsed = HarmonyValidationResponseSchema.parse(unwrapped);
+      // Normalize null revisedAnalysis to undefined to match HarmonyValidationResult type
+      const result: HarmonyValidationResult = {
+        ...parsed,
+        revisedAnalysis: parsed.revisedAnalysis ?? undefined,
+      };
 
       return {
         success: true,
@@ -276,13 +271,14 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
         model: response.model,
       };
     } catch (error) {
+      lastError = error instanceof Error ? error.message : "Harmony validation failed";
       if (attempt === 0) {
-        console.warn(`[harmony-validation] Attempt 1 failed, retrying:`, error);
+        console.warn(`[harmony-validation] Attempt 1 failed: ${lastError}`);
         continue;
       }
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Harmony validation failed",
+        error: lastError,
       };
     }
   }
@@ -411,28 +407,44 @@ Return JSON:
 
   content.push({ type: "text", text: promptText });
 
-  try {
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content }],
-      max_tokens: 16000,
-      temperature: 0.2,
-      thinkingConfig: { thinkingLevel: "high" },
-      responseMimeType: "application/json",
-    });
+  let lastError: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const retryContent = attempt > 0 && lastError
+        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+        : content;
 
-    const parsed = JSON.parse(response.content) as ValidationResult;
-    return {
-      success: true,
-      data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-      model: response.model,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Product set validation failed",
-    };
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content: retryContent }],
+        max_tokens: 16000,
+        temperature: attempt === 0 ? 0.2 : 0.3,
+        thinkingConfig: { thinkingLevel: "high" },
+        responseMimeType: "application/json",
+      });
+
+      const raw = JSON.parse(response.content);
+      const validated = ProductSetValidationResponseSchema.parse(raw);
+      return {
+        success: true,
+        data: validated,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+        model: response.model,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Product set validation failed";
+      if (attempt === 0) {
+        console.warn(`[product-set-validation] Attempt 1 failed: ${lastError}`);
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      return {
+        success: false,
+        error: lastError,
+      };
+    }
   }
+
+  return { success: false, error: "Product set validation failed after retries" };
 }

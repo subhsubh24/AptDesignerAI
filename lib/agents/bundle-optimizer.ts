@@ -3,6 +3,8 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
+import { BundleEvalResponseSchema } from "@/lib/types/schemas";
+import { recordBundleScores } from "@/lib/scoring/drift-monitor";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
@@ -93,42 +95,54 @@ export async function evaluateBundle(
     text: `${bundlePrompt}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
   });
 
+  let lastError: string | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      // On retry: include error context and bump temperature
+      const retryContent = attempt > 0 && lastError
+        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. All score fields must be numbers 0-10.` }]
+        : content;
+
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content }],
+        messages: [{ role: "user", content: retryContent }],
         max_tokens: 10000,
-        temperature: 0.2,
+        temperature: attempt === 0 ? 0.2 : 0.35,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "high" },
       });
 
-      const parsed = JSON.parse(response.content);
-      const scores = parsed.scores;
+      const raw = JSON.parse(response.content);
+      const validated = BundleEvalResponseSchema.parse(raw);
+      const scores = validated.scores;
       const finalScore = computeFinalBundleScore(scores);
+
+      // Record scores for drift monitoring
+      recordBundleScores(scores as unknown as Record<string, number>);
 
       return {
         success: true,
         data: {
           scores,
           final_bundle_score: finalScore,
-          verdict: parsed.verdict,
-          analysis: parsed.analysis,
-          room_vibe: parsed.room_vibe,
+          verdict: validated.verdict,
+          analysis: validated.analysis,
+          room_vibe: validated.room_vibe,
         },
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
     } catch (error) {
+      lastError = error instanceof Error ? error.message : "Bundle evaluation failed";
       if (attempt === 0) {
+        console.warn(`[bundle-optimizer] Attempt 1 failed: ${lastError}`);
         await new Promise((r) => setTimeout(r, 1500));
         continue;
       }
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Bundle evaluation failed",
+        error: lastError,
       };
     }
   }

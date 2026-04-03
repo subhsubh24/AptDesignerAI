@@ -2,6 +2,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
+import { ExtractedProductSchema } from "@/lib/types/schemas";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -243,22 +244,27 @@ async function validateExtractedImages(
 
 /**
  * Parse JSON from a potentially messy LLM response (may have markdown, extra text, etc.)
+ * Then validate through the ExtractedProduct Zod schema.
  */
-function parseJsonResponse<T>(raw: string): T {
+function parseAndValidateExtraction(raw: string): ExtractedProduct {
+  let jsonObj: unknown;
   try {
-    return JSON.parse(raw) as T;
+    jsonObj = JSON.parse(raw);
   } catch {
     const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[1].trim()) as T;
+      jsonObj = JSON.parse(jsonMatch[1].trim());
+    } else {
+      const braceStart = raw.indexOf("{");
+      const braceEnd = raw.lastIndexOf("}");
+      if (braceStart !== -1 && braceEnd > braceStart) {
+        jsonObj = JSON.parse(raw.slice(braceStart, braceEnd + 1));
+      } else {
+        throw new Error("Could not parse response as JSON");
+      }
     }
-    const braceStart = raw.indexOf("{");
-    const braceEnd = raw.lastIndexOf("}");
-    if (braceStart !== -1 && braceEnd > braceStart) {
-      return JSON.parse(raw.slice(braceStart, braceEnd + 1)) as T;
-    }
-    throw new Error("Could not parse response as JSON");
   }
+  return ExtractedProductSchema.parse(jsonObj) as ExtractedProduct;
 }
 
 /**
@@ -298,7 +304,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
     const raw = response.content.trim();
     if (!raw) throw new Error("Empty response from extraction");
 
-    let parsed = parseJsonResponse<ExtractedProduct>(raw);
+    let parsed = parseAndValidateExtraction(raw);
     parsed = await validateExtractedImages(parsed, url);
     cacheExtraction(url, parsed);
     return {
@@ -323,7 +329,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
       const raw = response.content.trim();
       if (!raw) throw new Error("Empty response from extraction (retry)");
 
-      let parsed = parseJsonResponse<ExtractedProduct>(raw);
+      let parsed = parseAndValidateExtraction(raw);
       parsed = await validateExtractedImages(parsed, url);
       cacheExtraction(url, parsed);
       return {
@@ -350,7 +356,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
         const raw = response.content.trim();
         if (!raw) throw new Error("Empty response from fallback extraction");
 
-        let parsed = parseJsonResponse<ExtractedProduct>(raw);
+        let parsed = parseAndValidateExtraction(raw);
         parsed = await validateExtractedImages(parsed, url);
         cacheExtraction(url, parsed);
         return {
@@ -398,10 +404,10 @@ export async function extractFromImage(imageUrl: string, designProfile?: Dynamic
       responseMimeType: "application/json",
     });
 
-    const parsed = JSON.parse(response.content) as ExtractedProduct;
+    const validated = ExtractedProductSchema.parse(JSON.parse(response.content)) as ExtractedProduct;
     return {
       success: true,
-      data: parsed,
+      data: validated,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
