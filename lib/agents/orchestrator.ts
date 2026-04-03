@@ -86,6 +86,22 @@ function pLimit(concurrency: number) {
   };
 }
 
+// ─── Cartesian Product ────────────────────────────────────────
+
+/** Generate all combinations by picking one element from each array. */
+function cartesian<T>(arrays: T[][]): T[][] {
+  if (arrays.length === 0) return [[]];
+  const [first, ...rest] = arrays;
+  const restCombos = cartesian(rest);
+  const result: T[][] = [];
+  for (const item of first) {
+    for (const combo of restCombos) {
+      result.push([item, ...combo]);
+    }
+  }
+  return result;
+}
+
 // ─── Token Budget ─────────────────────────────────────────────
 
 /** Track cumulative token usage and enforce a hard cap. */
@@ -779,19 +795,6 @@ export async function runAgenticSearch(
 
       // Generate full cartesian product of top candidates across categories
       // e.g. 3 categories × 3 options each = up to 27 combos
-      function cartesian(arrays: CandidateProduct[][]): CandidateProduct[][] {
-        if (arrays.length === 0) return [[]];
-        const [first, ...rest] = arrays;
-        const restCombos = cartesian(rest);
-        const result: CandidateProduct[][] = [];
-        for (const item of first) {
-          for (const combo of restCombos) {
-            result.push([item, ...combo]);
-          }
-        }
-        return result;
-      }
-
       let combos = cartesian(topByCategory);
 
       // Safety cap: if more than 27 combos, keep only top 27 by average individual score
@@ -986,21 +989,7 @@ export async function runAgenticSearch(
 
           if (topByCategory.length === 0) continue;
 
-          // Simplified cartesian for backfill re-eval (same logic, capped at 27)
-          function cartesianBackfill(arrays: CandidateProduct[][]): CandidateProduct[][] {
-            if (arrays.length === 0) return [[]];
-            const [first, ...rest] = arrays;
-            const restCombos = cartesianBackfill(rest);
-            const result: CandidateProduct[][] = [];
-            for (const item of first) {
-              for (const combo of restCombos) {
-                result.push([item, ...combo]);
-              }
-            }
-            return result;
-          }
-
-          let combos = cartesianBackfill(topByCategory);
+          let combos = cartesian(topByCategory);
           if (combos.length > 27) {
             combos.sort((a, b) => {
               const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;

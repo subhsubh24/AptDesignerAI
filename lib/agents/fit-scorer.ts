@@ -4,6 +4,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
 import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types/schemas";
+import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { createLogger } from "@/lib/logging/logger";
@@ -14,6 +15,9 @@ import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/typ
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 const log = createLogger("fit-scorer");
+
+/** Pre-computed Gemini-compatible schema for quick-score responses. */
+const QUICK_SCORE_GEMINI_SCHEMA = zodToGeminiSchema(QuickScoreResponseSchema);
 
 export interface ScoringContext {
   roomType: string;
@@ -404,7 +408,7 @@ Return JSON:
               messages: [{ role: "user", content: [...qsContent, { type: "text" as const, text: retryHint }] }],
               max_tokens: 1500,
               temperature: 0.1,
-              responseMimeType: "application/json",
+              responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
             });
 
             const raw = JSON.parse(response.content);
@@ -413,10 +417,17 @@ Return JSON:
             for (const scoreEntry of validated.scores) {
               if (scoreEntry.index >= 0 && scoreEntry.index < batch.length) {
                 const scaleFit = scoreEntry.scale_fit ?? 5;
+                // Gate: if ANY dimension is critically low (≤ 2), the product
+                // is physically impossible or fundamentally wrong — cap the
+                // quick score so it cannot sneak past the deep-score threshold.
+                const minDim = Math.min(scoreEntry.style_fit, scaleFit, scoreEntry.value_fit);
                 const avg = (scoreEntry.style_fit + scaleFit + scoreEntry.value_fit + scoreEntry.confidence) / 4;
+                const quickScore = minDim <= 2
+                  ? Math.min(Math.round(avg * 10) / 10, minDim)
+                  : Math.round(avg * 10) / 10;
                 result.push({
                   productId: batch[scoreEntry.index].id,
-                  quickScore: Math.round(avg * 10) / 10,
+                  quickScore,
                   styleFit: scoreEntry.style_fit,
                   scaleFit,
                   valueFit: scoreEntry.value_fit,
@@ -454,15 +465,6 @@ Return JSON:
           confidence: 1,
         }));
       }
-      // Unreachable but satisfies TypeScript — conservative defaults
-      return batch.map((p) => ({
-        productId: p.id,
-        quickScore: 3,
-        styleFit: 3,
-        scaleFit: 3,
-        valueFit: 3,
-        confidence: 1,
-      }));
     })
   );
 

@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
+import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { createLogger } from "@/lib/logging/logger";
 import type { PriceTier } from "@/lib/prompts/search-brief";
@@ -11,6 +12,10 @@ import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DesignDirection } from "@/lib/types/database";
 
 const log = createLogger("shopping-researcher");
+
+/** Pre-computed Gemini-compatible schemas. */
+const SEARCH_BRIEF_GEMINI_SCHEMA = zodToGeminiSchema(SearchBriefResponseSchema);
+const QUICK_SCREEN_GEMINI_SCHEMA = zodToGeminiSchema(QuickScreenResponseSchema);
 
 interface QueryWithAngle {
   query: string;
@@ -304,7 +309,7 @@ export async function generateSearchBrief(
           messages: [{ role: "user", content: prompt + retryHint }],
           max_tokens: 8000,
           temperature: attempt === 1 ? 0.3 : 0.4,
-          responseMimeType: "application/json",
+          responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
         });
 
         if (response.truncated) {
@@ -551,7 +556,7 @@ Return JSON:
           messages: [{ role: "user", content: prompt }],
           max_tokens: 2000,
           temperature: 0.1,
-          responseMimeType: "application/json",
+          responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
         });
 
         const raw = JSON.parse(response.content);

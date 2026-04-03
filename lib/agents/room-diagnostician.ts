@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
 import { DiagnosisResponseSchema } from "@/lib/types/schemas";
+import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
@@ -10,6 +11,8 @@ import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/dat
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 const log = createLogger("room-diagnostician");
+
+const DIAGNOSIS_GEMINI_SCHEMA = zodToGeminiSchema(DiagnosisResponseSchema);
 
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
@@ -61,7 +64,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
         messages: [{ role: "user", content: retryContent }],
         max_tokens: 8000,
         temperature: attempt === 0 ? 0.3 : 0.4,
-        responseMimeType: "application/json",
+        responseSchema: DIAGNOSIS_GEMINI_SCHEMA,
       });
 
       const raw = JSON.parse(response.content);
