@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 import path from "path";
+import { createLogger } from "@/lib/logging/logger";
+import { getInputBudget } from "@/lib/ai/context-truncation";
 import type {
   AIProvider,
   AIMessage,
@@ -8,6 +10,8 @@ import type {
   AIContentBlock,
   GeminiTool,
 } from "./provider";
+
+const log = createLogger("gemini");
 
 let client: GoogleGenAI | null = null;
 
@@ -28,7 +32,7 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
   if (url.startsWith("/uploads/")) {
     const filePath = path.join(process.cwd(), "public", url);
     if (!fs.existsSync(filePath)) {
-      console.error(`[gemini] Local image not found at: ${filePath} (url: ${url}, cwd: ${process.cwd()})`);
+      log.error(`Local image not found at: ${filePath}`, { url });
       throw new Error(`Local image not found: ${filePath}`);
     }
     const buffer = fs.readFileSync(filePath);
@@ -107,7 +111,7 @@ async function convertMessages(
               });
             } catch (err) {
               failedImages++;
-              console.error(`[gemini] Failed to fetch image (${failedImages}/${totalImages}): ${block.source.url}`, err instanceof Error ? err.message : err);
+              log.warn(`Failed to fetch image (${failedImages}/${totalImages})`, { url: block.source.url, error: err instanceof Error ? err.message : String(err) });
             }
           }
         } else if (block.type === "text" && block.text) {
@@ -130,7 +134,7 @@ async function convertMessages(
   }
 
   if (failedImages > 0) {
-    console.warn(`[gemini] ${failedImages}/${totalImages} images failed to load — proceeding with partial visual context`);
+    log.warn(`${failedImages}/${totalImages} images failed — proceeding with partial visual context`);
   }
 
   return result;
@@ -187,8 +191,11 @@ export const geminiProvider: AIProvider = {
       return Math.ceil(textChars / 4) + imageCount * 258;
     })();
 
-    if (estimatedPromptTokens > 50000) {
-      console.warn(`[gemini] ⚠️ Large prompt: ~${estimatedPromptTokens.toLocaleString()} estimated tokens for model=${model}. Consider reducing context.`);
+    const inputBudget = getInputBudget(model, max_tokens);
+    if (estimatedPromptTokens > inputBudget * 0.85) {
+      log.warn(`Prompt approaching context limit: ~${estimatedPromptTokens.toLocaleString()} / ${inputBudget.toLocaleString()} tokens (${Math.round(estimatedPromptTokens / inputBudget * 100)}%)`, { model, estimatedPromptTokens, inputBudget });
+    } else if (estimatedPromptTokens > 50000) {
+      log.info(`Large prompt: ~${estimatedPromptTokens.toLocaleString()} estimated tokens`, { model, estimatedPromptTokens });
     }
 
     // Build config
@@ -234,12 +241,13 @@ export const geminiProvider: AIProvider = {
       });
     } catch (err) {
       const e = err as Record<string, unknown>;
-      console.error(`[gemini] API error for model=${model}:`, JSON.stringify({
-        name: e.name,
-        status: e.status,
-        message: e.message || (err instanceof Error ? err.message : "unknown"),
+      log.error("API error", {
+        model,
+        errorName: e.name as string,
+        status: e.status as number,
+        error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
         details: e.details || e.errorDetails,
-      }, null, 2));
+      });
       throw err;
     }
 
@@ -293,7 +301,7 @@ export const geminiProvider: AIProvider = {
     const finishReason = response.candidates?.[0]?.finishReason as string | undefined;
     const truncated = finishReason === "MAX_TOKENS";
     if (truncated) {
-      console.warn(`[gemini] ⚠️ Response TRUNCATED (MAX_TOKENS) for model=${model}. Increase max_tokens for this call.`);
+      log.warn("Response truncated (MAX_TOKENS)", { model });
     }
 
     // Extract usage — include thinking tokens for accurate cost tracking
@@ -301,7 +309,7 @@ export const geminiProvider: AIProvider = {
     const thinkingTokens = usageMetadata?.thoughtsTokenCount || 0;
 
     if (thinkingTokens > 0) {
-      console.log(`[gemini] Thinking tokens: ${thinkingTokens}, Output tokens: ${usageMetadata?.candidatesTokenCount || 0}`);
+      log.debug("Token usage", { model, tokens: { thinking: thinkingTokens, output: usageMetadata?.candidatesTokenCount || 0 } });
     }
 
     return {

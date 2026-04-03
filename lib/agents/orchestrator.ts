@@ -12,10 +12,13 @@ import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
+import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { PriceTier } from "@/lib/prompts/search-brief";
+
+const log = createLogger("orchestrator");
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -167,7 +170,7 @@ export async function runAgenticSearch(
     const enriched = { ...step, data: { ...(step.data as Record<string, unknown> || {}), stats: { ...stats } } };
     steps.push(step);
     onStep?.(enriched);
-    console.log(`[orchestrator] ${step.status}: ${step.step}`);
+    log.info(`${step.status}: ${step.step}`, { phase: step.step, roomId: ctx.roomId });
   }
 
   try {

@@ -1,3 +1,4 @@
+import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
 export function getProductEvalPrompt(
@@ -69,6 +70,76 @@ export function getProductEvalPrompt(
     outletPositions && `\n\n## OUTLET POSITIONS\n${outletPositions}`,
   ].filter(Boolean).join("");
 
+  // ─── Assemble context with priority-based truncation ──────
+  // Priority 1 = critical (scoring instructions), 2 = important (room/design),
+  // 3 = helpful (environment/spatial), 4 = nice-to-have (other rooms)
+  const sections: ContextSection[] = [];
+
+  sections.push({
+    key: "room_context",
+    priority: 2,
+    content: `## ROOM CONTEXT
+- Room type: ${roomType}
+- Product category: ${category}
+- Budget mode: ${budgetMode}
+- Existing items in room: ${existingItems.length > 0 ? existingItems.join(", ") : "See apartment context in system prompt and room photos"}${placementContext}
+${prioritiesContext ? `\n${prioritiesContext}` : ""}
+${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThis product may be a REPLACEMENT for one of these items. If so, it should solve the same functional need but better match the design direction.` : ""}`,
+  });
+
+  if (otherRoomsContext) {
+    sections.push({
+      key: "other_rooms",
+      priority: 4,
+      content: `## OTHER ROOMS IN APARTMENT (for cross-room coherence)\n${otherRoomsContext}`,
+    });
+  }
+
+  sections.push({
+    key: "design_direction",
+    priority: 2,
+    content: `## DESIGN DIRECTION (from room diagnosis)\n${paletteInfo}\n${materialsInfo}\n${styleInfo}`,
+  });
+
+  if (diagnosisContext) {
+    sections.push({ key: "diagnosis", priority: 2, content: `## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` });
+  }
+
+  if (spatialLayout) {
+    sections.push({ key: "spatial_layout", priority: 3, content: `## SPATIAL LAYOUT PLAN\n${spatialLayout}` });
+  }
+
+  if (floorPlan) {
+    sections.push({
+      key: "floor_plan",
+      priority: 3,
+      content: `## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}\nSpatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`,
+    });
+  }
+
+  if (lightingConditions) {
+    sections.push({ key: "lighting", priority: 3, content: `## LIGHTING CONDITIONS\n${lightingConditions}` });
+  }
+  if (windowDoorPositions) {
+    sections.push({ key: "windows_doors", priority: 3, content: `## WINDOW & DOOR POSITIONS\n${windowDoorPositions}` });
+  }
+  if (outletPositions) {
+    sections.push({ key: "outlets", priority: 3, content: `## OUTLET POSITIONS\n${outletPositions}` });
+  }
+
+  if (userContext) {
+    sections.push({
+      key: "user_notes",
+      priority: 2,
+      content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when scoring. If they mention something not visible in photos, incorporate that information. If they say to ignore something, exclude it from scoring considerations.`,
+    });
+  }
+
+  // Truncate context sections to fit within a reasonable token budget.
+  // Reserve ~8000 tokens for the scoring instructions + output format below.
+  const contextResult = truncateContext(sections, 25000, 0);
+  const assembledContext = contextResult.text;
+
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.
 
 ## SCORING PROCESS — For each dimension below, follow these steps:
@@ -78,20 +149,7 @@ export function getProductEvalPrompt(
 
 Evaluate the following product using THREE LAYERS of analysis:
 
-## ROOM CONTEXT
-- Room type: ${roomType}
-- Product category: ${category}
-- Budget mode: ${budgetMode}
-- Existing items in room: ${existingItems.length > 0 ? existingItems.join(", ") : "See apartment context in system prompt and room photos"}${placementContext}
-${prioritiesContext ? `\n${prioritiesContext}` : ""}
-${otherRoomsContext ? `\n## OTHER ROOMS IN APARTMENT (for cross-room coherence)\n${otherRoomsContext}` : ""}
-${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThis product may be a REPLACEMENT for one of these items. If so, it should solve the same functional need but better match the design direction.` : ""}
-
-## DESIGN DIRECTION (from room diagnosis)
-${paletteInfo}
-${materialsInfo}
-${styleInfo}
-${diagnosisContext ? `\n## ROOM DIAGNOSIS — PROBLEMS TO SOLVE\n${diagnosisContext}` : ""}${spatialContext}${floorPlanContext}${environmentContext}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when scoring. If they mention something not visible in photos, incorporate that information. If they say to ignore something, exclude it from scoring considerations.` : ""}
+${assembledContext}
 
 ## LAYER 1: INDIVIDUAL ITEM FIT (8 dimensions, each 0-10)
 

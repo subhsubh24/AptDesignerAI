@@ -5,11 +5,15 @@ import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
 import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types/schemas";
 import { recordProductScores } from "@/lib/scoring/drift-monitor";
+import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+const log = createLogger("fit-scorer");
 
 export interface ScoringContext {
   roomType: string;
@@ -136,62 +140,92 @@ export async function scoreProduct(
     text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
   });
 
-  // Attempt scoring with retry on failure (retry includes error context + higher temp)
+  // Attempt scoring with retry (exponential backoff for API errors,
+  // prompt-level retry for parse errors)
   let lastError: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      // On retry: include previous error context and bump temperature slightly
-      const retryContent = attempt > 0 && lastError
-        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Please return ONLY valid JSON matching the exact schema above. Ensure all score fields are numbers 0-10.` }]
-        : content;
+  let attempt = 0;
 
-      const response = await geminiProvider.chat({
-        model,
-        system,
-        messages: [{ role: "user", content: retryContent }],
-        max_tokens: 16000,
-        temperature: attempt === 0 ? 0.2 : 0.35,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "high" },
-      });
+  try {
+    const result = await withRetry(
+      async () => {
+        attempt++;
+        // On retry: include previous error context and bump temperature slightly
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Please return ONLY valid JSON matching the exact schema above. Ensure all score fields are numbers 0-10.` }]
+          : content;
 
-      const raw = JSON.parse(response.content);
-      const validated = ProductEvalResponseSchema.parse(raw);
-      const scores = validated.scores;
-      const finalScore = computeFinalItemScore(scores);
-      const verdict = determineVerdict(finalScore, scores.confidence_score);
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: 16000,
+          temperature: attempt === 1 ? 0.2 : 0.35,
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" },
+        });
 
-      // Record scores for drift monitoring
-      recordProductScores(scores as unknown as Record<string, number>);
+        const raw = JSON.parse(response.content);
+        const validated = ProductEvalResponseSchema.parse(raw);
+        const scores = validated.scores;
+        const finalScore = computeFinalItemScore(scores, product.category || undefined);
+        const verdict = determineVerdict(finalScore, scores.confidence_score);
 
-      return {
-        success: true,
-        data: {
-          scores,
-          final_item_score: finalScore,
+        // Record scores for drift monitoring
+        recordProductScores(scores as unknown as Record<string, number>);
+
+        const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+        log.info("Product scored", {
+          productId: product.id,
+          model: response.model,
+          tokens: { input: response.usage.input_tokens, output: response.usage.output_tokens, thinking: response.usage.thinking_tokens, total: totalTokens },
+          finalScore,
           verdict,
-          reasoning: validated.reasoning,
-          area_fit_note: validated.area_fit_note,
-          apartment_fit_note: validated.apartment_fit_note,
-        },
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-        model: response.model,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : "Scoring failed";
-      if (attempt === 0) {
-        console.warn(`[fit-scorer] Attempt 1 failed for "${product.title}": ${lastError}`);
-        await new Promise((r) => setTimeout(r, 1500));
-        continue;
-      }
-      return {
-        success: false,
-        error: lastError,
-      };
-    }
-  }
+          category: product.category || "unknown",
+        });
 
-  return { success: false, error: "Scoring failed after retries" };
+        return {
+          success: true as const,
+          data: {
+            scores,
+            final_item_score: finalScore,
+            verdict,
+            reasoning: validated.reasoning,
+            area_fit_note: validated.area_fit_note,
+            apartment_fit_note: validated.apartment_fit_note,
+          },
+          tokensUsed: totalTokens,
+          model: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 10000,
+        isRetryable: (error) => {
+          // Retry both API errors and parse errors (with corrected prompt on next attempt)
+          if (isRetryableError(error)) return true;
+          // Also retry JSON parse / Zod validation errors (model returned bad format)
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          return false;
+        },
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Scoring failed";
+          log.warn(`Retry ${retryAttempt} for "${product.title}"`, {
+            productId: product.id,
+            durationMs: delayMs,
+            error: lastError,
+          });
+        },
+      }
+    );
+
+    return result;
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Scoring failed after retries";
+    log.error(`Scoring failed for "${product.title}"`, { productId: product.id, error: errMsg });
+    return { success: false, error: errMsg };
+  }
 }
 
 export interface QuickScoreEntry {
@@ -347,57 +381,78 @@ Return JSON:
   ]
 }`;
 
-      let lastQsError: string | undefined;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const retryHint = attempt > 0 && lastQsError
-            ? `\n\nPrevious response was invalid: "${lastQsError}". Return ONLY valid JSON with the exact schema above.`
-            : "";
-
-          const response = await geminiProvider.chat({
-            model: selectModel("quick_score"),
-            system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. Return ONLY the JSON scores, no explanations.",
-            messages: [{ role: "user", content: prompt + retryHint }],
-            max_tokens: 1500,
-            temperature: attempt === 0 ? 0.1 : 0.2,
-            responseMimeType: "application/json",
-          });
-
-          const raw = JSON.parse(response.content);
-          const validated = QuickScoreResponseSchema.parse(raw);
-          const entries: QuickScoreEntry[] = [];
-          for (const scoreEntry of validated.scores) {
-            if (scoreEntry.index >= 0 && scoreEntry.index < batch.length) {
-              const scaleFit = scoreEntry.scale_fit ?? 5;
-              const avg = (scoreEntry.style_fit + scaleFit + scoreEntry.value_fit + scoreEntry.confidence) / 4;
-              entries.push({
-                productId: batch[scoreEntry.index].id,
-                quickScore: Math.round(avg * 10) / 10,
-                styleFit: scoreEntry.style_fit,
-                scaleFit,
-                valueFit: scoreEntry.value_fit,
-                confidence: scoreEntry.confidence,
-              });
-            }
-          }
-          return entries;
-        } catch (qsErr) {
-          lastQsError = qsErr instanceof Error ? qsErr.message : "Quick score failed";
-          if (attempt === 0) {
-            await new Promise((r) => setTimeout(r, 1000));
-            continue;
-          }
-          // On second failure, conservative defaults — low scores so these don't pass through unchecked
-          console.warn(`[fit-scorer] Quick score failed for batch, applying conservative defaults: ${lastQsError}`);
-          return batch.map((p) => ({
-            productId: p.id,
-            quickScore: 3,
-            styleFit: 3,
-            scaleFit: 3,
-            valueFit: 3,
-            confidence: 1,
-          }));
+      // Build visual content: include product images for visual pre-filtering
+      const qsContent: AIContentBlock[] = [];
+      for (const p of batch) {
+        if (p.image_url) {
+          qsContent.push({ type: "image", source: { type: "url", url: p.image_url } });
         }
+      }
+      qsContent.push({ type: "text", text: prompt });
+
+      let lastQsError: string | undefined;
+      try {
+        const entries = await withRetry(
+          async () => {
+            const retryHint = lastQsError
+              ? `\n\nPrevious response was invalid: "${lastQsError}". Return ONLY valid JSON with the exact schema above.`
+              : "";
+
+            const response = await geminiProvider.chat({
+              model: selectModel("quick_score"),
+              system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. If product images are provided, use them to verify style, color, and material claims. Return ONLY the JSON scores, no explanations.",
+              messages: [{ role: "user", content: [...qsContent, { type: "text" as const, text: retryHint }] }],
+              max_tokens: 1500,
+              temperature: 0.1,
+              responseMimeType: "application/json",
+            });
+
+            const raw = JSON.parse(response.content);
+            const validated = QuickScoreResponseSchema.parse(raw);
+            const result: QuickScoreEntry[] = [];
+            for (const scoreEntry of validated.scores) {
+              if (scoreEntry.index >= 0 && scoreEntry.index < batch.length) {
+                const scaleFit = scoreEntry.scale_fit ?? 5;
+                const avg = (scoreEntry.style_fit + scaleFit + scoreEntry.value_fit + scoreEntry.confidence) / 4;
+                result.push({
+                  productId: batch[scoreEntry.index].id,
+                  quickScore: Math.round(avg * 10) / 10,
+                  styleFit: scoreEntry.style_fit,
+                  scaleFit,
+                  valueFit: scoreEntry.value_fit,
+                  confidence: scoreEntry.confidence,
+                });
+              }
+            }
+            return result;
+          },
+          {
+            maxAttempts: 2,
+            baseDelayMs: 1000,
+            isRetryable: (error) => {
+              lastQsError = error instanceof Error ? error.message : "Quick score failed";
+              if (isRetryableError(error)) return true;
+              if (error instanceof SyntaxError) return true;
+              if (error instanceof Error && error.name === "ZodError") return true;
+              return false;
+            },
+            onRetry: (retryAttempt, delayMs) => {
+              log.warn(`Quick-score retry ${retryAttempt}`, { category, durationMs: delayMs });
+            },
+          }
+        );
+        return entries;
+      } catch (qsErr) {
+        const errMsg = qsErr instanceof Error ? qsErr.message : "Quick score failed";
+        log.warn("Quick score failed for batch, applying conservative defaults", { category, error: errMsg });
+        return batch.map((p) => ({
+          productId: p.id,
+          quickScore: 3,
+          styleFit: 3,
+          scaleFit: 3,
+          valueFit: 3,
+          confidence: 1,
+        }));
       }
       // Unreachable but satisfies TypeScript — conservative defaults
       return batch.map((p) => ({
