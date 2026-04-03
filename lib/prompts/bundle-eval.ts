@@ -1,3 +1,4 @@
+import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
 export function getBundleEvalPrompt(
@@ -37,34 +38,64 @@ export function getBundleEvalPrompt(
     ? `Client priorities: ${priorities.join(", ")}`
     : "";
 
-  // Build spatial context
-  const spatialCtx = spatialLayout
-    ? `\n\n## SPATIAL LAYOUT PLAN\n${spatialLayout}`
-    : "";
+  // ─── Assemble context with priority-based truncation ──────
+  const sections: ContextSection[] = [];
 
-  const floorPlanCtx = floorPlan
-    ? `\n\n## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}`
-    : "";
+  sections.push({
+    key: "room_context",
+    priority: 2,
+    content: `## ROOM CONTEXT\n- Room type: ${roomType}\n- Consider how ALL items work together as a set, not just individually\n- Use the building finishes, floor plan, and apartment context from the system prompt\n- Study the room photos to understand existing furniture and finishes${prioritiesContext ? `\n- ${prioritiesContext}` : ""}`,
+  });
 
-  const placementCtx = placementMap && Object.keys(placementMap).length > 0
-    ? `\n\n## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, placement]) => `- **${cat}**: ${placement}`).join("\n")}`
-    : "";
+  sections.push({
+    key: "existing_items",
+    priority: 2,
+    content: `## WHAT'S ALREADY IN THE ROOM\n${existingContext}${problemsContext ? `\n${problemsContext}` : ""}`,
+  });
 
-  const lightingCtx = lightingConditions
-    ? `\n\n## LIGHTING CONDITIONS\n${lightingConditions}`
-    : "";
+  if (directionContext) {
+    sections.push({ key: "design_direction", priority: 2, content: `## DESIGN DIRECTION\n${directionContext}` });
+  }
 
-  const windowDoorCtx = windowDoorPositions
-    ? `\n\n## WINDOW & DOOR POSITIONS\n${windowDoorPositions}`
-    : "";
+  if (spatialLayout) {
+    sections.push({ key: "spatial_layout", priority: 3, content: `## SPATIAL LAYOUT PLAN\n${spatialLayout}` });
+  }
 
-  const outletCtx = outletPositions
-    ? `\n\n## OUTLET POSITIONS\n${outletPositions}\nCheck that powered items (lamps, media consoles, smart devices) have realistic outlet access in their intended positions.`
-    : "";
+  if (floorPlan) {
+    sections.push({ key: "floor_plan", priority: 3, content: `## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}` });
+  }
 
-  const existingItemsCtx = existingItems?.length
-    ? `\n\n## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.`
-    : "";
+  if (placementMap && Object.keys(placementMap).length > 0) {
+    sections.push({ key: "placements", priority: 3, content: `## INTENDED PLACEMENTS\n${Object.entries(placementMap).map(([cat, placement]) => `- **${cat}**: ${placement}`).join("\n")}` });
+  }
+
+  if (lightingConditions) {
+    sections.push({ key: "lighting", priority: 3, content: `## LIGHTING CONDITIONS\n${lightingConditions}` });
+  }
+  if (windowDoorPositions) {
+    sections.push({ key: "windows_doors", priority: 3, content: `## WINDOW & DOOR POSITIONS\n${windowDoorPositions}` });
+  }
+  if (outletPositions) {
+    sections.push({ key: "outlets", priority: 3, content: `## OUTLET POSITIONS\n${outletPositions}\nCheck that powered items (lamps, media consoles, smart devices) have realistic outlet access in their intended positions.` });
+  }
+
+  if (existingItems?.length) {
+    sections.push({ key: "existing_items_list", priority: 2, content: `## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.` });
+  }
+
+  if (replaceItems?.length) {
+    sections.push({ key: "replace_items", priority: 3, content: `## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThe bundle should include adequate replacements for these items. Verify the bundle addresses these removals.` });
+  }
+  if (whatShouldGo?.length) {
+    sections.push({ key: "what_should_go", priority: 3, content: `## FROM DIAGNOSIS — ITEMS THAT SHOULD GO\n${whatShouldGo.map((item) => `- ${item}`).join("\n")}\nVerify this bundle doesn't repeat the same problems these items had.` });
+  }
+
+  if (userContext) {
+    sections.push({ key: "user_notes", priority: 2, content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` });
+  }
+
+  const contextResult = truncateContext(sections, 20000, 0);
+  const assembledContext = contextResult.text;
 
   return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. Score how well these items work TOGETHER as a set, not just individually.
 
@@ -76,17 +107,16 @@ export function getBundleEvalPrompt(
 
 You are a world-class designer reviewing a proposed set of pieces for a real client's apartment. You know their building, their finishes, their room, and how they live.
 
-## ROOM CONTEXT
-- Room type: ${roomType}
-- Consider how ALL items work together as a set, not just individually
-- Use the building finishes, floor plan, and apartment context from the system prompt
-- Study the room photos to understand existing furniture and finishes
-${prioritiesContext ? `- ${prioritiesContext}` : ""}
+${assembledContext}
 
-## WHAT'S ALREADY IN THE ROOM
-${existingContext}
-${problemsContext ? `\n${problemsContext}` : ""}
-${directionContext ? `\n## DESIGN DIRECTION\n${directionContext}` : ""}${spatialCtx}${floorPlanCtx}${placementCtx}${lightingCtx}${windowDoorCtx}${outletCtx}${existingItemsCtx}${replaceItems?.length ? `\n\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.map((item) => `- ${item}`).join("\n")}\nThe bundle should include adequate replacements for these items. Verify the bundle addresses these removals.` : ""}${whatShouldGo?.length ? `\n\n## FROM DIAGNOSIS — ITEMS THAT SHOULD GO\n${whatShouldGo.map((item) => `- ${item}`).join("\n")}\nVerify this bundle doesn't repeat the same problems these items had.` : ""}${userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` : ""}
+## SCORE CALIBRATION — READ BEFORE SCORING
+- **9-10 (Exceptional)**: Professional-grade curation. Every piece intentional. Materials, colors, scale all harmonize. THIS IS RARE.
+- **7-8 (Strong)**: Solid set with minor concerns. One piece could be better but doesn't break the concept.
+- **5-6 (Mediocre)**: Safe but uninspired. Products don't clash but don't elevate each other. THIS IS AVERAGE.
+- **3-4 (Poor)**: Active conflicts between items. Wrong scale, clashing materials, or missing key pieces.
+- **1-2 (Wrong)**: Incoherent set. Looks like random pieces from different homes.
+
+CRITICAL: Use the FULL 0-10 range. If the bundle is just okay, score it 5-6. Do NOT give everything 6-8.
 
 ## SCORING DIMENSIONS (each 0-10)
 

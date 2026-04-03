@@ -3,10 +3,14 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
+import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { createLogger } from "@/lib/logging/logger";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DesignDirection } from "@/lib/types/database";
+
+const log = createLogger("shopping-researcher");
 
 interface QueryWithAngle {
   query: string;
@@ -284,48 +288,65 @@ export async function generateSearchBrief(
   const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext, diagnosis, lightingConditions, windowDoorPositions, outletPositions);
 
   let lastError: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const retryHint = attempt > 0 && lastError
-        ? `\n\nPrevious response was invalid: "${lastError}". Return ONLY valid JSON with the exact schema above. Each category must have tiers with search_queries and price_range.`
-        : "";
+  let attempt = 0;
 
-      const response = await geminiProvider.chat({
-        model,
-        system,
-        messages: [{ role: "user", content: prompt + retryHint }],
-        max_tokens: 8000,
-        temperature: attempt === 0 ? 0.3 : 0.4,
-        responseMimeType: "application/json",
-      });
+  try {
+    return await withRetry(
+      async () => {
+        attempt++;
+        const retryHint = attempt > 1 && lastError
+          ? `\n\nPrevious response was invalid: "${lastError}". Return ONLY valid JSON with the exact schema above. Each category must have tiers with search_queries and price_range.`
+          : "";
 
-      if (response.truncated) {
-        console.error("[search-brief] Response was truncated! Need more output tokens.");
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: prompt + retryHint }],
+          max_tokens: 8000,
+          temperature: attempt === 1 ? 0.3 : 0.4,
+          responseMimeType: "application/json",
+        });
+
+        if (response.truncated) {
+          log.warn("Search brief response truncated", { phase: "search_brief" });
+        }
+
+        const raw = JSON.parse(response.content);
+        const validated = SearchBriefResponseSchema.parse(raw);
+
+        log.info("Search brief generated", {
+          phase: "search_brief",
+          categories: validated.categories.length,
+        });
+
+        return {
+          success: true as const,
+          data: validated as SearchBrief,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+          model: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 2000,
+        maxDelayMs: 15000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          return false;
+        },
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Search brief generation failed";
+          log.warn(`Search brief retry ${retryAttempt}`, { phase: "search_brief", durationMs: delayMs, error: lastError });
+        },
       }
-
-      const raw = JSON.parse(response.content);
-      const validated = SearchBriefResponseSchema.parse(raw);
-      return {
-        success: true,
-        data: validated as SearchBrief,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-        model: response.model,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : "Search brief generation failed";
-      console.error(`[search-brief] Attempt ${attempt + 1} failed:`, lastError);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 2000));
-        continue;
-      }
-      return {
-        success: false,
-        error: lastError,
-      };
-    }
+    );
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Search brief generation failed after retries";
+    log.error("Search brief generation failed", { phase: "search_brief", error: errMsg });
+    return { success: false, error: errMsg };
   }
-
-  return { success: false, error: "Search brief generation failed after retries" };
 }
 
 /**
@@ -547,7 +568,7 @@ Return JSON:
         }
         return passed;
       } catch (err) {
-        console.error(`[quick-screen] Batch ${batchIdx} failed, returning empty:`, err);
+        log.warn(`Quick-screen batch ${batchIdx} failed, returning empty`, { phase: "quick_screen", error: err instanceof Error ? err.message : String(err) });
         return [];
       }
     })

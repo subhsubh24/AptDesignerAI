@@ -187,7 +187,7 @@ export async function runAgenticSearch(
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
-      console.error("[orchestrator] Search brief failed:", briefResult.error);
+      log.error("Search brief failed", { error: briefResult.error, roomId: ctx.roomId });
       return { success: false, error: briefResult.error || "Failed to generate search brief" };
     }
     const brief: SearchBrief = briefResult.data;
@@ -591,7 +591,7 @@ export async function runAgenticSearch(
     await Promise.all(deepScorePromises);
 
     if (tokenBudget.exceeded) {
-      console.warn(`[orchestrator] Token budget exceeded (${stats.tokensUsed.toLocaleString()}/${DEFAULT_TOKEN_CAP.toLocaleString()}). Deep scored ${stats.totalDeepScored}/${stats.totalQuickScored} candidates. Skipping validation and bundles.`);
+      log.warn("Token budget exceeded, skipping validation and bundles", { tokensUsed: stats.tokensUsed, tokenCap: DEFAULT_TOKEN_CAP, deepScored: stats.totalDeepScored, quickScored: stats.totalQuickScored, roomId: ctx.roomId });
       reportStep({ step: "Token budget exceeded — returning scored results", status: "completed" });
       return {
         success: true,
@@ -701,7 +701,7 @@ export async function runAgenticSearch(
               (p) => p.title?.toLowerCase() === flag.title.toLowerCase() || p.category === flag.category
             );
             if (idx !== -1) {
-              console.log(`[orchestrator] Removing "${flag.title}" — harmony ${flag.harmony_score}/10: ${flag.reason}`);
+              log.info(`Removing "${flag.title}" — harmony ${flag.harmony_score}/10`, { phase: "validation", title: flag.title, harmonyScore: flag.harmony_score, reason: flag.reason });
               tracer.traceFilter("validation", products[idx].id, products[idx].product_url || "", `harmony ${flag.harmony_score}/10: ${flag.reason}`);
               candidatesByCategory[category].splice(idx, 1);
               stats.totalFinal--;
@@ -720,7 +720,7 @@ export async function runAgenticSearch(
               if (existing) {
                 const penalty = (5 - flag.harmony_score) * 0.5; // 0.5 or 1.0 point penalty
                 const penalized = Math.max(0, existing.final_item_score - penalty);
-                console.log(`[orchestrator] Penalizing "${flag.title}" by ${penalty} (harmony ${flag.harmony_score}/10) — ${existing.final_item_score.toFixed(1)} → ${penalized.toFixed(1)}`);
+                log.info(`Penalizing "${flag.title}"`, { phase: "validation", title: flag.title, penalty, harmonyScore: flag.harmony_score, before: existing.final_item_score, after: penalized });
                 evaluations.set(product.id, { ...existing, final_item_score: penalized });
               }
             }
@@ -728,7 +728,7 @@ export async function runAgenticSearch(
         }
 
         if (clashingProducts.length > 0 || weakProducts.length > 0) {
-          console.log(`[orchestrator] Validation enforcement: dropped ${clashingProducts.length}, penalized ${weakProducts.length}`);
+          log.info("Validation enforcement complete", { phase: "validation", dropped: clashingProducts.length, penalized: weakProducts.length });
         }
       }
 
@@ -1074,7 +1074,7 @@ export async function runAgenticSearch(
       overallYield: stats.totalRawUrls > 0 ? Math.round((stats.totalFinal / stats.totalRawUrls) * 100) : 0,
     };
 
-    console.log(`[orchestrator] Pipeline conversion: ${JSON.stringify(conversionRates)}`);
+    log.info("Pipeline conversion rates", { phase: "stats", conversionRates });
 
     // Identify bottlenecks — any stage dropping more than 80% is worth investigating
     const bottlenecks: string[] = [];
@@ -1088,21 +1088,18 @@ export async function runAgenticSearch(
       bottlenecks.push(`Zero final products from ${stats.totalRawUrls} URLs — search queries may not match available products`);
     }
     if (bottlenecks.length > 0) {
-      console.warn(`[orchestrator] Pipeline bottlenecks:\n  ${bottlenecks.join("\n  ")}`);
+      log.warn("Pipeline bottlenecks detected", { phase: "stats", bottlenecks });
     }
 
     // Check for score drift
     const driftWarnings = checkForDrift();
     if (driftWarnings.length > 0) {
-      console.warn(`[orchestrator] Score drift detected (${driftWarnings.length} warnings):`);
-      for (const w of driftWarnings) {
-        console.warn(`  ${w.message}`);
-      }
+      log.warn(`Score drift detected (${driftWarnings.length} warnings)`, { phase: "drift", warnings: driftWarnings.map((w) => w.message) });
     }
 
     const distribution = getScoreDistributionSummary();
     if (Object.keys(distribution).length > 0) {
-      console.log(`[orchestrator] Score distributions: ${JSON.stringify(distribution)}`);
+      log.info("Score distributions", { phase: "drift", distribution });
     }
 
     return {

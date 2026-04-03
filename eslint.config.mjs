@@ -5,6 +5,15 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Ban raw console calls in AI pipeline code — use lib/logging/logger.ts instead.
+  // The logger itself and store infrastructure are exempted.
+  {
+    files: ["lib/agents/**/*.ts", "lib/ai/**/*.ts", "lib/scoring/**/*.ts", "lib/prompts/**/*.ts"],
+    ignores: ["lib/logging/**"],
+    rules: {
+      "no-console": "error",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

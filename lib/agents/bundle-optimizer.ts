@@ -5,11 +5,15 @@ import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import { BundleEvalResponseSchema } from "@/lib/types/schemas";
 import { recordBundleScores } from "@/lib/scoring/drift-monitor";
+import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DiagnosisData, DesignDirection } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+const log = createLogger("bundle-optimizer");
 
 export interface BundleContext {
   roomType: string;
@@ -96,56 +100,73 @@ export async function evaluateBundle(
   });
 
   let lastError: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      // On retry: include error context and bump temperature
-      const retryContent = attempt > 0 && lastError
-        ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. All score fields must be numbers 0-10.` }]
-        : content;
+  let attempt = 0;
 
-      const response = await geminiProvider.chat({
-        model,
-        system,
-        messages: [{ role: "user", content: retryContent }],
-        max_tokens: 10000,
-        temperature: attempt === 0 ? 0.2 : 0.35,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "high" },
-      });
+  try {
+    return await withRetry(
+      async () => {
+        attempt++;
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. All score fields must be numbers 0-10.` }]
+          : content;
 
-      const raw = JSON.parse(response.content);
-      const validated = BundleEvalResponseSchema.parse(raw);
-      const scores = validated.scores;
-      const finalScore = computeFinalBundleScore(scores);
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: 10000,
+          temperature: attempt === 1 ? 0.2 : 0.35,
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" },
+        });
 
-      // Record scores for drift monitoring
-      recordBundleScores(scores as unknown as Record<string, number>);
+        const raw = JSON.parse(response.content);
+        const validated = BundleEvalResponseSchema.parse(raw);
+        const scores = validated.scores;
+        const finalScore = computeFinalBundleScore(scores);
 
-      return {
-        success: true,
-        data: {
-          scores,
-          final_bundle_score: finalScore,
-          verdict: validated.verdict,
-          analysis: validated.analysis,
-          room_vibe: validated.room_vibe,
+        // Record scores for drift monitoring
+        recordBundleScores(scores as unknown as Record<string, number>);
+
+        const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+        log.info("Bundle evaluated", {
+          model: response.model,
+          tokens: { total: totalTokens },
+          finalScore,
+        });
+
+        return {
+          success: true as const,
+          data: {
+            scores,
+            final_bundle_score: finalScore,
+            verdict: validated.verdict,
+            analysis: validated.analysis,
+            room_vibe: validated.room_vibe,
+          },
+          tokensUsed: totalTokens,
+          model: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 10000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          return false;
         },
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-        model: response.model,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : "Bundle evaluation failed";
-      if (attempt === 0) {
-        console.warn(`[bundle-optimizer] Attempt 1 failed: ${lastError}`);
-        await new Promise((r) => setTimeout(r, 1500));
-        continue;
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Bundle evaluation failed";
+          log.warn(`Retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+        },
       }
-      return {
-        success: false,
-        error: lastError,
-      };
-    }
+    );
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Bundle evaluation failed after retries";
+    log.error("Bundle evaluation failed", { error: errMsg });
+    return { success: false, error: errMsg };
   }
-
-  return { success: false, error: "Bundle evaluation failed after retries" };
 }

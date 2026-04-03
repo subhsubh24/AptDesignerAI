@@ -3,10 +3,13 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
 import { DiagnosisResponseSchema } from "@/lib/types/schemas";
+import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+const log = createLogger("room-diagnostician");
 
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
@@ -78,7 +81,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Diagnosis failed";
       if (attempt === 0) {
-        console.warn(`[room-diagnostician] Attempt 1 failed: ${lastError}`);
+        log.warn("Diagnosis attempt 1 failed", { error: lastError });
         await new Promise((r) => setTimeout(r, 1500));
         continue;
       }

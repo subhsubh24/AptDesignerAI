@@ -1,5 +1,7 @@
 import type { BundleScores } from "@/lib/types/scoring";
 import { BUNDLE_WEIGHTS } from "./weights";
+import { calibrateScore } from "./calibration";
+import { getScoreDistributionSummary } from "./drift-monitor";
 
 export function computeFinalBundleScore(scores: BundleScores): number {
   const raw =
@@ -11,5 +13,14 @@ export function computeFinalBundleScore(scores: BundleScores): number {
     BUNDLE_WEIGHTS.spatial_arrangement * (scores.spatial_arrangement_score ?? 5) +
     BUNDLE_WEIGHTS.practicality * scores.practicality_score;
 
-  return Math.round(raw * 100) / 100;
+  const baseScore = Math.round(raw * 100) / 100;
+
+  // Apply calibration using drift monitor data
+  const summary = getScoreDistributionSummary();
+  const styleDist = summary["style_consistency_score"];
+  const observedMedian = styleDist?.median;
+  const observedMean = styleDist?.mean;
+
+  // Use "bundle" as category — no baseline shift, but expansion + inflation correction still apply
+  return calibrateScore(baseScore, "bundle", observedMedian, observedMean);
 }

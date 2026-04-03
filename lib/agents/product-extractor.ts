@@ -3,9 +3,12 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import { ExtractedProductSchema } from "@/lib/types/schemas";
+import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+
+const log = createLogger("product-extractor");
 
 // ─── Extraction Cache (24h TTL) ───────────────────────────────
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -169,7 +172,7 @@ async function scrapeProductImages(
 
     return { ogImage, productImages: images };
   } catch (err) {
-    console.warn(`[extractor] Failed to scrape images from ${pageUrl}:`, err instanceof Error ? err.message : err);
+    log.warn("Failed to scrape images from page", { url: pageUrl, error: err instanceof Error ? err.message : String(err) });
     return { ogImage: null, productImages: [] };
   }
 }
@@ -201,7 +204,7 @@ async function validateExtractedImages(
   if (!finalMain && scraped.ogImage) {
     finalMain = await validateImageUrl(scraped.ogImage);
     if (finalMain) {
-      console.log(`[extractor] Replaced dead image_url with og:image for "${product.title}"`);
+      log.debug("Replaced dead image_url with og:image", { title: product.title });
     }
   }
 
@@ -211,7 +214,7 @@ async function validateExtractedImages(
       if (candidate === scraped.ogImage) continue; // already tried
       finalMain = await validateImageUrl(candidate);
       if (finalMain) {
-        console.log(`[extractor] Replaced dead image_url with JSON-LD image for "${product.title}"`);
+        log.debug("Replaced dead image_url with JSON-LD image", { title: product.title });
         break;
       }
     }
@@ -223,16 +226,18 @@ async function validateExtractedImages(
       if (candidate === finalMain) continue;
       finalLifestyle = await validateImageUrl(candidate);
       if (finalLifestyle) {
-        console.log(`[extractor] Found lifestyle image from page scrape for "${product.title}"`);
+        log.debug("Found lifestyle image from page scrape", { title: product.title });
         break;
       }
     }
   }
 
   if (finalMain !== product.image_url || finalLifestyle !== product.lifestyle_image_url) {
-    console.log(
-      `[extractor] Image fix-up for "${product.title}": main=${finalMain ? "✓" : "null"}, lifestyle=${finalLifestyle ? "✓" : "null"}`
-    );
+    log.info("Image fix-up applied", {
+      title: product.title,
+      mainResolved: !!finalMain,
+      lifestyleResolved: !!finalLifestyle,
+    });
   }
 
   return {
@@ -341,7 +346,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
     } catch {
       // Attempt 3: fall back to plain prompt WITHOUT urlContext
       // Flash Lite can still extract from the URL if given just the text prompt
-      console.warn(`[extractor] urlContext failed for ${url}, falling back to plain extraction`);
+      log.warn("urlContext failed, falling back to plain extraction", { url });
       try {
         const fallbackContent = `${extractionPrompt}\n\nI need you to extract product information from this URL: ${url}\n\nBased on the URL structure and any information you can infer from it, provide your best extraction. If the URL contains a product slug, use it to infer the product name. Set confidence fields low if you're uncertain.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
