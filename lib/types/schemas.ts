@@ -98,11 +98,11 @@ export const HarmonyItemScoreSchema = z.object({
   harmony_score: score,
   keeps_well_with: stringArray,
   clashes_with: stringArray,
-  revised_search_title: z.string().optional(),
-  revised_specs: z.string().optional(),
-  revised_placement: z.string().optional(),
+  revised_search_title: z.string().nullable().optional(),
+  revised_specs: z.string().nullable().optional(),
+  revised_placement: z.string().nullable().optional(),
   drop: z.boolean().default(false),
-  root_cause: z.string().optional(),
+  root_cause: z.string().nullable().optional(),
   reason: z.string().default(""),
 });
 
