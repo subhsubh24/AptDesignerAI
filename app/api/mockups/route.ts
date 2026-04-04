@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage } from "@/lib/agents/mockup-agent";
+import type { MockupContext } from "@/lib/agents/mockup-agent";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 
 export async function GET(request: NextRequest) {
@@ -61,7 +62,32 @@ export async function POST(request: Request) {
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
-  // ─── Vision Mode: pre-search imagination mockup ────────────────
+  // Extract diagnosis context that's useful for both modes
+  const djson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
+  const ddJson = diagnosis?.design_direction_json as Record<string, unknown> | undefined;
+
+  // Extract spatial/environmental context from diagnosis
+  const spatialLayout = djson?.spatial_layout as string | undefined;
+  const lightingConditions = djson?.lighting_conditions as string | undefined;
+  const windowDoorPositions = djson?.window_door_positions as string | undefined;
+
+  // Extract design palette/materials/textures
+  const palette = (ddJson?.recommended_palette as string[]) || (djson?.recommended_palette as string[]) || [];
+  const materials = (ddJson?.recommended_materials as string[]) || (djson?.recommended_materials as string[]) || [];
+  const textures = (ddJson?.recommended_textures as string[]) || (djson?.recommended_textures as string[]) || [];
+
+  // Build placement map from what_it_needs
+  const placementMap: Record<string, string> = {};
+  const whatItNeeds = djson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
+  if (whatItNeeds) {
+    for (const item of whatItNeeds) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
+
+  // ─── Vision Mode: pre-search imagination mockup ─────��──────────
   if (vision_mode) {
     const agentRun = await createAgentRun(supabase, {
       room_id,
@@ -71,6 +97,20 @@ export async function POST(request: Request) {
 
     // Build architectural context from building research
     const archContext = buildArchitecturalContext(buildingResearch, room.room_type);
+
+    // Build extra context for vision mode
+    const existingItems = (djson?.what_works as string[]) || (djson?.what_is_working as string[]) || [];
+    const keepSection = existingItems.length > 0
+      ? `\nExisting furniture to KEEP in the scene:\n${existingItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+      : "";
+    const paletteSection = palette.length > 0 ? `\nColor palette: ${palette.join(", ")}` : "";
+    const materialsSection = materials.length > 0 ? `\nMaterials: ${materials.join(", ")}` : "";
+    const texturesSection = textures.length > 0 ? `\nTextures: ${textures.join(", ")}` : "";
+    const spatialSection = spatialLayout ? `\nSpatial layout plan: ${spatialLayout}` : "";
+    const lightingSection = lightingConditions ? `\nLighting conditions: ${lightingConditions}` : "";
+    const windowDoorSection = windowDoorPositions ? `\nWindow/door positions: ${windowDoorPositions}` : "";
+    const userContextSection = room.user_context ? `\nUser notes: "${room.user_context}" — respect these notes in the visualization.` : "";
+    const prioritiesSection = room.priorities?.length ? `\nClient priorities: ${room.priorities.join(", ")}` : "";
 
     const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
 
@@ -85,7 +125,7 @@ Study the reference photos carefully. The generated image MUST preserve:
 - The same natural lighting direction and quality
 ${archContext}
 
-Design direction: ${design_direction || "modern, cohesive apartment design"}
+Design direction: ${design_direction || "modern, cohesive apartment design"}${paletteSection}${materialsSection}${texturesSection}${spatialSection}${lightingSection}${windowDoorSection}${prioritiesSection}${userContextSection}${keepSection}
 
 New furniture and decor to place in the room:
 ${items_description || "All recommended furniture and decor items from the diagnosis"}
@@ -161,25 +201,41 @@ RULES:
   });
 
   // Generate mockup prompt — extract diagnosis fields with fallbacks
-  const djson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
   const diagnosisSummary = (djson?.current_vibe_summary as string)
     || (djson?.summary as string)
     || "Modern apartment room";
 
   // Extract existing items to keep from diagnosis
-  const existingItems: string[] =
+  const stdExistingItems: string[] =
     (djson?.what_works as string[])
     || (djson?.what_is_working as string[])
     || [];
 
   // Extract design direction
-  const ddJson = diagnosis?.design_direction_json as Record<string, unknown> | undefined;
   const designDir = (ddJson?.style_notes as string)
     || (ddJson?.direction as string)
     || (djson?.design_direction as string)
     || "";
 
-  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, existingItems, designDir, buildingResearch);
+  // Build full mockup context with all available data
+  const mockupCtx: MockupContext = {
+    roomType: room.room_type,
+    diagnosisSummary,
+    existingItems: stdExistingItems,
+    designDirection: designDir,
+    buildingResearch,
+    palette,
+    materials,
+    textures,
+    spatialLayout,
+    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+    lightingConditions,
+    windowDoorPositions,
+    priorities: room.priorities || undefined,
+    userContext: room.user_context || undefined,
+  };
+
+  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, stdExistingItems, designDir, buildingResearch, mockupCtx);
 
   if (!promptResult.success || !promptResult.data) {
     await supabase

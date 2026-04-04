@@ -20,6 +20,23 @@ interface MockupGenerationResult {
   provider: string;
 }
 
+export interface MockupContext {
+  roomType: string;
+  diagnosisSummary: string;
+  existingItems?: string[];
+  designDirection?: string;
+  buildingResearch?: Record<string, unknown>;
+  palette?: string[];
+  materials?: string[];
+  textures?: string[];
+  spatialLayout?: string;
+  placementMap?: Record<string, string>;
+  lightingConditions?: string;
+  windowDoorPositions?: string;
+  priorities?: string[];
+  userContext?: string;
+}
+
 /**
  * Generate an image generation prompt from room context + selected products.
  */
@@ -30,6 +47,7 @@ export async function generateMockupPrompt(
   existingItems?: string[],
   designDirection?: string,
   buildingResearch?: Record<string, unknown>,
+  mockupContext?: MockupContext,
 ): Promise<AgentResult<MockupPromptResult>> {
   const model = selectModel("mockup_prompt");
   const system = getSystemPrompt();
@@ -40,11 +58,15 @@ export async function generateMockupPrompt(
       if (p.colors?.length) parts.push(`colors: ${p.colors.join("/")}`);
       if (p.materials?.length) parts.push(`materials: ${p.materials.join("/")}`);
       if (p.dimensions) parts.push(`dimensions: ${p.dimensions}`);
+      // Include placement info if available from context
+      if (mockupContext?.placementMap?.[p.category || ""]) {
+        parts.push(`placement: ${mockupContext.placementMap[p.category || ""]}`);
+      }
       return parts.join(" — ");
     }
   );
 
-  const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions, existingItems, designDirection, buildingResearch);
+  const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions, existingItems, designDirection, buildingResearch, mockupContext);
 
   try {
     const response = await geminiProvider.chat({

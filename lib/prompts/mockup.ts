@@ -5,6 +5,16 @@ export function getMockupPrompt(
   existingItems?: string[],
   designDirection?: string,
   buildingResearch?: Record<string, unknown>,
+  mockupContext?: {
+    palette?: string[];
+    materials?: string[];
+    textures?: string[];
+    spatialLayout?: string;
+    lightingConditions?: string;
+    windowDoorPositions?: string;
+    priorities?: string[];
+    userContext?: string;
+  },
 ): string {
   const keepItems = existingItems && existingItems.length > 0
     ? existingItems.map((item, i) => `  ${i + 1}. ${item}`).join("\n")
@@ -40,12 +50,27 @@ ${lines.map((l) => `  - ${l}`).join("\n")}`;
     }
   }
 
+  // Build extra context sections from mockupContext
+  let extraContext = "";
+  if (mockupContext) {
+    const sections: string[] = [];
+    if (mockupContext.palette?.length) sections.push(`- Color palette: ${mockupContext.palette.join(", ")}`);
+    if (mockupContext.materials?.length) sections.push(`- Materials: ${mockupContext.materials.join(", ")}`);
+    if (mockupContext.textures?.length) sections.push(`- Textures: ${mockupContext.textures.join(", ")}`);
+    if (mockupContext.spatialLayout) sections.push(`- Spatial layout: ${mockupContext.spatialLayout}`);
+    if (mockupContext.lightingConditions) sections.push(`- Lighting conditions: ${mockupContext.lightingConditions}`);
+    if (mockupContext.windowDoorPositions) sections.push(`- Window/door positions: ${mockupContext.windowDoorPositions}`);
+    if (mockupContext.priorities?.length) sections.push(`- Client priorities: ${mockupContext.priorities.join(", ")}`);
+    if (mockupContext.userContext) sections.push(`- User notes: "${mockupContext.userContext}"`);
+    if (sections.length > 0) extraContext = `\n${sections.join("\n")}`;
+  }
+
   return `Generate an image generation prompt for a room mockup.
 
 ## CONTEXT
 - Room type: ${roomType}
 - Current room state: ${diagnosisSummary}
-${designDirection ? `- Design direction: ${designDirection}` : ""}${finishesBlock}
+${designDirection ? `- Design direction: ${designDirection}` : ""}${finishesBlock}${extraContext}
 - Existing items to keep in the scene:
 ${keepItems}
 - New products to visualize:
