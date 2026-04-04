@@ -34,6 +34,13 @@ export async function POST(request: Request) {
     .eq("id", project_id || room.project_id)
     .single();
 
+  // Load other rooms for cross-room awareness
+  const { data: otherRooms } = await supabase
+    .from("rooms")
+    .select("name, room_type, room_diagnoses(diagnosis_json, design_direction_json)")
+    .eq("project_id", project?.id || room.project_id)
+    .neq("id", room_id);
+
   // Build content blocks
   const contentBlocks: AIContentBlock[] = [];
 
@@ -55,6 +62,54 @@ Finishes: ${JSON.stringify(br.finishes || {})}
 Layout: ${br.layout_style || "unknown"} | Windows: ${br.windows || "unknown"} | Ceiling: ${br.ceiling_height || "unknown"}
 Aesthetic: ${br.design_aesthetic || "unknown"}${floorPlanSection}
 ---`,
+    });
+  }
+
+  // Apartment-level analysis for cross-room coherence
+  if (project?.apartment_analysis) {
+    const aa = project.apartment_analysis as Record<string, unknown>;
+    contentBlocks.push({
+      type: "text",
+      text: `--- APARTMENT-LEVEL ANALYSIS ---
+Overall: ${aa.overall || ""}
+${JSON.stringify(aa.rooms || {}, null, 2)}
+---
+Use this apartment-level context to ensure cross-room coherence in your refinement.`,
+    });
+  }
+
+  // Room preferences and constraints
+  const preferencesLines: string[] = [];
+  if (room.budget_mode) preferencesLines.push(`Budget mode: ${room.budget_mode}`);
+  if (room.priorities?.length) preferencesLines.push(`Priorities: ${room.priorities.join(", ")}`);
+  if (room.keep_items?.length) preferencesLines.push(`Items to keep: ${room.keep_items.join(", ")}`);
+  if (room.replace_items?.length) preferencesLines.push(`Items to replace/remove: ${room.replace_items.join(", ")}`);
+
+  if (preferencesLines.length > 0) {
+    contentBlocks.push({
+      type: "text",
+      text: `--- ROOM PREFERENCES & CONSTRAINTS ---\n${preferencesLines.join("\n")}\n---`,
+    });
+  }
+
+  // Other rooms context for cross-room coherence
+  if (otherRooms && otherRooms.length > 0) {
+    const otherRoomsSummary = otherRooms
+      .map((r: any) => {
+        const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
+        const djson = diag?.diagnosis_json as Record<string, unknown> | undefined;
+        const dd = diag?.design_direction_json as Record<string, unknown> | undefined;
+        const parts = [`- ${r.name} (${r.room_type})`];
+        if (djson?.summary) parts.push(`  Summary: ${djson.summary}`);
+        if (dd?.style_notes || djson?.design_direction) parts.push(`  Direction: ${dd?.style_notes || djson?.design_direction}`);
+        if (dd?.recommended_palette) parts.push(`  Palette: ${(dd.recommended_palette as string[]).join(", ")}`);
+        return parts.join("\n");
+      })
+      .join("\n");
+
+    contentBlocks.push({
+      type: "text",
+      text: `--- OTHER ROOMS (for cross-room coherence) ---\n${otherRoomsSummary}\n---\nEnsure your refined recommendations stay cohesive with the rest of the apartment.`,
     });
   }
 

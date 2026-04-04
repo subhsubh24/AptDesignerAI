@@ -1,11 +1,15 @@
-export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[]): string {
+export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string): string {
+  const userNotes = userContext
+    ? `\n- User notes about this room: "${userContext}"\nIMPORTANT: Take these notes into account. If they mention something not visible in photos, incorporate that. If they say to ignore something, exclude it from your assessment.`
+    : "";
+
   return `Analyze the room photos provided and produce a comprehensive room diagnosis.
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
 - Items to keep: ${keepItems.length > 0 ? keepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
-- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}
+- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}
 
 ## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
 

@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     budgetMode: room.budget_mode,
     sourcingMode: room.sourcing_mode,
     imageUrls,
+    userContext: room.user_context || undefined,
   };
 
   const result = await runRoomDiagnosis(ctx, profile);

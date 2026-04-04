@@ -71,6 +71,24 @@ export async function POST(request: Request) {
       .join("\n");
   }
 
+  // Extract spatial/environmental context from diagnosis
+  const diagnosisJson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
+  const spatialLayout = diagnosisJson?.spatial_layout as string | undefined;
+  const lightingConditions = diagnosisJson?.lighting_conditions as string | undefined;
+  const windowDoorPositions = diagnosisJson?.window_door_positions as string | undefined;
+  const outletPositions = diagnosisJson?.outlet_positions as string | undefined;
+
+  // Extract floor plan from building research
+  const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
+
+  // Extract placement for this product's category from what_it_needs
+  let placement: string | undefined;
+  const whatItNeeds = diagnosisJson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
+  if (whatItNeeds && product.category) {
+    const match = whatItNeeds.find((item) => item.category === product.category);
+    if (match?.placement) placement = match.placement;
+  }
+
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
     room_id,
@@ -88,6 +106,14 @@ export async function POST(request: Request) {
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
     designDirection: diagnosis?.design_direction_json || undefined,
+    placement,
+    spatialLayout,
+    floorPlan,
+    lightingConditions,
+    windowDoorPositions,
+    outletPositions,
+    userContext: room.user_context || undefined,
+    replaceItems: room.replace_items || [],
   });
 
   if (!result.success || !result.data) {
