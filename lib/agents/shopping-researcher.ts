@@ -5,6 +5,7 @@ import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
@@ -316,7 +317,7 @@ export async function generateSearchBrief(
           log.warn("Search brief response truncated", { phase: "search_brief" });
         }
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const validated = SearchBriefResponseSchema.parse(raw);
 
         log.info("Search brief generated", {
@@ -559,7 +560,7 @@ Return JSON:
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
         });
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const validated = QuickScreenResponseSchema.parse(raw);
         const passed: SearchCandidate[] = [];
         for (const rating of validated.ratings) {

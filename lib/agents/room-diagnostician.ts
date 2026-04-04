@@ -4,6 +4,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
 import { DiagnosisResponseSchema } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
@@ -67,7 +68,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
         responseSchema: DIAGNOSIS_GEMINI_SCHEMA,
       });
 
-      const raw = JSON.parse(response.content);
+      const raw = extractJsonObject(response.content);
       const validated = DiagnosisResponseSchema.parse(raw);
 
       return {

@@ -7,6 +7,7 @@ import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
@@ -168,7 +169,7 @@ export async function scoreProduct(
           thinkingConfig: { thinkingLevel: "high" },
         });
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const validated = ProductEvalResponseSchema.parse(raw);
         const scores = validated.scores;
         const finalScore = computeFinalItemScore(scores, product.category || undefined);
@@ -411,7 +412,7 @@ Return JSON:
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
             });
 
-            const raw = JSON.parse(response.content);
+            const raw = extractJsonObject(response.content);
             const validated = QuickScoreResponseSchema.parse(raw);
             const result: QuickScoreEntry[] = [];
             for (const scoreEntry of validated.scores) {

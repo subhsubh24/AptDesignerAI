@@ -7,6 +7,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony } from "@/lib/agents/validation-agent";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -297,7 +298,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       thinkingConfig: { thinkingLevel: "high" },
     });
 
-    let analysis = JSON.parse(response.content);
+    let analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // If the AI returned a truncated response, the JSON may be incomplete
     if (response.truncated) {

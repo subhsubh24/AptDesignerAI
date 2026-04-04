@@ -2,6 +2,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import type { AgentResult } from "./types";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -55,7 +56,7 @@ export async function generateMockupPrompt(
       responseMimeType: "application/json",
     });
 
-    const parsed = JSON.parse(response.content) as MockupPromptResult;
+    const parsed = extractJsonObject<MockupPromptResult>(response.content);
     return {
       success: true,
       data: parsed,

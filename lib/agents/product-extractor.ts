@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import { ExtractedProductSchema } from "@/lib/types/schemas";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
@@ -409,7 +410,7 @@ export async function extractFromImage(imageUrl: string, designProfile?: Dynamic
       responseMimeType: "application/json",
     });
 
-    const validated = ExtractedProductSchema.parse(JSON.parse(response.content)) as ExtractedProduct;
+    const validated = ExtractedProductSchema.parse(extractJsonObject(response.content)) as ExtractedProduct;
     return {
       success: true,
       data: validated,

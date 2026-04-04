@@ -6,6 +6,7 @@ import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import { BundleEvalResponseSchema } from "@/lib/types/schemas";
 import { recordBundleScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
@@ -120,7 +121,7 @@ export async function evaluateBundle(
           thinkingConfig: { thinkingLevel: "high" },
         });
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const validated = BundleEvalResponseSchema.parse(raw);
         const scores = validated.scores;
         const finalScore = computeFinalBundleScore(scores);

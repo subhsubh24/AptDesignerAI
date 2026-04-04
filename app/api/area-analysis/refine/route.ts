@@ -6,6 +6,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -141,7 +142,7 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
       throw new Error("AI response was truncated (MAX_TOKENS). The refinement response was too long.");
     }
 
-    const analysis = JSON.parse(response.content);
+    const analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // Validate response structure
     if (Array.isArray(analysis)) {

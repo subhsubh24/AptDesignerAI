@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema } from "@/lib/types/schemas";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
@@ -259,7 +260,7 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
           throw new Error("Response truncated (MAX_TOKENS)");
         }
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const unwrapped = Array.isArray(raw) ? raw[0] : raw;
         const parsed = HarmonyValidationResponseSchema.parse(unwrapped);
         const result: HarmonyValidationResult = {
@@ -447,7 +448,7 @@ Return JSON:
           responseMimeType: "application/json",
         });
 
-        const raw = JSON.parse(response.content);
+        const raw = extractJsonObject(response.content);
         const validated = ProductSetValidationResponseSchema.parse(raw);
 
         log.info("Product set validation complete", {

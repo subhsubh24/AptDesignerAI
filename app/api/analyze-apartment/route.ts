@@ -6,6 +6,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { extractJsonObject } from "@/lib/ai/extract-json";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -171,7 +172,7 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
       responseMimeType: "application/json",
     });
 
-    const analysis = JSON.parse(response.content);
+    const analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // Save diagnosis for each room — normalize keys to handle case/format mismatches
     const analysisRooms = analysis.rooms || {};
