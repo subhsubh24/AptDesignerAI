@@ -281,8 +281,10 @@ export default function FocusPage() {
         setChangesMade(data.changes_made || []);
         setFeedbackText("");
         setShowFeedbackInput(false);
-        // Clear any existing products since the analysis changed
+        // Clear existing products and vision since the analysis changed
         setProducts([]);
+        setVisionUrl(null);
+        visionTriggered.current = false; // Allow auto-regeneration for new analysis
       }
     } catch (err) {
       console.error("Refinement error:", err);
@@ -290,9 +292,52 @@ export default function FocusPage() {
     setRefining(false);
   };
 
-  // Pre-search vision mockup
+  // Auto-trigger vision mockup when analysis is ready (runs in background)
+  const visionTriggered = useRef(false);
+  useEffect(() => {
+    if (areaAnalysis && !visionTriggered.current && !visionUrl && step === "analysis") {
+      visionTriggered.current = true;
+      // Fire and forget — generates in background while user reviews assessment
+      generateVisionInBackground(areaAnalysis);
+    }
+  }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const generateVisionInBackground = async (analysis: AreaAnalysis) => {
+    setGeneratingVision(true);
+    const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
+    try {
+      const res = await fetch("/api/mockups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room_id: roomId,
+          vision_mode: true,
+          design_direction: analysis.design_direction || "",
+          items_description: items,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVisionUrl(data.image_url);
+      }
+    } catch (err) {
+      console.error("Background vision generation error:", err);
+    }
+    setGeneratingVision(false);
+  };
+
+  // Manual trigger for vision mockup (re-generate or generate from vision step)
   const handleGenerateVision = async () => {
     setGeneratingVision(true);
+    if (step === "analysis") {
+      // Just re-trigger background generation, don't change step
+      if (areaAnalysis) {
+        visionTriggered.current = true;
+        setVisionUrl(null);
+        await generateVisionInBackground(areaAnalysis);
+      }
+      return;
+    }
     setStep("vision");
 
     // Build description from area analysis — use search_title for specificity
@@ -633,6 +678,61 @@ export default function FocusPage() {
                 <h3 className="font-semibold text-sm mb-1">Design Direction</h3>
                 <p className="text-sm text-muted-foreground">{areaAnalysis.design_direction}</p>
               </div>
+
+              {/* Vision Preview — auto-generated, appears at bottom of assessment as the "reveal" */}
+              <div className="pt-2">
+                <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Design Vision Preview
+                </h3>
+                {visionUrl ? (
+                  <div className="space-y-3">
+                    <div
+                      className="relative rounded-xl overflow-hidden border cursor-pointer group"
+                      onClick={() => setShowVisionOverlay(true)}
+                    >
+                      <img src={visionUrl} alt="Design vision preview" className="w-full h-auto" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium bg-black/60 px-3 py-1.5 rounded-full">
+                          View full size
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground flex-1">AI-generated preview based on the design direction above</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={handleGenerateVision}
+                        disabled={generatingVision}
+                      >
+                        {generatingVision ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                        Regenerate
+                      </Button>
+                    </div>
+                  </div>
+                ) : generatingVision ? (
+                  <div className="flex items-center gap-3 p-6 rounded-xl bg-muted/30 border border-dashed">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Generating design vision...</p>
+                      <p className="text-xs text-muted-foreground">Creating a preview of your room redesigned</p>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleGenerateVision}
+                    className="w-full flex items-center gap-3 p-6 rounded-xl bg-muted/30 border border-dashed hover:bg-muted/50 hover:border-primary/30 transition-colors text-left"
+                  >
+                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Generate design preview</p>
+                      <p className="text-xs text-muted-foreground">See an AI visualization of this room redesigned</p>
+                    </div>
+                  </button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -729,10 +829,6 @@ export default function FocusPage() {
             >
               <LinkIcon className="h-5 w-5 mr-2" />
               I&apos;ll find my own
-            </Button>
-            <Button size="lg" variant="outline" className="h-14" onClick={handleGenerateVision} disabled={generatingVision || refining}>
-              {generatingVision ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Eye className="h-5 w-5 mr-2" />}
-              Preview the vision
             </Button>
           </div>
         </>

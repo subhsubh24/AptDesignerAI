@@ -126,7 +126,24 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
   }
 
   const userContextNote = room.user_context
-    ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. For example, if they say to ignore something, don't include it in your assessment or recommendations.`
+    ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. If they say to ignore something, don't include it in your assessment. If they express a preference for keeping or liking something, RESPECT that — design around it, don't suggest removing it.`
+    : "";
+
+  // Build keep-items protection block
+  const keepItems = room.keep_items as string[] | null;
+  const replaceItems = room.replace_items as string[] | null;
+  const priorities = room.priorities as string[] | null;
+
+  const keepItemsBlock = keepItems?.length
+    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — DO NOT SUGGEST REMOVING THESE:\n${keepItems.map((item: string) => `- ${item}`).join("\n")}\nThese items are NON-NEGOTIABLE. Include them in "what_works" and design AROUND them. NEVER put these in "what_should_go".`
+    : "";
+
+  const replaceItemsBlock = replaceItems?.length
+    ? `\n\nITEMS THE CLIENT WANTS TO REPLACE/REMOVE:\n${replaceItems.map((item: string) => `- ${item}`).join("\n")}\nThese should appear in "what_should_go" and new items should solve the same functional need.`
+    : "";
+
+  const prioritiesBlock = priorities?.length
+    ? `\n\nCLIENT PRIORITIES & LIFESTYLE NEEDS:\n${priorities.map((p: string) => `- ${p}`).join("\n")}\nWeight these heavily in your recommendations. If hosting is a priority, ensure enough seating and dining capacity. If comfort is key, prioritize deeply comfortable pieces over photogenic ones.`
     : "";
 
   // ── TARGET ROOM PHOTOS (clearly labeled) ──
@@ -135,7 +152,7 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     type: "text",
     text: `═══════════════════════════════════════════════════════════
 >>> TARGET ROOM: ${room.name} (${room.room_type}) — THIS IS THE ROOM YOU ARE ANALYZING <<<
-═══════════════════════════════════════════════════════════${userContextNote}
+═══════════════════════════════════════════════════════════${userContextNote}${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}
 
 The next ${targetImageCount} photo(s) are ALL from the ${room.name}. Your analysis, recommendations, and "what_it_needs" must be ONLY about this room.`,
   });

@@ -51,7 +51,19 @@ export function buildDesignProfile(
   if (project.bedrooms != null) profile.bedrooms = project.bedrooms as number;
   if (project.bathrooms != null) profile.bathrooms = project.bathrooms as number;
 
+  // Lifestyle context
+  if (project.lifestyle || project.pets || project.kids || project.hosting) {
+    const ls = (project.lifestyle as Record<string, unknown>) || {};
+    profile.lifestyle = {
+      pets: (ls.pets as string) || (project.pets as string) || undefined,
+      kids: (ls.kids as string) || (project.kids as string) || undefined,
+      hosting: (ls.hosting as string) || (project.hosting as string) || undefined,
+      work_from_home: (ls.work_from_home as boolean) || (project.work_from_home as boolean) || undefined,
+      notes: (ls.notes as string) || undefined,
+    };
+  }
+
   // Return undefined if nothing was populated
-  const hasData = profile.location || profile.buildingResearch || profile.apartmentAnalysis || profile.bedrooms;
+  const hasData = profile.location || profile.buildingResearch || profile.apartmentAnalysis || profile.bedrooms || profile.lifestyle;
   return hasData ? profile : undefined;
 }

@@ -1,6 +1,12 @@
 export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string): string {
   const userNotes = userContext
-    ? `\n- User notes about this room: "${userContext}"\nIMPORTANT: Take these notes into account. If they mention something not visible in photos, incorporate that. If they say to ignore something, exclude it from your assessment.`
+    ? `\n- User notes about this room: "${userContext}"\nIMPORTANT: Take these notes into account. If they mention something not visible in photos, incorporate that. If they say to ignore something, exclude it from your assessment. If they express a preference for keeping or liking something, RESPECT that — design around it.`
+    : "";
+
+  const keepItemsWarning = keepItems.length > 0
+    ? `\n\n## ⚠️ ITEMS THE CLIENT WANTS TO KEEP — DO NOT SUGGEST REMOVING THESE
+${keepItems.map((item) => `- ${item}`).join("\n")}
+These items are NON-NEGOTIABLE. The client explicitly chose to keep them. Your job is to design AROUND these pieces and make them work within the design direction. Include them in "what_is_working" and explain how the design will complement them. NEVER put these in "what_is_not_working" or suggest they should be replaced.`
     : "";
 
   return `Analyze the room photos provided and produce a comprehensive room diagnosis.
@@ -9,7 +15,7 @@ export function getDiagnosisPrompt(roomType: string, keepItems: string[], replac
 - Room type: ${roomType}
 - Items to keep: ${keepItems.length > 0 ? keepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
-- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}
+- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
 
 ## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
 
@@ -38,11 +44,21 @@ Think like a designer completing a room. Common things people forget:
 - Side tables / surfaces near seating
 - Storage solutions
 
-### Step 5: DESIGN DIRECTION
-Based on the existing finishes (floors, walls, fixed elements), recommend:
+### Step 5: THINK ABOUT LIFESTYLE
+Before making any recommendations, consider:
+- How does someone actually LIVE in this ${roomType}? What happens here daily?
+- Do they host guests? How many people need to sit comfortably?
+- Where do they set their coffee/drink? Where do they charge their phone?
+- Is there enough seating for entertaining? Enough surface area for daily life?
+- Are materials practical for the room's use (pets, kids, high-traffic)?
+- Consider morning vs. evening use — lighting changes, ambience shifts.
+${priorities.length > 0 ? `- The client specifically cares about: ${priorities.join(", ")}. Weight these heavily in your recommendations.` : ""}
+
+### Step 6: DESIGN DIRECTION
+Based on the existing finishes (floors, walls, fixed elements) AND how the client lives, recommend:
 - Specific color palette (name 6-10 actual colors like "warm ivory", "walnut brown", "muted sage")
 - Specific materials (name 5-8 like "solid walnut", "linen", "bouclé", "brushed brass")
-- Style direction in 3-4 sentences
+- Style direction in 3-4 sentences that reference the client's lifestyle and priorities, not just aesthetics
 
 ## ARRAY SIZE REQUIREMENTS
 - what_is_working: List **at least 5-8 items**. Every room has things working — find them all.

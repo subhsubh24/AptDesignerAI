@@ -28,6 +28,14 @@ export interface DynamicDesignProfile {
   };
   bedrooms?: number;
   bathrooms?: number;
+  /** Client lifestyle context — pets, kids, hosting habits, daily routines */
+  lifestyle?: {
+    pets?: string;
+    kids?: string;
+    hosting?: string;
+    work_from_home?: boolean;
+    notes?: string;
+  };
 }
 
 /**
@@ -121,6 +129,20 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
     sections.push(`## APARTMENT LAYOUT
 - Bedrooms: ${profile.bedrooms || 1}
 - Bathrooms: ${profile.bathrooms || 1}`);
+  }
+
+  // Lifestyle context
+  if (profile.lifestyle) {
+    const ls = profile.lifestyle;
+    const lifestyleLines: string[] = [];
+    if (ls.pets) lifestyleLines.push(`- Pets: ${ls.pets} — choose durable, easy-to-clean materials. Avoid delicate fabrics like white bouclé or silk.`);
+    if (ls.kids) lifestyleLines.push(`- Children: ${ls.kids} — prioritize safety (rounded corners, stable furniture), durability, and stain-resistant materials.`);
+    if (ls.hosting) lifestyleLines.push(`- Hosting/entertaining: ${ls.hosting} — ensure sufficient seating capacity, dining space, and drink surfaces.`);
+    if (ls.work_from_home) lifestyleLines.push(`- Works from home — consider a dedicated work zone, good task lighting, and ergonomic seating.`);
+    if (ls.notes) lifestyleLines.push(`- Additional: ${ls.notes}`);
+    if (lifestyleLines.length > 0) {
+      sections.push(`## CLIENT LIFESTYLE\n${lifestyleLines.join("\n")}\nIMPORTANT: Every recommendation must be practical for this client's actual daily life. Beauty that isn't livable is bad design.`);
+    }
   }
 
   if (sections.length === 0) {

@@ -130,6 +130,12 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
     });
   }
 
+  // Extract keep/replace items for reinforcement
+  const keepItems = room.keep_items as string[] | null;
+  const keepItemsWarning = keepItems?.length
+    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — NON-NEGOTIABLE:\n${keepItems.map((item: string) => `- ${item}`).join("\n")}\nThese MUST appear in "what_works". NEVER put them in "what_should_go".`
+    : "";
+
   // The refinement prompt — this is where the magic happens
   contentBlocks.push({
     type: "text",
@@ -139,7 +145,7 @@ ${JSON.stringify(previous_analysis, null, 2)}
 
 --- CLIENT FEEDBACK ---
 "${user_feedback}"
----
+---${keepItemsWarning}
 
 The client has reviewed your previous analysis and provided feedback above. As their personal interior designer, you need to:
 
@@ -162,7 +168,8 @@ Return JSON:
       "search_title": "Detailed product search query with material, color, size, style",
       "description": "Why this item is needed — updated to reflect client feedback",
       "priority": "high | medium | low",
-      "specs": "Ideal dimensions, material, color range, price range"
+      "specs": "Ideal dimensions, material, color range, price range",
+      "placement": "WHERE in the room this item goes — be spatial and specific"
     }
   ],
   "what_works": ["Updated list — include items the client wants to keep"],
@@ -170,10 +177,20 @@ Return JSON:
   "design_direction": "Updated paragraph reflecting the client's feedback",
   "recommended_palette": ["Updated list of 4-8 specific colors for this room"],
   "recommended_materials": ["Updated list of 4-6 materials to use"],
-  "recommended_textures": ["Updated list of 3-5 textures to layer"]
+  "recommended_textures": ["Updated list of 3-5 textures to layer"],
+  "spatial_layout": "Updated furniture arrangement strategy — traffic flow, zones, sightlines",
+  "lighting_conditions": "Updated lighting assessment for the room",
+  "window_door_positions": "Carry forward or update window/door positions",
+  "outlet_positions": "Carry forward or update outlet positions"
 }
 
-IMPORTANT: Respect the client's preferences. If they want to keep something, keep it and make the design work around it — don't push back unless it genuinely creates a problem, and if so, explain the specific issue clearly. Think like a designer who LISTENS to the client and adapts.`,
+CRITICAL RULES:
+1. If the client says to KEEP something, it goes in "what_works" and NEVER in "what_should_go". Design around it. Make it shine. This is non-negotiable.
+2. If the client says they like something or want something, honor that preference completely.
+3. Only push back on a client preference if it creates a genuine, specific, measurable problem (e.g., "the 8-foot sofa physically won't fit in the 7-foot alcove") — and even then, offer alternatives, don't just reject.
+4. Think like a designer who LISTENS to the client and adapts. Your ego about the "best" design direction is less important than the client's happiness.
+5. Carry forward ALL spatial context (spatial_layout, lighting_conditions, window_door_positions, outlet_positions) from the previous analysis — update them only if the feedback requires changes. Do not drop these fields.
+6. Every item in what_it_needs MUST include a "placement" field describing exactly where it goes in the room.`,
   });
 
   const agentRun = await createAgentRun(supabase, {
@@ -188,9 +205,10 @@ IMPORTANT: Respect the client's preferences. If they want to keep something, kee
       model: selectModel("area_analysis"),
       system: getSystemPrompt(profile),
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 8192,
+      max_tokens: 12000,
       temperature: 0.3,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "medium" },
     });
 
     if (response.truncated) {
