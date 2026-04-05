@@ -72,11 +72,12 @@ function parseRoomDimensions(
   if (!floorPlan) return null;
 
   // Try room_dimensions field (e.g., "12x15", "12' x 15'")
-  const dims =
-    (floorPlan.room_dimensions as string) ||
-    (floorPlan.dimensions as string) ||
-    (floorPlan.size as string);
-  if (!dims) return null;
+  const raw =
+    floorPlan.room_dimensions ||
+    floorPlan.dimensions ||
+    floorPlan.size;
+  if (!raw || typeof raw !== "string") return null;
+  const dims = raw;
 
   const match = dims.match(
     /(\d+(?:\.\d+)?)\s*['']?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*['']?/i
