@@ -4,7 +4,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
-import { validateRoomHarmony } from "@/lib/agents/validation-agent";
+import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
 import { computeHarmonyScores, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -382,12 +382,24 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
     const MAX_HARMONY_ROUNDS = 10;
     let validation = null;
     let latestMathResult: MathHarmonyResult | null = null;
-    // Track best score each item has ever achieved + whether it was revised
+
+    // ── Convergence tracking ──
     const bestScores = new Map<string, number>();
     const previouslyRevised = new Set<string>();
+    const stabilizedItems = new Set<string>(); // Items locked in — no more revisions
+    // Revision history: per-item list of {round, score, specs, searchTitle, rootCause}
+    const revisionHistory = new Map<string, Array<{ round: number; score: number; specs?: string; searchTitle?: string; rootCause?: string }>>();
+    // Track previous-round scores for stale detection
+    const prevRoundScores = new Map<string, number>();
 
+    // Good-enough threshold: items at this score with clean math are stabilized
+    const GOOD_ENOUGH_SCORE = 8;
+    const GOOD_ENOUGH_MATH = 0.75;
+
+    let totalRoundsCompleted = 0;
+
+    // ── Phase 1: Iterative refinement rounds ──
     for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
-      // Compute deterministic math scores before AI validation
       const mathCtx = {
         roomType: room.room_type,
         floorPlan,
@@ -404,7 +416,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           console.error(`[area-analysis] Harmony validation failed on round 1: ${harmonyResult.error}`);
           throw new Error(`Harmony validation failed: ${harmonyResult.error}`);
         }
-        console.warn(`[area-analysis] Harmony round ${round} failed (${harmonyResult.error}), using last good state from round ${round - 1}`);
+        console.warn(`[area-analysis] Harmony round ${round} failed (${harmonyResult.error}), using last good state`);
         break;
       }
 
@@ -414,7 +426,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         if (round === 1) {
           throw new Error(`Harmony validation failed: missing item_scores in response. Got keys: ${Object.keys(harmony).join(", ")}.`);
         }
-        console.warn(`[area-analysis] Harmony round ${round} returned invalid data, using last good state from round ${round - 1}`);
+        console.warn(`[area-analysis] Harmony round ${round} returned invalid data, using last good state`);
         break;
       }
 
@@ -425,7 +437,6 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       for (const s of harmony.item_scores) {
         const mathItem = mathItemMap.get(s.category);
         if (mathItem && mathItem.math_score < 0.95) {
-          // Math violation → cap AI score
           const mathCap = Math.round(mathItem.math_score * 10);
           if (s.harmony_score > mathCap) {
             console.log(`[area-analysis] Round ${round}: "${s.category}" AI score ${s.harmony_score} capped to ${mathCap} by math (${mathItem.math_score.toFixed(2)})`);
@@ -434,11 +445,75 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         }
       }
 
-      // Update best-ever scores (after composite scoring)
+      // Update best-ever scores
       for (const s of harmony.item_scores) {
         const prev = bestScores.get(s.category) || 0;
         if (s.harmony_score > prev) bestScores.set(s.category, s.harmony_score);
       }
+
+      // ── Stabilization checks ──
+      for (const s of harmony.item_scores) {
+        if (stabilizedItems.has(s.category)) continue;
+
+        const mathItem = mathItemMap.get(s.category);
+        const mathScore = mathItem?.math_score ?? 1;
+
+        // (A) Good-enough threshold: score >= 8 AND math >= 0.75 → lock in
+        if (s.harmony_score >= GOOD_ENOUGH_SCORE && mathScore >= GOOD_ENOUGH_MATH && previouslyRevised.has(s.category)) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" stabilized at ${s.harmony_score}/10 (math: ${mathScore.toFixed(2)}) — good enough, locked in`);
+          stabilizedItems.add(s.category);
+          continue;
+        }
+
+        // (B) Stale detection: revised last round but score didn't improve → lock in
+        const prevScore = prevRoundScores.get(s.category);
+        if (prevScore !== undefined && previouslyRevised.has(s.category) && s.harmony_score <= prevScore) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" stale — score ${s.harmony_score}/10 (was ${prevScore}) after revision, locked in`);
+          stabilizedItems.add(s.category);
+          continue;
+        }
+
+        // (C) Oscillation detection: check if root_cause contradicts a prior revision
+        const history = revisionHistory.get(s.category);
+        if (history && history.length >= 2 && s.root_cause) {
+          const rootCauseLower = s.root_cause.toLowerCase();
+          // Detect warm/cool oscillation
+          const isWarmCoolFlip =
+            (rootCauseLower.includes("too warm") && history.some((h) => h.rootCause?.toLowerCase().includes("too cool"))) ||
+            (rootCauseLower.includes("too cool") && history.some((h) => h.rootCause?.toLowerCase().includes("too warm"))) ||
+            (rootCauseLower.includes("too yellow") && history.some((h) => h.rootCause?.toLowerCase().includes("too cool"))) ||
+            (rootCauseLower.includes("too cool") && history.some((h) => h.rootCause?.toLowerCase().includes("too yellow")));
+          // Detect size oscillation (too large ↔ too small)
+          const isSizeFlip =
+            (rootCauseLower.includes("too large") && history.some((h) => h.rootCause?.toLowerCase().includes("too small"))) ||
+            (rootCauseLower.includes("too small") && history.some((h) => h.rootCause?.toLowerCase().includes("too large"))) ||
+            (rootCauseLower.includes("undersized") && history.some((h) => h.rootCause?.toLowerCase().includes("too large"))) ||
+            (rootCauseLower.includes("too large") && history.some((h) => h.rootCause?.toLowerCase().includes("undersized")));
+          // Detect generic spec oscillation: same root_cause type appeared before with a different fix
+          const rootCauseType = rootCauseLower.split(":")[0]?.trim();
+          const sameTypeCount = history.filter((h) => h.rootCause?.toLowerCase().startsWith(rootCauseType)).length;
+
+          if (isWarmCoolFlip || isSizeFlip || sameTypeCount >= 2) {
+            // Find the best-scoring version from history
+            const bestEntry = history.reduce((best, h) => h.score > best.score ? h : best, history[0]);
+            console.log(`[area-analysis] Round ${round}: "${s.category}" oscillating (${isWarmCoolFlip ? "warm/cool" : isSizeFlip ? "size" : "repeated " + rootCauseType}) — locking in best version from round ${bestEntry.round} (score ${bestEntry.score})`);
+            stabilizedItems.add(s.category);
+
+            // Restore best version's specs if we have them
+            const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
+            const item = needs.find((n) => n.category === s.category);
+            if (item && bestEntry.searchTitle) {
+              item.search_title = bestEntry.searchTitle;
+            }
+            if (item && bestEntry.specs) {
+              item.specs = bestEntry.specs;
+            }
+            continue;
+          }
+        }
+      }
+
+      totalRoundsCompleted = round;
 
       validation = {
         confidence: harmony.confidence,
@@ -458,41 +533,40 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         rounds_completed: round,
       };
 
-      // Determine which items genuinely need revision:
-      // - Skip items that already hit 10 in any previous round (locked in)
-      // - Skip items revised before that still score 8+ (converged, just nitpicking)
-      // - Also consider math scores: items with math_score < 0.95 still need work
+      // Determine which items need revision (excluding stabilized items)
       const needsRevision = harmony.item_scores.filter((s) => {
+        if (stabilizedItems.has(s.category)) return false;
         if (s.drop) return true;
         const mathItem = mathItemMap.get(s.category);
         const hasMathViolation = mathItem && mathItem.math_score < 0.95;
         if (s.harmony_score >= 10 && !hasMathViolation) return false;
-        // Item hit 10 in a prior round and math is clean — lock it in
         if (bestScores.get(s.category) === 10 && !hasMathViolation) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" was 10 before, now ${s.harmony_score} — locked in`);
+          console.log(`[area-analysis] Round ${round}: "${s.category}" was 10 before — locked in`);
+          stabilizedItems.add(s.category);
           return false;
-        }
-        // Item was revised before — keep pushing for 10/10
-        if (previouslyRevised.has(s.category)) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10${hasMathViolation ? ` (math: ${mathItem!.math_score.toFixed(2)})` : ""} after prior revision — continuing to push`);
         }
         return true;
       });
 
       const imperfectItems = harmony.item_scores.filter((s) => s.harmony_score < 10);
-      console.log(`[area-analysis] Harmony round ${round}: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}, imperfect=${imperfectItems.length}, actionable=${needsRevision.length}`);
+      console.log(`[area-analysis] Harmony round ${round}: confidence=${harmony.confidence}/10, cohesion=${harmony.overall_cohesion}/10, items=${harmony.item_scores.length}, imperfect=${imperfectItems.length}, actionable=${needsRevision.length}, stabilized=${stabilizedItems.size}`);
 
-      // All items converged (either 10/10 or accepted after revision)
+      // All items converged or stabilized
       if (needsRevision.length === 0) {
-        console.log(`[area-analysis] All items converged — harmony complete after ${round} round(s)`);
+        console.log(`[area-analysis] All items converged/stabilized — moving to final assessment after ${round} round(s)`);
         break;
       }
 
-      // If confidence is low and we got a full revised analysis, use it
+      // Record current scores for next-round stale detection
+      prevRoundScores.clear();
+      for (const s of harmony.item_scores) {
+        prevRoundScores.set(s.category, s.harmony_score);
+      }
+
+      // Apply revisions
       if (harmony.confidence < 7 && harmony.revisedAnalysis) {
         console.log(`[area-analysis] Round ${round}: confidence ${harmony.confidence}/10 — using full revised analysis`);
         analysis = harmony.revisedAnalysis;
-        // Reset tracking since we got a completely new analysis
         previouslyRevised.clear();
       } else {
         const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
@@ -512,14 +586,29 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
           if (score && actionableCategories.has(score.category) && (score.revised_search_title || score.revised_placement || score.revised_specs)) {
             console.log(`[area-analysis] Round ${round}: revising "${item.category}" — score ${score.harmony_score}/10 | root cause: ${score.root_cause || score.reason}`);
+
+            const newSearchTitle = score.revised_search_title || (item.search_title as string);
+            const newSpecs = score.revised_specs || (item.specs as string);
+
             revised.push({
               ...item,
-              search_title: score.revised_search_title || item.search_title,
-              specs: score.revised_specs || item.specs,
+              search_title: newSearchTitle,
+              specs: newSpecs,
               placement: score.revised_placement || item.placement,
             });
             previouslyRevised.add(item.category as string);
             revisedCount++;
+
+            // Record in revision history
+            const cat = item.category as string;
+            if (!revisionHistory.has(cat)) revisionHistory.set(cat, []);
+            revisionHistory.get(cat)!.push({
+              round,
+              score: score.harmony_score,
+              specs: newSpecs,
+              searchTitle: newSearchTitle,
+              rootCause: score.root_cause || undefined,
+            });
           } else {
             revised.push(item);
           }
@@ -528,14 +617,196 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         analysis.what_it_needs = revised;
 
         if (revisedCount === 0) {
-          console.log(`[area-analysis] Round ${round}: no actionable revisions — stopping`);
+          console.log(`[area-analysis] Round ${round}: no actionable revisions — moving to final assessment`);
           break;
         }
       }
 
       if (round === MAX_HARMONY_ROUNDS) {
-        console.log(`[area-analysis] Max harmony rounds (${MAX_HARMONY_ROUNDS}) reached — proceeding with best state`);
+        console.log(`[area-analysis] Max harmony rounds (${MAX_HARMONY_ROUNDS}) reached — moving to final assessment`);
       }
+    }
+
+    // ── Phase 2: Final comprehensive AI assessment ──
+    console.log(`[area-analysis] Starting final assessment after ${totalRoundsCompleted} iterative rounds (${stabilizedItems.size} items stabilized)`);
+
+    // Compute fresh math scores for the final state
+    const finalMathCtx = {
+      roomType: room.room_type,
+      floorPlan,
+      otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+    };
+    latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
+    const finalMathText = formatMathScoresForPrompt(latestMathResult);
+
+    // Convert revisionHistory Map to plain object for the prompt
+    const revisionHistoryObj: Record<string, Array<{ round: number; score: number; specs?: string; searchTitle?: string; rootCause?: string }>> = {};
+    for (const [cat, entries] of revisionHistory) {
+      revisionHistoryObj[cat] = entries;
+    }
+
+    const finalResult = await performFinalAssessment(analysis, {
+      ...harmonyCtx,
+      mathScoresText: finalMathText,
+      revisionHistory: revisionHistoryObj,
+      stabilizedItems: Array.from(stabilizedItems),
+      roundsCompleted: totalRoundsCompleted,
+    });
+
+    if (finalResult.success && finalResult.data) {
+      const final = finalResult.data;
+      console.log(`[area-analysis] Final assessment: confidence=${final.confidence}/10, cohesion=${final.overall_cohesion}/10, needs_more=${final.needs_more_rounds}, budget=${final.round_budget}`);
+
+      // Apply final scores as the definitive validation
+      validation = {
+        confidence: final.confidence,
+        overall_cohesion: final.overall_cohesion,
+        palette_coherence: final.palette_coherence,
+        material_coherence: final.material_coherence,
+        spatial_flow: final.spatial_flow,
+        issues: final.issues,
+        item_scores: final.item_scores.map((s) => ({
+          category: s.category,
+          harmony_score: s.final_score,
+          keeps_well_with: [] as string[],
+          clashes_with: [] as string[],
+          revised_search_title: s.revised_search_title,
+          revised_specs: s.revised_specs,
+          revised_placement: s.revised_placement,
+          drop: false,
+          root_cause: s.root_cause,
+          reason: s.reason,
+        })),
+        math_scores: {
+          overall: latestMathResult.overall,
+          color: latestMathResult.color,
+          spatial: latestMathResult.spatial,
+          material: latestMathResult.material,
+          proportion: latestMathResult.proportion,
+        },
+        rounds_completed: totalRoundsCompleted,
+        final_assessment: true,
+      };
+
+      // ── Phase 3: If final assessment says more work needed, do targeted rounds ──
+      if (final.needs_more_rounds && final.round_budget > 0) {
+        const itemsNeedingWork = final.item_scores.filter((s) => s.needs_more_work);
+        console.log(`[area-analysis] Final assessment requests ${final.round_budget} more rounds for ${itemsNeedingWork.length} items: ${itemsNeedingWork.map((s) => s.category).join(", ")}`);
+
+        // Apply the final assessment's revisions first
+        const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
+        for (const item of needs) {
+          const finalItem = itemsNeedingWork.find((s) => s.category === item.category);
+          if (finalItem) {
+            if (finalItem.revised_search_title) item.search_title = finalItem.revised_search_title;
+            if (finalItem.revised_specs) item.specs = finalItem.revised_specs;
+            if (finalItem.revised_placement) item.placement = finalItem.revised_placement;
+          }
+        }
+
+        // Lock all items that DON'T need more work — only iterate on flagged ones
+        const postFinalStabilized = new Set(stabilizedItems);
+        for (const s of final.item_scores) {
+          if (!s.needs_more_work) postFinalStabilized.add(s.category);
+        }
+
+        for (let extraRound = 1; extraRound <= final.round_budget; extraRound++) {
+          const postRound = totalRoundsCompleted + extraRound;
+          console.log(`[area-analysis] Post-final round ${extraRound}/${final.round_budget} (total round ${postRound})`);
+
+          latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
+          const mathText = formatMathScoresForPrompt(latestMathResult);
+
+          const harmonyResult = await validateRoomHarmony(analysis, { ...harmonyCtx, mathScoresText: mathText });
+
+          if (!harmonyResult.success || !harmonyResult.data) {
+            console.warn(`[area-analysis] Post-final round ${extraRound} failed — using current state`);
+            break;
+          }
+
+          const harmony = harmonyResult.data;
+          if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) break;
+
+          // Apply math capping
+          const mathItemMap = new Map(
+            (latestMathResult?.itemScores || []).map((s) => [s.category, s])
+          );
+          for (const s of harmony.item_scores) {
+            const mathItem = mathItemMap.get(s.category);
+            if (mathItem && mathItem.math_score < 0.95) {
+              const mathCap = Math.round(mathItem.math_score * 10);
+              if (s.harmony_score > mathCap) {
+                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" AI score ${s.harmony_score} capped to ${mathCap} by math (${mathItem.math_score.toFixed(2)})`);
+                s.harmony_score = mathCap;
+              }
+            }
+          }
+
+          // Only revise items that the final assessment flagged
+          let revisedCount = 0;
+          const revisedNeeds: Array<Record<string, unknown>> = [];
+
+          for (const item of analysis.what_it_needs as Array<Record<string, unknown>>) {
+            const score = harmony.item_scores.find((s) => s.category === item.category);
+            if (!score || postFinalStabilized.has(item.category as string)) {
+              revisedNeeds.push(item);
+              continue;
+            }
+            if (score.harmony_score >= GOOD_ENOUGH_SCORE) {
+              console.log(`[area-analysis] Post-final round ${extraRound}: "${item.category}" now ${score.harmony_score}/10 — stabilized`);
+              postFinalStabilized.add(item.category as string);
+              revisedNeeds.push(item);
+              continue;
+            }
+            if (score.revised_search_title || score.revised_specs || score.revised_placement) {
+              console.log(`[area-analysis] Post-final round ${extraRound}: revising "${item.category}" — ${score.harmony_score}/10 | ${score.root_cause || score.reason}`);
+              revisedNeeds.push({
+                ...item,
+                search_title: score.revised_search_title || item.search_title,
+                specs: score.revised_specs || item.specs,
+                placement: score.revised_placement || item.placement,
+              });
+              revisedCount++;
+            } else {
+              revisedNeeds.push(item);
+            }
+          }
+
+          analysis.what_it_needs = revisedNeeds;
+
+          // Update validation with latest scores
+          validation = {
+            ...validation,
+            item_scores: harmony.item_scores.map((s) => ({
+              category: s.category,
+              harmony_score: s.harmony_score,
+              keeps_well_with: s.keeps_well_with || [],
+              clashes_with: s.clashes_with || [],
+              revised_search_title: s.revised_search_title,
+              revised_specs: s.revised_specs,
+              revised_placement: s.revised_placement,
+              drop: s.drop,
+              root_cause: s.root_cause,
+              reason: s.reason,
+            })),
+            rounds_completed: postRound,
+            math_scores: {
+              overall: latestMathResult.overall,
+              color: latestMathResult.color,
+              spatial: latestMathResult.spatial,
+              material: latestMathResult.material,
+              proportion: latestMathResult.proportion,
+            },
+          };
+
+          if (revisedCount === 0) {
+            console.log(`[area-analysis] Post-final round ${extraRound}: no more revisions needed — done`);
+            break;
+          }
+        }
+      }
+    } else {
+      console.warn(`[area-analysis] Final assessment failed (${finalResult.error}) — using iterative-round validation`);
     }
 
     // Save as detailed diagnosis

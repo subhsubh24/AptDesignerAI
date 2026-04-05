@@ -1,7 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
-import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema } from "@/lib/types/schemas";
+import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema, FinalAssessmentResponseSchema } from "@/lib/types/schemas";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
@@ -312,6 +312,279 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Harmony validation failed after retries";
     log.error("Harmony validation failed", { error: errMsg });
+    return { success: false, error: errMsg };
+  }
+}
+
+export interface FinalAssessmentResult {
+  confidence: number;
+  overall_cohesion: number;
+  palette_coherence: string;
+  material_coherence: string;
+  spatial_flow: string;
+  issues: string[];
+  item_scores: Array<{
+    category: string;
+    final_score: number;
+    needs_more_work: boolean;
+    revised_search_title?: string;
+    revised_specs?: string;
+    revised_placement?: string;
+    root_cause?: string;
+    reason: string;
+  }>;
+  needs_more_rounds: boolean;
+  round_budget: number;
+}
+
+/**
+ * Final comprehensive assessment: one deep AI pass after iterative rounds stabilize.
+ * Sees the full revision history, all math scores, room photos, and all context.
+ * Produces definitive scores and decides if more iteration is needed.
+ */
+export async function performFinalAssessment(
+  analysis: Record<string, unknown>,
+  context: {
+    roomType: string;
+    roomName: string;
+    roomImageUrls: string[];
+    buildingResearch?: Record<string, unknown>;
+    apartmentAnalysis?: Record<string, unknown>;
+    designProfile?: DynamicDesignProfile;
+    floorPlan?: Record<string, unknown>;
+    userContext?: string;
+    otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
+    mathScoresText?: string;
+    revisionHistory?: Record<string, Array<{ round: number; score: number; specs?: string; searchTitle?: string; rootCause?: string }>>;
+    stabilizedItems?: string[];
+    roundsCompleted: number;
+  }
+): Promise<AgentResult<FinalAssessmentResult>> {
+  const model = selectModel("validation");
+  const system = getSystemPrompt(context.designProfile);
+
+  const whatWorks = (analysis.what_works as string[]) || [];
+  const whatShouldGo = (analysis.what_should_go as string[]) || [];
+  const whatItNeeds = (analysis.what_it_needs as Array<Record<string, unknown>>) || [];
+  const designDirection = (analysis.design_direction as string) || "";
+  const spatialLayout = (analysis.spatial_layout as string) || "";
+
+  const content: AIContentBlock[] = [];
+
+  // Send room photos
+  for (const url of context.roomImageUrls.slice(0, 4)) {
+    content.push({ type: "image", source: { type: "url", url } });
+  }
+
+  const buildingCtx = context.buildingResearch
+    ? `\nBuilding: ${JSON.stringify({
+        style: (context.buildingResearch as Record<string, unknown>).building_style,
+        finishes: (context.buildingResearch as Record<string, unknown>).finishes,
+        aesthetic: (context.buildingResearch as Record<string, unknown>).design_aesthetic,
+      })}`
+    : "";
+
+  const aa = context.apartmentAnalysis as Record<string, unknown> | undefined;
+  const apartmentCtx = aa
+    ? `\nApartment overview: ${aa.overall || ""}${aa.rooms ? `\nPer-room summaries: ${JSON.stringify(aa.rooms)}` : ""}`
+    : "";
+
+  const otherRoomsCtx = context.otherRooms?.length
+    ? `\n\n## OTHER ROOMS IN THE APARTMENT
+${context.otherRooms.map((r) => {
+  const parts = [`- **${r.name}** (${r.roomType})`];
+  if (r.designDirection) parts.push(`  Direction: ${r.designDirection}`);
+  if (r.palette?.length) parts.push(`  Palette: ${r.palette.join(", ")}`);
+  if (r.materials?.length) parts.push(`  Materials: ${r.materials.join(", ")}`);
+  if (r.keyItems?.length) parts.push(`  Key items: ${r.keyItems.join("; ")}`);
+  return parts.join("\n");
+}).join("\n")}`
+    : "";
+
+  const floorPlanCtx = context.floorPlan
+    ? `\n\n## FLOOR PLAN / ROOM DIMENSIONS
+Total sqft: ${context.floorPlan.total_sqft || "unknown"}
+Room dimensions: ${JSON.stringify(context.floorPlan.room_dimensions || {})}
+Room layout: ${context.floorPlan.room_layout || "unknown"}
+Living/dining combined: ${context.floorPlan.living_dining_combined ?? "unknown"}
+Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? context.floorPlan.notable_spatial_features.join(", ") : "unknown"}`
+    : "";
+
+  // Build revision history summary
+  let revisionHistoryText = "";
+  if (context.revisionHistory && Object.keys(context.revisionHistory).length > 0) {
+    revisionHistoryText = `\n\n## REVISION HISTORY (what the iterative rounds tried)
+This analysis went through ${context.roundsCompleted} iterative rounds. Here's what changed:\n`;
+    for (const [category, history] of Object.entries(context.revisionHistory)) {
+      revisionHistoryText += `\n### ${category}\n`;
+      for (const entry of history) {
+        revisionHistoryText += `- Round ${entry.round}: score=${entry.score}/10`;
+        if (entry.rootCause) revisionHistoryText += ` | issue: ${entry.rootCause}`;
+        if (entry.searchTitle) revisionHistoryText += ` | title: "${entry.searchTitle}"`;
+        if (entry.specs) revisionHistoryText += ` | specs: "${entry.specs}"`;
+        revisionHistoryText += "\n";
+      }
+    }
+    if (context.stabilizedItems?.length) {
+      revisionHistoryText += `\nItems that stabilized early (locked in): ${context.stabilizedItems.join(", ")}`;
+    }
+    revisionHistoryText += `\n\n⚠️ IMPORTANT: Some items oscillated (flip-flopped between options across rounds). If you see that pattern in the history above, pick the BEST version from the history — don't propose yet another alternative. The iterative rounds already explored the design space.`;
+  }
+
+  content.push({
+    type: "text",
+    text: `You are a LEAD INTERIOR DESIGNER doing the FINAL QUALITY REVIEW of a room design recommendation.
+
+This recommendation has already been through ${context.roundsCompleted} rounds of iterative harmony checking. Your job is to do ONE comprehensive, definitive assessment — not to nitpick endlessly.
+
+## ROOM
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"` : ""}
+
+## DESIGN DIRECTION
+${designDirection}
+
+## SPATIAL LAYOUT
+${spatialLayout || "Not specified"}
+
+## ITEMS TO KEEP
+${whatWorks.length > 0 ? whatWorks.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None specified"}
+
+## ITEMS BEING REMOVED
+${whatShouldGo.length > 0 ? whatShouldGo.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None"}
+
+## CURRENT RECOMMENDED ITEMS (after ${context.roundsCompleted} rounds of refinement)
+${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title}
+   Specs: ${item.specs}
+   Placement: ${item.placement || "not specified"}
+   Priority: ${item.priority}
+   Why: ${item.description}`).join("\n\n")}
+
+${context.mathScoresText || ""}
+${revisionHistoryText}
+
+## YOUR JOB — FINAL COMPREHENSIVE ASSESSMENT
+
+Step 1: Look at the room photos. Understand the actual space, finishes, lighting, dimensions.
+Step 2: Evaluate the FULL SET of recommended items as a cohesive whole — palette coherence, material story, spatial flow, zone definition.
+Step 3: For each item, give a DEFINITIVE score. This is the final word — be fair and realistic.
+Step 4: Decide if the set needs MORE iteration or if it's ready.
+
+### SCORING PHILOSOPHY FOR FINAL ASSESSMENT
+- This is a REAL ROOM design, not a theoretical exercise. Perfect 10/10 on every item is unrealistic.
+- Score based on whether a skilled interior designer would be SATISFIED with this recommendation.
+- 8-10 = would confidently present to client. THESE ARE GOOD.
+- 7 = acceptable but has a specific fixable issue. Only flag needs_more_work if the fix is important.
+- 6 or below = genuinely problematic, needs_more_work = true.
+- Do NOT mark items as needs_more_work for subjective preferences or theoretical improvements.
+- Only mark needs_more_work = true if there's a CONCRETE problem (wrong dimensions, color clash, blocks a door, etc.)
+
+### WHEN TO REQUEST MORE ROUNDS
+Set needs_more_rounds = true ONLY if:
+- 3+ items have needs_more_work = true with concrete, fixable issues
+- There's a systemic problem (e.g., the entire palette doesn't work, or major spatial conflicts)
+Set round_budget to the number of additional rounds needed (0-5). Be conservative — 1-2 rounds usually suffice.
+
+## OUTPUT FORMAT
+Return JSON:
+{
+  "confidence": 0-10,
+  "overall_cohesion": 0-10,
+  "palette_coherence": "assessment of the color story across all items + keeps",
+  "material_coherence": "assessment of the material/texture story",
+  "spatial_flow": "assessment of traffic flow, zones, and spatial relationships",
+  "issues": ["only genuine cross-cutting problems, not nitpicks"],
+  "item_scores": [
+    {
+      "category": "category slug",
+      "final_score": number (1-10),
+      "needs_more_work": true/false,
+      "revised_search_title": "only if needs_more_work is true",
+      "revised_specs": "only if needs_more_work is true",
+      "revised_placement": "only if needs_more_work is true",
+      "root_cause": "only if needs_more_work — the specific fixable issue",
+      "reason": "1-2 sentence assessment"
+    }
+  ],
+  "needs_more_rounds": true/false,
+  "round_budget": number (0-5, how many more rounds if needed)
+}`,
+  });
+
+  let lastError: string | undefined;
+  let attempt = 0;
+
+  try {
+    return await withRetry(
+      async () => {
+        attempt++;
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+          : content;
+
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: 32000,
+          temperature: 0.2,
+          thinkingConfig: { thinkingLevel: "high" },
+          responseMimeType: "application/json",
+        });
+
+        if (response.truncated) {
+          throw new Error("Response truncated (MAX_TOKENS)");
+        }
+
+        const raw = extractJsonObject(response.content);
+        const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+        const parsed = FinalAssessmentResponseSchema.parse(unwrapped);
+        const result: FinalAssessmentResult = {
+          ...parsed,
+          item_scores: parsed.item_scores.map((s) => ({
+            ...s,
+            revised_search_title: s.revised_search_title ?? undefined,
+            revised_specs: s.revised_specs ?? undefined,
+            revised_placement: s.revised_placement ?? undefined,
+            root_cause: s.root_cause ?? undefined,
+          })),
+        };
+
+        log.info("Final assessment complete", {
+          phase: "final-assessment",
+          confidence: result.confidence,
+          cohesion: result.overall_cohesion,
+          items: result.item_scores.length,
+          needsMoreRounds: result.needs_more_rounds,
+          roundBudget: result.round_budget,
+        });
+
+        return {
+          success: true as const,
+          data: result,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+          model: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 15000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          if (error instanceof Error && error.message.includes("truncated")) return true;
+          return false;
+        },
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Final assessment failed";
+          log.warn(`Final assessment retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+        },
+      }
+    );
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Final assessment failed after retries";
+    log.error("Final assessment failed", { error: errMsg });
     return { success: false, error: errMsg };
   }
 }

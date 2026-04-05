@@ -117,6 +117,31 @@ export const HarmonyValidationResponseSchema = z.object({
   revisedAnalysis: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
+// ─── Final Harmony Assessment ─────────────────────────────────
+
+export const FinalAssessmentItemSchema = z.object({
+  category: z.string(),
+  final_score: score,
+  needs_more_work: z.boolean().default(false),
+  revised_search_title: z.string().nullable().optional(),
+  revised_specs: z.string().nullable().optional(),
+  revised_placement: z.string().nullable().optional(),
+  root_cause: z.string().nullable().optional(),
+  reason: z.string().default(""),
+});
+
+export const FinalAssessmentResponseSchema = z.object({
+  confidence: score,
+  overall_cohesion: score,
+  palette_coherence: z.string().default(""),
+  material_coherence: z.string().default(""),
+  spatial_flow: z.string().default(""),
+  issues: stringArray,
+  item_scores: z.array(FinalAssessmentItemSchema).min(1),
+  needs_more_rounds: z.boolean().default(false),
+  round_budget: z.coerce.number().int().min(0).max(5).default(0),
+});
+
 // ─── Product Set Validation ───────────────────────────────────
 
 export const ProductFlagSchema = z.object({
