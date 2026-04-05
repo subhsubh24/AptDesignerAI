@@ -93,9 +93,37 @@ export const BundleEvalResponseSchema = z.object({
 
 // ─── Harmony Validation ───────────────────────────────────────
 
+/** 6-dimensional sub-scores for granular per-item harmony assessment */
+export const HarmonySubScoresSchema = z.object({
+  /** Color/palette fit: harmony with keeps, other items, design palette */
+  color_fit: score,
+  /** Spatial fit: physical fit, clearances, traffic flow, placement validity */
+  spatial_fit: score,
+  /** Material fit: material compatibility, wood/metal coherence, texture story */
+  material_fit: score,
+  /** Style coherence: alignment with design direction, style family, visual weight */
+  style_coherence: score,
+  /** Cross-room fit: apartment-wide palette/material/style coherence */
+  cross_room_fit: score,
+  /** Functional fit: practical use, durability, lifestyle match, acoustic/lighting */
+  functional_fit: score,
+});
+
+/** Pairwise compatibility conflict between two items */
+export const PairwiseConflictSchema = z.object({
+  item_a: z.string(),
+  item_b: z.string(),
+  compatibility: score,
+  conflict_type: z.string().default(""),
+  reason: z.string().default(""),
+});
+
 export const HarmonyItemScoreSchema = z.object({
   category: z.string(),
+  /** Overall harmony score — server-computed from sub_scores via weighted geometric mean */
   harmony_score: score,
+  /** 6-dimensional sub-scores for granular assessment */
+  sub_scores: HarmonySubScoresSchema,
   keeps_well_with: stringArray,
   clashes_with: stringArray,
   revised_search_title: z.string().nullable().optional(),
@@ -111,6 +139,8 @@ export const HarmonyItemScoreSchema = z.object({
 export const HarmonyValidationResponseSchema = z.object({
   confidence: score,
   item_scores: z.array(HarmonyItemScoreSchema).min(1),
+  /** Pairwise conflicts: pairs with compatibility < 9.0 (omitted pairs assumed 9.5+) */
+  pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
   overall_cohesion: score,
   palette_coherence: z.string().default(""),
   material_coherence: z.string().default(""),
@@ -124,6 +154,8 @@ export const HarmonyValidationResponseSchema = z.object({
 export const FinalAssessmentItemSchema = z.object({
   category: z.string(),
   final_score: score,
+  /** 6-dimensional sub-scores for granular assessment */
+  sub_scores: HarmonySubScoresSchema.optional(),
   needs_more_work: z.boolean().default(false),
   revised_search_title: z.string().nullable().optional(),
   revised_specs: z.string().nullable().optional(),
@@ -142,6 +174,8 @@ export const FinalAssessmentResponseSchema = z.object({
   spatial_flow: z.string().default(""),
   issues: stringArray,
   item_scores: z.array(FinalAssessmentItemSchema).min(1),
+  /** Pairwise conflicts: pairs with compatibility < 9.0 */
+  pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
   needs_more_rounds: z.boolean().default(false),
   round_budget: z.coerce.number().int().min(0).max(5).default(0),
 });

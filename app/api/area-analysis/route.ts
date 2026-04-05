@@ -6,6 +6,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
 import { computeHarmonyScores, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
+import { computeFinalHarmonyScore, type MathDimensionCaps } from "@/lib/scoring/harmony-composite";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -430,18 +431,51 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         break;
       }
 
-      // Apply composite scoring: math can veto but not promote AI scores
+      // Apply per-dimension math caps + composite scoring (weighted geometric mean + pairwise penalties)
       const mathItemMap = new Map(
         (latestMathResult?.itemScores || []).map((s) => [s.category, s])
       );
       for (const s of harmony.item_scores) {
         const mathItem = mathItemMap.get(s.category);
-        if (mathItem && mathItem.math_score < 0.95) {
-          const mathCap = Math.round(mathItem.math_score * 100) / 10; // decimal-aware cap
-          if (s.harmony_score > mathCap) {
-            console.log(`[area-analysis] Round ${round}: "${s.category}" AI score ${s.harmony_score} capped to ${mathCap} by math (${mathItem.math_score.toFixed(2)})`);
-            s.harmony_score = mathCap;
-          }
+
+        // Build per-dimension math caps from the math module's outputs
+        const mathCaps: MathDimensionCaps = {};
+        if (latestMathResult) {
+          // Color: use palette_harmony (0-1)
+          mathCaps.color_fit = latestMathResult.color.palette_harmony;
+          // Spatial: combine coverage + clearance (0-1 each, average)
+          mathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+          // Material: combine balance + wood + metal coherence (weighted average)
+          const mat = latestMathResult.material;
+          mathCaps.material_fit = mat.material_balance * 0.3 + mat.wood_coherence * 0.3 + mat.metal_coherence * 0.2 + mat.soft_hard_ratio * 0.2;
+          // Cross-room: use color cross_room_coherence
+          mathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
+        }
+
+        // Compute final harmony score using weighted geometric mean + pairwise penalty
+        const compositeResult = computeFinalHarmonyScore(
+          s.sub_scores,
+          mathCaps,
+          s.category,
+          harmony.pairwise_conflicts || []
+        );
+
+        // Use the LOWER of AI's overall assessment and our computed composite
+        const computedScore = compositeResult.harmony_score;
+        if (computedScore < s.harmony_score) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" composite ${computedScore} < AI ${s.harmony_score} — using composite (geoMean=${compositeResult.composite_before_pairwise}, pairFactor=${compositeResult.pairwise_factor})`);
+          s.harmony_score = computedScore;
+        }
+
+        // Log per-dimension caps if any were applied
+        for (const cap of compositeResult.cappedDimensions) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" ${cap.dimension}: AI=${cap.aiScore} capped to ${cap.mathCap} by math`);
+        }
+
+        // Log worst pairwise conflict
+        if (compositeResult.worstConflict) {
+          const wc = compositeResult.worstConflict;
+          console.log(`[area-analysis] Round ${round}: "${s.category}" pairwise penalty: ${wc.item_a}↔${wc.item_b} compatibility=${wc.compatibility} (${wc.conflict_type}: ${wc.reason})`);
         }
       }
 
@@ -538,6 +572,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         spatial_flow: harmony.spatial_flow,
         issues: harmony.issues,
         item_scores: harmony.item_scores,
+        pairwise_conflicts: harmony.pairwise_conflicts || [],
         math_scores: latestMathResult ? {
           overall: latestMathResult.overall,
           color: latestMathResult.color,
@@ -690,6 +725,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         item_scores: final.item_scores.map((s) => ({
           category: s.category,
           harmony_score: s.final_score,
+          sub_scores: s.sub_scores,
           keeps_well_with: [] as string[],
           clashes_with: [] as string[],
           revised_search_title: s.revised_search_title,
@@ -700,6 +736,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           reason: s.reason,
           rationale: s.rationale,
         })),
+        pairwise_conflicts: final.pairwise_conflicts || [],
         math_scores: {
           overall: latestMathResult.overall,
           color: latestMathResult.color,
@@ -750,18 +787,20 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           const harmony = harmonyResult.data;
           if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) break;
 
-          // Apply math capping
-          const mathItemMap = new Map(
-            (latestMathResult?.itemScores || []).map((s) => [s.category, s])
-          );
+          // Apply per-dimension composite scoring (same as main loop)
           for (const s of harmony.item_scores) {
-            const mathItem = mathItemMap.get(s.category);
-            if (mathItem && mathItem.math_score < 0.95) {
-              const mathCap = Math.round(mathItem.math_score * 100) / 10;
-              if (s.harmony_score > mathCap) {
-                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" AI score ${s.harmony_score} capped to ${mathCap} by math (${mathItem.math_score.toFixed(2)})`);
-                s.harmony_score = mathCap;
-              }
+            const postMathCaps: MathDimensionCaps = {};
+            if (latestMathResult) {
+              postMathCaps.color_fit = latestMathResult.color.palette_harmony;
+              postMathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+              const postMat = latestMathResult.material;
+              postMathCaps.material_fit = postMat.material_balance * 0.3 + postMat.wood_coherence * 0.3 + postMat.metal_coherence * 0.2 + postMat.soft_hard_ratio * 0.2;
+              postMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
+            }
+            const compositeResult = computeFinalHarmonyScore(s.sub_scores, postMathCaps, s.category, harmony.pairwise_conflicts || []);
+            if (compositeResult.harmony_score < s.harmony_score) {
+              console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" composite ${compositeResult.harmony_score} < AI ${s.harmony_score} — using composite`);
+              s.harmony_score = compositeResult.harmony_score;
             }
           }
 

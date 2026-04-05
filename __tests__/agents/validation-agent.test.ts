@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import type { ValidationResult, HarmonyValidationResult } from "@/lib/agents/validation-agent";
+import type { ValidationResult, HarmonyValidationResult, HarmonySubScores } from "@/lib/agents/validation-agent";
+
+/** Helper to create default sub_scores for test fixtures */
+function makeSubScores(overrides: Partial<HarmonySubScores> = {}): HarmonySubScores {
+  return {
+    color_fit: 8, spatial_fit: 8, material_fit: 8,
+    style_coherence: 8, cross_room_fit: 8, functional_fit: 8,
+    ...overrides,
+  };
+}
 
 /**
  * Tests for validation agent interfaces and data contracts.
@@ -91,13 +100,14 @@ describe("ValidationResult interface", () => {
 });
 
 describe("HarmonyValidationResult interface", () => {
-  it("should represent full harmony validation output", () => {
+  it("should represent full harmony validation output with sub_scores", () => {
     const result: HarmonyValidationResult = {
       confidence: 9,
       item_scores: [
         {
           category: "coffee_table",
           harmony_score: 8,
+          sub_scores: makeSubScores({ color_fit: 9, material_fit: 9 }),
           keeps_well_with: ["walnut media console"],
           clashes_with: [],
           drop: false,
@@ -106,6 +116,7 @@ describe("HarmonyValidationResult interface", () => {
         {
           category: "area_rug",
           harmony_score: 5,
+          sub_scores: makeSubScores({ spatial_fit: 4, color_fit: 7 }),
           keeps_well_with: [],
           clashes_with: ["blocks south window light path"],
           revised_search_title: "8x10 wool rug warm ivory",
@@ -113,6 +124,15 @@ describe("HarmonyValidationResult interface", () => {
           revised_placement: "Centered under seating, 12 inches from south wall",
           drop: false,
           reason: "9x12 is too large — would swallow the room",
+        },
+      ],
+      pairwise_conflicts: [
+        {
+          item_a: "coffee_table",
+          item_b: "area_rug",
+          compatibility: 6.5,
+          conflict_type: "scale_conflict",
+          reason: "Rug too large relative to coffee table placement",
         },
       ],
       overall_cohesion: 8,
@@ -125,6 +145,11 @@ describe("HarmonyValidationResult interface", () => {
     expect(result.confidence).toBe(9);
     expect(result.item_scores).toHaveLength(2);
     expect(result.spatial_flow).toBeTruthy();
+    expect(result.pairwise_conflicts).toHaveLength(1);
+
+    // Check sub_scores are present
+    expect(result.item_scores[0].sub_scores.color_fit).toBe(9);
+    expect(result.item_scores[1].sub_scores.spatial_fit).toBe(4);
 
     // Check that revised items have all revision fields
     const revised = result.item_scores.find((s) => s.revised_search_title);
@@ -140,12 +165,14 @@ describe("HarmonyValidationResult interface", () => {
         {
           category: "pendant_light",
           harmony_score: 2,
+          sub_scores: makeSubScores({ spatial_fit: 1, functional_fit: 2, style_coherence: 3 }),
           keeps_well_with: [],
           clashes_with: ["existing recessed lighting", "ceiling height too low"],
           drop: true,
           reason: "Pendant would hang too low in 8ft ceiling room with recessed lights already installed",
         },
       ],
+      pairwise_conflicts: [],
       overall_cohesion: 7,
       palette_coherence: "OK",
       material_coherence: "OK",
