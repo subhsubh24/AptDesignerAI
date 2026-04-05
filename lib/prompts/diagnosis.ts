@@ -1,6 +1,6 @@
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 
-export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string): string {
+export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string, otherRoomsContext?: string): string {
   // Parse user context into structured constraints
   const parsed = userContext ? parseUserContext(userContext) : null;
   const parsedSections = parsed ? formatParsedContextForPrompt(parsed) : "";
@@ -28,7 +28,11 @@ These items are NON-NEGOTIABLE. The client explicitly chose to keep them. Your j
 - Items to keep: ${allKeepItems.length > 0 ? allKeepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
-${parsedSections ? `\n${parsedSections}\n` : ""}
+${parsedSections ? `\n${parsedSections}\n` : ""}${otherRoomsContext ? `
+## CROSS-ROOM COHERENCE
+${otherRoomsContext}
+IMPORTANT: Your design direction for this room should be compatible with the other rooms. The apartment should feel like one cohesive home — not identical rooms, but harmonious palettes, complementary materials, and a consistent aesthetic thread. If another room uses walnut and brass, this room should either echo those materials or use something that complements them (not clashes).
+` : ""}
 ## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
 
 ### Step 1: OBSERVE the room (spend the most time here)

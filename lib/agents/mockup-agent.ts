@@ -35,6 +35,7 @@ export interface MockupContext {
   windowDoorPositions?: string;
   priorities?: string[];
   userContext?: string;
+  iterationNotes?: string;
 }
 
 /**

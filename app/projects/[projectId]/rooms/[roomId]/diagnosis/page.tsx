@@ -6,8 +6,15 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
+import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight, RotateCcw } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
+
+interface DiagnosisStep {
+  step: string;
+  status: "running" | "done" | "error";
+  detail?: string;
+}
 
 export default function DiagnosisPage() {
   const params = useParams();
@@ -22,7 +29,7 @@ export default function DiagnosisPage() {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasDiagnosis, setHasDiagnosis] = useState(false);
+  const [steps, setSteps] = useState<DiagnosisStep[]>([]);
 
   useEffect(() => {
     async function loadExisting() {
@@ -30,8 +37,8 @@ export default function DiagnosisPage() {
       if (res.ok) {
         const room = await res.json();
         if (room.status !== "setup") {
-          const diagRes = await fetch(`/api/diagnosis?room_id=${roomId}`);
-          setHasDiagnosis(room.status !== "setup");
+          // Room already diagnosed — could load existing diagnosis
+          // For now, just note it exists
         }
       }
     }
@@ -41,20 +48,74 @@ export default function DiagnosisPage() {
   const handleRunDiagnosis = async () => {
     setLoading(true);
     setError(null);
+    setSteps([]);
+
     try {
-      const res = await fetch("/api/diagnosis", {
+      const res = await fetch("/api/diagnosis/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId }),
       });
+
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Diagnosis failed");
       }
-      const data = await res.json();
-      setDiagnosis(data);
+
+      if (!res.body) {
+        throw new Error("No response stream");
+      }
+
+      // Parse SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.substring(7).trim();
+          } else if (line.startsWith("data: ") && currentEvent) {
+            try {
+              const data = JSON.parse(line.substring(6));
+
+              if (currentEvent === "step") {
+                setSteps((prev) => {
+                  const existing = prev.findIndex((s) => s.step === data.step);
+                  if (existing >= 0) {
+                    const updated = [...prev];
+                    updated[existing] = data;
+                    return updated;
+                  }
+                  return [...prev, data];
+                });
+              } else if (currentEvent === "done") {
+                setDiagnosis(data.diagnosis);
+                toast.success("Diagnosis complete!", "Your room has been analyzed successfully.");
+              } else if (currentEvent === "error") {
+                throw new Error(data.error);
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
+                throw parseErr;
+              }
+            }
+            currentEvent = "";
+          }
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      toast.error("Diagnosis failed", message);
     } finally {
       setLoading(false);
     }
@@ -97,16 +158,47 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
-      {error && (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
+      {/* Progress Steps */}
+      {loading && steps.length > 0 && (
+        <Card>
+          <CardContent className="py-6">
+            <div className="space-y-3">
+              {steps.map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  {step.status === "running" ? (
+                    <Loader2 className="h-4 w-4 text-accent-warm animate-spin shrink-0" />
+                  ) : step.status === "done" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{step.step}</p>
+                    {step.detail && (
+                      <p className="text-xs text-muted-foreground">{step.detail}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {!diagnosis && !loading && (
+      {error && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <p className="text-sm text-destructive flex-1">{error}</p>
+            <Button onClick={handleRunDiagnosis} variant="outline" size="sm">
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!diagnosis && !loading && !error && (
         <Card className="border-dashed border-2">
           <CardContent className="flex flex-col items-center justify-center py-20">
             <div className="h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-5">

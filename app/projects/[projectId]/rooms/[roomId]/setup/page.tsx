@@ -28,6 +28,7 @@ export default function RoomSetupPage() {
   const [room, setRoom] = useState<Record<string, unknown> | null>(null);
   const [images, setImages] = useState<{ id: string; url: string }[]>([]);
   const [budgetMode, setBudgetMode] = useState("balanced");
+  const [budgetDollars, setBudgetDollars] = useState<string>("");
   const [sourcingMode, setSourcingMode] = useState("manual");
   const [keepItems, setKeepItems] = useState("");
   const [replaceItems, setReplaceItems] = useState("");
@@ -41,6 +42,7 @@ export default function RoomSetupPage() {
         const data = await res.json();
         setRoom(data);
         setBudgetMode(data.budget_mode || "balanced");
+        setBudgetDollars(data.budget_dollars ? String(data.budget_dollars) : "");
         setSourcingMode(data.sourcing_mode || "manual");
         setKeepItems((data.keep_items || []).join(", "));
         setReplaceItems((data.replace_items || []).join(", "));
@@ -64,6 +66,7 @@ export default function RoomSetupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           budget_mode: budgetMode,
+          budget_dollars: budgetDollars ? parseInt(budgetDollars, 10) : null,
           sourcing_mode: sourcingMode,
           keep_items: keepItems.split(",").map((s) => s.trim()).filter(Boolean),
           replace_items: replaceItems.split(",").map((s) => s.trim()).filter(Boolean),
@@ -157,6 +160,25 @@ export default function RoomSetupPage() {
                 <SelectItem value="best_possible">Best Possible</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Total Budget (optional)</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+              <Input
+                type="number"
+                placeholder="e.g., 3000"
+                value={budgetDollars}
+                onChange={(e) => setBudgetDollars(e.target.value)}
+                className="pl-7"
+                min={0}
+                step={100}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Set a target budget to track spending against. Leave blank if flexible.
+            </p>
           </div>
 
           <div className="grid gap-2">

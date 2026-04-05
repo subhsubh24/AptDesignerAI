@@ -30,7 +30,8 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
     ctx.keepItems,
     ctx.replaceItems,
     ctx.priorities,
-    ctx.userContext
+    ctx.userContext,
+    ctx.otherRoomsContext
   );
 
   // Build message with images

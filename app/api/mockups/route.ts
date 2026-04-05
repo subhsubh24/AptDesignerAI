@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage } from "@/lib/agents/mockup-agent";
 import type { MockupContext } from "@/lib/agents/mockup-agent";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -28,8 +29,17 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Rate limit
+  const limit = checkRateLimit(`mockup:${user.id}`, RATE_LIMITS.mockup);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many mockup requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
+    );
+  }
+
   const body = await request.json();
-  const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description } = body;
+  const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description, iteration_notes } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
@@ -112,6 +122,10 @@ export async function POST(request: Request) {
     const userContextSection = room.user_context ? `\nUser notes: "${room.user_context}" — respect these notes in the visualization.` : "";
     const prioritiesSection = room.priorities?.length ? `\nClient priorities: ${room.priorities.join(", ")}` : "";
 
+    const iterationSection = iteration_notes
+      ? `\n\nITERATION FEEDBACK — The user has seen a previous version and wants these changes:\n"${iteration_notes}"\nApply these changes while keeping everything else the same.`
+      : "";
+
     const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
 
 CRITICAL — MATCH THE ACTUAL ROOM:
@@ -128,7 +142,7 @@ ${archContext}
 Design direction: ${design_direction || "modern, cohesive apartment design"}${paletteSection}${materialsSection}${texturesSection}${spatialSection}${lightingSection}${windowDoorSection}${prioritiesSection}${userContextSection}${keepSection}
 
 New furniture and decor to place in the room:
-${items_description || "All recommended furniture and decor items from the diagnosis"}
+${items_description || "All recommended furniture and decor items from the diagnosis"}${iterationSection}
 
 RULES:
 - The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos — same colors, same materials, same proportions.
@@ -233,6 +247,7 @@ RULES:
     windowDoorPositions,
     priorities: room.priorities || undefined,
     userContext: room.user_context || undefined,
+    iterationNotes: iteration_notes || undefined,
   };
 
   const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, stdExistingItems, designDir, buildingResearch, mockupCtx);

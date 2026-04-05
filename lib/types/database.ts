@@ -38,6 +38,7 @@ export interface Room {
   name: string;
   room_type: RoomType;
   budget_mode: BudgetMode;
+  budget_dollars: number | null;
   sourcing_mode: SourcingMode;
   priorities: string[];
   keep_items: string[];

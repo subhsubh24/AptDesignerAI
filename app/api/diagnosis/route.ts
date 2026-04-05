@@ -4,6 +4,8 @@ import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
 import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import type { AgentContext } from "@/lib/agents/types";
 
 export async function POST(request: Request) {
@@ -11,9 +13,20 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Rate limit
+  const limit = checkRateLimit(`diagnosis:${user.id}`, RATE_LIMITS.diagnosis);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many diagnosis requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
+    );
+  }
+
   const body = await request.json();
   const { room_id } = body;
-  if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!room_id || typeof room_id !== "string") {
+    return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  }
 
   // Fetch room + images
   const { data: room } = await supabase
@@ -45,6 +58,10 @@ export async function POST(request: Request) {
 
   const profile = buildDesignProfile(project);
 
+  // Sanitize user context before it enters the AI pipeline
+  const rawUserContext = room.user_context || undefined;
+  const sanitized = rawUserContext ? sanitizeUserContext(rawUserContext) : null;
+
   // Build context and run diagnosis
   const ctx: AgentContext = {
     roomId: room_id,
@@ -55,7 +72,7 @@ export async function POST(request: Request) {
     budgetMode: room.budget_mode,
     sourcingMode: room.sourcing_mode,
     imageUrls,
-    userContext: room.user_context || undefined,
+    userContext: sanitized?.sanitized || rawUserContext,
   };
 
   const result = await runRoomDiagnosis(ctx, profile);

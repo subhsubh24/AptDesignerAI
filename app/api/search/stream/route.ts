@@ -3,6 +3,7 @@ import { runAgenticSearch } from "@/lib/agents/orchestrator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import type { AgentContext } from "@/lib/agents/types";
 
 /**
@@ -27,6 +28,15 @@ export async function POST(request: Request) {
 
   if (!room_id) {
     return new Response(JSON.stringify({ error: "room_id required" }), { status: 400 });
+  }
+
+  // Rate limit
+  const limit = checkRateLimit(`search:${user.id}`, RATE_LIMITS.search);
+  if (!limit.allowed) {
+    return new Response(
+      JSON.stringify({ error: "Too many search requests. Please wait a moment." }),
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
+    );
   }
 
   // Fetch room
