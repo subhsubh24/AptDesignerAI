@@ -1,22 +1,34 @@
+import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+
 export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string): string {
+  // Parse user context into structured constraints
+  const parsed = userContext ? parseUserContext(userContext) : null;
+  const parsedSections = parsed ? formatParsedContextForPrompt(parsed) : "";
+
+  // Merge keep items from explicit list + parsed context
+  const allKeepItems = [
+    ...keepItems,
+    ...(parsed?.additionalKeepItems || []),
+  ];
+
   const userNotes = userContext
     ? `\n- User notes about this room: "${userContext}"\nIMPORTANT: Take these notes into account. If they mention something not visible in photos, incorporate that. If they say to ignore something, exclude it from your assessment. If they express a preference for keeping or liking something, RESPECT that — design around it.`
     : "";
 
-  const keepItemsWarning = keepItems.length > 0
+  const keepItemsWarning = allKeepItems.length > 0
     ? `\n\n## ⚠️ ITEMS THE CLIENT WANTS TO KEEP — DO NOT SUGGEST REMOVING THESE
-${keepItems.map((item) => `- ${item}`).join("\n")}
-These items are NON-NEGOTIABLE. The client explicitly chose to keep them. Your job is to design AROUND these pieces and make them work within the design direction. Include them in "what_is_working" and explain how the design will complement them. NEVER put these in "what_is_not_working" or suggest they should be replaced.`
+${allKeepItems.map((item) => `- ${item}`).join("\n")}
+These items are NON-NEGOTIABLE. The client explicitly chose to keep them. Your job is to design AROUND these pieces and make them work within the design direction. Include them in "what_is_working" and explain how the design will complement them. NEVER put these in "what_is_not_working" or suggest they should be replaced. NEVER recommend a replacement item in the same category as a kept item (e.g., if they're keeping a floor lamp, do NOT recommend a new floor lamp).`
     : "";
 
   return `Analyze the room photos provided and produce a comprehensive room diagnosis.
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
-- Items to keep: ${keepItems.length > 0 ? keepItems.join(", ") : "none specified"}
+- Items to keep: ${allKeepItems.length > 0 ? allKeepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
-
+${parsedSections ? `\n${parsedSections}\n` : ""}
 ## STEP-BY-STEP ANALYSIS PROCESS — Follow this order exactly:
 
 ### Step 1: OBSERVE the room (spend the most time here)
@@ -27,6 +39,7 @@ Look at EVERY photo carefully. For each photo, note:
 - Ceiling: Height estimate? Any features (molding, beams, recessed lights)?
 - Every piece of furniture: Name it, describe its material, color, condition, and approximate size
 - Lighting: What fixtures exist? Where are dark corners? How much natural light?
+- Personal items and decor: Note culturally significant or personal items (statues, art, collections) — these may be important to the client
 
 ### Step 2: ASSESS what's working
 For each item you're keeping or that works well, explain specifically WHY it works.
@@ -138,6 +151,11 @@ Return a JSON object with this exact structure:
 - Did I list ALL missing furniture categories (usually 6-12)?
 - Did I provide specific color names (not just "neutral" or "warm")?
 - Did I include 6+ recommended_palette colors, 5+ materials, 4+ textures?
+- ⚠️ Did I CHECK that NONE of my recommendations conflict with the client's EXCLUSIONS?
+- ⚠️ Did I CHECK that NONE of my recommendations replace an item the client wants to KEEP?
+- ⚠️ Did I include ALL items the client EXPLICITLY REQUESTED?
+- ⚠️ If the client used PLURAL for a request (e.g., "plants", "decor"), did I recommend MULTIPLE items in that category?
+- ⚠️ Did I note any culturally significant or personal items (statues, figurines, art) visible in the photos?
 
 Be specific and opinionated. Reference actual items visible in the photos. This is not a generic analysis — it is tailored to this specific apartment and space.`;
 }

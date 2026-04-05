@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
+import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import type { AgentContext } from "@/lib/agents/types";
@@ -67,15 +68,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error || "Diagnosis failed" }, { status: 500 });
   }
 
+  // Validate diagnosis against user constraints (exclusions, keep items, explicit requests)
+  const validation = validateDiagnosis(
+    result.data,
+    ctx.keepItems,
+    ctx.userContext
+  );
+
+  // Use the patched version (violations auto-corrected)
+  const diagnosisData = validation.patched;
+
   // Save diagnosis
   const { data: diagnosis, error: saveError } = await supabase
     .from("room_diagnoses")
     .insert({
       room_id,
-      diagnosis_json: result.data.diagnosis,
-      design_direction_json: result.data.design_direction,
-      missing_categories: result.data.missing_categories,
-      action_list: result.data.action_list,
+      diagnosis_json: diagnosisData.diagnosis,
+      design_direction_json: diagnosisData.design_direction,
+      missing_categories: diagnosisData.missing_categories,
+      action_list: diagnosisData.action_list,
       model_used: result.model,
     })
     .select()
@@ -94,9 +105,20 @@ export async function POST(request: Request) {
   // Complete agent run
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
-    output_json: result.data as unknown as Record<string, unknown>,
+    output_json: {
+      ...diagnosisData as unknown as Record<string, unknown>,
+      _validation: {
+        issues: validation.issues,
+        wasModified: validation.wasModified,
+      },
+    },
     tokens_used: result.tokensUsed,
   });
 
-  return NextResponse.json(diagnosis, { status: 201 });
+  return NextResponse.json({
+    ...diagnosis,
+    _validation: validation.issues.length > 0
+      ? { issueCount: validation.issues.length, issues: validation.issues }
+      : undefined,
+  }, { status: 201 });
 }
