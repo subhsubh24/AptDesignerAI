@@ -5,6 +5,7 @@ import { lookupColor, type HSL } from "./lookups";
 export interface ColorHarmonyResult {
   palette_harmony: number; // 0-1
   cross_room_coherence: number; // 0-1
+  per_item_color_fit: Map<string, number>; // category → 0-1 score for how well item's colors fit the palette
   pair_conflicts: Array<{
     color1: string;
     color2: string;
@@ -165,11 +166,26 @@ function classifyPairRelationship(hsl1: HSL, hsl2: HSL): ColorRelationship {
 function classifyPaletteScheme(
   hsls: HSL[]
 ): { scheme: string; score: number } {
-  const chromatic = hsls.filter((c) => c.s >= 10);
-  if (chromatic.length === 0) return { scheme: "neutral", score: 0.9 };
+  const neutrals = hsls.filter((c) => c.s < 10);
+  const lowSat = hsls.filter((c) => c.s >= 10 && c.s < 25);
+  const chromatic = hsls.filter((c) => c.s >= 25);
+
+  // All neutrals → great, very common in design
+  if (chromatic.length === 0 && lowSat.length === 0) return { scheme: "neutral", score: 0.92 };
+
+  // Neutral-dominant with muted tones (e.g., warm beige, greige, taupe) → very common
+  if (chromatic.length === 0) return { scheme: "tonal", score: 0.93 };
+
+  // Neutral-dominant with 1-2 accent colors — the most common interior design palette
+  const neutralAndLowSat = neutrals.length + lowSat.length;
+  if (chromatic.length <= 2 && neutralAndLowSat >= chromatic.length) {
+    return { scheme: "neutral-accent", score: 0.94 };
+  }
+
+  // If only 1 chromatic color (rest are low-sat), that's a monochromatic accent
   if (chromatic.length === 1) return { scheme: "monochromatic-accent", score: 0.95 };
 
-  // Count relationship types
+  // For chromatic-heavy palettes, analyze relationships
   const rels: Record<string, number> = {};
   for (let i = 0; i < chromatic.length; i++) {
     for (let j = i + 1; j < chromatic.length; j++) {
@@ -181,24 +197,28 @@ function classifyPaletteScheme(
   const totalPairs = (chromatic.length * (chromatic.length - 1)) / 2;
   const dominantRel = Object.entries(rels).sort((a, b) => b[1] - a[1])[0];
 
-  if (!dominantRel) return { scheme: "mixed", score: 0.7 };
+  if (!dominantRel) return { scheme: "mixed", score: 0.8 };
 
   const dominance = dominantRel[1] / totalPairs;
 
-  // Harmonious schemes score higher
+  // Interior-design-appropriate scoring: even "unrelated" chromatic colors
+  // can work if the rest of the palette provides enough neutral grounding
+  const neutralRatio = neutralAndLowSat / hsls.length;
+
   const schemeScores: Record<string, number> = {
     monochromatic: 0.95,
-    analogous: 0.9,
-    complementary: 0.85,
-    "split-complementary": 0.8,
-    triadic: 0.75,
-    neutral: 0.85,
-    unrelated: 0.4,
+    analogous: 0.92,
+    complementary: 0.88,
+    "split-complementary": 0.85,
+    triadic: 0.80,
+    neutral: 0.90,
+    // "unrelated" chromatic colors are okay if grounded by neutrals
+    unrelated: 0.65 + neutralRatio * 0.2, // 0.65 to 0.85 depending on neutral grounding
   };
 
-  const baseScore = schemeScores[dominantRel[0]] || 0.5;
-  // Higher dominance = more coherent palette
-  const score = baseScore * (0.5 + 0.5 * dominance);
+  const baseScore = schemeScores[dominantRel[0]] || 0.7;
+  // Higher dominance = more coherent palette, but floor at 0.7 (not 0.5)
+  const score = baseScore * (0.7 + 0.3 * dominance);
 
   return { scheme: dominantRel[0], score };
 }
@@ -279,7 +299,7 @@ export function computeColorHarmony(
 
   if (resolved.length === 0) {
     // Can't compute, return neutral
-    return { palette_harmony: 0.5, cross_room_coherence: 1.0, pair_conflicts: [] };
+    return { palette_harmony: 0.5, cross_room_coherence: 1.0, per_item_color_fit: new Map(), pair_conflicts: [] };
   }
 
   // 1. Palette harmony score
@@ -307,6 +327,63 @@ export function computeColorHarmony(
   const conflictPenalty = Math.min(pairConflicts.length * 0.1, 0.3);
   const finalPaletteHarmony = Math.max(0, paletteScore - conflictPenalty);
 
+  // 3. Per-item color fit: measure how well each item's colors integrate with the palette
+  const paletteHsls = resolved.map((r) => r.hsl);
+  const perItemColorFit = new Map<string, number>();
+  for (const item of whatItNeeds) {
+    if (!item.specs || !item.category) continue;
+
+    // Extract colors from this item's specs
+    const itemColors: HSL[] = [];
+    const words = item.specs.toLowerCase().split(/[,;/\-\s]+/);
+    for (let i = 0; i < words.length; i++) {
+      if (i < words.length - 1) {
+        const twoWord = `${words[i]} ${words[i + 1]}`;
+        const hsl = lookupColor(twoWord);
+        if (hsl) { itemColors.push(hsl); continue; }
+      }
+      const hsl = lookupColor(words[i]);
+      if (hsl) itemColors.push(hsl);
+    }
+
+    if (itemColors.length === 0) {
+      // No colors detected in specs → can't penalize, assume it fits
+      perItemColorFit.set(item.category, 0.95);
+      continue;
+    }
+
+    // Measure average Delta-E between item colors and the palette
+    let totalDe = 0;
+    let count = 0;
+    for (const itemHsl of itemColors) {
+      const itemLab = hslToLab(itemHsl);
+      // Find the closest palette color (min Delta-E)
+      let minDe = Infinity;
+      for (const palHsl of paletteHsls) {
+        const de = deltaE2000(itemLab, hslToLab(palHsl));
+        if (de < minDe) minDe = de;
+      }
+      totalDe += minDe;
+      count++;
+    }
+
+    const avgMinDe = count > 0 ? totalDe / count : 0;
+    // Delta-E interpretation for palette fit:
+    // 0-5: excellent match (score 1.0)
+    // 5-15: good match (0.85-1.0)
+    // 15-30: acceptable accent (0.70-0.85)
+    // 30-50: distant but may work (0.55-0.70)
+    // 50+: clashing (0.40-0.55)
+    let itemFit: number;
+    if (avgMinDe <= 5) itemFit = 1.0;
+    else if (avgMinDe <= 15) itemFit = 1.0 - 0.15 * ((avgMinDe - 5) / 10);
+    else if (avgMinDe <= 30) itemFit = 0.85 - 0.15 * ((avgMinDe - 15) / 15);
+    else if (avgMinDe <= 50) itemFit = 0.70 - 0.15 * ((avgMinDe - 30) / 20);
+    else itemFit = Math.max(0.40, 0.55 - 0.01 * (avgMinDe - 50));
+
+    perItemColorFit.set(item.category, Math.round(itemFit * 100) / 100);
+  }
+
   // 3. Cross-room coherence
   const otherRoomHsls: HSL[][] = [];
   if (context.otherRooms) {
@@ -330,6 +407,7 @@ export function computeColorHarmony(
   return {
     palette_harmony: Math.round(finalPaletteHarmony * 100) / 100,
     cross_room_coherence: Math.round(crossRoomCoherence * 100) / 100,
+    per_item_color_fit: perItemColorFit,
     pair_conflicts: pairConflicts,
   };
 }

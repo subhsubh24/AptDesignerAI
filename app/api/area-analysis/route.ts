@@ -441,8 +441,18 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         // Build per-dimension math caps from the math module's outputs
         const mathCaps: MathDimensionCaps = {};
         if (latestMathResult) {
-          // Color: use palette_harmony (0-1)
-          mathCaps.color_fit = latestMathResult.color.palette_harmony;
+          // Color: use per-item color fit if available, fall back to palette_harmony
+          // Per-item scoring measures how well THIS item's colors fit the palette,
+          // rather than applying a single global penalty to every item
+          const perItemFit = latestMathResult.color.per_item_color_fit?.get(s.category);
+          if (perItemFit !== undefined) {
+            // Blend per-item fit (70%) with palette harmony (30%) — the palette
+            // harmony provides a baseline coherence signal while per-item fit
+            // captures whether this specific item's colors work
+            mathCaps.color_fit = perItemFit * 0.7 + latestMathResult.color.palette_harmony * 0.3;
+          } else {
+            mathCaps.color_fit = latestMathResult.color.palette_harmony;
+          }
           // Spatial: combine coverage + clearance (0-1 each, average)
           mathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
           // Material: combine balance + wood + metal coherence (weighted average)
@@ -510,10 +520,23 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           continue;
         }
 
-        // (B) Stale detection: revised last round but score didn't improve → lock in
+        // (B) Stale detection: revised last round but score didn't improve → revert to best version and lock in
         const prevScore = prevRoundScores.get(s.category);
         if (prevScore !== undefined && previouslyRevised.has(s.category) && s.harmony_score <= prevScore) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" stale — score ${s.harmony_score}/10 (was ${prevScore}) after revision, locked in`);
+          // Revert to the best-ever version instead of locking in the degraded score
+          const bestVersion = bestVersions.get(s.category);
+          const bestScore = bestScores.get(s.category) || s.harmony_score;
+          if (bestVersion && bestScore > s.harmony_score) {
+            console.log(`[area-analysis] Round ${round}: "${s.category}" stale — score ${s.harmony_score}/10 (was ${prevScore}) after revision, reverting to best version (score ${bestScore})`);
+            const item = needs.find((n) => n.category === s.category);
+            if (item) {
+              if (bestVersion.searchTitle) item.search_title = bestVersion.searchTitle;
+              if (bestVersion.specs) item.specs = bestVersion.specs;
+              if (bestVersion.placement) item.placement = bestVersion.placement;
+            }
+          } else {
+            console.log(`[area-analysis] Round ${round}: "${s.category}" stale — score ${s.harmony_score}/10 (was ${prevScore}) after revision, locked in`);
+          }
           stabilizedItems.add(s.category);
           continue;
         }
@@ -575,7 +598,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         pairwise_conflicts: harmony.pairwise_conflicts || [],
         math_scores: latestMathResult ? {
           overall: latestMathResult.overall,
-          color: latestMathResult.color,
+          color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
           spatial: latestMathResult.spatial,
           material: latestMathResult.material,
           proportion: latestMathResult.proportion,
@@ -739,7 +762,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         pairwise_conflicts: final.pairwise_conflicts || [],
         math_scores: {
           overall: latestMathResult.overall,
-          color: latestMathResult.color,
+          color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
           spatial: latestMathResult.spatial,
           material: latestMathResult.material,
           proportion: latestMathResult.proportion,
@@ -791,7 +814,13 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           for (const s of harmony.item_scores) {
             const postMathCaps: MathDimensionCaps = {};
             if (latestMathResult) {
-              postMathCaps.color_fit = latestMathResult.color.palette_harmony;
+              // Use per-item color fit if available (same logic as main loop)
+              const postPerItemFit = latestMathResult.color.per_item_color_fit?.get(s.category);
+              if (postPerItemFit !== undefined) {
+                postMathCaps.color_fit = postPerItemFit * 0.7 + latestMathResult.color.palette_harmony * 0.3;
+              } else {
+                postMathCaps.color_fit = latestMathResult.color.palette_harmony;
+              }
               postMathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
               const postMat = latestMathResult.material;
               postMathCaps.material_fit = postMat.material_balance * 0.3 + postMat.wood_coherence * 0.3 + postMat.metal_coherence * 0.2 + postMat.soft_hard_ratio * 0.2;
@@ -855,7 +884,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
             rounds_completed: postRound,
             math_scores: {
               overall: latestMathResult.overall,
-              color: latestMathResult.color,
+              color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
               spatial: latestMathResult.spatial,
               material: latestMathResult.material,
               proportion: latestMathResult.proportion,

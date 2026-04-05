@@ -63,6 +63,31 @@ export interface MathDimensionCaps {
  * Math can veto (cap) AI scores but never promote them.
  * Returns the capped sub-scores and a list of dimensions that were capped.
  */
+/**
+ * Convert a math score (0-1) to a cap value on the 0-10 scale.
+ *
+ * Uses a softened curve instead of linear mapping to avoid being overly
+ * punitive. The geometric mean already penalizes low scores aggressively,
+ * so the cap doesn't need to be equally harsh.
+ *
+ * Mapping:
+ *  math 0.90+ → no cap (handled by threshold check)
+ *  math 0.80  → cap at 8.5 (not 8.0)
+ *  math 0.70  → cap at 7.5 (not 7.0)
+ *  math 0.50  → cap at 5.5 (not 5.0)
+ *  math 0.30  → cap at 4.0 (not 3.0)
+ *  math 0.00  → cap at 2.0 (not 0.0 — floor)
+ */
+function mathToCapValue(mathNormalized: number): number {
+  // Floor at 2.0/10 — no dimension should be capped to near-zero
+  // since that creates catastrophic geometric mean collapse
+  const floor = 2.0;
+  const ceiling = 10.0;
+  // Softened mapping: sqrt curve gives more headroom to moderate scores
+  const softened = floor + (ceiling - floor) * Math.sqrt(mathNormalized);
+  return Math.round(softened * 10) / 10;
+}
+
 export function applyMathCaps(
   subScores: HarmonySubScores,
   mathCaps: MathDimensionCaps
@@ -71,9 +96,9 @@ export function applyMathCaps(
   const cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number }> = [];
 
   for (const [dim, mathNormalized] of Object.entries(mathCaps)) {
-    if (mathNormalized === undefined || mathNormalized >= 0.95) continue;
+    if (mathNormalized === undefined || mathNormalized >= 0.90) continue;
     const key = dim as keyof HarmonySubScores;
-    const mathCap = Math.round(mathNormalized * 100) / 10; // 0-1 → 0-10 with one decimal
+    const mathCap = mathToCapValue(mathNormalized);
     if (capped[key] > mathCap) {
       cappedDimensions.push({ dimension: dim, aiScore: capped[key], mathCap });
       capped[key] = mathCap;
