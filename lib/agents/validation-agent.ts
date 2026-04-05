@@ -9,6 +9,7 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
+import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores, type PairwiseConflict as CompositePairwiseConflict } from "@/lib/scoring/harmony-composite";
 
 const log = createLogger("validation-agent");
 
@@ -23,9 +24,12 @@ export interface ValidationResult {
     title: string;
     category: string;
     harmony_score: number;
+    sub_scores?: HarmonySubScores;
     clashes_with: string[];
     reason: string;
   }>;
+  /** Pairwise conflicts between products (pairs with compatibility < 9.0) */
+  pairwise_conflicts?: PairwiseConflict[];
 }
 
 export interface HarmonySubScores {
@@ -841,27 +845,45 @@ ${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${room
 ## PRODUCTS TO VALIDATE
 ${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
 
-## PER-PRODUCT SCORING
-For EACH product, score its harmony with the rest of the set AND the existing items:
-- 8-10: Excellent fit — works beautifully with the set and room
-- 6-7: Good fit — works well, no real issues
-- 4-5: Questionable — might clash with something or feel slightly off
-- 1-3: Poor fit — actively clashes with existing items or other products in the set
+## PER-PRODUCT SCORING — 6-DIMENSIONAL + PAIRWISE
+
+For EACH product, provide 6 sub-scores (USE DECIMALS e.g. 7.3, 8.8, 9.6):
+1. **color_fit** (0-10): Color harmony with other products and existing items
+2. **spatial_fit** (0-10): Physical fit, dimensions appropriate for the room
+3. **material_fit** (0-10): Material compatibility with other products (wood species, metal finishes, texture)
+4. **style_coherence** (0-10): Style family alignment with design direction
+5. **cross_room_fit** (0-10): Apartment-wide coherence (if context available)
+6. **functional_fit** (0-10): Practical for daily use, durability, lifestyle match
+
+Also provide an overall **harmony_score** — but note: the server computes a composite from sub_scores using weighted geometric mean. One bad dimension tanks the whole score (compounding).
+
+## PAIRWISE COMPATIBILITY CHECK — CRITICAL
+After individual scoring, check EVERY PAIR of products for compatibility conflicts. Report pairs with compatibility < 9.0:
+- Walnut coffee table + oak side table = wood species clash → 4.5
+- Chrome lamp + brass pendant = metal finish clash → 5.0
+Only report conflicting pairs. Omitted pairs assumed 9.5+.
 
 Return JSON:
 {
   "isValid": true/false,
-  "confidence": 0-10 (overall set confidence),
+  "confidence": 0-10 (use decimals),
   "issues": ["specific problems — reference what you SEE in the images"],
   "suggestions": ["specific improvements"],
   "product_flags": [
     {
       "title": "product title",
       "category": "category slug",
-      "harmony_score": number (1-10),
-      "clashes_with": ["names of items it clashes with — existing or other products"],
+      "harmony_score": number (USE DECIMALS),
+      "sub_scores": {
+        "color_fit": number, "spatial_fit": number, "material_fit": number,
+        "style_coherence": number, "cross_room_fit": number, "functional_fit": number
+      },
+      "clashes_with": ["items it clashes with — existing or other products"],
       "reason": "why it fits or doesn't fit"
     }
+  ],
+  "pairwise_conflicts": [
+    { "item_a": "category_a", "item_b": "category_b", "compatibility": number, "conflict_type": "type", "reason": "why" }
   ]
 }`;
 
@@ -906,16 +928,45 @@ Return JSON:
         const raw = extractJsonObject(response.content);
         const validated = ProductSetValidationResponseSchema.parse(raw);
 
-        // Apply math veto: cap per-product harmony scores where math found issues
+        // Apply per-dimension math capping and composite scoring for product flags
         if (validated.product_flags) {
+          const pairwiseConflicts = (validated.pairwise_conflicts || []).map((c) => ({
+            item_a: c.item_a,
+            item_b: c.item_b,
+            compatibility: c.compatibility,
+            conflict_type: c.conflict_type || "",
+            reason: c.reason || "",
+          }));
+
           for (const flag of validated.product_flags) {
             const mathEntry = setMathScores.per_product.find(
               pp => pp.title === flag.title || pp.category === flag.category
             );
-            if (mathEntry && mathEntry.math_harmony < 0.6 && flag.harmony_score > 6) {
-              const mathCap = Math.round(mathEntry.math_harmony * 10);
-              log.info(`Math capping product set harmony: "${flag.title}" AI=${flag.harmony_score} → ${mathCap}`);
-              flag.harmony_score = mathCap;
+
+            // If sub_scores are provided, compute composite with math caps + pairwise
+            if (flag.sub_scores) {
+              const mathCaps: MathDimensionCaps = {};
+              if (mathEntry) {
+                mathCaps.color_fit = mathEntry.math_harmony; // best available proxy
+                mathCaps.material_fit = mathEntry.math_harmony;
+              }
+              const compositeResult = computeFinalHarmonyScore(
+                flag.sub_scores as CompositeSubScores,
+                mathCaps,
+                flag.category,
+                pairwiseConflicts
+              );
+              if (compositeResult.harmony_score < flag.harmony_score) {
+                log.info(`Composite capping product set "${flag.title}": AI=${flag.harmony_score} → composite=${compositeResult.harmony_score}`);
+                flag.harmony_score = compositeResult.harmony_score;
+              }
+            } else {
+              // Fallback: flat math cap for products without sub_scores
+              if (mathEntry && mathEntry.math_harmony < 0.6 && flag.harmony_score > 6) {
+                const mathCap = Math.round(mathEntry.math_harmony * 10);
+                log.info(`Math capping product set harmony: "${flag.title}" AI=${flag.harmony_score} → ${mathCap}`);
+                flag.harmony_score = mathCap;
+              }
             }
           }
         }
@@ -924,6 +975,7 @@ Return JSON:
           phase: "validation",
           confidence: validated.confidence,
           products: validated.product_flags?.length ?? 0,
+          pairwise_conflicts: validated.pairwise_conflicts?.length ?? 0,
           mathOverall: setMathScores.overall,
         });
 

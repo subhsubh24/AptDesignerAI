@@ -15,12 +15,14 @@ function makeBundleScores(override: Partial<BundleScores> = {}): BundleScores {
 }
 
 describe("computeFinalBundleScore", () => {
-  it("should return 7.0 when all scores are 7 (including default spatial)", () => {
-    // When spatial_arrangement_score is undefined, it defaults to 5
+  it("should return less than arithmetic mean when spatial defaults to 5 (geometric compounding)", () => {
+    // When spatial_arrangement_score is undefined, it defaults to 5.
+    // Geometric mean penalizes the low spatial score more than arithmetic mean would.
+    // Arithmetic would give ~6.68; geometric mean gives lower due to compounding.
     const scores = makeBundleScores();
     const result = computeFinalBundleScore(scores);
-    // 7 * (0.18 + 0.14 + 0.14 + 0.16 + 0.12 + 0.10) + 5 * 0.16 = 7*0.84 + 5*0.16 = 5.88 + 0.80 = 6.68
-    expect(result).toBeCloseTo(6.68, 2);
+    expect(result).toBeLessThan(6.68);
+    expect(result).toBeGreaterThan(5.5);
   });
 
   it("should return 7.0 when all scores including spatial are 7", () => {
@@ -42,7 +44,8 @@ describe("computeFinalBundleScore", () => {
     expect(computeFinalBundleScore(scores)).toBe(10);
   });
 
-  it("should return 0 when all scores are 0", () => {
+  it("should return floor value (0.5) when all scores are 0", () => {
+    // With geometric mean and a floor of 0.5, all-zero scores clamp to 0.5
     const scores: BundleScores = {
       palette_harmony_score: 0,
       material_balance_score: 0,
@@ -52,7 +55,7 @@ describe("computeFinalBundleScore", () => {
       spatial_arrangement_score: 0,
       practicality_score: 0,
     };
-    expect(computeFinalBundleScore(scores)).toBe(0);
+    expect(computeFinalBundleScore(scores)).toBe(0.5);
   });
 
   it("should default spatial_arrangement_score to 5 when undefined", () => {

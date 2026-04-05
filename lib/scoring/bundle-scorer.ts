@@ -3,17 +3,41 @@ import { BUNDLE_WEIGHTS } from "./weights";
 import { calibrateScore } from "./calibration";
 import { getScoreDistributionSummary } from "./drift-monitor";
 
+/**
+ * Compute the final bundle score using a weighted geometric mean.
+ *
+ * This mirrors the harmony scoring approach — one bad dimension tanks
+ * the overall score due to compounding (vs arithmetic mean which hides it).
+ *
+ * - Arithmetic: (10+10+10+10+10+10+2)/7 = 8.86 — hides the 2
+ * - Geometric: (10×10×10×10×10×10×2)^(1/7) = 7.24 — the 2 drags it down
+ */
 export function computeFinalBundleScore(scores: BundleScores): number {
-  const raw =
-    BUNDLE_WEIGHTS.palette_harmony * scores.palette_harmony_score +
-    BUNDLE_WEIGHTS.material_balance * scores.material_balance_score +
-    BUNDLE_WEIGHTS.scale_balance * scores.scale_balance_score +
-    BUNDLE_WEIGHTS.style_consistency * scores.style_consistency_score +
-    BUNDLE_WEIGHTS.room_completion * scores.room_completion_score +
-    BUNDLE_WEIGHTS.spatial_arrangement * (scores.spatial_arrangement_score ?? 5) +
-    BUNDLE_WEIGHTS.practicality * scores.practicality_score;
+  const FLOOR = 0.5; // Minimum score for log computation (prevents log(0))
 
-  const baseScore = Math.round(raw * 100) / 100;
+  const dimensions: Array<{ key: string; weight: number; score: number }> = [
+    { key: "palette_harmony", weight: BUNDLE_WEIGHTS.palette_harmony, score: scores.palette_harmony_score },
+    { key: "material_balance", weight: BUNDLE_WEIGHTS.material_balance, score: scores.material_balance_score },
+    { key: "scale_balance", weight: BUNDLE_WEIGHTS.scale_balance, score: scores.scale_balance_score },
+    { key: "style_consistency", weight: BUNDLE_WEIGHTS.style_consistency, score: scores.style_consistency_score },
+    { key: "room_completion", weight: BUNDLE_WEIGHTS.room_completion, score: scores.room_completion_score },
+    { key: "spatial_arrangement", weight: BUNDLE_WEIGHTS.spatial_arrangement, score: scores.spatial_arrangement_score ?? 5 },
+    { key: "practicality", weight: BUNDLE_WEIGHTS.practicality, score: scores.practicality_score },
+  ];
+
+  let weightedLogSum = 0;
+  let totalWeight = 0;
+
+  for (const { weight, score } of dimensions) {
+    const clamped = Math.max(score, FLOOR);
+    weightedLogSum += weight * Math.log(clamped);
+    totalWeight += weight;
+  }
+
+  if (totalWeight === 0) return 0;
+
+  const geometricMean = Math.exp(weightedLogSum / totalWeight);
+  const baseScore = Math.round(geometricMean * 100) / 100;
 
   // Apply calibration using drift monitor data
   const summary = getScoreDistributionSummary();

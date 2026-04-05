@@ -175,6 +175,14 @@ export async function evaluateBundle(
         recordBundleScores(scores as unknown as Record<string, number>);
 
         const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+
+        if (validated.pairwise_conflicts.length > 0) {
+          log.info("Bundle pairwise conflicts detected", {
+            count: validated.pairwise_conflicts.length,
+            conflicts: validated.pairwise_conflicts.map(c => `${c.product_a} ↔ ${c.product_b}: ${c.compatibility}/10 (${c.conflict_type})`),
+          });
+        }
+
         log.info("Bundle evaluated", {
           model: response.model,
           tokens: { total: totalTokens },
@@ -189,6 +197,7 @@ export async function evaluateBundle(
             verdict: validated.verdict,
             analysis: validated.analysis,
             room_vibe: validated.room_vibe,
+            pairwise_conflicts: validated.pairwise_conflicts,
           },
           tokensUsed: totalTokens,
           model: response.model,

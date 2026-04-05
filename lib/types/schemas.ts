@@ -84,11 +84,21 @@ export const RoomVibeSchema = z.object({
   mood: z.string().default(""),
 }).optional();
 
+export const BundlePairwiseConflictSchema = z.object({
+  product_a: z.string(),
+  product_b: z.string(),
+  compatibility: score,
+  conflict_type: z.string().default(""),
+  reason: z.string().default(""),
+});
+
 export const BundleEvalResponseSchema = z.object({
   scores: BundleScoresSchema,
   verdict: z.string().default("No verdict provided"),
   analysis: BundleAnalysisSchema,
   room_vibe: RoomVibeSchema,
+  /** Pairwise conflicts between products in the bundle (pairs with compatibility < 9.0) */
+  pairwise_conflicts: z.array(BundlePairwiseConflictSchema).default([]),
 });
 
 // ─── Harmony Validation ───────────────────────────────────────
@@ -155,7 +165,7 @@ export const FinalAssessmentItemSchema = z.object({
   category: z.string(),
   final_score: score,
   /** 6-dimensional sub-scores for granular assessment */
-  sub_scores: HarmonySubScoresSchema.optional(),
+  sub_scores: HarmonySubScoresSchema,
   needs_more_work: z.boolean().default(false),
   revised_search_title: z.string().nullable().optional(),
   revised_specs: z.string().nullable().optional(),
@@ -186,6 +196,8 @@ export const ProductFlagSchema = z.object({
   title: z.string(),
   category: z.string(),
   harmony_score: score,
+  /** 6-dimensional sub-scores for granular per-product assessment */
+  sub_scores: HarmonySubScoresSchema.optional(),
   clashes_with: stringArray,
   reason: z.string().default(""),
 });
@@ -196,6 +208,8 @@ export const ProductSetValidationResponseSchema = z.object({
   issues: stringArray,
   suggestions: stringArray,
   product_flags: z.array(ProductFlagSchema).optional(),
+  /** Pairwise conflicts between products in the set (pairs with compatibility < 9.0) */
+  pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
 });
 
 // ─── Room Diagnosis ───────────────────────────────────────────

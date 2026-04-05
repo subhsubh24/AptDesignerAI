@@ -193,6 +193,21 @@ CRITICAL: Use the FULL 0-10 range. If the bundle is just okay, score it 5-6. Do 
    - 5-6: Some impractical elements — e.g., beautiful but not enough seating for hosting, or acoustically harsh with no soft surfaces
    - Below 5: Fundamentally impractical for how the client lives
 
+## PAIRWISE INTERACTION CHECK
+For every PAIR of products in this bundle, evaluate how well they work together.
+- Only report pairs with compatibility BELOW 9.0 (omit pairs that work well together — assume they're 9.5+).
+- compatibility is 0-10: 10 = perfect pairing, 0 = catastrophic clash.
+- conflict_type examples: "color_clash", "material_mismatch", "scale_conflict", "style_conflict", "spatial_crowding"
+- This is CRITICAL: two individually great products can be terrible together (e.g., two different wood species, warm lamp + cool art, oversized sofa + oversized coffee table).
+
+## COMPOUNDING SCORING — HOW YOUR SCORES ARE USED
+Your 7 dimension scores are combined using a **weighted geometric mean**, not an arithmetic average.
+This means ONE bad dimension tanks the overall score:
+- Arithmetic: (10+10+10+10+10+10+2)/7 = 8.86 — hides the 2
+- Geometric: (10×10×10×10×10×10×2)^(1/7) = 7.24 — the 2 drags it down
+
+So be PRECISE with each dimension. Inflating one score cannot compensate for a real weakness elsewhere.
+
 ## OUTPUT FORMAT
 Return a JSON object:
 {
@@ -211,6 +226,15 @@ Return a JSON object:
     "what_feels_missing": "specific categories or elements still needed after this bundle",
     "what_should_be_swapped_first": "which specific item should be replaced first, what it should be replaced with, and why"
   },
+  "pairwise_conflicts": [
+    {
+      "product_a": "category_or_title_of_first_item",
+      "product_b": "category_or_title_of_second_item",
+      "compatibility": number_0_to_10,
+      "conflict_type": "type_of_clash",
+      "reason": "specific explanation of why these two items conflict"
+    }
+  ],
   "room_vibe": {
     "vibe_summary": "2-3 sentence description of the overall mood and feeling this room will have with these pieces. Describe it the way an interior designer would pitch it to a client — what does walking into this room FEEL like? Reference specific pieces that drive the vibe.",
     "style_keywords": ["3-5 style keywords that capture the aesthetic, e.g. 'warm minimalist', 'lived-in modern', 'earthy calm', 'curated bohemian'"],
