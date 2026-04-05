@@ -322,9 +322,14 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       throw new Error("AI response was truncated (MAX_TOKENS). The analysis was too long to complete. Try with fewer room photos.");
     }
 
-    // Validate the response is an object with required fields — not an array or malformed
+    // If the AI returned an array instead of an object, unwrap the first element
     if (Array.isArray(analysis)) {
-      throw new Error(`AI returned an array instead of an object. Keys found: ${Object.keys(analysis[0] || {}).join(", ")}. This is a model output format error — retrying should fix it.`);
+      if (analysis.length > 0 && typeof analysis[0] === "object" && analysis[0] !== null) {
+        console.log(`[area-analysis] AI returned an array — unwrapping first element with keys: ${Object.keys(analysis[0]).join(", ")}`);
+        analysis = analysis[0];
+      } else {
+        throw new Error(`AI returned an empty or invalid array. This is a model output format error — retrying should fix it.`);
+      }
     }
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
       throw new Error(`AI response missing required field "what_it_needs". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error — retrying should fix it.`);
