@@ -36,7 +36,8 @@ describe("computeFinalItemScore", () => {
     expect(score).toBe(10);
   });
 
-  it("should return 0 when all scores are 0", () => {
+  it("should return floor value (0.5) when all scores are 0", () => {
+    // With geometric mean and a floor of 0.5, all-zero scores clamp to 0.5
     const scores = makeScores({
       style_fit_score: 0,
       palette_fit_score: 0,
@@ -47,7 +48,25 @@ describe("computeFinalItemScore", () => {
       value_fit_score: 0,
     });
     const score = computeFinalItemScore(scores);
-    expect(score).toBe(0);
+    expect(score).toBe(0.5);
+  });
+
+  it("should penalize one bad dimension more than arithmetic mean would", () => {
+    // One dimension at 2, rest at 9
+    const scores = makeScores({
+      style_fit_score: 9,
+      palette_fit_score: 9,
+      material_fit_score: 2,
+      scale_fit_score: 9,
+      function_fit_score: 9,
+      cohesion_fit_score: 9,
+      value_fit_score: 9,
+    });
+    const score = computeFinalItemScore(scores);
+    // Arithmetic mean would be ~8.16 (weighted)
+    // Geometric mean should be noticeably lower due to compounding
+    expect(score).toBeLessThan(8);
+    expect(score).toBeGreaterThan(4);
   });
 
   it("should NOT include confidence_score in the weighted sum", () => {

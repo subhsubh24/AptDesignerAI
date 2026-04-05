@@ -3,17 +3,39 @@ import { PRODUCT_WEIGHTS, VERDICT_THRESHOLDS } from "./weights";
 import { calibrateScore } from "./calibration";
 import { getScoreDistributionSummary } from "./drift-monitor";
 
+/**
+ * Compute the final item score using a weighted geometric mean.
+ *
+ * One bad dimension tanks the overall score due to compounding:
+ * - Arithmetic: (10+10+10+10+10+10+2)/7 = 8.86 — hides the 2
+ * - Geometric: (10^6 × 2)^(1/7) = 7.24 — the 2 drags it down
+ */
 export function computeFinalItemScore(scores: ProductScores, category?: string): number {
-  const raw =
-    PRODUCT_WEIGHTS.style_fit * scores.style_fit_score +
-    PRODUCT_WEIGHTS.palette_fit * scores.palette_fit_score +
-    PRODUCT_WEIGHTS.material_fit * scores.material_fit_score +
-    PRODUCT_WEIGHTS.scale_fit * scores.scale_fit_score +
-    PRODUCT_WEIGHTS.function_fit * scores.function_fit_score +
-    PRODUCT_WEIGHTS.cohesion_fit * scores.cohesion_fit_score +
-    PRODUCT_WEIGHTS.value_fit * scores.value_fit_score;
+  const FLOOR = 0.5; // Minimum score for log computation (prevents log(0))
 
-  const baseScore = Math.round(raw * 100) / 100;
+  const dimensions: Array<{ weight: number; score: number }> = [
+    { weight: PRODUCT_WEIGHTS.style_fit, score: scores.style_fit_score },
+    { weight: PRODUCT_WEIGHTS.palette_fit, score: scores.palette_fit_score },
+    { weight: PRODUCT_WEIGHTS.material_fit, score: scores.material_fit_score },
+    { weight: PRODUCT_WEIGHTS.scale_fit, score: scores.scale_fit_score },
+    { weight: PRODUCT_WEIGHTS.function_fit, score: scores.function_fit_score },
+    { weight: PRODUCT_WEIGHTS.cohesion_fit, score: scores.cohesion_fit_score },
+    { weight: PRODUCT_WEIGHTS.value_fit, score: scores.value_fit_score },
+  ];
+
+  let weightedLogSum = 0;
+  let totalWeight = 0;
+
+  for (const { weight, score } of dimensions) {
+    const clamped = Math.max(score, FLOOR);
+    weightedLogSum += weight * Math.log(clamped);
+    totalWeight += weight;
+  }
+
+  if (totalWeight === 0) return 0;
+
+  const geometricMean = Math.exp(weightedLogSum / totalWeight);
+  const baseScore = Math.round(geometricMean * 100) / 100;
 
   // Apply programmatic calibration when category is provided
   if (category) {
