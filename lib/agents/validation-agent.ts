@@ -266,6 +266,13 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
         const result: HarmonyValidationResult = {
           ...parsed,
           revisedAnalysis: parsed.revisedAnalysis ?? undefined,
+          item_scores: parsed.item_scores.map((s) => ({
+            ...s,
+            revised_search_title: s.revised_search_title ?? undefined,
+            revised_specs: s.revised_specs ?? undefined,
+            revised_placement: s.revised_placement ?? undefined,
+            root_cause: s.root_cause ?? undefined,
+          })),
         };
 
         log.info("Harmony validation complete", {

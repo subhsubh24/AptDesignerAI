@@ -46,6 +46,7 @@ export interface AIResponse {
 export type GeminiTool =
   | { googleSearch: Record<string, never> }
   | { urlContext: Record<string, never> }
+  | { googleMaps: Record<string, never> }
   | { functionDeclarations: FunctionDeclaration[] };
 
 export interface FunctionDeclaration {

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms } = await request.json();
+  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, building_place_id } = await request.json();
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
@@ -220,7 +220,7 @@ PROCESS:
       messages: [{ role: "user", content: prompt }],
       max_tokens: 8000,
       temperature: 0.2,
-      tools: [{ googleSearch: {} }, { urlContext: {} }],
+      tools: [{ googleSearch: {} }, { urlContext: {} }, { googleMaps: {} }],
       // Note: responseMimeType is incompatible with built-in tools (googleSearch, urlContext)
     });
 
@@ -272,6 +272,7 @@ PROCESS:
           city,
           state,
           neighborhood,
+          ...(building_place_id ? { building_place_id } : {}),
         })
         .eq("id", project_id);
     }

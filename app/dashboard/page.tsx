@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight } from "lucide-react";
+import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
+import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autocomplete";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -68,6 +69,9 @@ export default function DashboardPage() {
   const [buildingName, setBuildingName] = useState("");
   const [buildingUrl, setBuildingUrl] = useState("");
   const [buildingResearch, setBuildingResearch] = useState<Record<string, unknown> | null>(null);
+  const [locationPlaceId, setLocationPlaceId] = useState<string | null>(null);
+  const [buildingPlaceId, setBuildingPlaceId] = useState<string | null>(null);
+  const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [roomImages, setRoomImages] = useState<Record<string, UploadedImage[]>>({});
   const [projectId, setProjectId] = useState<string | null>(null);
   const [roomIds, setRoomIds] = useState<Record<string, string>>({});
@@ -279,6 +283,7 @@ export default function DashboardPage() {
               city, state, neighborhood,
               project_id: projId,
               bedrooms, bathrooms,
+              building_place_id: buildingPlaceId || undefined,
             }),
           });
           if (res.ok) {
@@ -429,6 +434,14 @@ export default function DashboardPage() {
 
   // ─── Step: Location ───────────────────────────────────────────
   if (step === "location") {
+    const handleLocationSelected = (place: PlaceResult) => {
+      if (place.city) setCity(place.city);
+      if (place.state) setState(place.state);
+      if (place.neighborhood) setNeighborhood(place.neighborhood);
+      if (place.placeId) setLocationPlaceId(place.placeId);
+      if (place.lat && place.lng) setLocationCoords({ lat: place.lat, lng: place.lng });
+    };
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
@@ -439,39 +452,59 @@ export default function DashboardPage() {
         />
 
         <div className="space-y-6 mt-8">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="Chicago"
-                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">State</label>
-              <input
-                type="text"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                placeholder="IL"
-                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-              />
-            </div>
+          {/* Google Places autocomplete search */}
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Search your city or neighborhood</label>
+            <PlaceAutocomplete
+              searchType="regions"
+              placeholder="e.g. West Loop, Chicago"
+              icon="pin"
+              onPlaceSelected={handleLocationSelected}
+            />
           </div>
 
-          {showNeighborhood && (
-            <div className="animate-fade-in-up">
-              <label className="text-sm font-medium mb-1.5 block">Neighborhood</label>
-              <input
-                type="text"
-                value={neighborhood}
-                onChange={(e) => setNeighborhood(e.target.value)}
-                placeholder="West Loop"
-                className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-              />
+          {/* Auto-filled fields (editable) */}
+          {city && (
+            <div className="animate-fade-in-up space-y-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                <span>Auto-filled from selection — edit if needed</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">City</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Chicago"
+                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">State</label>
+                  <input
+                    type="text"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    placeholder="IL"
+                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  />
+                </div>
+              </div>
+
+              {showNeighborhood && (
+                <div className="animate-fade-in-up">
+                  <label className="text-sm font-medium mb-1.5 block">Neighborhood</label>
+                  <input
+                    type="text"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    placeholder="West Loop"
+                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -481,7 +514,12 @@ export default function DashboardPage() {
               size="lg"
               className="flex-1 h-12"
               onClick={async () => {
-                await saveProjectMeta({ city, state, neighborhood });
+                await saveProjectMeta({
+                  city, state, neighborhood,
+                  location_place_id: locationPlaceId,
+                  latitude: locationCoords?.lat,
+                  longitude: locationCoords?.lng,
+                });
                 setStep("setup");
               }}
               disabled={!city}
@@ -513,28 +551,48 @@ export default function DashboardPage() {
               <Building2 className="h-4 w-4" />
               Building
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Building name</label>
-                <input
-                  type="text"
-                  value={buildingName}
-                  onChange={(e) => setBuildingName(e.target.value)}
+                <label className="text-sm font-medium mb-1.5 block">Search your building</label>
+                <PlaceAutocomplete
+                  searchType="establishment"
                   placeholder="e.g. Porte Apartments"
-                  className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  icon="building"
+                  locationBias={locationCoords ?? undefined}
+                  value={buildingName}
+                  onInputChange={(v) => setBuildingName(v)}
+                  onPlaceSelected={(place) => {
+                    setBuildingName(place.displayName);
+                    if (place.websiteUri) setBuildingUrl(place.websiteUri);
+                    if (place.placeId) setBuildingPlaceId(place.placeId);
+                  }}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
-                  Website <span className="text-xs">(optional)</span>
-                </label>
-                <input
-                  type="url"
-                  value={buildingUrl}
-                  onChange={(e) => setBuildingUrl(e.target.value)}
-                  placeholder="https://www.porteapts.com"
-                  className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
+                    Building name <span className="text-xs">(edit if needed)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={buildingName}
+                    onChange={(e) => setBuildingName(e.target.value)}
+                    placeholder="e.g. Porte Apartments"
+                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
+                    Website <span className="text-xs">(optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={buildingUrl}
+                    onChange={(e) => setBuildingUrl(e.target.value)}
+                    placeholder="https://www.porteapts.com"
+                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                  />
+                </div>
               </div>
             </div>
 
