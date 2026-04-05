@@ -41,6 +41,8 @@ export interface HarmonyValidationResult {
     drop: boolean;
     root_cause?: string;
     reason: string;
+    /** Chain-of-thought rationale: step-by-step reasoning that led to this score */
+    rationale?: string;
   }>;
   overall_cohesion: number;
   palette_coherence: string;
@@ -197,37 +199,51 @@ Evaluate EACH recommended item on BOTH harmony AND spatial fit:
 15. **Outlet access for powered items**: If recommending lamps, media consoles, or other powered items — is there likely an outlet near the intended placement? A floor lamp in the center of the room with no nearby wall = impractical placement.
 
 ## SCORING (per item) — AIM FOR 10/10 ON EVERY ITEM
-- **harmony_score** (1-10): Combined harmony + spatial + environmental fit score
-  - 10: Flawless — perfect material/color harmony, ideal dimensions for the space, placement accounts for traffic/sightlines/outlets/acoustics, and it elevates the room as a whole. THIS is the target for every item.
-  - 9: Near-perfect — one very minor nitpick that barely matters (e.g. could be 2 inches narrower but still works great)
-  - 7-8: Good but has room for improvement — slightly off on color shade, could have better placement, or materials could be more specific
-  - 5-6: Mediocre — wrong size, blocks window/door, impractical material, acoustic harshness, missing outlet access
-  - 3-4: Conflict — clashes with keeps OR serious spatial problem OR fundamentally impractical
-  - 1-2: Wrong — completely out of place
+- **harmony_score** (0-10, USE DECIMALS e.g. 7.3, 8.8, 9.6): Combined harmony + spatial + environmental fit score
+  - 9.5-10: Exceptional — perfect material/color harmony, ideal dimensions, placement accounts for traffic/sightlines/outlets/acoustics, elevates the room. THIS is the target.
+  - 8.5-9.4: Near-perfect — one or two very minor issues (e.g. could be 2 inches narrower but still works great)
+  - 7.0-8.4: Good but has room for improvement — slightly off on color shade, could have better placement, or materials could be more specific
+  - 5.0-6.9: Mediocre — wrong size, blocks window/door, impractical material, acoustic harshness, missing outlet access
+  - 3.0-4.9: Conflict — clashes with keeps OR serious spatial problem OR fundamentally impractical
+  - 1.0-2.9: Wrong — completely out of place
 
 - **drop**: true if harmony_score ≤ 3
 
-- For ANY item scoring below 10, you MUST provide **revised_search_title**, **revised_specs**, AND **revised_placement** that would bring it to a 10. Even a score of 8 or 9 should include the small tweak needed to reach perfection.
+- For ANY item scoring below 9.5, you MUST provide **revised_search_title**, **revised_specs**, AND **revised_placement** that would bring it to 9.5+. Even a score of 8 or 9 should include the tweak needed to reach perfection.
+
+- **rationale** (REQUIRED for EVERY item): Your chain of reasoning. Walk through your thought process step by step:
+  1. What does the math score tell you about this item? (reference the specific math dimensions)
+  2. What do you see in the room photos that confirms or contradicts the math?
+  3. How does this item interact with each keep item and each other recommendation?
+  4. What spatial constraints apply to this placement?
+  5. Final score justification: why exactly this decimal score?
+
+## MATH SCORES — CRITICAL INPUT
+The math scores above are DETERMINISTIC pre-computed scores. They are GROUND TRUTH for measurable dimensions (color distance, material compatibility, spatial fit, proportions). Your harmony_score MUST account for these math scores:
+- If math says a color clashes (low color score), your score must reflect that — don't override math with vibes.
+- If math says dimensions don't fit (low spatial score), your score must reflect that.
+- Use the math as your FOUNDATION, then layer in your visual/aesthetic judgment for aspects math can't measure (visual weight, style coherence, mood, etc.)
 
 ## OUTPUT FORMAT
 Return JSON:
 {
-  "confidence": 0-10 (overall confidence in this recommendation set),
+  "confidence": 0-10 (overall confidence, use decimals e.g. 8.3),
   "item_scores": [
     {
       "category": "the category slug",
-      "harmony_score": number,
+      "harmony_score": number (USE DECIMALS e.g. 8.4, 9.6 — not just integers),
       "keeps_well_with": ["which existing items it pairs well with"],
       "clashes_with": ["which existing items or other recommendations it conflicts with — include spatial conflicts like 'blocks path to dining area', environmental issues like 'blocks south window', 'no outlet nearby for floor lamp', 'adds more hard surface to acoustically harsh room'"],
-      "revised_search_title": "if score < 10, the improved search title that would score 10",
-      "revised_specs": "if score < 10, the improved specs that would score 10",
-      "revised_placement": "if score < 10, the improved placement that would score 10",
+      "revised_search_title": "if score < 9.5, the improved search title that would score 9.5+",
+      "revised_specs": "if score < 9.5, the improved specs that would score 9.5+",
+      "revised_placement": "if score < 9.5, the improved placement that would score 9.5+",
       "drop": true/false,
-      "root_cause": "if score < 10, the SPECIFIC root cause: 'color_clash: warm cream conflicts with cool gray pillows', 'material_mismatch: oak legs clash with walnut in bedroom', 'scale_issue: 48-inch table too wide for 52-inch wall leaving 2-inch clearance', 'arrangement: blocks path from entry to kitchen', 'cross_room_clash: chrome finish conflicts with brass used in bedroom and kitchen'",
-      "reason": "1-2 sentence explanation — what specifically prevents this from being a 10? What did you fix in the revision?"
+      "root_cause": "if score < 9.5, the SPECIFIC root cause: 'color_clash: warm cream conflicts with cool gray pillows', 'material_mismatch: oak legs clash with walnut in bedroom', 'scale_issue: 48-inch table too wide for 52-inch wall leaving 2-inch clearance', 'arrangement: blocks path from entry to kitchen', 'cross_room_clash: chrome finish conflicts with brass used in bedroom and kitchen'",
+      "reason": "1-2 sentence explanation — what specifically prevents this from being 9.5+? What did you fix in the revision?",
+      "rationale": "REQUIRED chain-of-thought: Step 1: Math scores show [X]. Step 2: Room photos confirm/show [Y]. Step 3: Interaction with [item A] is [good/bad because Z]. Step 4: Spatial fit is [assessment]. Step 5: Therefore score is [X.X] because [final justification]."
     }
   ],
-  "overall_cohesion": 0-10 (do ALL items work together as a complete room?),
+  "overall_cohesion": 0-10 (use decimals, do ALL items work together as a complete room?),
   "palette_coherence": "1 sentence: does the color palette across all items + keeps make sense?",
   "material_coherence": "1 sentence: do the materials across all items + keeps create a cohesive texture story?",
   "spatial_flow": "2-3 sentences: How does the overall furniture arrangement work? Are there clear pathways? Do the zones make sense? Is there a logical flow from entry to seating to dining? Any bottlenecks or dead zones?",
@@ -235,7 +251,7 @@ Return JSON:
   "revisedAnalysis": null or { the full revised analysis if confidence < 7 — with corrected placements }
 }
 
-YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designer would accept nothing less than perfection. If a search title says "warm cream" but "ivory" would harmonize better with the existing floors, that's not a 10. If placement says "next to the sofa" but a specific "18 inches from the sofa arm, centered on the south wall outlet" would be better, that's not a 10. Optimize every detail.`,
+YOUR GOAL IS 9.5+/10 ON EVERY ITEM. Be extremely precise — a world-class designer would accept nothing less than near-perfection. If a search title says "warm cream" but "ivory" would harmonize better with the existing floors, that's not a 9.5. If placement says "next to the sofa" but a specific "18 inches from the sofa arm, centered on the south wall outlet" would be better, that's not a 9.5. Optimize every detail. Use the math scores as your foundation — they don't lie about measurable fit.`,
   });
 
   let lastError: string | undefined;
@@ -275,6 +291,7 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
             revised_specs: s.revised_specs ?? undefined,
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
+            rationale: s.rationale ?? undefined,
           })),
         };
 
@@ -283,6 +300,7 @@ YOUR GOAL IS 10/10 ON EVERY ITEM. Be extremely precise — a world-class designe
           confidence: result.confidence,
           cohesion: result.overall_cohesion,
           items: result.item_scores.length,
+          scores: result.item_scores.map((s) => `${s.category}=${s.harmony_score}`).join(", "),
         });
 
         return {
@@ -332,6 +350,8 @@ export interface FinalAssessmentResult {
     revised_placement?: string;
     root_cause?: string;
     reason: string;
+    /** Chain-of-thought rationale: step-by-step reasoning that led to this score */
+    rationale?: string;
   }>;
   needs_more_rounds: boolean;
   round_budget: number;
@@ -470,25 +490,33 @@ Step 3: For each item, give a DEFINITIVE score. This is the final word — be fa
 Step 4: Decide if the set needs MORE iteration or if it's ready.
 
 ### SCORING PHILOSOPHY FOR FINAL ASSESSMENT
-- This is a REAL ROOM design, not a theoretical exercise. Perfect 10/10 on every item is unrealistic.
-- Score based on whether a skilled interior designer would be SATISFIED with this recommendation.
-- 8-10 = would confidently present to client. THESE ARE GOOD.
-- 7 = acceptable but has a specific fixable issue. Only flag needs_more_work if the fix is important.
-- 6 or below = genuinely problematic, needs_more_work = true.
-- Do NOT mark items as needs_more_work for subjective preferences or theoretical improvements.
-- Only mark needs_more_work = true if there's a CONCRETE problem (wrong dimensions, color clash, blocks a door, etc.)
+- Score with DECIMALS (e.g. 7.3, 8.8, 9.6) — not just integers.
+- Use math scores as GROUND TRUTH for measurable dimensions. The math doesn't lie.
+- 9.5-10 = exceptional, would confidently present to any client
+- 8.5-9.4 = near-perfect, minor fixable issues
+- 7.0-8.4 = good but has room for improvement
+- Below 7.0 = genuinely problematic, needs_more_work = true
+- Only mark needs_more_work = true if there's a CONCRETE problem AND the score is below 9.5
+
+### CHAIN OF REASONING — REQUIRED
+For EVERY item, provide a **rationale** field with your step-by-step thinking:
+1. What does the math score tell you about this item?
+2. What do the room photos confirm or contradict?
+3. How does this interact with keeps and other recommendations?
+4. Spatial assessment
+5. Final score justification: why exactly this decimal score?
 
 ### WHEN TO REQUEST MORE ROUNDS
 Set needs_more_rounds = true ONLY if:
-- 3+ items have needs_more_work = true with concrete, fixable issues
+- ANY item scores below 9.5 with a concrete, fixable issue
 - There's a systemic problem (e.g., the entire palette doesn't work, or major spatial conflicts)
-Set round_budget to the number of additional rounds needed (0-5). Be conservative — 1-2 rounds usually suffice.
+Set round_budget to the number of additional rounds needed (0-5).
 
 ## OUTPUT FORMAT
 Return JSON:
 {
-  "confidence": 0-10,
-  "overall_cohesion": 0-10,
+  "confidence": 0-10 (use decimals e.g. 8.3),
+  "overall_cohesion": 0-10 (use decimals),
   "palette_coherence": "assessment of the color story across all items + keeps",
   "material_coherence": "assessment of the material/texture story",
   "spatial_flow": "assessment of traffic flow, zones, and spatial relationships",
@@ -496,13 +524,14 @@ Return JSON:
   "item_scores": [
     {
       "category": "category slug",
-      "final_score": number (1-10),
-      "needs_more_work": true/false,
+      "final_score": number (USE DECIMALS e.g. 8.4, 9.6),
+      "needs_more_work": true/false (true if score < 9.5 AND fixable),
       "revised_search_title": "only if needs_more_work is true",
       "revised_specs": "only if needs_more_work is true",
       "revised_placement": "only if needs_more_work is true",
       "root_cause": "only if needs_more_work — the specific fixable issue",
-      "reason": "1-2 sentence assessment"
+      "reason": "1-2 sentence assessment",
+      "rationale": "REQUIRED chain-of-thought: Step 1: Math says [X]. Step 2: Photos show [Y]. Step 3: Interactions with [items]. Step 4: Spatial [assessment]. Step 5: Score is [X.X] because [justification]."
     }
   ],
   "needs_more_rounds": true/false,
@@ -546,6 +575,7 @@ Return JSON:
             revised_specs: s.revised_specs ?? undefined,
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
+            rationale: s.rationale ?? undefined,
           })),
         };
 
@@ -554,6 +584,7 @@ Return JSON:
           confidence: result.confidence,
           cohesion: result.overall_cohesion,
           items: result.item_scores.length,
+          scores: result.item_scores.map((s) => `${s.category}=${s.final_score}`).join(", "),
           needsMoreRounds: result.needs_more_rounds,
           roundBudget: result.round_budget,
         });

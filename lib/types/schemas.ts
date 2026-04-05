@@ -104,6 +104,8 @@ export const HarmonyItemScoreSchema = z.object({
   drop: z.boolean().default(false),
   root_cause: z.string().nullable().optional(),
   reason: z.string().default(""),
+  /** Chain-of-thought rationale: step-by-step reasoning that led to this score */
+  rationale: z.string().nullable().optional(),
 });
 
 export const HarmonyValidationResponseSchema = z.object({
@@ -128,6 +130,8 @@ export const FinalAssessmentItemSchema = z.object({
   revised_placement: z.string().nullable().optional(),
   root_cause: z.string().nullable().optional(),
   reason: z.string().default(""),
+  /** Chain-of-thought rationale: step-by-step reasoning that led to this score */
+  rationale: z.string().nullable().optional(),
 });
 
 export const FinalAssessmentResponseSchema = z.object({
