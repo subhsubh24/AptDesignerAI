@@ -434,10 +434,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           console.log(`[area-analysis] Round ${round}: "${s.category}" was 10 before, now ${s.harmony_score} — locked in`);
           return false;
         }
-        // Item was revised before and still 8+ — converged
-        if (previouslyRevised.has(s.category) && s.harmony_score >= 8) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10 but was already revised — accepting (converged)`);
-          return false;
+        // Item was revised before — keep pushing for 10/10
+        if (previouslyRevised.has(s.category)) {
+          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10 after prior revision — continuing to push for 10/10`);
         }
         return true;
       });
