@@ -5,6 +5,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony } from "@/lib/agents/validation-agent";
+import { computeHarmonyScores, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -380,12 +381,23 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     const MAX_HARMONY_ROUNDS = 10;
     let validation = null;
+    let latestMathResult: MathHarmonyResult | null = null;
     // Track best score each item has ever achieved + whether it was revised
     const bestScores = new Map<string, number>();
     const previouslyRevised = new Set<string>();
 
     for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
-      const harmonyResult = await validateRoomHarmony(analysis, harmonyCtx);
+      // Compute deterministic math scores before AI validation
+      const mathCtx = {
+        roomType: room.room_type,
+        floorPlan,
+        otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+      };
+      latestMathResult = computeHarmonyScores(analysis, mathCtx);
+      const mathScoresText = formatMathScoresForPrompt(latestMathResult);
+      console.log(`[area-analysis] Round ${round} math scores: overall=${latestMathResult.overall.toFixed(2)}`);
+
+      const harmonyResult = await validateRoomHarmony(analysis, { ...harmonyCtx, mathScoresText });
 
       if (!harmonyResult.success || !harmonyResult.data) {
         if (round === 1) {
@@ -406,7 +418,23 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         break;
       }
 
-      // Update best-ever scores
+      // Apply composite scoring: math can veto but not promote AI scores
+      const mathItemMap = new Map(
+        (latestMathResult?.itemScores || []).map((s) => [s.category, s])
+      );
+      for (const s of harmony.item_scores) {
+        const mathItem = mathItemMap.get(s.category);
+        if (mathItem && mathItem.math_score < 0.95) {
+          // Math violation → cap AI score
+          const mathCap = Math.round(mathItem.math_score * 10);
+          if (s.harmony_score > mathCap) {
+            console.log(`[area-analysis] Round ${round}: "${s.category}" AI score ${s.harmony_score} capped to ${mathCap} by math (${mathItem.math_score.toFixed(2)})`);
+            s.harmony_score = mathCap;
+          }
+        }
+      }
+
+      // Update best-ever scores (after composite scoring)
       for (const s of harmony.item_scores) {
         const prev = bestScores.get(s.category) || 0;
         if (s.harmony_score > prev) bestScores.set(s.category, s.harmony_score);
@@ -420,23 +448,33 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         spatial_flow: harmony.spatial_flow,
         issues: harmony.issues,
         item_scores: harmony.item_scores,
+        math_scores: latestMathResult ? {
+          overall: latestMathResult.overall,
+          color: latestMathResult.color,
+          spatial: latestMathResult.spatial,
+          material: latestMathResult.material,
+          proportion: latestMathResult.proportion,
+        } : undefined,
         rounds_completed: round,
       };
 
       // Determine which items genuinely need revision:
       // - Skip items that already hit 10 in any previous round (locked in)
       // - Skip items revised before that still score 8+ (converged, just nitpicking)
+      // - Also consider math scores: items with math_score < 0.95 still need work
       const needsRevision = harmony.item_scores.filter((s) => {
-        if (s.harmony_score >= 10) return false;
         if (s.drop) return true;
-        // Item hit 10 in a prior round — validator is now nitpicking, lock it in
-        if (bestScores.get(s.category) === 10) {
+        const mathItem = mathItemMap.get(s.category);
+        const hasMathViolation = mathItem && mathItem.math_score < 0.95;
+        if (s.harmony_score >= 10 && !hasMathViolation) return false;
+        // Item hit 10 in a prior round and math is clean — lock it in
+        if (bestScores.get(s.category) === 10 && !hasMathViolation) {
           console.log(`[area-analysis] Round ${round}: "${s.category}" was 10 before, now ${s.harmony_score} — locked in`);
           return false;
         }
         // Item was revised before — keep pushing for 10/10
         if (previouslyRevised.has(s.category)) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10 after prior revision — continuing to push for 10/10`);
+          console.log(`[area-analysis] Round ${round}: "${s.category}" scores ${s.harmony_score}/10${hasMathViolation ? ` (math: ${mathItem!.math_score.toFixed(2)})` : ""} after prior revision — continuing to push`);
         }
         return true;
       });

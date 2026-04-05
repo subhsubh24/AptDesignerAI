@@ -67,6 +67,7 @@ export async function validateRoomHarmony(
     floorPlan?: Record<string, unknown>;
     userContext?: string;
     otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
+    mathScoresText?: string;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -151,6 +152,7 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
    Priority: ${item.priority}
    Why: ${item.description}`).join("\n\n")}
 
+${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}
 ## YOUR JOB — STEP BY STEP
 Step 1: Look at the room photos carefully. Note: floor material+color, wall color, ceiling height, window positions, door positions, existing furniture and their positions.
 Step 2: Estimate the room's dimensions from photos (or use floor plan if provided).
