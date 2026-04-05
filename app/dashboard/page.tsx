@@ -94,9 +94,6 @@ export default function DashboardPage() {
   const [savingContext, setSavingContext] = useState(false);
 
   const roomSections = getRoomSections(bedrooms, bathrooms);
-  const showNeighborhood = ["new york", "nyc", "los angeles", "la", "san francisco", "sf", "chicago"].some(
-    (c) => city.toLowerCase().includes(c)
-  );
 
   // Load existing project on mount
   useEffect(() => {
@@ -434,6 +431,9 @@ export default function DashboardPage() {
 
   // ─── Step: Location ───────────────────────────────────────────
   if (step === "location") {
+    const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const locationConfirmed = !!(city && locationCoords);
+
     const handleLocationSelected = (place: PlaceResult) => {
       if (place.city) setCity(place.city);
       if (place.state) setState(place.state);
@@ -441,6 +441,16 @@ export default function DashboardPage() {
       if (place.placeId) setLocationPlaceId(place.placeId);
       if (place.lat && place.lng) setLocationCoords({ lat: place.lat, lng: place.lng });
     };
+
+    const handleLocationReset = () => {
+      setCity("");
+      setState("");
+      setNeighborhood("");
+      setLocationPlaceId(null);
+      setLocationCoords(null);
+    };
+
+    const locationLabel = [neighborhood, city, state].filter(Boolean).join(", ");
 
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
@@ -452,63 +462,55 @@ export default function DashboardPage() {
         />
 
         <div className="space-y-6 mt-8">
-          {/* Google Places autocomplete search */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Search your city or neighborhood</label>
+          {!locationConfirmed ? (
+            /* ── Search state ── */
             <PlaceAutocomplete
               searchType="regions"
-              placeholder="e.g. West Loop, Chicago"
+              placeholder="Search your city or neighborhood..."
               icon="pin"
               onPlaceSelected={handleLocationSelected}
             />
-          </div>
-
-          {/* Auto-filled fields (editable) */}
-          {city && (
+          ) : (
+            /* ── Confirmed state with map ── */
             <div className="animate-fade-in-up space-y-4">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <MapPin className="h-3 w-3" />
-                <span>Auto-filled from selection — edit if needed</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">City</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Chicago"
-                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-                  />
+              {/* Location badge with change button */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-warm/10">
+                    <MapPin className="h-4.5 w-4.5 text-accent-warm" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{locationLabel}</p>
+                    <p className="text-xs text-muted-foreground">Your neighborhood</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">State</label>
-                  <input
-                    type="text"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    placeholder="IL"
-                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-                  />
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground"
+                  onClick={handleLocationReset}
+                >
+                  Change
+                </Button>
               </div>
 
-              {showNeighborhood && (
-                <div className="animate-fade-in-up">
-                  <label className="text-sm font-medium mb-1.5 block">Neighborhood</label>
-                  <input
-                    type="text"
-                    value={neighborhood}
-                    onChange={(e) => setNeighborhood(e.target.value)}
-                    placeholder="West Loop"
-                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+              {/* Map embed */}
+              {mapsApiKey && (
+                <div className="overflow-hidden rounded-2xl border shadow-sm">
+                  <iframe
+                    width="100%"
+                    height="240"
+                    style={{ border: 0, display: "block" }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=${encodeURIComponent(locationLabel)}&zoom=14`}
                   />
                 </div>
               )}
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <Button variant="outline" className="h-12" onClick={() => setStep("layout")}>Back</Button>
             <Button
               size="lg"
@@ -524,7 +526,7 @@ export default function DashboardPage() {
               }}
               disabled={!city}
             >
-              Continue
+              {locationConfirmed ? "Looks good" : "Continue"}
               <ChevronRight className="h-5 w-5 ml-2" />
             </Button>
           </div>
@@ -546,72 +548,107 @@ export default function DashboardPage() {
 
         <div className="space-y-8 mt-8">
           {/* Building info section */}
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              Building
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Search your building</label>
-                <PlaceAutocomplete
-                  searchType="establishment"
-                  placeholder="e.g. Porte Apartments"
-                  icon="building"
-                  locationBias={locationCoords ?? undefined}
-                  value={buildingName}
-                  onInputChange={(v) => setBuildingName(v)}
-                  onPlaceSelected={(place) => {
-                    setBuildingName(place.displayName);
-                    if (place.websiteUri) setBuildingUrl(place.websiteUri);
-                    if (place.placeId) setBuildingPlaceId(place.placeId);
-                  }}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
-                    Building name <span className="text-xs">(edit if needed)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={buildingName}
-                    onChange={(e) => setBuildingName(e.target.value)}
-                    placeholder="e.g. Porte Apartments"
-                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block text-muted-foreground">
-                    Website <span className="text-xs">(optional)</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={buildingUrl}
-                    onChange={(e) => setBuildingUrl(e.target.value)}
-                    placeholder="https://www.porteapts.com"
-                    className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
-                  />
-                </div>
-              </div>
-            </div>
+          {(() => {
+            const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+            const buildingConfirmed = !!buildingPlaceId;
+            const locationLabel = [neighborhood, city, state].filter(Boolean).join(", ");
 
-            {/* Show research result if already done */}
-            {buildingResearch && (() => {
-              const br = buildingResearch as Record<string, unknown>;
-              const fp = br.floor_plan as Record<string, unknown> | undefined;
-              const hasFloorPlan = fp?.found === true;
-              return (
-                <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    Building researched — {String(br.building_style || "style identified")}
-                    {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
-                  </span>
-                </div>
-              );
-            })()}
-          </div>
+            const handleBuildingReset = () => {
+              setBuildingName("");
+              setBuildingUrl("");
+              setBuildingPlaceId(null);
+            };
+
+            return (
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Building
+                </h3>
+
+                {!buildingConfirmed ? (
+                  /* ── Search state ── */
+                  <div className="space-y-3">
+                    <PlaceAutocomplete
+                      searchType="establishment"
+                      placeholder={city ? `Search apartments in ${city}...` : "Search your building..."}
+                      icon="building"
+                      locationBias={locationCoords ?? undefined}
+                      onPlaceSelected={(place) => {
+                        setBuildingName(place.displayName);
+                        if (place.websiteUri) setBuildingUrl(place.websiteUri);
+                        if (place.placeId) setBuildingPlaceId(place.placeId);
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground pl-1">
+                      Or type a name manually:
+                    </p>
+                    <input
+                      type="text"
+                      value={buildingName}
+                      onChange={(e) => setBuildingName(e.target.value)}
+                      placeholder="e.g. Porte Apartments"
+                      className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+                    />
+                  </div>
+                ) : (
+                  /* ── Confirmed state with map ── */
+                  <div className="animate-fade-in-up space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-warm/10">
+                          <Building2 className="h-4.5 w-4.5 text-accent-warm" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{buildingName}</p>
+                          {buildingUrl && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[250px]">{buildingUrl}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground"
+                        onClick={handleBuildingReset}
+                      >
+                        Change
+                      </Button>
+                    </div>
+
+                    {mapsApiKey && (
+                      <div className="overflow-hidden rounded-2xl border shadow-sm">
+                        <iframe
+                          width="100%"
+                          height="180"
+                          style={{ border: 0, display: "block" }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=place_id:${buildingPlaceId}&zoom=16`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Show research result if already done */}
+                {buildingResearch && (() => {
+                  const br = buildingResearch as Record<string, unknown>;
+                  const fp = br.floor_plan as Record<string, unknown> | undefined;
+                  const hasFloorPlan = fp?.found === true;
+                  return (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Building researched — {String(br.building_style || "style identified")}
+                        {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })()}
 
           {/* Room photos section */}
           <div>
