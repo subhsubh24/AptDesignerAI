@@ -220,7 +220,8 @@ PROCESS:
       messages: [{ role: "user", content: prompt }],
       max_tokens: 8000,
       temperature: 0.2,
-      tools: [{ googleSearch: {} }, { urlContext: {} }, { googleMaps: {} }],
+      // Note: googleMaps cannot be combined with googleSearch in the same request
+      tools: [{ googleSearch: {} }, { urlContext: {} }],
       // Note: responseMimeType is incompatible with built-in tools (googleSearch, urlContext)
     });
 
