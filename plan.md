@@ -1,135 +1,234 @@
-# Plan: Google Maps Integration for Location & Building Search
+# Plan: Mathematical Harmony Validation System
 
 ## Problem
-The current onboarding location step (Step 3) uses plain text inputs for city, state, and neighborhood. The building step (Step 4) also uses plain text for building name. This means:
-- Users can typo city/neighborhood names, degrading downstream AI research
-- No autocomplete or discovery — users must already know their neighborhood name
-- Building name input has no validation or suggestions
-- The app misses an opportunity to auto-fill city/state/neighborhood from a single search
+The current harmony validation is entirely LLM-driven — the AI scores its own recommendations 1-10, then revises and re-scores. The scores are subjective, non-reproducible, and "10/10" has no mathematical meaning. The model can inflate scores on re-evaluation.
 
-## Two Complementary Approaches
+## Solution
+Add a **deterministic scoring layer** (`lib/validation/harmony-math.ts`) that computes hard numbers for what's quantifiable, then feeds those scores INTO the LLM validation prompt so the AI can focus on the truly subjective aesthetic bits. The final harmony_score becomes a weighted composite of math + AI.
 
-### Approach A: Google Places Autocomplete (Address Dropdown)
-**What:** Replace the 3 separate text inputs (city, state, neighborhood) with a single Google Places autocomplete search bar — the familiar "start typing an address" dropdown.
+## Architecture
 
-**How it works:**
-- Use the new `PlaceAutocompleteElement` (the old `Autocomplete` class was deprecated for new customers as of March 2025)
-- User types their address or neighborhood → dropdown shows predictions
-- On selection, auto-extract `city`, `state`, `neighborhood` from the structured place data via `place.fetchFields()`
-- Also works for the **building name** field — user types "Porte Apartments Chicago" and gets the real place with address, website, etc.
-
-**Key implementation details:**
-- **API:** Google Maps JavaScript API with Places library (new)
-- **Component:** `PlaceAutocompleteElement` is a native HTML custom element (`<gmp-place-autocomplete>`)
-- **React integration:** Wrap in a `useRef` + `useEffect` pattern or use `@vis.gl/react-google-maps` library
-- **Types filter:** Constrain to `(regions)` for location step, `(establishment)` for building step
-- **Fields to fetch:** `addressComponents`, `displayName`, `formattedAddress`, `location`, `websiteUri`
-- **Cost:** Places Autocomplete: $2.83/1000 sessions (session-based pricing, very cheap)
-
-**Files to change:**
-1. `app/dashboard/page.tsx` — Replace city/state/neighborhood inputs with single autocomplete, replace building name input with establishment autocomplete
-2. New component: `components/ui/place-autocomplete.tsx` — Reusable wrapper around `PlaceAutocompleteElement`
-3. `app/layout.tsx` or `app/dashboard/layout.tsx` — Load Google Maps JS API script
-4. `.env.local` — Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
-
-**UX flow (location step):**
 ```
-Current:  [City: ___] [State: ___] [Neighborhood: ___]  (3 fields)
-Proposed: [🔍 Search your city or neighborhood...]       (1 field)
-          ├─ West Loop, Chicago, IL
-          ├─ Wicker Park, Chicago, IL
-          └─ Lincoln Park, Chicago, IL
-          
-          Auto-fills: city="Chicago", state="IL", neighborhood="West Loop"
-          User can still manually edit if needed
+Area Analysis generates recommendations
+        ↓
+  computeHarmonyScores()          ← NEW: deterministic math
+        ↓
+  validateRoomHarmony()           ← EXISTING: AI validation, now receives math scores as context
+        ↓
+  Composite score = weighted(math, AI)   ← NEW: blended in route.ts
 ```
 
-**UX flow (building step):**
+The math layer does NOT replace the AI — it augments it. The AI still handles subjective aesthetics (does this "feel" right?), but can no longer claim 10/10 when the math says there's a 14" clearance violation.
+
+---
+
+## Step 1: Create `lib/validation/lookups.ts` — Color & Material Reference Tables
+
+**Color HSL lookup table** (~100 common interior design colors):
+- Maps color names like "warm ivory", "sage green", "walnut brown", "matte black" to HSL values
+- Supports fuzzy matching for slight variations ("ivory" matches "warm ivory")
+
+**Material property vectors** (~50 common materials):
+- Maps materials to `[warmth, roughness, sheen, weight]` vectors (0-1 each)
+- e.g., "solid walnut" → [0.8, 0.3, 0.4, 0.9], "brushed brass" → [0.6, 0.2, 0.7, 0.8], "linen" → [0.7, 0.6, 0.1, 0.2]
+
+---
+
+## Step 2: Create `lib/validation/color-math.ts` — Color Harmony Scoring
+
+**What it computes:**
+- Parse color names → HSL values using lookup table from Step 1
+- **Delta-E (CIEDE2000)** between all color pairs in the palette
+- **Color relationship classification**: analogous (<30° hue apart), complementary (~180°), triadic (~120°), split-complementary, monochromatic (same hue, different saturation/lightness)
+- **Palette coherence score**: Does the set of colors form a recognized harmonious relationship? Score 0-1.
+- **Cross-room palette distance**: How similar is this room's palette to other rooms? Should be similar but not identical. Score 0-1.
+
+**Inputs:** `recommended_palette: string[]`, `otherRooms[].palette: string[]`, `what_it_needs[].specs` (extract color mentions)
+
+**Output:**
+```ts
+{
+  palette_harmony: number;        // 0-1: how harmonious the color set is
+  cross_room_coherence: number;   // 0-1: apartment-wide palette consistency
+  pair_conflicts: Array<{ color1: string; color2: string; deltaE: number; issue: string }>;
+}
 ```
-Current:  [Building name: ___] [Website: ___]
-Proposed: [🔍 Search your building...]
-          ├─ Porte Apartments - 840 W Blackhawk St, Chicago
-          ├─ AMLI River North - 747 N Clark St, Chicago  
-          └─ The Parker Fulton Market - 939 W Randolph St
-          
-          Auto-fills: buildingName, buildingUrl (from websiteUri), 
-          plus lat/lng for future use
+
+**No external deps needed** — implement CIEDE2000 directly (~60 lines of math).
+
+---
+
+## Step 3: Create `lib/validation/spatial-math.ts` — Spatial Constraint Scoring
+
+**What it computes:**
+- Parse dimensions from `specs` strings (regex: `(\d+)[-–]?(\d+)?\s*(inches?|in|"|ft|feet|cm)`)
+- Parse room dimensions from `floorPlan.room_dimensions` (e.g., `"12x15"` → 144" x 180")
+- **Furniture-to-room ratio**: total furniture footprint / room area. Target: 0.55-0.70 for living rooms, 0.45-0.60 for bedrooms.
+- **Clearance checks** (hard constraints, pass/fail):
+  - Main walkways: ≥ 36"
+  - Coffee table to sofa: ≥ 18"
+  - Behind dining chairs: ≥ 24"
+  - Beside beds: ≥ 30"
+  - Door swing clearance: ≥ 36"
+- **Placement conflict detection**: Two items assigned to same wall/zone that would overlap
+- **Coverage gaps**: Zones with no items assigned (e.g., dining zone in a combined room has no dining table)
+
+**Inputs:** `what_it_needs[]` (specs + placement), `floorPlan`, `spatial_layout`, `window_door_positions`
+
+**Output:**
+```ts
+{
+  room_coverage_ratio: number;       // 0-1: furniture footprint / room area
+  clearance_score: number;           // 0-1: % of clearance constraints met
+  violations: Array<{ item: string; constraint: string; actual: string; required: string }>;
+  placement_conflicts: Array<{ item1: string; item2: string; zone: string }>;
+}
 ```
 
 ---
 
-### Approach B: Gemini Maps Grounding (AI-Powered Research)
-**What:** Enhance the existing apartment research API call by enabling Gemini's Maps grounding tool, so the AI can pull real Google Maps data (place details, reviews, nearby amenities, neighborhood info) when researching the building.
+## Step 4: Create `lib/validation/material-math.ts` — Material Cluster Scoring
 
-**How it works:**
-- When calling the Gemini API in `/api/apartment-research`, add `google_maps` as a tool alongside `google_search` and `url_context`
-- Gemini will automatically use Maps data when the query involves location context
-- Returns richer `neighborhood_vibe`, verified `amenities`, accurate `website_url`, and place photos
-- Response includes `groundingMetadata` with `placeId` links back to Google Maps
+**What it computes:**
+- Map materials to property vectors using lookup from Step 1
+- **Distribution variance**: Are materials balanced across warm/cool, rough/smooth, matte/glossy spectrums? Score 0-1.
+- **Wood species conflict detection**: Mixing oak + walnut + ash = too many wood tones. Max 2 wood species recommended.
+- **Metal finish conflict detection**: Mixing brass + chrome + nickel = clash. Max 1 primary + 1 accent metal.
+- **Soft-to-hard ratio**: Count soft items (rug, curtains, upholstery, throws) vs hard (wood, metal, glass, stone). Target ratio depends on room type.
 
-**Key implementation details:**
-- **API:** Already using `@google/genai` — just add `{ googleMaps: {} }` to the tools config
-- **Model requirement:** Gemini 2.5+ (or Gemini 3 family) supports Maps grounding
-- **Pricing:** Maps grounding requests are billed per Gemini API call + Maps data usage
-- **Bonus:** Can combine with Google Search grounding in the same request (already doing search)
+**Inputs:** `recommended_materials[]`, `what_it_needs[].specs`, `what_works[]`
 
-**Files to change:**
-1. `app/api/apartment-research/route.ts` — Add `googleMaps` tool to Gemini config
-2. Optionally store `placeId` in the `building_research` JSONB column for future use
-
----
-
-### Approach C: Curated Popular Buildings List (Hybrid)
-**What:** For the 4 target cities (Chicago, LA, NYC, SF), maintain a curated list of popular apartment buildings that appears as quick-select options.
-
-**How it works:**
-- After user selects city via Places Autocomplete, show a "Popular buildings nearby" section
-- Could be a static JSON file initially, or populated from a Supabase table
-- Clicking a building auto-fills name + URL + skips the research step if we already have cached data
-- Falls back to free-text search for buildings not in the list
-
-**Implementation:**
-- New file: `lib/data/popular-buildings.ts` — Static data for known buildings per city
-- New Supabase table (optional): `popular_buildings` with pre-cached research results
-- UI: Show as clickable chips/cards below the building input when city matches
+**Output:**
+```ts
+{
+  material_balance: number;        // 0-1: distribution across property axes
+  wood_coherence: number;          // 0-1: 1.0 if ≤2 wood species
+  metal_coherence: number;         // 0-1: 1.0 if ≤2 metal finishes
+  soft_hard_ratio: number;         // 0-1: how close to ideal balance
+  conflicts: Array<{ material1: string; material2: string; issue: string }>;
+}
+```
 
 ---
 
-## Recommended Implementation Order
+## Step 5: Create `lib/validation/proportion-math.ts` — Scale & Proportion Scoring
 
-### Phase 1: Places Autocomplete for Location (Highest impact, simplest)
-1. Set up Google Maps API key and script loading
-2. Build `<PlaceAutocomplete>` reusable component  
-3. Replace location step with single autocomplete field
-4. Parse place result → auto-fill city/state/neighborhood
-5. Keep manual override capability (editable fields below, collapsed by default)
+**What it computes:**
+- **Rug-to-seating ratio**: Rug should extend ≥6" beyond seating on all sides, ≥24" for dining (chair pullback)
+- **Table height relationships**: Coffee table ±2" of sofa seat height (~17-19"), dining table ~30", side tables within 2" of sofa arm height
+- **Visual weight balance**: Assign visual weight (size × darkness × density) per item, check left/right and front/back balance
+- **Grouping ratios**: Odd numbers for decorative groupings (3 or 5 throw pillows, not 4)
 
-### Phase 2: Places Autocomplete for Building (High impact)
-1. Add second autocomplete instance filtered to `establishment` type
-2. Bias results to the location selected in Phase 1 (use lat/lng from step 3)
-3. Auto-fill building name + website from place data
-4. Store `placeId` for potential future use
+**Inputs:** `what_it_needs[]` (specs + placement), `floorPlan`
 
-### Phase 3: Gemini Maps Grounding (Enriches AI research)
-1. Add `googleMaps` tool to apartment-research API
-2. Update prompt to leverage Maps data for neighborhood context
-3. Test that it enriches building research quality
-
-### Phase 4: Curated Buildings (Nice-to-have)
-1. Build initial dataset for Chicago, LA, NYC, SF
-2. Show as suggestions after city selection
-3. Cache research results for instant onboarding
+**Output:**
+```ts
+{
+  rug_coverage: number;          // 0-1
+  height_relationships: number;  // 0-1
+  visual_balance: number;        // 0-1
+  issues: Array<{ item: string; issue: string; suggestion: string }>;
+}
+```
 
 ---
 
-## Dependencies & Considerations
+## Step 6: Create `lib/validation/harmony-math.ts` — Orchestrator
 
-| Item | Detail |
-|------|--------|
-| **API Key** | Need Google Maps Platform API key with Places API (New) enabled |
-| **Billing** | Places Autocomplete ~$2.83/1k sessions; Maps grounding priced per Gemini call |
-| **Bundle size** | Google Maps JS API loads async, ~50-100KB; no impact on initial bundle |
-| **Existing key** | Already have `GOOGLE_API_KEY` for Gemini — may need a separate key for Maps, or enable Maps on same project |
-| **Deprecation** | Must use `PlaceAutocompleteElement` (new), NOT legacy `Autocomplete` class |
-| **Fallback** | Keep manual text inputs as fallback if Places API is unavailable |
-| **DB changes** | Consider adding `place_id` and `lat`/`lng` columns to `projects` table |
+Combines all four modules:
+
+```ts
+export function computeHarmonyScores(analysis, context): MathHarmonyResult {
+  const color = computeColorHarmony(analysis, context);
+  const spatial = computeSpatialConstraints(analysis, context);
+  const material = computeMaterialBalance(analysis, context);
+  const proportion = computeProportionScores(analysis, context);
+
+  const itemScores = analysis.what_it_needs.map(item => ({
+    category: item.category,
+    math_score: weightedAverage({
+      color: 0.20,    spatial: 0.30,
+      material: 0.20, proportion: 0.15,
+      specificity: 0.15,
+    }),
+    violations: [...collected per item...],
+  }));
+
+  return { overall, color, spatial, material, proportion, itemScores };
+}
+```
+
+**Weights** (spatial heaviest — hard physical constraints):
+- Spatial: 0.30
+- Color: 0.20
+- Material: 0.20
+- Proportion: 0.15
+- Specificity: 0.15
+
+---
+
+## Step 7: Integrate into `validation-agent.ts`
+
+Inject math scores into the AI validation prompt as facts:
+
+```
+## MATHEMATICAL ANALYSIS (computed — these are FACTS, not opinions)
+Overall math score: 0.82/1.0
+
+### Color Harmony: 0.90/1.0
+- Palette forms analogous warm scheme ✓
+- Conflict: "sage green" ↔ "warm ivory" Delta-E=42 (threshold: 30)
+
+### Spatial Constraints: 0.70/1.0
+- VIOLATION: coffee_table clearance = 14" (required: 18")
+- VIOLATION: dining_chairs pullback = 20" (required: 24")
+
+### Material Balance: 0.85/1.0
+- 3 wood species (walnut, oak, ash) — max 2 recommended
+
+Per-item math scores:
+- area_rug: 0.95 | no violations
+- coffee_table: 0.62 | clearance violation, height mismatch
+...
+
+You CANNOT score an item 10/10 if it has math violations. Fix violations
+in revised_specs/placement. Focus on SUBJECTIVE aspects math can't capture.
+```
+
+---
+
+## Step 8: Composite scoring in `route.ts`
+
+After both math + AI scores:
+
+```ts
+// Math can veto but not promote
+const finalScore = item.math_score >= 0.95
+  ? item.ai_harmony_score              // Math clean → trust AI
+  : Math.min(item.ai_harmony_score,    // Math violation → cap AI score
+      Math.round(item.math_score * 10));
+```
+
+Update convergence: loop stops when ALL items have `math_score >= 0.95` AND `ai_score >= 9`.
+
+---
+
+## Files to Create
+1. `lib/validation/lookups.ts` (~150 lines — color HSL + material property tables)
+2. `lib/validation/color-math.ts` (~200 lines)
+3. `lib/validation/spatial-math.ts` (~180 lines)
+4. `lib/validation/material-math.ts` (~150 lines)
+5. `lib/validation/proportion-math.ts` (~150 lines)
+6. `lib/validation/harmony-math.ts` (~100 lines — orchestrator)
+
+## Files to Modify
+1. `lib/agents/validation-agent.ts` — inject math scores into prompt, accept mathScores param
+2. `app/api/area-analysis/route.ts` — call computeHarmonyScores(), composite scoring, updated convergence
+
+## Dependencies
+**None** — all math implemented from scratch. No new packages needed.
+
+## Risks & Mitigations
+- **Color name parsing**: AI uses free-form names → fuzzy match against lookup, unrecognized → 0.5 score
+- **Dimension parsing**: Free-form specs → robust regex with fallbacks, unparseable → neutral 0.7
+- **False violations**: Some "violations" are intentional (cozy reading nook with 12" clearance) → soft constraints cap at 0.85 minimum, only hard violations (overlap, doesn't fit) go below
