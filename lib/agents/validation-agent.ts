@@ -8,6 +8,7 @@ import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
 
 const log = createLogger("validation-agent");
 
@@ -367,9 +368,33 @@ export async function validateProductSet(
       `Intended placements:\n${Object.entries(roomContext.placementMap).map(([cat, pl]) => `  ${cat}: ${pl}`).join("\n")}`,
   ].filter(Boolean).join("\n");
 
+  // Compute deterministic math scores for the product set
+  const setMathScores = computeSetMathScores(
+    products.map(p => ({
+      title: p.title,
+      category: p.category,
+      tier: p.tier,
+      materials: p.materials,
+      colors: p.colors,
+      price: p.price,
+      description: p.description,
+      dimensions: p.dimensions,
+      visual_style_tags: p.visual_style_tags,
+    })),
+    {
+      roomType: roomContext.roomType,
+      designDirection: roomContext.designDirection,
+      existingItems: roomContext.existingItems,
+      floorPlan: roomContext.floorPlan,
+    }
+  );
+  const setMathSection = formatSetMathForPrompt(setMathScores);
+
   const promptText = `Validate this set of product search results AS A COLLECTIVE SET. You have room photos and product images — use them to verify visual coherence.
 
 IMPORTANT: Think step-by-step. First examine the room photos. Then examine each product image. Then evaluate each product against the room AND against every other product in the set.
+
+${setMathSection}
 
 ## VALIDATION CHECKLIST — Check EVERY item on this list:
 1. **Visual cohesion**: Do the product images ACTUALLY look like they belong together? Check real colors, textures, and styles in the images — not just text descriptions.
@@ -460,10 +485,25 @@ Return JSON:
         const raw = extractJsonObject(response.content);
         const validated = ProductSetValidationResponseSchema.parse(raw);
 
+        // Apply math veto: cap per-product harmony scores where math found issues
+        if (validated.product_flags) {
+          for (const flag of validated.product_flags) {
+            const mathEntry = setMathScores.per_product.find(
+              pp => pp.title === flag.title || pp.category === flag.category
+            );
+            if (mathEntry && mathEntry.math_harmony < 0.6 && flag.harmony_score > 6) {
+              const mathCap = Math.round(mathEntry.math_harmony * 10);
+              log.info(`Math capping product set harmony: "${flag.title}" AI=${flag.harmony_score} → ${mathCap}`);
+              flag.harmony_score = mathCap;
+            }
+          }
+        }
+
         log.info("Product set validation complete", {
           phase: "validation",
           confidence: validated.confidence,
           products: validated.product_flags?.length ?? 0,
+          mathOverall: setMathScores.overall,
         });
 
         return {

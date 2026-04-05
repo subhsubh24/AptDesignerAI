@@ -13,6 +13,7 @@ import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DiagnosisData, DesignDirection } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import { computeBundleMathScores, formatBundleMathForPrompt } from "@/lib/validation/bundle-math";
 
 const log = createLogger("bundle-optimizer");
 
@@ -95,9 +96,30 @@ export async function evaluateBundle(
     }
   }
 
+  // Compute deterministic math scores for the bundle
+  const bundleMathScores = computeBundleMathScores(
+    products.map(p => ({
+      title: p.title || undefined,
+      category: p.category || undefined,
+      price: p.price || undefined,
+      materials: p.materials || undefined,
+      colors: p.colors || undefined,
+      dimensions: p.dimensions || undefined,
+    })),
+    {
+      roomType: bundleCtx.roomType,
+      recommendedPalette: bundleCtx.designDirection?.recommended_palette,
+      recommendedMaterials: bundleCtx.designDirection?.recommended_materials,
+      floorPlan: bundleCtx.floorPlan,
+      placementMap: bundleCtx.placementMap,
+      existingItems: bundleCtx.existingItems,
+    }
+  );
+  const bundleMathSection = formatBundleMathForPrompt(bundleMathScores);
+
   content.push({
     type: "text",
-    text: `${bundlePrompt}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
+    text: `${bundlePrompt}\n\n${bundleMathSection}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
   });
 
   let lastError: string | undefined;
@@ -124,6 +146,29 @@ export async function evaluateBundle(
         const raw = extractJsonObject(response.content);
         const validated = BundleEvalResponseSchema.parse(raw);
         const scores = validated.scores;
+
+        // Apply math veto: cap AI bundle dimension scores where math found violations
+        if (bundleMathScores.palette_harmony < 0.6 && scores.palette_harmony_score > 6) {
+          log.info(`Math capping palette_harmony: AI=${scores.palette_harmony_score} → ${Math.round(bundleMathScores.palette_harmony * 10)}`);
+          scores.palette_harmony_score = Math.round(bundleMathScores.palette_harmony * 10);
+        }
+        if (bundleMathScores.material_balance < 0.6 && scores.material_balance_score > 6) {
+          log.info(`Math capping material_balance: AI=${scores.material_balance_score} → ${Math.round(bundleMathScores.material_balance * 10)}`);
+          scores.material_balance_score = Math.round(bundleMathScores.material_balance * 10);
+        }
+        if (bundleMathScores.scale_balance < 0.6 && scores.scale_balance_score > 6) {
+          log.info(`Math capping scale_balance: AI=${scores.scale_balance_score} → ${Math.round(bundleMathScores.scale_balance * 10)}`);
+          scores.scale_balance_score = Math.round(bundleMathScores.scale_balance * 10);
+        }
+        if (bundleMathScores.spatial_feasibility < 0.6 && scores.spatial_arrangement_score !== undefined && scores.spatial_arrangement_score > 6) {
+          log.info(`Math capping spatial_arrangement: AI=${scores.spatial_arrangement_score} → ${Math.round(bundleMathScores.spatial_feasibility * 10)}`);
+          scores.spatial_arrangement_score = Math.round(bundleMathScores.spatial_feasibility * 10);
+        }
+        if (bundleMathScores.completeness < 0.6 && scores.room_completion_score > 6) {
+          log.info(`Math capping room_completion: AI=${scores.room_completion_score} → ${Math.round(bundleMathScores.completeness * 10)}`);
+          scores.room_completion_score = Math.round(bundleMathScores.completeness * 10);
+        }
+
         const finalScore = computeFinalBundleScore(scores);
 
         // Record scores for drift monitoring

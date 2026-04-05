@@ -14,6 +14,7 @@ import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import { computeProductMathScores, formatProductMathForPrompt, type ProductMathScores } from "@/lib/validation/product-math";
 
 const log = createLogger("fit-scorer");
 
@@ -135,6 +136,28 @@ export async function scoreProduct(
     content.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
   }
 
+  // Compute deterministic math scores before LLM evaluation
+  const mathScores: ProductMathScores = computeProductMathScores(
+    {
+      title: product.title || undefined,
+      category: product.category || undefined,
+      price: product.price || undefined,
+      materials: product.materials || undefined,
+      colors: product.colors || undefined,
+      dimensions: product.dimensions || undefined,
+      description: product.description || undefined,
+    },
+    {
+      roomType: scoringCtx.roomType,
+      budgetMode: scoringCtx.budgetMode,
+      recommendedPalette: scoringCtx.designDirection?.recommended_palette,
+      recommendedMaterials: scoringCtx.designDirection?.recommended_materials,
+      floorPlan: scoringCtx.floorPlan,
+      placement: scoringCtx.placement,
+    }
+  );
+  const mathSection = formatProductMathForPrompt(mathScores);
+
   // Build the full prompt with calibration anchors and optional user feedback
   const feedbackSection = scoringCtx.userFeedbackContext
     ? `\n\n${scoringCtx.userFeedbackContext}`
@@ -142,7 +165,7 @@ export async function scoreProduct(
 
   content.push({
     type: "text",
-    text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
+    text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
   });
 
   // Attempt scoring with retry (exponential backoff for API errors,
@@ -172,6 +195,21 @@ export async function scoreProduct(
         const raw = extractJsonObject(response.content);
         const validated = ProductEvalResponseSchema.parse(raw);
         const scores = validated.scores;
+
+        // Apply math veto: cap AI dimension scores where math found violations
+        if (mathScores.scale_fit < 0.6 && scores.scale_fit_score > 6) {
+          log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
+          scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);
+        }
+        if (mathScores.palette_fit < 0.6 && scores.palette_fit_score > 6) {
+          log.info(`Math capping palette_fit: AI=${scores.palette_fit_score} → ${Math.round(mathScores.palette_fit * 10)}`, { product: product.title });
+          scores.palette_fit_score = Math.round(mathScores.palette_fit * 10);
+        }
+        if (mathScores.material_fit < 0.6 && scores.material_fit_score > 6) {
+          log.info(`Math capping material_fit: AI=${scores.material_fit_score} → ${Math.round(mathScores.material_fit * 10)}`, { product: product.title });
+          scores.material_fit_score = Math.round(mathScores.material_fit * 10);
+        }
+
         const finalScore = computeFinalItemScore(scores, product.category || undefined);
         const verdict = determineVerdict(finalScore, scores.confidence_score);
 
