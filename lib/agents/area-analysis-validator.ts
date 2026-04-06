@@ -38,10 +38,14 @@ function mentionsAny(text: string, terms: string[]): string | null {
   const normalText = normalize(text);
   for (const term of terms) {
     const normalTerm = normalize(term);
-    if (normalText.includes(normalTerm)) return term;
-    if (normalTerm.split(" ").length === 1 && normalTerm.length >= 3) {
+    // For multi-word terms, check substring containment
+    if (normalTerm.split(" ").length > 1) {
+      if (normalText.includes(normalTerm)) return term;
+    } else if (normalTerm.length >= 3) {
+      // For single-word terms, require exact word match (not prefix)
+      // to avoid "light" matching "lightweight", "lamp" matching "lampshade", etc.
       const words = normalText.split(" ");
-      if (words.some((w) => w === normalTerm || w.startsWith(normalTerm))) return term;
+      if (words.some((w) => w === normalTerm)) return term;
     }
   }
   return null;
@@ -75,6 +79,19 @@ function expandExclusionTerms(exclusions: string[]): string[] {
 /**
  * Extract category keywords from keep items for detecting replacement recommendations.
  */
+/**
+ * Strip location/context phrases from keep item text so we only match
+ * the item itself, not where it is. For example:
+ *   "black arc floor lamp behind the sofa" → "black arc floor lamp"
+ *   "two lights next to the TV" → "two lights"
+ */
+function stripLocationContext(text: string): string {
+  return text
+    .replace(/\b(?:behind|next to|near|beside|by|on top of|under|underneath|above|in front of|across from|against|along|around|at|between|in|on|over|to the (?:left|right) of|if possible)\b.*/gi, "")
+    .replace(/\b(?:also)\b/gi, "")
+    .trim();
+}
+
 function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[] }> {
   const categoryPatterns: Record<string, string[]> = {
     "floor lamp": ["floor_lamp", "floor lamp", "arc lamp", "standing lamp", "arc floor lamp", "tripod lamp", "tripod floor lamp", "tripod light"],
@@ -89,7 +106,9 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
   };
 
   return keepItems.map((item) => {
-    const normalItem = normalize(item);
+    // Strip location context so "lamp behind the sofa" doesn't trigger "sofa" category
+    const itemOnly = stripLocationContext(item);
+    const normalItem = normalize(itemOnly);
     const keywords: string[] = [];
     for (const [, patterns] of Object.entries(categoryPatterns)) {
       if (patterns.some((p) => normalItem.includes(normalize(p)))) {
@@ -217,14 +236,82 @@ export function validateAreaAnalysis(
   }
 
   // --- Check 3: Missing explicit requests ---
+  // Map short request phrases to likely furniture categories for auto-injection
+  const requestCategoryMap: Record<string, string> = {
+    "dining table": "dining_table",
+    "dining chair": "dining_chairs",
+    "dining chairs": "dining_chairs",
+    "coffee table": "coffee_table",
+    "side table": "side_table",
+    "rug": "area_rug",
+    "area rug": "area_rug",
+    "plant": "plant",
+    "plants": "plant",
+    "lamp": "floor_lamp",
+    "floor lamp": "floor_lamp",
+    "bookshelf": "bookshelf",
+    "curtains": "curtains",
+    "throw pillows": "throw_pillows",
+    "throw blanket": "throw_blanket",
+    "wall art": "wall_art",
+    "art": "wall_art",
+    "mirror": "wall_art",
+    "console table": "console_table",
+    "storage": "storage_cabinet",
+    "vase": "vase",
+    "tray": "tray",
+  };
+
   if (parsed?.explicitRequests && parsed.explicitRequests.length > 0) {
     for (const request of parsed.explicitRequests) {
+      // Build search terms: the full request + any category keyword extracted from it
       const requestTerms = [request.item];
+      const normalRequest = normalize(request.item);
+      for (const [keyword] of Object.entries(requestCategoryMap)) {
+        if (normalRequest.includes(keyword)) {
+          requestTerms.push(keyword);
+        }
+      }
       const foundInNeeds = Array.isArray(patched.what_it_needs) && patched.what_it_needs.some(
         (item: any) => mentionsAny(`${item.category || ""} ${item.search_title || ""} ${item.description || ""}`, requestTerms)
       );
 
       if (!foundInNeeds) {
+        // Try to detect a concrete furniture category from the request
+        let detectedCategory: string | null = null;
+        for (const [keyword, category] of Object.entries(requestCategoryMap)) {
+          if (normalRequest.includes(keyword)) {
+            detectedCategory = category;
+            break;
+          }
+        }
+
+        if (detectedCategory && Array.isArray(patched.what_it_needs)) {
+          // Check the category isn't already present
+          const categoryExists = patched.what_it_needs.some(
+            (item: any) => item.category === detectedCategory
+          );
+          if (!categoryExists) {
+            patched.what_it_needs.push({
+              category: detectedCategory,
+              search_title: `${request.item} — style and specs to be determined by design direction`,
+              description: `Client explicitly requested: "${request.item}". The harmony loop should refine this into a specific product recommendation that fits the room's design direction.`,
+              priority: "high",
+              specs: "To be determined during harmony validation",
+              placement: "To be determined based on room layout",
+              _injected_by_validator: true,
+            });
+            issues.push({
+              type: "missing_request",
+              description: `Client explicitly requested "${request.item}" — auto-injected as ${detectedCategory} into what_it_needs`,
+              field: "what_it_needs",
+              action: "removed", // "removed" signals wasModified=true
+            });
+            continue;
+          }
+        }
+
+        // If we couldn't auto-inject (abstract request like "comfortable and impressive"), just flag
         issues.push({
           type: "missing_request",
           description: `Client explicitly requested "${request.item}" but it was not found in what_it_needs`,
