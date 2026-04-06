@@ -357,28 +357,44 @@ Return JSON:
 YOUR GOAL IS 9.5+/10 ON EVERY SUB-DIMENSION OF EVERY ITEM. Be extremely precise — one bad dimension tanks the whole item due to compounding. Use the math scores as your foundation for the 4 math-anchored dimensions.`,
   });
 
+  // Scale max_tokens based on item count: each item needs ~2.5K tokens for
+  // 6D scoring + rationale + revisions + thinking overhead
+  const itemCount = ((analysis.what_it_needs as unknown[]) || []).length;
+  const baseMaxTokens = Math.min(16000 + itemCount * 2500, 65000);
+
   let lastError: string | undefined;
   let attempt = 0;
+  let wasTruncated = false;
 
   try {
     return await withRetry(
       async () => {
         attempt++;
+
+        // On truncation retries: increase token budget + reduce thinking overhead
+        const maxTokens = wasTruncated
+          ? Math.min(baseMaxTokens + 16000, 65000)
+          : baseMaxTokens;
+        const thinkingLevel = wasTruncated ? "medium" as const : (attempt === 1 ? "high" as const : "medium" as const);
+
         const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. Ensure confidence and overall_cohesion are numbers 0-10, and item_scores is a non-empty array.` }]
+          ? [...content, { type: "text" as const, text: wasTruncated
+              ? `\n\n**IMPORTANT**: Your previous response was truncated due to length. Be MORE CONCISE: keep rationales to 1-2 sentences max, omit revised fields for items scoring above 9.0. Return ONLY valid JSON matching the exact schema above.`
+              : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. Ensure confidence and overall_cohesion are numbers 0-10, and item_scores is a non-empty array.` }]
           : content;
 
         const response = await geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 32000,
+          max_tokens: maxTokens,
           temperature: attempt === 1 ? 0.2 : 0.3,
-          thinkingConfig: { thinkingLevel: attempt === 1 ? "high" : "medium" },
+          thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
         });
 
         if (response.truncated) {
+          wasTruncated = true;
           throw new Error("Response truncated (MAX_TOKENS)");
         }
 
@@ -663,28 +679,43 @@ Return JSON:
 }`,
   });
 
+  // Scale max_tokens based on item count (same logic as harmony validation)
+  const finalItemCount = whatItNeeds.length;
+  const finalBaseMaxTokens = Math.min(16000 + finalItemCount * 2500, 65000);
+
   let lastError: string | undefined;
   let attempt = 0;
+  let wasTruncated = false;
 
   try {
     return await withRetry(
       async () => {
         attempt++;
+
+        // On truncation retries: increase token budget + reduce thinking overhead
+        const maxTokens = wasTruncated
+          ? Math.min(finalBaseMaxTokens + 16000, 65000)
+          : finalBaseMaxTokens;
+        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+
         const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+          ? [...content, { type: "text" as const, text: wasTruncated
+              ? `\n\n**IMPORTANT**: Your previous response was truncated due to length. Be MORE CONCISE: keep rationales to 1-2 sentences max, omit revised fields for items scoring above 9.0. Return ONLY valid JSON matching the exact schema above.`
+              : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
           : content;
 
         const response = await geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 32000,
+          max_tokens: maxTokens,
           temperature: 0.2,
-          thinkingConfig: { thinkingLevel: "high" },
+          thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
         });
 
         if (response.truncated) {
+          wasTruncated = true;
           throw new Error("Response truncated (MAX_TOKENS)");
         }
 
