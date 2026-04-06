@@ -10,6 +10,8 @@ import { computeFinalHarmonyScore, type MathDimensionCaps } from "@/lib/scoring/
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -92,12 +94,19 @@ export async function POST(request: Request) {
   // Build vision content
   const contentBlocks: AIContentBlock[] = [];
 
+  // Extract user-provided sqft override from context (e.g., "My apt sq ft is 725")
+  const userSqftMatch = room.user_context?.match(/(?:sq\s*ft|square\s*feet?|sqft)\s*(?:is|:)?\s*(\d{3,5})/i)
+    || room.user_context?.match(/(\d{3,5})\s*(?:sq\s*ft|square\s*feet?|sqft)/i);
+  const userSqft = userSqftMatch ? parseInt(userSqftMatch[1], 10) : null;
+
   // Inject building research if available
   if (project?.building_research) {
     const br = project.building_research as Record<string, unknown>;
     const floorPlan = br.floor_plan as Record<string, unknown> | undefined;
+    // Use user-provided sqft if available, otherwise fall back to building research
+    const effectiveSqft = userSqft || floorPlan?.total_sqft || "unknown";
     const floorPlanSection = floorPlan
-      ? `\nFloor Plan: ${floorPlan.total_sqft || "unknown"} sqft | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
+      ? `\nFloor Plan: ${effectiveSqft} sqft${userSqft ? " (per client)" : ""} | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
 Room layout: ${floorPlan.room_layout || "unknown"}
 Room dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}
 Spatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
@@ -127,17 +136,26 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     });
   }
 
+  // Parse user context into structured constraints (exclusions, keep items, requests)
+  const parsedContext = room.user_context ? parseUserContext(room.user_context) : null;
+  const parsedContextBlock = parsedContext ? formatParsedContextForPrompt(parsedContext) : "";
+
   const userContextNote = room.user_context
     ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. If they say to ignore something, don't include it in your assessment. If they express a preference for keeping or liking something, RESPECT that — design around it, don't suggest removing it.`
     : "";
 
-  // Build keep-items protection block
+  // Build keep-items protection block — merge explicit keep_items with parsed keep items from user context
   const keepItems = room.keep_items as string[] | null;
   const replaceItems = room.replace_items as string[] | null;
   const priorities = room.priorities as string[] | null;
 
-  const keepItemsBlock = keepItems?.length
-    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — DO NOT SUGGEST REMOVING THESE:\n${keepItems.map((item: string) => `- ${item}`).join("\n")}\nThese items are NON-NEGOTIABLE. Include them in "what_works" and design AROUND them. NEVER put these in "what_should_go".`
+  const allKeepItems = [
+    ...(keepItems || []),
+    ...(parsedContext?.additionalKeepItems || []),
+  ];
+
+  const keepItemsBlock = allKeepItems.length > 0
+    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — DO NOT SUGGEST REMOVING THESE:\n${allKeepItems.map((item: string) => `- ${item}`).join("\n")}\nThese items are NON-NEGOTIABLE. Include them in "what_works" and design AROUND them. NEVER put these in "what_should_go". Do NOT recommend buying a NEW version of these items — the client already has them and wants to keep them.`
     : "";
 
   const replaceItemsBlock = replaceItems?.length
@@ -154,7 +172,8 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     type: "text",
     text: `═══════════════════════════════════════════════════════════
 >>> TARGET ROOM: ${room.name} (${room.room_type}) — THIS IS THE ROOM YOU ARE ANALYZING <<<
-═══════════════════════════════════════════════════════════${userContextNote}${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}
+═══════════════════════════════════════════════════════════${userContextNote}
+${parsedContextBlock}${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}
 
 The next ${targetImageCount} photo(s) are ALL from the ${room.name}. Your analysis, recommendations, and "what_it_needs" must be ONLY about this room.`,
   });
@@ -345,12 +364,27 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
     console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
 
+    // ── Post-validation: enforce user constraints ────────────────────
+    // Catch cases where the LLM ignored exclusions, keep items, or explicit requests
+    if (parsedContext || allKeepItems.length > 0) {
+      const validation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      if (validation.wasModified) {
+        analysis = validation.patched;
+        console.log(`[area-analysis] Post-validation patched ${validation.issues.length} constraint violation(s):`,
+          validation.issues.map(i => `${i.type}: ${i.description}`).join("; "));
+      }
+    }
+
     // ── Harmony + Spatial validation loop ────────────────────────────
     // Validate every recommended item, apply revisions for any score < 10,
     // then re-validate until all items score 10/10 or max rounds reached.
     const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
     const br = project?.building_research as Record<string, unknown> | undefined;
-    const floorPlan = br?.floor_plan as Record<string, unknown> | undefined;
+    const rawFloorPlan = br?.floor_plan as Record<string, unknown> | undefined;
+    // Override floor plan sqft with user-provided value if available
+    const floorPlan = rawFloorPlan
+      ? { ...rawFloorPlan, ...(userSqft ? { total_sqft: userSqft } : {}) }
+      : userSqft ? { total_sqft: userSqft } : undefined;
     // Build cross-room context for apartment-wide coherence checks
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const otherRoomsForHarmony = (otherRooms || []).map((r: any) => {

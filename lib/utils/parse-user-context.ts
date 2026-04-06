@@ -56,6 +56,8 @@ const REQUEST_PATTERNS = [
 const KEEP_PATTERNS = [
   // "keep the X", "keep my X"
   /\bkeep\s+(?:the|my)\s+(.+?)(?:\.|,|$)/gi,
+  // "I want to keep the X"
+  /\bwant\s+to\s+keep\s+(?:the|my)\s+(.+?)(?:\.|,|$)/gi,
 ];
 
 // Patterns that signal lifestyle context
@@ -105,12 +107,14 @@ export function parseUserContext(rawContext: string): ParsedUserContext {
   const exclusions = extractMatches(text, EXCLUSION_PATTERNS)
     .filter((e) => e.length > 2);
 
-  // Extract requests
+  // Extract requests — filter out "I want to keep X" which is a keep signal, not a request
   const rawRequests = extractMatches(text, REQUEST_PATTERNS);
-  const explicitRequests = rawRequests.map((item) => ({
-    item: item.replace(/\balso\b/gi, "").trim(),
-    wantsMultiple: PLURAL_INDICATORS.test(item),
-  })).filter((r) => r.item.length > 1);
+  const explicitRequests = rawRequests
+    .filter((item) => !item.match(/^to\s+keep\b/i))
+    .map((item) => ({
+      item: item.replace(/\balso\b/gi, "").trim(),
+      wantsMultiple: PLURAL_INDICATORS.test(item),
+    })).filter((r) => r.item.length > 1);
 
   // Extract keep items
   const additionalKeepItems = extractMatches(text, KEEP_PATTERNS);
