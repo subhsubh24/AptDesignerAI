@@ -140,6 +140,17 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
   const parsedContext = room.user_context ? parseUserContext(room.user_context) : null;
   const parsedContextBlock = parsedContext ? formatParsedContextForPrompt(parsedContext) : "";
 
+  if (parsedContext) {
+    console.log(`[area-analysis] User context parsed:`, {
+      exclusions: parsedContext.exclusions,
+      keepItems: parsedContext.additionalKeepItems,
+      requests: parsedContext.explicitRequests.map(r => r.item),
+      lifestyle: parsedContext.lifestyleNotes,
+    });
+  } else {
+    console.warn(`[area-analysis] ⚠️ No user_context found on room ${room_id} — user preferences will NOT be applied`);
+  }
+
   const userContextNote = room.user_context
     ? `\n\nIMPORTANT — USER NOTES ABOUT THESE PHOTOS:\n"${room.user_context}"\nTake these notes into account when analyzing the room. If they say to ignore something, don't include it in your assessment. If they express a preference for keeping or liking something, RESPECT that — design around it, don't suggest removing it.`
     : "";

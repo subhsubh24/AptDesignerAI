@@ -727,11 +727,14 @@ export default function DashboardPage() {
       if (context) {
         setSavingContext(true);
         try {
-          await fetch(`/api/rooms/${roomId}`, {
+          const res = await fetch(`/api/rooms/${roomId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_context: context }),
           });
+          if (!res.ok) {
+            console.error("[dashboard] Failed to save user_context:", await res.text());
+          }
         } finally {
           setSavingContext(false);
         }

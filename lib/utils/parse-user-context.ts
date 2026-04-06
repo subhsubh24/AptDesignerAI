@@ -36,10 +36,10 @@ const EXCLUSION_PATTERNS = [
   /\bignore\s+(?:the\s+)?(.+?)(?:\.|,|$)/gi,
   // "won't be there", "it won't be there" — needs surrounding context
   /(?:the\s+)?(\w[\w\s]*?)\s+won'?t\s+be\s+there/gi,
-  // "already have X" (implies don't recommend another)
-  /(?:already\s+have|have)\s+(\w[\w\s]*?)(?:\s+so\s+|\.|,|$)/gi,
-  // "my windows have blinds so don't need curtains" — compound
-  /have\s+(\w+)\s+so\s+(?:don'?t|do not)\s+need\s+(\w[\w\s]*?)(?:\.|,|$)/gi,
+  // "already have X" (implies don't recommend another) — requires "already" to avoid false positives
+  /\balready\s+have\s+(\w[\w\s]*?)(?:\s+so\s+|\.|,|$)/gi,
+  // "my windows have blinds so don't need curtains" — compound (only captures the excluded item, not the owned item)
+  /have\s+\w+\s+so\s+(?:don'?t|do not)\s+need\s+(\w[\w\s]*?)(?:\.|,|$)/gi,
 ];
 
 // Patterns that signal explicit requests
@@ -66,8 +66,8 @@ const KEEP_PATTERNS = [
 
 // Patterns that signal lifestyle context
 const LIFESTYLE_PATTERNS = [
-  // "I am a X", "I'm a X"
-  /\bi\s+(?:am|'m)\s+(?:a\s+)?(.+?)(?:\.|,|$)/gi,
+  // "I am a X", "I'm a X" — stop at period, comma, or "and I" conjunction
+  /\bi\s+(?:am|'m)\s+(?:a\s+)?(.+?)(?:\.\s|\.\s*$|,\s|\s+and\s+i\s+)/gi,
   // "I like to X"
   /\bi\s+like\s+to\s+(.+?)(?:\.|,|$)/gi,
   // "I like X"
