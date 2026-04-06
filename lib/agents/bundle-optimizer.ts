@@ -13,6 +13,7 @@ import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DiagnosisData, DesignDirection } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import { MATH_VETO } from "@/lib/config/pipeline";
 import { computeBundleMathScores, formatBundleMathForPrompt } from "@/lib/validation/bundle-math";
 
 const log = createLogger("bundle-optimizer");
@@ -148,8 +149,7 @@ export async function evaluateBundle(
         const scores = validated.scores;
 
         // Apply math veto: cap AI bundle dimension scores where math found violations
-        // Threshold is configurable via MATH_VETO config
-        const VETO_T = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
+        const VETO_T = MATH_VETO.threshold;
         if (bundleMathScores.palette_harmony < VETO_T && scores.palette_harmony_score > VETO_T * 10) {
           log.info(`Math capping palette_harmony: AI=${scores.palette_harmony_score} → ${Math.round(bundleMathScores.palette_harmony * 10)}`);
           scores.palette_harmony_score = Math.round(bundleMathScores.palette_harmony * 10);
@@ -170,11 +170,18 @@ export async function evaluateBundle(
           log.info(`Math capping room_completion: AI=${scores.room_completion_score} → ${Math.round(bundleMathScores.completeness * 10)}`);
           scores.room_completion_score = Math.round(bundleMathScores.completeness * 10);
         }
+        if (bundleMathScores.price_coherence < VETO_T && scores.practicality_score > VETO_T * 10) {
+          log.info(`Math capping practicality (price_coherence): AI=${scores.practicality_score} → ${Math.round(bundleMathScores.price_coherence * 10)}`);
+          scores.practicality_score = Math.round(bundleMathScores.price_coherence * 10);
+        }
 
         const finalScore = computeFinalBundleScore(scores);
 
-        // Record scores for drift monitoring
-        recordBundleScores(scores as unknown as Record<string, number>);
+        // Record scores for drift monitoring (include final score for calibration)
+        recordBundleScores({
+          ...scores as unknown as Record<string, number>,
+          final_bundle_score: finalScore,
+        });
 
         const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
 

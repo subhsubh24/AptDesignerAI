@@ -215,8 +215,13 @@ export async function scoreProduct(
         const finalScore = computeFinalItemScore(scores, product.category || undefined);
         const verdict = determineVerdict(finalScore, scores.confidence_score);
 
-        // Record scores for drift monitoring
-        recordProductScores(scores as unknown as Record<string, number>);
+        // Record scores for drift monitoring (include final score and category-keyed score)
+        const categoryKey = (product.category || "unknown").toLowerCase().replace(/[\s-]+/g, "_");
+        recordProductScores({
+          ...scores as unknown as Record<string, number>,
+          final_item_score: finalScore,
+          [`${categoryKey}_final_item_score`]: finalScore,
+        });
 
         const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
         log.info("Product scored", {

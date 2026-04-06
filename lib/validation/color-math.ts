@@ -15,8 +15,9 @@ export interface ColorHarmonyResult {
 }
 
 // --- HSL → Lab conversion (via sRGB → XYZ → Lab) ---
+// Exported for reuse by product-math, bundle-math, and set-math modules.
 
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   s /= 100;
   l /= 100;
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -32,11 +33,11 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [r + m, g + m, b + m];
 }
 
-function linearize(c: number): number {
+export function linearize(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
-function rgbToXyz(r: number, g: number, b: number): [number, number, number] {
+export function rgbToXyz(r: number, g: number, b: number): [number, number, number] {
   const rl = linearize(r), gl = linearize(g), bl = linearize(b);
   return [
     0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl,
@@ -51,12 +52,12 @@ function f(t: number): number {
   return t > 0.008856 ? Math.cbrt(t) : (903.3 * t + 16) / 116;
 }
 
-function xyzToLab(x: number, y: number, z: number): [number, number, number] {
+export function xyzToLab(x: number, y: number, z: number): [number, number, number] {
   const fx = f(x / D65_X), fy = f(y / D65_Y), fz = f(z / D65_Z);
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
 
-function hslToLab(hsl: HSL): [number, number, number] {
+export function hslToLab(hsl: HSL): [number, number, number] {
   const [r, g, b] = hslToRgb(hsl.h, hsl.s, hsl.l);
   const [x, y, z] = rgbToXyz(r, g, b);
   return xyzToLab(x, y, z);

@@ -41,10 +41,55 @@ export function computeFinalBundleScore(scores: BundleScores): number {
 
   // Apply calibration using drift monitor data
   const summary = getScoreDistributionSummary();
-  const styleDist = summary["style_consistency_score"];
-  const observedMedian = styleDist?.median;
-  const observedMean = styleDist?.mean;
+  // Use final_bundle_score distribution for drift detection (not a single proxy dimension)
+  const bundleDist = summary["final_bundle_score"];
+  const observedMedian = (bundleDist && bundleDist.count >= 5) ? bundleDist.median : undefined;
+  const observedMean = (bundleDist && bundleDist.count >= 5) ? bundleDist.mean : undefined;
 
   // Use "bundle" as category — no baseline shift, but expansion + inflation correction still apply
   return calibrateScore(baseScore, "bundle", observedMedian, observedMean);
+}
+
+/**
+ * Ground bundle confidence based on data quality signals across the bundle.
+ *
+ * Bundles inherit data quality issues from their constituent products.
+ * A bundle with mostly well-documented products is more trustworthy than
+ * one built from products with missing images, dimensions, or materials.
+ */
+export function groundBundleConfidence(
+  rawConfidence: number,
+  signals: {
+    productCount: number;
+    productsWithImages: number;
+    productsWithDimensions: number;
+    productsWithMaterials: number;
+    productsWithPrices: number;
+    hasRoomImages: boolean;
+    mathValidationRan: boolean;
+    hasFloorPlan: boolean;
+  }
+): number {
+  let grounded = rawConfidence;
+
+  // Penalize based on data coverage ratios across the bundle
+  const { productCount } = signals;
+  if (productCount === 0) return 1;
+
+  const imageCoverage = signals.productsWithImages / productCount;
+  const dimCoverage = signals.productsWithDimensions / productCount;
+  const matCoverage = signals.productsWithMaterials / productCount;
+  const priceCoverage = signals.productsWithPrices / productCount;
+
+  // Penalties scale with how many products are missing data
+  if (imageCoverage < 1.0) grounded -= (1.0 - imageCoverage) * 2.0;   // Images critical for visual scoring
+  if (dimCoverage < 1.0) grounded -= (1.0 - dimCoverage) * 1.5;       // Dimensions critical for scale/spatial
+  if (matCoverage < 1.0) grounded -= (1.0 - matCoverage) * 1.0;       // Materials for harmony assessment
+  if (priceCoverage < 1.0) grounded -= (1.0 - priceCoverage) * 0.5;   // Prices for practicality
+
+  if (!signals.hasRoomImages) grounded -= 1.0;
+  if (!signals.mathValidationRan) grounded -= 0.5;
+  if (!signals.hasFloorPlan) grounded -= 0.5;  // Spatial scoring is guesswork without floor plan
+
+  return Math.max(1, Math.min(10, Math.round(grounded * 10) / 10));
 }

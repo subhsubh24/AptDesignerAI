@@ -6,7 +6,7 @@
  */
 
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL } from "./lookups";
-import { deltaE2000 } from "./color-math";
+import { deltaE2000, hslToLab } from "./color-math";
 import { parseDimensions } from "./spatial-math";
 
 export interface ProductMathScores {
@@ -50,45 +50,7 @@ interface ProductMathContext {
   roomMetalFinishes?: string[];
 }
 
-// --- HSL conversion (reuse from color-math) ---
-
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  s /= 100; l /= 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; }
-  else if (h < 120) { r = x; g = c; }
-  else if (h < 180) { g = c; b = x; }
-  else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = x; b = c; }
-  else { r = c; b = x; }
-  return [r + m, g + m, b + m];
-}
-
-function linearize(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-function rgbToXyz(r: number, g: number, b: number): [number, number, number] {
-  const rl = linearize(r), gl = linearize(g), bl = linearize(b);
-  return [
-    0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl,
-    0.2126729 * rl + 0.7151522 * gl + 0.0721750 * bl,
-    0.0193339 * rl + 0.1191920 * gl + 0.9503041 * bl,
-  ];
-}
-
-const D65_X = 0.95047, D65_Y = 1.0, D65_Z = 1.08883;
-function f(t: number): number { return t > 0.008856 ? Math.cbrt(t) : (903.3 * t + 16) / 116; }
-function xyzToLab(x: number, y: number, z: number): [number, number, number] {
-  return [116 * f(y / D65_Y) - 16, 500 * (f(x / D65_X) - f(y / D65_Y)), 200 * (f(y / D65_Y) - f(z / D65_Z))];
-}
-function hslToLab(hsl: HSL): [number, number, number] {
-  const [r, g, b] = hslToRgb(hsl.h, hsl.s, hsl.l);
-  return xyzToLab(...rgbToXyz(r, g, b));
-}
+// HSL → Lab conversion imported from color-math.ts (single source of truth)
 
 // --- Scale fit ---
 

@@ -6,7 +6,7 @@
  */
 
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL, type MaterialProperties } from "./lookups";
-import { deltaE2000 } from "./color-math";
+import { deltaE2000, hslToLab } from "./color-math";
 import { parseDimensions } from "./spatial-math";
 
 export interface BundleMathScores {
@@ -44,45 +44,7 @@ interface BundleMathContext {
   existingItems?: string[];
 }
 
-// --- HSL/Lab conversion ---
-
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  s /= 100; l /= 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; }
-  else if (h < 120) { r = x; g = c; }
-  else if (h < 180) { g = c; b = x; }
-  else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = x; b = c; }
-  else { r = c; b = x; }
-  return [r + m, g + m, b + m];
-}
-
-function linearize(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-function rgbToXyz(r: number, g: number, b: number): [number, number, number] {
-  const rl = linearize(r), gl = linearize(g), bl = linearize(b);
-  return [
-    0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl,
-    0.2126729 * rl + 0.7151522 * gl + 0.0721750 * bl,
-    0.0193339 * rl + 0.1191920 * gl + 0.9503041 * bl,
-  ];
-}
-
-const D65_X = 0.95047, D65_Y = 1.0, D65_Z = 1.08883;
-function f(t: number): number { return t > 0.008856 ? Math.cbrt(t) : (903.3 * t + 16) / 116; }
-function xyzToLab(x: number, y: number, z: number): [number, number, number] {
-  return [116 * f(y / D65_Y) - 16, 500 * (f(x / D65_X) - f(y / D65_Y)), 200 * (f(y / D65_Y) - f(z / D65_Z))];
-}
-function hslToLab(hsl: HSL): [number, number, number] {
-  const [r, g, b] = hslToRgb(hsl.h, hsl.s, hsl.l);
-  return xyzToLab(...rgbToXyz(r, g, b));
-}
+// HSL → Lab conversion imported from color-math.ts (single source of truth)
 
 // --- Palette harmony across bundle products ---
 
@@ -386,31 +348,70 @@ function computeBundleScaleBalance(products: BundleProduct[], ctx: BundleMathCon
     score = 0.5 + (rulesPassed / rulesChecked) * 0.5;
   }
 
-  // Check total footprint vs room area
-  if (ctx.floorPlan) {
-    const rdStr = JSON.stringify(ctx.floorPlan.room_dimensions || "");
-    const match = rdStr.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
-    if (match) {
-      const roomW = parseFloat(match[1]) * 12;
-      const roomD = parseFloat(match[2]) * 12;
-      const roomArea = roomW * roomD;
+  return { score: Math.max(0, Math.min(1, score)), issues };
+}
 
-      let totalFootprint = 0;
-      for (const [, dims] of dimMap) {
-        totalFootprint += dims.w * dims.d;
-      }
+// --- Spatial feasibility (room area coverage, clearance estimation) ---
 
-      if (totalFootprint > 0 && roomArea > 0) {
-        const ratio = totalFootprint / roomArea;
-        if (ratio > 0.75) {
-          score -= 0.2;
-          issues.push(`Bundle total footprint is ${Math.round(ratio * 100)}% of room area — likely overcrowded`);
-        } else if (ratio < 0.2) {
-          score -= 0.1;
-          issues.push(`Bundle total footprint is only ${Math.round(ratio * 100)}% of room area — room may feel empty`);
-        }
-      }
+function parseRoomDimensions(floorPlan: Record<string, unknown>): { roomW: number; roomD: number } | null {
+  const rdStr = JSON.stringify(floorPlan.room_dimensions || "");
+  const match = rdStr.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  return { roomW: parseFloat(match[1]) * 12, roomD: parseFloat(match[2]) * 12 };
+}
+
+function computeSpatialFeasibility(products: BundleProduct[], ctx: BundleMathContext): { score: number; issues: string[] } {
+  const issues: string[] = [];
+  let score = 0.8;
+
+  // Build dimension map by category
+  const dimMap = new Map<string, { w: number; d: number; h?: number }>();
+  for (const p of products) {
+    const cat = (p.category || "").toLowerCase().replace(/[\s-]+/g, "_");
+    const dims = getNormalizedDims(p);
+    if (dims && cat) dimMap.set(cat, dims);
+  }
+
+  if (!ctx.floorPlan) {
+    // No floor plan data — can't verify spatial feasibility
+    return { score: 0.6, issues: ["No floor plan data available for spatial feasibility check"] };
+  }
+
+  const roomDims = parseRoomDimensions(ctx.floorPlan);
+  if (!roomDims) return { score: 0.7, issues: [] };
+
+  const { roomW, roomD } = roomDims;
+  const roomArea = roomW * roomD;
+
+  // 1. Total footprint coverage ratio
+  let totalFootprint = 0;
+  for (const [, dims] of dimMap) {
+    totalFootprint += dims.w * dims.d;
+  }
+
+  if (totalFootprint > 0 && roomArea > 0) {
+    const ratio = totalFootprint / roomArea;
+    if (ratio > 0.75) {
+      score -= 0.25;
+      issues.push(`Bundle total footprint is ${Math.round(ratio * 100)}% of room area — likely overcrowded`);
+    } else if (ratio > 0.60) {
+      score -= 0.1;
+      issues.push(`Bundle total footprint is ${Math.round(ratio * 100)}% of room area — may feel tight`);
+    } else if (ratio < 0.15) {
+      score -= 0.15;
+      issues.push(`Bundle total footprint is only ${Math.round(ratio * 100)}% of room area — room may feel empty`);
+    } else if (ratio >= 0.25 && ratio <= 0.55) {
+      score += 0.1; // Ideal range
     }
+  }
+
+  // 2. Estimate walkway clearance: remaining area after furniture should allow 36" main paths
+  // Rough heuristic: if room perimeter minus furniture widths along walls leaves < 36" gaps, penalize
+  const largestDimension = Math.max(...[...dimMap.values()].map(d => Math.max(d.w, d.d)), 0);
+  const smallerRoomDim = Math.min(roomW, roomD);
+  if (largestDimension > 0 && largestDimension > smallerRoomDim * 0.65) {
+    score -= 0.15;
+    issues.push(`Largest piece (${Math.round(largestDimension)}") spans >${Math.round((largestDimension / smallerRoomDim) * 100)}% of room's narrower dimension (${Math.round(smallerRoomDim)}") — may block traffic flow`);
   }
 
   return { score: Math.max(0, Math.min(1, score)), issues };
@@ -522,6 +523,7 @@ export function computeBundleMathScores(
   const palette = computeBundlePaletteHarmony(products, ctx);
   const material = computeBundleMaterialBalance(products, ctx);
   const scale = computeBundleScaleBalance(products, ctx);
+  const spatial = computeSpatialFeasibility(products, ctx);
   const completeness = computeCompleteness(products, ctx);
   const priceCoherence = computePriceCoherence(products);
 
@@ -529,18 +531,16 @@ export function computeBundleMathScores(
     ...palette.issues,
     ...material.issues,
     ...scale.issues,
+    ...spatial.issues,
     ...completeness.issues,
     ...priceCoherence.issues,
   ];
-
-  // Spatial feasibility is derived from scale balance (total footprint check)
-  const spatialFeasibility = scale.score; // Already includes room-area check
 
   const overall =
     BUNDLE_MATH_WEIGHTS.palette_harmony * palette.score +
     BUNDLE_MATH_WEIGHTS.material_balance * material.score +
     BUNDLE_MATH_WEIGHTS.scale_balance * scale.score +
-    BUNDLE_MATH_WEIGHTS.spatial_feasibility * spatialFeasibility +
+    BUNDLE_MATH_WEIGHTS.spatial_feasibility * spatial.score +
     BUNDLE_MATH_WEIGHTS.completeness * completeness.score +
     BUNDLE_MATH_WEIGHTS.price_coherence * priceCoherence.score;
 
@@ -548,7 +548,7 @@ export function computeBundleMathScores(
     palette_harmony: round2(palette.score),
     material_balance: round2(material.score),
     scale_balance: round2(scale.score),
-    spatial_feasibility: round2(spatialFeasibility),
+    spatial_feasibility: round2(spatial.score),
     completeness: round2(completeness.score),
     price_coherence: round2(priceCoherence.score),
     overall: round2(overall),

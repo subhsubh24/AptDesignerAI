@@ -40,11 +40,11 @@ export function computeFinalItemScore(scores: ProductScores, category?: string):
   // Apply programmatic calibration when category is provided
   if (category) {
     const summary = getScoreDistributionSummary();
-    // Use the overall style_fit_score distribution as a proxy for general drift
-    const styleDist = summary["style_fit_score"];
+    // Use the final_item_score distribution for drift detection (not a single proxy dimension)
+    const finalDist = summary["final_item_score"];
     // Only pass observed stats when we have enough data for reliable calibration
-    const observedMedian = (styleDist && styleDist.count >= 5) ? styleDist.median : undefined;
-    const observedMean = (styleDist && styleDist.count >= 5) ? styleDist.mean : undefined;
+    const observedMedian = (finalDist && finalDist.count >= 5) ? finalDist.median : undefined;
+    const observedMean = (finalDist && finalDist.count >= 5) ? finalDist.mean : undefined;
     return calibrateScore(baseScore, category, observedMedian, observedMean);
   }
 
