@@ -26,6 +26,10 @@ export function getBundleEvalPrompt(
     ? `Problems this bundle should solve: ${diagnosis.what_is_not_working.join("; ")}`
     : "";
 
+  const spatialGapsContext = (diagnosis as DiagnosisData & { spatial_gaps?: string[] })?.spatial_gaps?.length
+    ? `Dead zones & empty spaces to fill: ${(diagnosis as DiagnosisData & { spatial_gaps?: string[] }).spatial_gaps!.join("; ")}`
+    : "";
+
   const directionContext = designDirection
     ? [
         designDirection.recommended_palette?.length && `Target palette: ${designDirection.recommended_palette.join(", ")}`,
@@ -50,7 +54,7 @@ export function getBundleEvalPrompt(
   sections.push({
     key: "existing_items",
     priority: 2,
-    content: `## WHAT'S ALREADY IN THE ROOM\n${existingContext}${problemsContext ? `\n${problemsContext}` : ""}`,
+    content: `## WHAT'S ALREADY IN THE ROOM\n${existingContext}${problemsContext ? `\n${problemsContext}` : ""}${spatialGapsContext ? `\n${spatialGapsContext}` : ""}`,
   });
 
   if (directionContext) {
@@ -94,7 +98,9 @@ export function getBundleEvalPrompt(
     sections.push({ key: "user_notes", priority: 2, content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` });
   }
 
-  const contextResult = truncateContext(sections, 20000, 0);
+  // Model max_tokens is 10000 with thinking; reserve ~5000 for scoring
+  // instructions + output + thinking overhead. Context gets ~5000 tokens.
+  const contextResult = truncateContext(sections, 5000, 0);
   const assembledContext = contextResult.text;
 
   return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. Score how well these items work TOGETHER as a set, not just individually.
@@ -153,6 +159,7 @@ CRITICAL: Use the FULL 0-10 range. If the bundle is just okay, score it 5-6. Do 
 4. **style_consistency_score**: Is the aesthetic unified?
    - All pieces should belong to the same style family or a deliberate, curated mix
    - Cross-reference with the design direction from the room diagnosis
+   - **Use visual style tags**: If products include visual style tags (e.g., "mid-century", "organic modern"), check whether they belong to the same style family. Conflicting tags across products = lower score.
    - 9-10: Looks like a professional designed this room — every piece is intentional
    - 7-8: Mostly cohesive with one piece that's slightly off but still works
    - 5-6: Mixed signals — some pieces are mid-century, some are farmhouse, some are industrial
@@ -161,9 +168,10 @@ CRITICAL: Use the FULL 0-10 range. If the bundle is just okay, score it 5-6. Do 
 5. **room_completion_score**: Does this bundle solve the room's diagnosed problems?
    - Check the diagnosis: are all identified issues addressed?
    - List what's still missing after this bundle
-   - 9-10: Every diagnosed issue is addressed, room will feel complete
+   - **Dead zones & empty corners**: Does this bundle activate empty corners, fill awkward gaps behind furniture, and address unused wall stretches identified in the diagnosis? A room with barren corners or empty gaps behind the sofa loses points. A tall plant, arc lamp, corner shelf, or accent chair in a dead zone = bonus.
+   - 9-10: Every diagnosed issue is addressed, dead zones are activated, room will feel complete
    - 7-8: Most issues addressed, 1-2 minor gaps remain (e.g., still needs a plant or tray)
-   - 5-6: Addresses some issues but leaves major gaps (e.g., still no rug, still no art)
+   - 5-6: Addresses some issues but leaves major gaps (e.g., still no rug, still no art, corners still empty)
    - Below 5: Fails to address the main diagnosed problems
 
 6. **spatial_arrangement_score**: Does this bundle work as a physical arrangement?

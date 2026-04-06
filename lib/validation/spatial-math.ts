@@ -116,12 +116,31 @@ function parseRoomDimensions(
   }
 
   if (dimString) {
+    // Match dimensions with optional unit suffix (e.g., "12x15 ft", "144x180 in", "15'x20'")
     const match = dimString.match(
-      /(\d+(?:\.\d+)?)\s*['']?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*['']?/i
+      /(\d+(?:\.\d+)?)\s*['']?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*['']?\s*(?:(ft|feet|foot|in|inches|inch|cm|m|meters?))?/i
     );
     if (match) {
-      const w = parseFloat(match[1]) * 12; // Assume feet, convert to inches
-      const d = parseFloat(match[2]) * 12;
+      const val1 = parseFloat(match[1]);
+      const val2 = parseFloat(match[2]);
+      const unit = (match[3] || "").toLowerCase();
+
+      let w: number, d: number;
+      if (unit.startsWith("in") || unit === "inch") {
+        // Already in inches
+        w = val1;
+        d = val2;
+      } else if (unit === "cm") {
+        w = val1 / 2.54;
+        d = val2 / 2.54;
+      } else if (unit === "m" || unit.startsWith("meter")) {
+        w = val1 * 39.37;
+        d = val2 * 39.37;
+      } else {
+        // Default: assume feet (most common for US floor plans)
+        w = val1 * 12;
+        d = val2 * 12;
+      }
       return { width: w, depth: d };
     }
   }

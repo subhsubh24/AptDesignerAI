@@ -148,23 +148,25 @@ export async function evaluateBundle(
         const scores = validated.scores;
 
         // Apply math veto: cap AI bundle dimension scores where math found violations
-        if (bundleMathScores.palette_harmony < 0.6 && scores.palette_harmony_score > 6) {
+        // Threshold is configurable via MATH_VETO config
+        const VETO_T = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
+        if (bundleMathScores.palette_harmony < VETO_T && scores.palette_harmony_score > VETO_T * 10) {
           log.info(`Math capping palette_harmony: AI=${scores.palette_harmony_score} → ${Math.round(bundleMathScores.palette_harmony * 10)}`);
           scores.palette_harmony_score = Math.round(bundleMathScores.palette_harmony * 10);
         }
-        if (bundleMathScores.material_balance < 0.6 && scores.material_balance_score > 6) {
+        if (bundleMathScores.material_balance < VETO_T && scores.material_balance_score > VETO_T * 10) {
           log.info(`Math capping material_balance: AI=${scores.material_balance_score} → ${Math.round(bundleMathScores.material_balance * 10)}`);
           scores.material_balance_score = Math.round(bundleMathScores.material_balance * 10);
         }
-        if (bundleMathScores.scale_balance < 0.6 && scores.scale_balance_score > 6) {
+        if (bundleMathScores.scale_balance < VETO_T && scores.scale_balance_score > VETO_T * 10) {
           log.info(`Math capping scale_balance: AI=${scores.scale_balance_score} → ${Math.round(bundleMathScores.scale_balance * 10)}`);
           scores.scale_balance_score = Math.round(bundleMathScores.scale_balance * 10);
         }
-        if (bundleMathScores.spatial_feasibility < 0.6 && scores.spatial_arrangement_score !== undefined && scores.spatial_arrangement_score > 6) {
+        if (bundleMathScores.spatial_feasibility < VETO_T && scores.spatial_arrangement_score !== undefined && scores.spatial_arrangement_score > VETO_T * 10) {
           log.info(`Math capping spatial_arrangement: AI=${scores.spatial_arrangement_score} → ${Math.round(bundleMathScores.spatial_feasibility * 10)}`);
           scores.spatial_arrangement_score = Math.round(bundleMathScores.spatial_feasibility * 10);
         }
-        if (bundleMathScores.completeness < 0.6 && scores.room_completion_score > 6) {
+        if (bundleMathScores.completeness < VETO_T && scores.room_completion_score > VETO_T * 10) {
           log.info(`Math capping room_completion: AI=${scores.room_completion_score} → ${Math.round(bundleMathScores.completeness * 10)}`);
           scores.room_completion_score = Math.round(bundleMathScores.completeness * 10);
         }

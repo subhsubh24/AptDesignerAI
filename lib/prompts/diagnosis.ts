@@ -60,6 +60,7 @@ Think like a designer completing a room. Common things people forget:
 - Plants
 - Side tables / surfaces near seating
 - Storage solutions
+- **Corner and dead zone solutions** — look for empty corners, awkward gaps behind furniture, unused wall stretches, or dead zones that need activation (a tall plant, corner shelf, accent chair, floor lamp, or decorative object)
 
 ### Step 5: THINK ABOUT LIFESTYLE
 Before making any recommendations, consider:
@@ -90,6 +91,7 @@ Based on the existing finishes (floors, walls, fixed elements) AND how the clien
 - texture_material_issues: List **3-5 observations**. Count distinct textures.
 - scale_proportion_issues: List **3-5 observations**. Reference specific items.
 - layout_issues: List **3-5 observations**. Note traffic paths, dead zones, awkward gaps.
+- spatial_gaps: List **3-5 observations**. Identify empty corners, unused wall stretches, dead zones behind furniture, awkward gaps, and areas that feel barren or unfinished. For each, suggest what could fill it (e.g., "Empty corner behind sofa — a tall fiddle leaf fig or arc floor lamp would activate this dead zone and add vertical interest").
 - lighting_issues: List **3-5 observations**. Note natural light direction and artificial gaps.
 - clutter_editing_issues: List items to remove or edit. Can be 0 if room is clean.
 
@@ -131,6 +133,7 @@ Return a JSON object with this exact structure:
     "texture_material_issues": ["3-5 texture/material gaps or conflicts"],
     "scale_proportion_issues": ["3-5 specific scale issues — reference actual item dimensions"],
     "layout_issues": ["3-5 traffic flow, furniture arrangement, zoning issues"],
+    "spatial_gaps": ["3-5 empty corners, dead zones behind furniture, unused wall stretches, awkward gaps — with suggestions for what would fill each one"],
     "lighting_issues": ["3-5 natural light, artificial light, evening ambience needs"],
     "clutter_editing_issues": ["things that should be removed or edited — be specific"]
   },

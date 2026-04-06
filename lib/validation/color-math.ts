@@ -157,9 +157,12 @@ function classifyPairRelationship(hsl1: HSL, hsl2: HSL): ColorRelationship {
 
   if (hueAngle < 10 && Math.abs(hsl1.s - hsl2.s) < 15) return "monochromatic";
   if (hueAngle < 30) return "analogous";
-  if (hueAngle >= 150 && hueAngle <= 210) return "complementary";
-  if (hueAngle >= 120 && hueAngle <= 150) return "split-complementary";
-  if (hueAngle >= 100 && hueAngle <= 140) return "triadic";
+  // Triadic: ~120° apart (three evenly-spaced colors on the wheel)
+  if (hueAngle >= 110 && hueAngle <= 130) return "triadic";
+  // Split-complementary: ~150° apart (adjacent to complement)
+  if (hueAngle >= 140 && hueAngle <= 160) return "split-complementary";
+  // Complementary: ~180° apart (opposite on the wheel)
+  if (hueAngle >= 160 && hueAngle <= 180) return "complementary";
   return "unrelated";
 }
 

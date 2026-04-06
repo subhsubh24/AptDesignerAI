@@ -157,14 +157,24 @@ async function scrapeProductImages(
               item["@type"] === "Product" ||
               item["@type"]?.includes?.("Product")
             ) {
-              const ldImages = Array.isArray(item.image)
-                ? item.image
-                : item.image
-                  ? [item.image]
+              // Collect image field — can be string, object, or array of either
+              const imageField = item.image || item.images;
+              const ldImages = Array.isArray(imageField)
+                ? imageField
+                : imageField
+                  ? [imageField]
                   : [];
               for (const img of ldImages) {
-                const url = typeof img === "string" ? img : img?.url || img?.contentUrl;
-                if (url && !images.includes(url)) images.push(url);
+                // Handle all common JSON-LD image formats:
+                // - String: "https://..."
+                // - Object: { url: "..." } or { contentUrl: "..." } or { "@id": "..." }
+                // - Nested: { url: { "@id": "..." } } or { image: { url: "..." } }
+                const url = typeof img === "string"
+                  ? img
+                  : img?.url
+                    ? (typeof img.url === "string" ? img.url : img.url?.["@id"] || img.url?.url)
+                    : img?.contentUrl || img?.["@id"] || img?.thumbnail?.url || null;
+                if (url && typeof url === "string" && !images.includes(url)) images.push(url);
               }
             }
           }

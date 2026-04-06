@@ -224,6 +224,7 @@ export const DiagnosisDataSchema = z.object({
   texture_material_issues: stringArray,
   scale_proportion_issues: stringArray,
   layout_issues: stringArray,
+  spatial_gaps: stringArray.default([]),
   lighting_issues: stringArray,
   clutter_editing_issues: stringArray,
 });

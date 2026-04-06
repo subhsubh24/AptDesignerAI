@@ -514,8 +514,9 @@ export async function quickScreenCandidates(
   // Process batches in parallel
   const batchResults = await Promise.all(
     batches.map(async (batch, batchIdx) => {
+      // Use 0-based local indices per batch (simpler, avoids global↔local conversion bugs)
       const candidateList = batch
-        .map((c, i) => `[${batchIdx * BATCH_SIZE + i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 120)}`)
+        .map((c, i) => `[${i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 120)}`)
         .join("\n");
 
       const styleContext = designDirection
@@ -565,10 +566,9 @@ Return JSON:
         const passed: SearchCandidate[] = [];
         for (const rating of validated.ratings) {
           if (rating.rating >= 3) {
-            const globalIdx = rating.index;
-            const localIdx = globalIdx - batchIdx * BATCH_SIZE;
-            if (localIdx >= 0 && localIdx < batch.length) {
-              passed.push(batch[localIdx]);
+            const idx = rating.index;
+            if (idx >= 0 && idx < batch.length) {
+              passed.push(batch[idx]);
             }
           }
         }

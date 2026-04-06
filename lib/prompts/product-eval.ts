@@ -136,8 +136,9 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
   }
 
   // Truncate context sections to fit within a reasonable token budget.
-  // Reserve ~8000 tokens for the scoring instructions + output format below.
-  const contextResult = truncateContext(sections, 25000, 0);
+  // Model max_tokens is 16000 with thinking enabled; reserve ~8000 for scoring
+  // instructions + output format + thinking overhead. Context gets ~8000 tokens.
+  const contextResult = truncateContext(sections, 8000, 0);
   const assembledContext = contextResult.text;
 
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.

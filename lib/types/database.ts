@@ -221,6 +221,7 @@ export interface DiagnosisData {
   texture_material_issues: string[];
   scale_proportion_issues: string[];
   layout_issues: string[];
+  spatial_gaps: string[];
   lighting_issues: string[];
   clutter_editing_issues: string[];
 }

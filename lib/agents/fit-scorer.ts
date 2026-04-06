@@ -197,15 +197,17 @@ export async function scoreProduct(
         const scores = validated.scores;
 
         // Apply math veto: cap AI dimension scores where math found violations
-        if (mathScores.scale_fit < 0.6 && scores.scale_fit_score > 6) {
+        // Threshold is configurable via MATH_VETO config
+        const VETO_THRESHOLD = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
+        if (mathScores.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
           log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
           scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);
         }
-        if (mathScores.palette_fit < 0.6 && scores.palette_fit_score > 6) {
+        if (mathScores.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
           log.info(`Math capping palette_fit: AI=${scores.palette_fit_score} → ${Math.round(mathScores.palette_fit * 10)}`, { product: product.title });
           scores.palette_fit_score = Math.round(mathScores.palette_fit * 10);
         }
-        if (mathScores.material_fit < 0.6 && scores.material_fit_score > 6) {
+        if (mathScores.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
           log.info(`Math capping material_fit: AI=${scores.material_fit_score} → ${Math.round(mathScores.material_fit * 10)}`, { product: product.title });
           scores.material_fit_score = Math.round(mathScores.material_fit * 10);
         }

@@ -111,6 +111,26 @@ export const BUNDLE_MATH = {
   },
 } as const;
 
+// ─── Math Veto ────────────────────────────────────────────────
+
+export const MATH_VETO = {
+  /**
+   * When a math score (0-1) is below this threshold AND the AI score (0-10)
+   * is above the corresponding value (threshold * 10), the AI score gets
+   * capped to the math score * 10.
+   *
+   * Example: threshold=0.6 means if math says 0.4 (bad) and AI says 7 (good),
+   * the AI score is capped to 4. This prevents AI from overriding math facts.
+   */
+  threshold: 0.6,
+
+  /** Dimensions subject to math veto for individual products */
+  productDimensions: ["scale_fit", "palette_fit", "material_fit"] as const,
+
+  /** Dimensions subject to math veto for bundles */
+  bundleDimensions: ["palette_harmony", "material_balance", "scale_balance", "spatial_feasibility", "completeness"] as const,
+} as const;
+
 // ─── Product Scoring ──────────────────────────────────────────
 
 export const PRODUCT_SCORING = {
