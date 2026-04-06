@@ -51,7 +51,7 @@ export function computeDynamicBaseline(category: string, targetMedian = 6.0): nu
   const catKey = `${category.toLowerCase()}_final_item_score`;
   const catDist = summary[catKey];
 
-  if (catDist && catDist.count >= 5) {
+  if (catDist && catDist.count >= 5 && catDist.median !== undefined && !isNaN(catDist.median)) {
     // Dynamic: adjustment = -(observedMedian - target) * dampingFactor
     const adjustment = -(catDist.median - targetMedian) * 0.5;
     return Math.max(-2, Math.min(2, adjustment)); // Clamp to prevent extreme swings
@@ -101,6 +101,8 @@ export function applyCategoryBaseline(
  * them toward the extremes to use more of the 0-10 range.
  *
  * Formula: expanded = mean + expansionFactor * (score - mean)
+ * This symmetrically pushes scores above the mean higher and scores
+ * below the mean lower, expanding the distribution in both directions.
  *
  * @param score - The original score
  * @param mean - The observed mean of recent scores (or 6.5 as default)
@@ -111,6 +113,8 @@ export function expandScore(
   mean = 6.5,
   expansionFactor = 1.2
 ): number {
+  // Guard: mean must be valid
+  if (mean < 0 || mean > 10 || isNaN(mean)) return score;
   const expanded = mean + expansionFactor * (score - mean);
   return clamp(expanded, 0, 10);
 }

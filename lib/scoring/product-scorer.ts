@@ -42,12 +42,46 @@ export function computeFinalItemScore(scores: ProductScores, category?: string):
     const summary = getScoreDistributionSummary();
     // Use the overall style_fit_score distribution as a proxy for general drift
     const styleDist = summary["style_fit_score"];
-    const observedMedian = styleDist?.median;
-    const observedMean = styleDist?.mean;
+    // Only pass observed stats when we have enough data for reliable calibration
+    const observedMedian = (styleDist && styleDist.count >= 5) ? styleDist.median : undefined;
+    const observedMean = (styleDist && styleDist.count >= 5) ? styleDist.mean : undefined;
     return calibrateScore(baseScore, category, observedMedian, observedMean);
   }
 
   return baseScore;
+}
+
+/**
+ * Ground confidence score based on data quality signals.
+ *
+ * The LLM's confidence is unreliable on its own. This adjusts it based on
+ * objective indicators: did we have images? dimensions? materials? price?
+ * A product with only a title and price should not have confidence 9.
+ */
+export function groundConfidence(
+  rawConfidence: number,
+  signals: {
+    hasProductImage: boolean;
+    hasDimensions: boolean;
+    hasMaterials: boolean;
+    hasPrice: boolean;
+    hasDescription: boolean;
+    hasRoomImages: boolean;
+    mathValidationRan: boolean;
+  }
+): number {
+  let grounded = rawConfidence;
+
+  // Penalty for missing critical data
+  if (!signals.hasProductImage) grounded -= 1.5;      // Can't judge visual fit without seeing it
+  if (!signals.hasDimensions) grounded -= 1.0;         // Scale scoring is guesswork
+  if (!signals.hasMaterials) grounded -= 0.5;           // Material harmony is approximate
+  if (!signals.hasPrice) grounded -= 0.3;               // Value fit is unknown
+  if (!signals.hasDescription) grounded -= 0.2;         // Less context
+  if (!signals.hasRoomImages) grounded -= 1.0;          // Can't judge room fit visually
+  if (!signals.mathValidationRan) grounded -= 0.5;      // No deterministic grounding
+
+  return Math.max(1, Math.min(10, Math.round(grounded * 10) / 10));
 }
 
 export function determineVerdict(finalScore: number, confidenceScore: number): Verdict {

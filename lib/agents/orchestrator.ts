@@ -181,6 +181,18 @@ export async function runAgenticSearch(
     totalDeepScored: 0,
     totalFinal: 0,
     tokensUsed: 0,
+    /** Per-phase token breakdown for cost/efficiency analysis */
+    tokensPerPhase: {
+      search_brief: 0,
+      search: 0,
+      screen: 0,
+      extract: 0,
+      quick_score: 0,
+      deep_score: 0,
+      validation: 0,
+      bundle: 0,
+      backfill: 0,
+    } as Record<string, number>,
   };
 
   function reportStep(step: OrchestrationStep) {
@@ -379,7 +391,7 @@ export async function runAgenticSearch(
             extractLimit(async () => {
               try {
                 const extractResult = await extractFromUrl(candidate.url, ctx.designProfile);
-                if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; }
+                if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; stats.tokensPerPhase.extract += extractResult.tokensUsed; }
                 if (!extractResult.success || !extractResult.data) {
                   tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
                   extractedSoFar++;
@@ -410,13 +422,13 @@ export async function runAgenticSearch(
                 const catBriefForPrice = brief.categories.find((c) => c.category === category);
                 const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
                 if (priceRange && extractResult.data.price) {
-                  if (extractResult.data.price > priceRange.max * 2) {
-                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} above 2x max $${priceRange.max}`);
+                  if (extractResult.data.price > priceRange.max * 1.75) {
+                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} above 1.75x max $${priceRange.max}`);
                     extractedSoFar++;
                     return;
                   }
-                  if (extractResult.data.price < priceRange.min * 0.3) {
-                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} below 0.3x min $${priceRange.min}`);
+                  if (extractResult.data.price < priceRange.min * 0.4) {
+                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} below 0.4x min $${priceRange.min}`);
                     extractedSoFar++;
                     return;
                   }
@@ -476,13 +488,39 @@ export async function runAgenticSearch(
     await Promise.all(extractPromises);
 
     // Deduplicate extracted products by title+retailer within each tier
+    // Uses fuzzy matching: normalize titles by removing size/color variants,
+    // and deduplicate by URL hostname+path to catch same product with different titles
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       for (const tier of PRICE_TIERS) {
-        const seen = new Set<string>();
+        const seenTitles = new Set<string>();
+        const seenUrlKeys = new Set<string>();
         extractedByCategory[category][tier] = tierResults[tier].filter((p) => {
-          const key = `${(p.title || "").toLowerCase().trim()}|${(p.retailer || "").toLowerCase().trim()}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
+          // Exact title+retailer dedup
+          const titleKey = `${(p.title || "").toLowerCase().trim()}|${(p.retailer || "").toLowerCase().trim()}`;
+          if (seenTitles.has(titleKey)) return false;
+          seenTitles.add(titleKey);
+
+          // URL-based dedup: normalize URL to hostname+pathname (ignore query params)
+          if (p.product_url) {
+            try {
+              const u = new URL(p.product_url);
+              const urlKey = `${u.hostname}${u.pathname.replace(/\/+$/, "")}`;
+              if (seenUrlKeys.has(urlKey)) return false;
+              seenUrlKeys.add(urlKey);
+            } catch { /* invalid URL, skip URL dedup */ }
+          }
+
+          // Fuzzy title dedup: strip size/color suffixes and common variant patterns
+          const normalizedTitle = (p.title || "")
+            .toLowerCase()
+            .replace(/\s*[-–]\s*(small|medium|large|xl|king|queen|twin|full|\d+["'x×]\s*\d+).*$/i, "")
+            .replace(/\s*in\s+(white|black|gray|grey|beige|cream|walnut|oak|navy|blue|green)\s*$/i, "")
+            .replace(/[^a-z0-9]/g, "")
+            .trim();
+          const fuzzyKey = `${normalizedTitle}|${(p.retailer || "").toLowerCase().trim()}`;
+          if (normalizedTitle.length > 5 && seenTitles.has(fuzzyKey)) return false;
+          seenTitles.add(fuzzyKey);
+
           return true;
         });
       }
@@ -592,7 +630,7 @@ export async function runAgenticSearch(
                 userContext: ctx.userContext,
                 replaceItems: ctx.replaceItems,
               });
-              if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; }
+              if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
@@ -614,6 +652,24 @@ export async function runAgenticSearch(
     if (tokenBudget.exceeded) {
       log.warn("Token budget exceeded, skipping validation and bundles", { tokensUsed: stats.tokensUsed, tokenCap: DEFAULT_TOKEN_CAP, deepScored: stats.totalDeepScored, quickScored: stats.totalQuickScored, roomId: ctx.roomId });
       reportStep({ step: "Token budget exceeded — returning scored results", status: "completed" });
+
+      // Safety net: even with budget exceeded, organize what we have into partial results
+      // so the user gets recommendations instead of an empty response
+      for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+        const kept: CandidateProduct[] = [];
+        for (const tier of PRICE_TIERS) {
+          const products = tierResults[tier].filter((p) => evaluations.has(p.id));
+          products.sort((a, b) => {
+            const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+            const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+            return scoreB - scoreA;
+          });
+          kept.push(...products.slice(0, 5));
+        }
+        if (kept.length > 0) candidatesByCategory[category] = kept;
+        stats.totalFinal += kept.length;
+      }
+
       return {
         success: true,
         data: {
@@ -622,7 +678,7 @@ export async function runAgenticSearch(
           evaluations,
           bundles: [],
           steps,
-          stats,
+          stats: { ...stats, bottlenecks: ["Token budget exceeded before validation/bundling — partial results returned"] },
           trace: tracer.getTrace(),
         },
       };
@@ -827,7 +883,7 @@ export async function runAgenticSearch(
           bundleEvalLimit(async () => {
             if (tokenBudget.exceeded) return null;
             const result = await evaluateBundle(combo, bundleCtx);
-            if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; }
+            if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; stats.tokensPerPhase.bundle += result.tokensUsed; }
             if (result.success && result.data) {
               return { products: combo, ...result.data };
             }
@@ -1103,6 +1159,9 @@ export async function runAgenticSearch(
     if (Object.keys(distribution).length > 0) {
       log.info("Score distributions", { phase: "drift", distribution });
     }
+
+    // Log per-phase token breakdown for cost analysis
+    log.info("Token usage by phase", { phase: "stats", tokensPerPhase: stats.tokensPerPhase, totalTokens: stats.tokensUsed });
 
     return {
       success: true,

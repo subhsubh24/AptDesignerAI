@@ -24,6 +24,14 @@ interface DriftWarning {
   sampleSize: number;
 }
 
+/** Compute proper median with interpolation for even-length sorted arrays. */
+function computeMedian(sorted: number[]): number {
+  const len = sorted.length;
+  if (len === 0) return 0;
+  if (len % 2 === 1) return sorted[Math.floor(len / 2)];
+  return (sorted[len / 2 - 1] + sorted[len / 2]) / 2;
+}
+
 // In-memory buffer — resets per process. For persistent monitoring,
 // write these to the DB or an observability service.
 const scoreBuffer: ScoreRecord[] = [];
@@ -83,7 +91,7 @@ export function checkForDrift(): DriftWarning[] {
     if (dimension === "confidence_score") continue;
 
     const sorted = [...values].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const median = computeMedian(sorted);
     const mean = values.reduce((s, v) => s + v, 0) / values.length;
     const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
     const stddev = Math.sqrt(variance);
@@ -143,12 +151,14 @@ export function getScoreDistributionSummary(): Record<string, { count: number; m
   }
 
   for (const [dimension, values] of byDimension.entries()) {
+    // Require minimum sample size for reliable statistics
+    if (values.length < 3) continue;
     const sorted = [...values].sort((a, b) => a - b);
     const mean = values.reduce((s, v) => s + v, 0) / values.length;
     const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
     summary[dimension] = {
       count: values.length,
-      median: sorted[Math.floor(sorted.length / 2)],
+      median: computeMedian(sorted),
       mean: Math.round(mean * 100) / 100,
       stddev: Math.round(Math.sqrt(variance) * 100) / 100,
       min: sorted[0],

@@ -277,7 +277,7 @@ For EACH item, score these 6 dimensions separately (ALL USE DECIMALS e.g. 7.3, 8
    - 1-3: Fundamentally impractical for the use case
 
 ### Also provide per item:
-- **harmony_score**: Your best overall assessment (0-10, decimal). The server will also compute one from sub_scores — the lower of the two is used.
+- **harmony_score**: Your best overall assessment (0-10, decimal). Compute as: min(sub_scores) × 0.4 + mean(sub_scores) × 0.6 — one bad dimension tanks the score. The server will also compute one from sub_scores — the lower of the two is used.
 - **drop**: true if harmony_score ≤ 3
 - For ANY item where ANY sub_score < 9.5, you MUST provide **revised_search_title**, **revised_specs**, AND **revised_placement** that would bring ALL sub_scores to 9.5+.
 

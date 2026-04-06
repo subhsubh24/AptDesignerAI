@@ -327,6 +327,31 @@ const SCALE_RELATIONS: Array<{
     rule: "Rug should extend ≥24\" beyond dining table for chair pullback",
     check: (rug, table) => rug.w >= table.w + 48 && rug.d >= table.d + 48,
   },
+  {
+    catA: "nightstand",
+    catB: "bed",
+    rule: "Nightstand should be ≤40% of bed width",
+    check: (ns, bed) => ns.w <= bed.w * 0.4,
+  },
+  {
+    catA: "side_table",
+    catB: "sofa",
+    rule: "Side table should be roughly sofa arm height (within 4\")",
+    check: (st: { w: number; d: number; h?: number }, sofa: { w: number; d: number; h?: number }) => {
+      if (st.h === undefined || sofa.h === undefined) return true;
+      return Math.abs(st.h - sofa.h * 0.85) <= 4;
+    },
+  },
+  {
+    catA: "dining_chairs",
+    catB: "dining_table",
+    rule: "Dining chair seat should be 10-13\" below table top",
+    check: (chair: { w: number; d: number; h?: number }, table: { w: number; d: number; h?: number }) => {
+      if (chair.h === undefined || table.h === undefined) return true;
+      const gap = table.h - chair.h;
+      return gap >= 10 && gap <= 13;
+    },
+  },
 ];
 
 function computeBundleScaleBalance(products: BundleProduct[], ctx: BundleMathContext): { score: number; issues: string[] } {
@@ -400,6 +425,10 @@ const EXPECTED_CATEGORIES: Record<string, string[]> = {
   home_office: ["desk", "desk_chair", "table_lamp", "bookshelf"],
   entryway: ["console_table", "mirror", "area_rug"],
   nursery: ["crib", "dresser", "area_rug", "table_lamp", "rocking_chair"],
+  kitchen: ["bar_stools", "pendant_light", "kitchen_rug"],
+  bathroom: ["bath_mat", "mirror", "storage"],
+  guest_room: ["bed", "nightstand", "table_lamp", "dresser"],
+  studio: ["sofa", "area_rug", "floor_lamp", "coffee_table", "desk", "bookshelf"],
 };
 
 function computeCompleteness(products: BundleProduct[], ctx: BundleMathContext): { score: number; issues: string[] } {
@@ -440,13 +469,14 @@ function computePriceCoherence(products: BundleProduct[]): { score: number; issu
 
   // Check coefficient of variation (relative spread)
   const mean = prices.reduce((a, b) => a + b, 0) / prices.length;
+  if (mean === 0) return { score: 0.3, issues: ["All product prices are $0 — invalid bundle pricing"] };
   const stdDev = Math.sqrt(prices.reduce((a, p) => a + (p - mean) ** 2, 0) / prices.length);
   const cv = stdDev / mean;
 
-  // Also check for extreme outliers
+  // Also check for extreme outliers using proper quartile indices
   const sorted = [...prices].sort((a, b) => a - b);
-  const q1 = sorted[Math.floor(sorted.length * 0.25)];
-  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const q1 = sorted[Math.max(0, Math.ceil(sorted.length * 0.25) - 1)];
+  const q3 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.75) - 1)];
   const iqr = q3 - q1;
   const outliers = prices.filter(p => p < q1 - 1.5 * iqr || p > q3 + 1.5 * iqr);
 
