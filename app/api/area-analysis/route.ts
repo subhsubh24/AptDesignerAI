@@ -935,6 +935,19 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       console.warn(`[area-analysis] Final assessment failed (${finalResult.error}) — using iterative-round validation`);
     }
 
+    // ── Post-harmony re-validation: re-enforce user constraints ──────
+    // The harmony loop can revise/drop items in ways that violate user
+    // exclusions, keep-item protections, or explicit requests. Re-run
+    // the deterministic validator as a final gate before saving.
+    if (parsedContext || allKeepItems.length > 0) {
+      const postHarmonyValidation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      if (postHarmonyValidation.wasModified) {
+        analysis = postHarmonyValidation.patched;
+        console.log(`[area-analysis] Post-harmony re-validation patched ${postHarmonyValidation.issues.length} constraint violation(s):`,
+          postHarmonyValidation.issues.map(i => `${i.type}: ${i.description}`).join("; "));
+      }
+    }
+
     // Save as detailed diagnosis
     await supabase.from("room_diagnoses").insert({
       room_id,

@@ -7,6 +7,8 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -113,6 +115,19 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
     });
   }
 
+  // Extract keep/replace items for reinforcement
+  const keepItems = room.keep_items as string[] | null;
+
+  // Parse user context into structured constraints (exclusions, keep items, requests)
+  const parsedContext = room.user_context ? parseUserContext(room.user_context) : null;
+  const parsedContextBlock = parsedContext ? formatParsedContextForPrompt(parsedContext) : "";
+
+  // Merge keep items from explicit list + parsed context
+  const allKeepItems = [
+    ...(keepItems || []),
+    ...(parsedContext?.additionalKeepItems || []),
+  ];
+
   // Room photos
   const userContextNote = room.user_context
     ? `\n\nUSER NOTES ABOUT PHOTOS: "${room.user_context}"`
@@ -120,7 +135,7 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
 
   contentBlocks.push({
     type: "text",
-    text: `Focus area: ${room.name} (${room.room_type})${userContextNote}\n\nHere are the photos of this area:`,
+    text: `Focus area: ${room.name} (${room.room_type})${userContextNote}${parsedContextBlock ? `\n\n${parsedContextBlock}` : ""}\n\nHere are the photos of this area:`,
   });
 
   for (const img of room.room_images || []) {
@@ -129,11 +144,8 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
       source: { type: "url", url: img.image_url },
     });
   }
-
-  // Extract keep/replace items for reinforcement
-  const keepItems = room.keep_items as string[] | null;
-  const keepItemsWarning = keepItems?.length
-    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — NON-NEGOTIABLE:\n${keepItems.map((item: string) => `- ${item}`).join("\n")}\nThese MUST appear in "what_works". NEVER put them in "what_should_go".`
+  const keepItemsWarning = allKeepItems.length > 0
+    ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — NON-NEGOTIABLE:\n${allKeepItems.map((item: string) => `- ${item}`).join("\n")}\nThese MUST appear in "what_works". NEVER put them in "what_should_go". Do NOT recommend buying a NEW version of these items — the client already has them and wants to keep them.`
     : "";
 
   // The refinement prompt — this is where the magic happens
@@ -225,6 +237,17 @@ CRITICAL RULES:
       throw new Error(`AI response missing required field "what_it_needs". Got keys: ${Object.keys(analysis).join(", ")}`);
     }
 
+    // Post-refinement validation: enforce user constraints
+    // Catch cases where the LLM ignored exclusions, keep items, or explicit requests
+    if (parsedContext || allKeepItems.length > 0) {
+      const postValidation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      if (postValidation.wasModified) {
+        Object.assign(analysis, postValidation.patched);
+        console.log(`[area-analysis/refine] Post-validation patched ${postValidation.issues.length} constraint violation(s):`,
+          postValidation.issues.map(i => `${i.type}: ${i.description}`).join("; "));
+      }
+    }
+
     // Extract refinement-specific fields
     const impactSummary = analysis.impact_summary;
     const changesMade = analysis.changes_made || [];
@@ -245,16 +268,10 @@ CRITICAL RULES:
       model_used: selectModel("area_analysis"),
     });
 
-    // Update room keep_items and replace_items to reflect refined analysis
-    const updatedKeepItems = analysis.what_works || [];
-    const updatedReplaceItems = analysis.what_should_go || [];
-    const roomUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (updatedKeepItems.length > 0) roomUpdate.keep_items = updatedKeepItems;
-    if (updatedReplaceItems.length > 0) roomUpdate.replace_items = updatedReplaceItems;
-
-    if (Object.keys(roomUpdate).length > 1) {
-      await supabase.from("rooms").update(roomUpdate).eq("id", room_id);
-    }
+    // Update room timestamp only — do NOT overwrite keep_items/replace_items
+    // with AI output. The user's original selections are the source of truth;
+    // overwriting them would cause cascading contradictions in future operations.
+    await supabase.from("rooms").update({ updated_at: new Date().toISOString() }).eq("id", room_id);
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",

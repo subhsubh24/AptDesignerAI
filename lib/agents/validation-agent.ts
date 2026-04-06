@@ -5,6 +5,7 @@ import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema, Fi
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
+import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -157,7 +158,20 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
 IMPORTANT: Think step-by-step through each item. For each recommended item, evaluate it against EVERY existing item and EVERY other recommendation.
 
 ## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.\n\n⚠️ CRITICAL: If the user says they DON'T NEED something (e.g., "don't need curtains", "have blinds"), any recommendation in that category MUST be flagged with drop=true and harmony_score=0. If the user says to KEEP an item (e.g., "keep the black arc floor lamp"), any recommendation that replaces it MUST be flagged with drop=true and harmony_score=0.` : ""}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${(() => {
+  const parts: string[] = [];
+  if (context.userContext) {
+    // Parse user context into structured constraints for the harmony validator
+    const parsed = parseUserContext(context.userContext);
+    const structuredBlock = formatParsedContextForPrompt(parsed);
+    parts.push(`\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.`);
+    if (structuredBlock) {
+      parts.push(`\n\n${structuredBlock}`);
+    }
+    parts.push(`\n\n⚠️ CRITICAL: If the user says they DON'T NEED something (e.g., "don't need curtains", "have blinds"), any recommendation in that category MUST be flagged with drop=true and harmony_score=0. If the user says to KEEP an item (e.g., "keep the black arc floor lamp"), any recommendation that replaces it MUST be flagged with drop=true and harmony_score=0. When revising items, NEVER revise a search_title or specs to include excluded categories.`);
+  }
+  return parts.join("");
+})()}
 
 ## DESIGN DIRECTION
 ${designDirection}
