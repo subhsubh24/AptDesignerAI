@@ -81,6 +81,8 @@ export function computeMaterialBalance(
   analysis: Record<string, unknown>,
   context: {
     roomType?: string;
+    // (m) Cross-room material data for apartment-wide coherence
+    otherRooms?: Array<{ materials?: string[] }>;
   }
 ): MaterialBalanceResult {
   const recommendedMaterials =
@@ -154,7 +156,7 @@ export function computeMaterialBalance(
     }
   }
 
-  const woodCoherence =
+  let woodCoherence =
     woodSpecies.size <= 2 ? 1.0 : Math.max(0.4, 1.0 - (woodSpecies.size - 2) * 0.2);
 
   // 3. Metal finish conflicts
@@ -176,6 +178,7 @@ export function computeMaterialBalance(
   const warmMetals = uniqueMetals.filter((m) => m.warm);
   const coolMetals = uniqueMetals.filter((m) => !m.warm);
 
+  // Use `let` for cross-room modification in (m)
   let metalCoherence = 1.0;
   if (warmMetals.length > 0 && coolMetals.length > 0) {
     // Mixing warm and cool metals
@@ -235,6 +238,66 @@ export function computeMaterialBalance(
       material2: coolMetals[0].name,
       issue: `Mixing warm (${warmMetals.map((m) => m.name).join(", ")}) and cool (${coolMetals.map((m) => m.name).join(", ")}) metals`,
     });
+  }
+
+  // (m) Cross-room material constraint propagation
+  // Check if this room's materials conflict with apartment-wide patterns
+  if (context.otherRooms?.length) {
+    const apartmentWoodSpecies = new Set<string>();
+    const apartmentMetalFinishes = new Set<string>();
+
+    for (const otherRoom of context.otherRooms) {
+      if (!otherRoom.materials) continue;
+      for (const mat of otherRoom.materials) {
+        const species = identifyWoodSpecies(mat);
+        if (species) apartmentWoodSpecies.add(species);
+        const metal = identifyMetalFinish(mat);
+        if (metal) apartmentMetalFinishes.add(metal.name);
+      }
+    }
+
+    // Cross-room wood species check: apartment-wide max 2 species
+    const allWoodSpecies = new Set([...woodSpecies, ...apartmentWoodSpecies]);
+    if (allWoodSpecies.size > 2 && woodSpecies.size > 0) {
+      const thisRoomWoods = [...woodSpecies];
+      const otherWoods = [...apartmentWoodSpecies].filter(w => !woodSpecies.has(w));
+      if (otherWoods.length > 0) {
+        conflicts.push({
+          material1: thisRoomWoods[0],
+          material2: otherWoods[0],
+          issue: `Apartment-wide: ${allWoodSpecies.size} wood species across rooms (${[...allWoodSpecies].join(", ")}) — max 2 recommended for cohesion`,
+        });
+        // Penalize wood coherence for cross-room violations
+        woodCoherence = Math.max(0.4, woodCoherence - 0.15);
+      }
+    }
+
+    // Cross-room metal finish check: apartment-wide consistency
+    const apartmentWarm = [...apartmentMetalFinishes].some(m => {
+      const metal = identifyMetalFinish(m);
+      return metal?.warm === true;
+    });
+    const apartmentCool = [...apartmentMetalFinishes].some(m => {
+      const metal = identifyMetalFinish(m);
+      return metal?.warm === false;
+    });
+    const thisRoomWarm = warmMetals.length > 0;
+    const thisRoomCool = coolMetals.length > 0;
+
+    // If apartment established warm metals but this room introduces cool (or vice versa)
+    if ((apartmentWarm && !apartmentCool && thisRoomCool && !thisRoomWarm) ||
+        (apartmentCool && !apartmentWarm && thisRoomWarm && !thisRoomCool)) {
+      const thisMetals = [...uniqueMetals.map(m => m.name)];
+      const otherMetals = [...apartmentMetalFinishes];
+      if (thisMetals.length > 0 && otherMetals.length > 0) {
+        conflicts.push({
+          material1: thisMetals[0],
+          material2: otherMetals[0],
+          issue: `Apartment-wide: this room uses ${thisRoomWarm ? "warm" : "cool"} metals but other rooms use ${apartmentWarm ? "warm" : "cool"} metals — inconsistent metal temperature`,
+        });
+        metalCoherence = Math.max(0.4, metalCoherence - 0.15);
+      }
+    }
   }
 
   return {

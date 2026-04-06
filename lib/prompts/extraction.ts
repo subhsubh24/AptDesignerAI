@@ -69,7 +69,9 @@ Return a JSON object with ALL fields populated (use null only when truly unavail
   "image_url": "direct URL to the highest-resolution product image (not thumbnail, not cropped)" or null,
   "lifestyle_image_url": "direct URL to the best lifestyle/room-setting image" or null,
   "visual_style_tags": ["5-7 style tags based on what you SEE — e.g. 'mid-century', 'warm-toned', 'organic-texture', 'matte-finish', 'tapered-legs', 'low-profile', 'natural-grain'"],
-  "available_variants": ["ALL other options — e.g. 'Also in: Charcoal Bouclé, Cream Linen, Olive Velvet, Walnut/Brass, Oak/Chrome'"] or []
+  "available_variants": ["ALL other options — e.g. 'Also in: Charcoal Bouclé, Cream Linen, Olive Velvet, Walnut/Brass, Oak/Chrome'"] or [],
+  "in_stock": true/false/null (check for "Out of Stock", "Sold Out", "Backordered", "Pre-order" badges — null if you can't determine),
+  "stock_notes": "any stock/shipping notes — e.g. 'Backordered until March', 'Ships in 4-6 weeks', 'Only 2 left', 'Made to order'" or null
 }
 
 ## RULES — READ CAREFULLY

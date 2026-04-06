@@ -2,6 +2,52 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { z } from "zod";
+
+// (c) Zod schema for structured validation of research output
+const FloorPlanVariantSchema = z.object({
+  name: z.string().nullable().optional(),
+  sqft: z.union([z.string(), z.number()]).nullable().optional(),
+  floor_plan_image_url: z.string().nullable().optional(),
+  room_layout: z.string().nullable().optional(),
+  living_dining_combined: z.boolean().nullable().optional(),
+  kitchen_style: z.string().nullable().optional(),
+  room_dimensions: z.record(z.string(), z.string().nullable()).nullable().optional(),
+  notable_spatial_features: z.array(z.string()).nullable().optional(),
+});
+
+const ResearchOutputSchema = z.object({
+  building_style: z.string().nullable().optional(),
+  finishes: z.object({
+    flooring: z.string().nullable().optional(),
+    countertops: z.string().nullable().optional(),
+    cabinetry: z.string().nullable().optional(),
+    appliances: z.string().nullable().optional(),
+    fixtures: z.string().nullable().optional(),
+  }).nullable().optional(),
+  features: z.array(z.string()).nullable().optional(),
+  windows: z.string().nullable().optional(),
+  ceiling_height: z.string().nullable().optional(),
+  layout_style: z.string().nullable().optional(),
+  floor_plan: z.object({
+    found: z.boolean().nullable().optional(),
+    source: z.string().nullable().optional(),
+    unit_type_searched: z.string().nullable().optional(),
+    total_sqft: z.union([z.string(), z.number()]).nullable().optional(),
+    unit_variants: z.array(FloorPlanVariantSchema).nullable().optional(),
+    room_layout: z.string().nullable().optional(),
+    living_dining_combined: z.boolean().nullable().optional(),
+    kitchen_style: z.string().nullable().optional(),
+    room_dimensions: z.record(z.string(), z.string().nullable()).nullable().optional(),
+    notable_spatial_features: z.array(z.string()).nullable().optional(),
+  }).nullable().optional(),
+  amenities: z.array(z.string()).nullable().optional(),
+  neighborhood_vibe: z.string().nullable().optional(),
+  design_aesthetic: z.string().nullable().optional(),
+  website_url: z.string().nullable().optional(),
+  confidence_notes: z.array(z.string()).nullable().optional(),
+  summary: z.string().nullable().optional(),
+}).passthrough(); // Allow extra fields
 
 /**
  * Attempt to repair truncated or malformed JSON by closing unclosed braces/brackets.
@@ -258,6 +304,133 @@ PROCESS:
         } else {
           console.error("[apartment-research] Unparseable response:", raw.slice(0, 500));
           throw new Error("Could not parse building research response");
+        }
+      }
+    }
+
+    // (c) Validate research output with Zod — coerce bad types to null
+    const validated = ResearchOutputSchema.safeParse(research);
+    if (validated.success) {
+      research = validated.data as Record<string, unknown>;
+    } else {
+      console.warn("[apartment-research] Schema validation warnings:", validated.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; "));
+      // Non-fatal: coerce known bad types (e.g., total_sqft: "varies" → null)
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      if (fp?.total_sqft && typeof fp.total_sqft !== "number" && typeof fp.total_sqft !== "string") {
+        fp.total_sqft = null;
+      }
+    }
+
+    // (b) Retry/fallback for sparse data — if floor plan is empty, do a targeted second pass
+    const fp = research.floor_plan as Record<string, unknown> | undefined;
+    const hasFloorPlan = fp?.found === true && (fp?.unit_variants as unknown[] | undefined)?.length;
+    const hasFinishes = research.finishes && Object.values(research.finishes as Record<string, unknown>).some(v => v && v !== "not specified");
+
+    if (!hasFloorPlan || !hasFinishes) {
+      console.log(`[apartment-research] Sparse data detected — floor_plan: ${hasFloorPlan ? "found" : "missing"}, finishes: ${hasFinishes ? "found" : "missing"}. Running targeted second pass.`);
+      const gaps: string[] = [];
+      if (!hasFloorPlan) gaps.push(`floor plans for a ${unitLabel} unit`);
+      if (!hasFinishes) gaps.push("standard finishes (flooring, countertops, cabinetry)");
+
+      try {
+        const fallbackResponse = await geminiProvider.chat({
+          model: selectModel("apartment_research"),
+          system: "You are a real estate researcher. Search specifically for the missing information about this apartment building. Return ONLY the fields you find — do NOT guess.",
+          messages: [{ role: "user", content: `Search for "${searchContext}" specifically to find: ${gaps.join(" and ")}.\n\nTry these sources:\n- apartments.com/${building_name?.toLowerCase().replace(/\s+/g, "-")}\n- zillow.com search for "${searchContext}"\n- The building's official website${building_url ? ` (${building_url})` : ""}\n\nReturn JSON with ONLY the fields you find:\n{\n  ${!hasFloorPlan ? '"floor_plan": { "found": true/false, "total_sqft": number_or_null, "unit_variants": [...], "room_dimensions": {...} },' : ''}\n  ${!hasFinishes ? '"finishes": { "flooring": "...", "countertops": "...", "cabinetry": "..." }' : ''}\n}` }],
+          max_tokens: 4000,
+          temperature: 0.2,
+          tools: [{ googleSearch: {} }, { urlContext: {} }],
+        });
+
+        const fallbackRaw = fallbackResponse.content.trim();
+        if (fallbackRaw) {
+          try {
+            let fallbackData: Record<string, unknown>;
+            try {
+              fallbackData = JSON.parse(fallbackRaw);
+            } catch {
+              fallbackData = repairAndParseJSON(fallbackRaw);
+            }
+            // Merge fallback data into research (only fill gaps)
+            if (!hasFloorPlan && fallbackData.floor_plan) {
+              research.floor_plan = fallbackData.floor_plan;
+              console.log("[apartment-research] Fallback filled floor_plan data");
+            }
+            if (!hasFinishes && fallbackData.finishes) {
+              research.finishes = { ...(research.finishes as Record<string, unknown> || {}), ...(fallbackData.finishes as Record<string, unknown>) };
+              console.log("[apartment-research] Fallback filled finishes data");
+            }
+          } catch (e) {
+            console.warn("[apartment-research] Fallback response unparseable:", (e as Error).message);
+          }
+        }
+      } catch (e) {
+        console.warn("[apartment-research] Fallback search failed:", (e as Error).message);
+      }
+    }
+
+    // (a) Analyze floor plan images via Gemini vision if URLs were found
+    const floorPlanData = research.floor_plan as Record<string, unknown> | undefined;
+    const variants = floorPlanData?.unit_variants as Array<Record<string, unknown>> | undefined;
+    if (variants?.length) {
+      const imageUrls = variants
+        .map(v => v.floor_plan_image_url as string | null)
+        .filter((url): url is string => !!url);
+
+      if (imageUrls.length > 0) {
+        console.log(`[apartment-research] Analyzing ${imageUrls.length} floor plan image(s) via Gemini vision`);
+        try {
+          const visionBlocks: Array<{ type: "image"; source: { type: "url"; url: string } } | { type: "text"; text: string }> = [];
+          for (const url of imageUrls.slice(0, 3)) {
+            visionBlocks.push({ type: "image", source: { type: "url", url } });
+          }
+          visionBlocks.push({
+            type: "text",
+            text: `Analyze these floor plan images for a ${unitLabel} apartment. Extract:\n1. Actual room dimensions if labeled or measurable from scale\n2. Door and window positions on each wall\n3. Room spatial relationships (which rooms connect, open/closed)\n4. Any hallways, closets, or architectural features\n\nReturn JSON:\n{\n  "extracted_dimensions": { "living_room": "WxD ft or null", "bedroom": "WxD ft or null", "kitchen": "WxD ft or null" },\n  "door_positions": ["description of each door location"],\n  "window_positions": ["description of each window location"],\n  "spatial_relationships": "how rooms connect"\n}`,
+          });
+
+          const visionResponse = await geminiProvider.chat({
+            model: selectModel("apartment_research"),
+            system: "You are analyzing floor plan images. Extract spatial information that would help an interior designer plan furniture placement.",
+            messages: [{ role: "user", content: visionBlocks }],
+            max_tokens: 3000,
+            temperature: 0.1,
+          });
+
+          const visionRaw = visionResponse.content.trim();
+          if (visionRaw) {
+            try {
+              let visionData: Record<string, unknown>;
+              try {
+                visionData = JSON.parse(visionRaw);
+              } catch {
+                visionData = repairAndParseJSON(visionRaw);
+              }
+              // Merge vision-extracted data into floor plan
+              if (visionData.extracted_dimensions) {
+                const existingDims = (floorPlanData?.room_dimensions as Record<string, string | null>) || {};
+                const extractedDims = visionData.extracted_dimensions as Record<string, string | null>;
+                // Only fill null dimensions
+                for (const [room, dim] of Object.entries(extractedDims)) {
+                  if (dim && (!existingDims[room] || existingDims[room] === "null")) {
+                    existingDims[room] = dim;
+                  }
+                }
+                (research.floor_plan as Record<string, unknown>).room_dimensions = existingDims;
+                console.log("[apartment-research] Vision extracted room dimensions:", JSON.stringify(existingDims));
+              }
+              // Store vision analysis as additional context
+              (research.floor_plan as Record<string, unknown>).vision_analysis = {
+                door_positions: visionData.door_positions || [],
+                window_positions: visionData.window_positions || [],
+                spatial_relationships: visionData.spatial_relationships || null,
+              };
+            } catch (e) {
+              console.warn("[apartment-research] Vision analysis unparseable:", (e as Error).message);
+            }
+          }
+        } catch (e) {
+          console.warn("[apartment-research] Floor plan vision analysis failed:", (e as Error).message);
         }
       }
     }

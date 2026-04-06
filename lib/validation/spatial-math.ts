@@ -66,28 +66,100 @@ export function parseDimensions(specs: string): Dimensions | null {
   return { width: side, depth: side };
 }
 
+// (d) Standard room size ratios for estimation from total sqft
+const ROOM_SIZE_RATIOS: Record<string, Record<string, number>> = {
+  // room_type → fraction of total apartment sqft
+  "1_bed": {
+    living_room: 0.25, bedroom: 0.20, kitchen: 0.12,
+    dining_room: 0.10, bathroom: 0.06, entryway: 0.04,
+  },
+  "2_bed": {
+    living_room: 0.22, bedroom: 0.15, kitchen: 0.10,
+    dining_room: 0.08, bathroom: 0.05, entryway: 0.04,
+  },
+  "3_bed": {
+    living_room: 0.20, bedroom: 0.13, kitchen: 0.09,
+    dining_room: 0.07, bathroom: 0.04, entryway: 0.03,
+  },
+};
+
+// Standard room aspect ratios (width:depth) for estimation
+const ROOM_ASPECT_RATIOS: Record<string, number> = {
+  living_room: 0.75, // typically wider than deep
+  bedroom: 0.85,
+  kitchen: 1.2, // often deeper than wide (galley)
+  dining_room: 0.9,
+  home_office: 0.8,
+  bathroom: 0.7,
+  entryway: 2.0, // narrow and long
+  nursery: 0.9,
+};
+
 function parseRoomDimensions(
-  floorPlan: Record<string, unknown> | undefined
-): { width: number; depth: number } | null {
+  floorPlan: Record<string, unknown> | undefined,
+  roomType?: string,
+): { width: number; depth: number; estimated?: boolean } | null {
   if (!floorPlan) return null;
 
-  // Try room_dimensions field (e.g., "12x15", "12' x 15'")
-  const raw =
-    floorPlan.room_dimensions ||
-    floorPlan.dimensions ||
-    floorPlan.size;
-  if (!raw || typeof raw !== "string") return null;
-  const dims = raw;
+  // Try room_dimensions field — can be a string ("12x15") or an object ({ living_room: "12x15" })
+  const raw = floorPlan.room_dimensions || floorPlan.dimensions || floorPlan.size;
 
-  const match = dims.match(
-    /(\d+(?:\.\d+)?)\s*['']?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*['']?/i
-  );
-  if (!match) return null;
+  let dimString: string | null = null;
+  if (typeof raw === "string") {
+    dimString = raw;
+  } else if (raw && typeof raw === "object") {
+    // It's a map like { living_room: "12x15", bedroom: "10x12" }
+    const roomKey = (roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+    const obj = raw as Record<string, unknown>;
+    const val = obj[roomKey] || obj.living_room;
+    if (typeof val === "string") dimString = val;
+  }
 
-  // Assume feet, convert to inches
-  const w = parseFloat(match[1]) * 12;
-  const d = parseFloat(match[2]) * 12;
-  return { width: w, depth: d };
+  if (dimString) {
+    const match = dimString.match(
+      /(\d+(?:\.\d+)?)\s*['']?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*['']?/i
+    );
+    if (match) {
+      const w = parseFloat(match[1]) * 12; // Assume feet, convert to inches
+      const d = parseFloat(match[2]) * 12;
+      return { width: w, depth: d };
+    }
+  }
+
+  // (d) Estimation fallback: derive from total_sqft + room type ratios
+  const totalSqft = floorPlan.total_sqft;
+  if (totalSqft) {
+    const sqftNum = typeof totalSqft === "number" ? totalSqft
+      : typeof totalSqft === "string" ? parseFloat(totalSqft.replace(/[^0-9.]/g, ""))
+      : NaN;
+
+    if (!isNaN(sqftNum) && sqftNum > 100) {
+      // Determine unit type from floor plan context
+      const unitType = floorPlan.unit_type_searched as string | undefined;
+      const bedCount = unitType?.match(/(\d)/)?.[1] || "1";
+      const ratioKey = `${bedCount}_bed`;
+      const ratios = ROOM_SIZE_RATIOS[ratioKey] || ROOM_SIZE_RATIOS["1_bed"];
+
+      const roomKey = (roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+      const fraction = ratios[roomKey] || 0.20;
+      const roomSqft = sqftNum * fraction;
+
+      // Use aspect ratio to compute width/depth
+      const aspect = ROOM_ASPECT_RATIOS[roomKey] || 0.85;
+      // area = width * depth, width = depth * aspect
+      // area = depth^2 * aspect → depth = sqrt(area/aspect)
+      const depthFt = Math.sqrt(roomSqft / aspect);
+      const widthFt = depthFt * aspect;
+
+      return {
+        width: Math.round(widthFt * 12),
+        depth: Math.round(depthFt * 12),
+        estimated: true,
+      };
+    }
+  }
+
+  return null;
 }
 
 // --- Room type ideal ratios ---
@@ -197,7 +269,7 @@ export function computeSpatialConstraints(
       placement?: string;
     }>) || [];
 
-  const roomDims = parseRoomDimensions(context.floorPlan);
+  const roomDims = parseRoomDimensions(context.floorPlan, context.roomType);
 
   // 1. Room coverage ratio
   let roomCoverageRatio = 0.7; // Default if we can't compute

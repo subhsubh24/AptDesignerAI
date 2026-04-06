@@ -12,12 +12,23 @@ export interface MathHarmonyItemScore {
   violations: string[];
 }
 
+// (q) Lighting adequacy result
+export interface LightingAdequacyResult {
+  has_ambient: boolean;
+  has_task: boolean;
+  has_accent: boolean;
+  light_source_count: number;
+  adequacy_score: number; // 0-1
+  issues: string[];
+}
+
 export interface MathHarmonyResult {
   overall: number; // 0-1
   color: ColorHarmonyResult;
   spatial: SpatialConstraintResult;
   material: MaterialBalanceResult;
   proportion: ProportionResult;
+  lighting: LightingAdequacyResult;
   itemScores: MathHarmonyItemScore[];
 }
 
@@ -30,29 +41,186 @@ const WEIGHTS = {
   specificity: 0.15,
 };
 
+// (f) Category-specific required fields for meaningful specificity scoring
+const CATEGORY_REQUIRED_FIELDS: Record<string, Array<{ field: string; pattern: RegExp; weight: number }>> = {
+  area_rug: [
+    { field: "dimensions", pattern: /\d+\s*['"]?\s*[x×]\s*\d+/i, weight: 0.25 },
+    { field: "material", pattern: /\b(wool|jute|sisal|cotton|polypropylene|silk|nylon|viscose|polyester)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(cream|ivory|beige|gray|grey|blue|green|terracotta|rust|navy|charcoal|white|black|natural|oatmeal|sage)\b/i, weight: 0.15 },
+    { field: "texture", pattern: /\b(hand[- ]knotted|flat[- ]weave|shag|loop|tufted|braided|woven|geometric|abstract|solid|striped)\b/i, weight: 0.1 },
+  ],
+  rug: [
+    { field: "dimensions", pattern: /\d+\s*['"]?\s*[x×]\s*\d+/i, weight: 0.25 },
+    { field: "material", pattern: /\b(wool|jute|sisal|cotton|polypropylene|silk|nylon)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(cream|ivory|beige|gray|grey|blue|green|terracotta|rust|navy)\b/i, weight: 0.15 },
+  ],
+  coffee_table: [
+    { field: "dimensions", pattern: /\d+\s*["']?\s*(inch|in|"|wide|diameter|round)/i, weight: 0.2 },
+    { field: "material", pattern: /\b(walnut|oak|marble|glass|stone|wood|metal|concrete|travertine)\b/i, weight: 0.2 },
+    { field: "shape", pattern: /\b(round|oval|rectangular|square|organic)\b/i, weight: 0.1 },
+    { field: "height", pattern: /\d+\s*["']?\s*(tall|high|height)/i, weight: 0.1 },
+  ],
+  floor_lamp: [
+    { field: "height", pattern: /\d+\s*["']?\s*(tall|high|inch|in|")/i, weight: 0.2 },
+    { field: "material", pattern: /\b(brass|iron|steel|chrome|nickel|wood|concrete|marble)\b/i, weight: 0.2 },
+    { field: "shade", pattern: /\b(linen|drum|arc|task|torchiere|globe|shade)\b/i, weight: 0.15 },
+  ],
+  table_lamp: [
+    { field: "height", pattern: /\d+\s*["']?\s*(tall|high|inch|in|")/i, weight: 0.2 },
+    { field: "material", pattern: /\b(ceramic|glass|brass|marble|stone|wood|concrete)\b/i, weight: 0.2 },
+    { field: "shade", pattern: /\b(linen|drum|empire|shade)\b/i, weight: 0.15 },
+  ],
+  pendant_light: [
+    { field: "dimensions", pattern: /\d+\s*["']?\s*(inch|in|"|wide|diameter)/i, weight: 0.2 },
+    { field: "material", pattern: /\b(brass|iron|glass|rattan|woven|metal|chrome)\b/i, weight: 0.2 },
+  ],
+  dining_table: [
+    { field: "dimensions", pattern: /\d+\s*["']?\s*(inch|in|"|wide|long|seats)/i, weight: 0.25 },
+    { field: "material", pattern: /\b(walnut|oak|marble|wood|glass|concrete)\b/i, weight: 0.2 },
+    { field: "seating", pattern: /\b(seats?\s*\d|for\s*\d|person)/i, weight: 0.1 },
+  ],
+  dining_chair: [
+    { field: "material", pattern: /\b(walnut|oak|wood|upholstered|leather|woven|rattan|metal)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(cream|ivory|beige|gray|black|natural|white|cognac)\b/i, weight: 0.15 },
+  ],
+  sofa: [
+    { field: "dimensions", pattern: /\d+\s*["']?\s*(inch|in|"|wide|long|seat)/i, weight: 0.2 },
+    { field: "material", pattern: /\b(linen|velvet|leather|boucle|performance|cotton)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(cream|ivory|beige|gray|grey|charcoal|navy|green|white|camel)\b/i, weight: 0.15 },
+  ],
+  accent_chair: [
+    { field: "material", pattern: /\b(velvet|linen|boucle|leather|woven|upholstered)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(cream|ivory|green|blue|rust|cognac|blush|charcoal)\b/i, weight: 0.15 },
+    { field: "style", pattern: /\b(mid[- ]century|modern|lounge|club|slipper|wing)\b/i, weight: 0.15 },
+  ],
+  curtains: [
+    { field: "material", pattern: /\b(linen|cotton|velvet|sheer|blackout|silk)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(white|cream|ivory|natural|oatmeal|beige|gray)\b/i, weight: 0.15 },
+    { field: "length", pattern: /\d+\s*["']?\s*(inch|in|"|long|length)/i, weight: 0.15 },
+  ],
+  wall_art: [
+    { field: "dimensions", pattern: /\d+\s*["']?\s*[x×]\s*\d+/i, weight: 0.2 },
+    { field: "medium", pattern: /\b(print|canvas|framed|photograph|painting|poster|abstract|landscape)\b/i, weight: 0.2 },
+    { field: "color", pattern: /\b(neutral|warm|cool|earth|muted|bold|black|white)\b/i, weight: 0.15 },
+  ],
+};
+
 function computeSpecificityScore(
   item: { category: string; specs?: string; placement?: string }
 ): number {
-  let score = 0.5;
+  const catKey = item.category.toLowerCase().replace(/[\s-]+/g, "_");
+  const requiredFields = CATEGORY_REQUIRED_FIELDS[catKey];
 
+  // (f) If we have category-specific required fields, score against them
+  if (requiredFields && item.specs) {
+    let totalWeight = 0;
+    let earnedWeight = 0;
+    for (const { pattern, weight } of requiredFields) {
+      totalWeight += weight;
+      if (pattern.test(item.specs)) {
+        earnedWeight += weight;
+      }
+    }
+    // Base score from field coverage
+    let score = totalWeight > 0 ? 0.4 + 0.5 * (earnedWeight / totalWeight) : 0.5;
+
+    // Bonus for placement specificity
+    if (item.placement && item.placement.length > 20) score += 0.1;
+    else if (item.placement && item.placement.length > 10) score += 0.05;
+
+    return Math.min(1, score);
+  }
+
+  // Fallback: generic scoring for unknown categories
+  let score = 0.5;
   if (item.specs) {
     const specLen = item.specs.length;
-    // Longer, more detailed specs = higher specificity
     if (specLen > 100) score += 0.3;
     else if (specLen > 50) score += 0.2;
     else if (specLen > 20) score += 0.1;
-
-    // Bonus for having actual dimensions
     if (/\d+\s*["'x×-]\s*\d+/.test(item.specs)) score += 0.1;
-    // Bonus for mentioning specific materials
     if (/\b(walnut|oak|brass|marble|linen|velvet|leather)\b/i.test(item.specs)) score += 0.05;
   }
+  if (item.placement && item.placement.length > 10) score += 0.1;
+  return Math.min(1, score);
+}
 
-  if (item.placement && item.placement.length > 10) {
-    score += 0.1;
+// (q) Lighting adequacy validation
+const AMBIENT_CATEGORIES = new Set(["pendant_light", "chandelier", "ceiling_light", "ceiling_fan_light", "recessed_light"]);
+const TASK_CATEGORIES = new Set(["floor_lamp", "table_lamp", "desk_lamp", "reading_lamp", "under_cabinet_light"]);
+const ACCENT_CATEGORIES = new Set(["wall_sconce", "picture_light", "led_strip", "candle"]);
+
+// Minimum recommended light sources by room type
+const MIN_LIGHT_SOURCES: Record<string, number> = {
+  living_room: 3, bedroom: 2, dining_room: 2, home_office: 2,
+  kitchen: 2, bathroom: 2, entryway: 1, nursery: 2,
+};
+
+function computeLightingAdequacy(
+  analysis: Record<string, unknown>,
+  roomType?: string,
+): LightingAdequacyResult {
+  const whatItNeeds = (analysis.what_it_needs as Array<{ category: string; specs?: string }>) || [];
+  const whatWorks = (analysis.what_works as string[]) || [];
+
+  let hasAmbient = false;
+  let hasTask = false;
+  let hasAccent = false;
+  let lightSourceCount = 0;
+  const issues: string[] = [];
+
+  // Count light sources in recommendations
+  for (const item of whatItNeeds) {
+    const cat = item.category.toLowerCase().replace(/[\s-]+/g, "_");
+    if (AMBIENT_CATEGORIES.has(cat)) { hasAmbient = true; lightSourceCount++; }
+    else if (TASK_CATEGORIES.has(cat)) { hasTask = true; lightSourceCount++; }
+    else if (ACCENT_CATEGORIES.has(cat)) { hasAccent = true; lightSourceCount++; }
+    // Check if specs mention lighting
+    else if (item.specs && /\b(lamp|light|lumen|watt|led)\b/i.test(item.specs)) {
+      lightSourceCount++;
+    }
   }
 
-  return Math.min(1, score);
+  // Count light sources in existing items (what_works)
+  for (const item of whatWorks) {
+    const lower = item.toLowerCase();
+    if (/\b(lamp|light|pendant|chandelier|sconce|fixture)\b/.test(lower)) {
+      lightSourceCount++;
+      if (/\b(pendant|chandelier|ceiling|overhead)\b/.test(lower)) hasAmbient = true;
+      if (/\b(floor lamp|table lamp|desk lamp|reading)\b/.test(lower)) hasTask = true;
+      if (/\b(sconce|accent|picture light)\b/.test(lower)) hasAccent = true;
+    }
+  }
+
+  const roomKey = (roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+  const minSources = MIN_LIGHT_SOURCES[roomKey] || 2;
+
+  if (lightSourceCount < minSources) {
+    issues.push(`Only ${lightSourceCount} light source(s) for ${roomKey} — recommend at least ${minSources}`);
+  }
+  if (!hasAmbient) {
+    issues.push("No ambient/overhead lighting — room may feel dim overall");
+  }
+  if (!hasTask && (roomKey === "home_office" || roomKey === "living_room" || roomKey === "bedroom")) {
+    issues.push(`No task lighting for ${roomKey} — reading/working areas will be underlit`);
+  }
+
+  // Compute adequacy score
+  let score = 0.5;
+  if (hasAmbient) score += 0.2;
+  if (hasTask) score += 0.15;
+  if (hasAccent) score += 0.05;
+  if (lightSourceCount >= minSources) score += 0.1;
+  if (lightSourceCount >= minSources + 1) score += 0.05; // bonus for extra coverage
+
+  return {
+    has_ambient: hasAmbient,
+    has_task: hasTask,
+    has_accent: hasAccent,
+    light_source_count: lightSourceCount,
+    adequacy_score: Math.min(1, Math.round(score * 100) / 100),
+    issues,
+  };
 }
 
 export function computeHarmonyScores(
@@ -61,11 +229,44 @@ export function computeHarmonyScores(
     roomType?: string;
     floorPlan?: Record<string, unknown>;
     otherRooms?: Array<{ palette?: string[]; materials?: string[] }>;
+    // (l) Building research for apartment-wide palette anchors
+    buildingResearch?: Record<string, unknown>;
   }
 ): MathHarmonyResult {
-  const color = computeColorHarmony(analysis, context);
+  // (l) Extract apartment-wide palette anchors from building finishes
+  const apartmentPaletteAnchors: string[] = [];
+  if (context.buildingResearch) {
+    const finishes = context.buildingResearch.finishes as Record<string, string> | undefined;
+    if (finishes) {
+      // Extract color-bearing finish descriptions
+      for (const value of Object.values(finishes)) {
+        if (value && typeof value === "string" && value !== "not specified") {
+          // Extract color words from finish descriptions like "dark walnut hardwood" or "white quartz"
+          const colorWords = value.toLowerCase().match(/\b(white|cream|ivory|beige|gray|grey|charcoal|black|brown|walnut|oak|espresso|dark|light|warm|cool|natural|honey|maple|cherry|stainless|brushed|matte|satin|silver|gold|brass|bronze|copper)\b/g);
+          if (colorWords) apartmentPaletteAnchors.push(...colorWords);
+        }
+      }
+    }
+    // Also extract from design_aesthetic
+    const aesthetic = context.buildingResearch.design_aesthetic as string | undefined;
+    if (aesthetic) {
+      const aestheticColors = aesthetic.toLowerCase().match(/\b(warm|cool|neutral|modern|industrial|minimalist|traditional|contemporary)\b/g);
+      if (aestheticColors) apartmentPaletteAnchors.push(...aestheticColors);
+    }
+  }
+
+  const color = computeColorHarmony(analysis, {
+    ...context,
+    apartmentPaletteAnchors: [...new Set(apartmentPaletteAnchors)],
+  });
   const spatial = computeSpatialConstraints(analysis, context);
-  const material = computeMaterialBalance(analysis, context);
+  // (q) Compute lighting adequacy
+  const lighting = computeLightingAdequacy(analysis, context.roomType);
+
+  const material = computeMaterialBalance(analysis, {
+    roomType: context.roomType,
+    otherRooms: context.otherRooms,
+  });
   const proportion = computeProportionScores(analysis, context);
 
   const whatItNeeds =
@@ -98,9 +299,15 @@ export function computeHarmonyScores(
 
     const specificity = computeSpecificityScore(item);
 
+    // (e) Use per-item color fit instead of global palette_harmony for per-item scores
+    const perItemColorFit = color.per_item_color_fit?.get(item.category);
+    const itemColorScore = perItemColorFit !== undefined
+      ? perItemColorFit * 0.7 + color.palette_harmony * 0.3  // Blend per-item (70%) + global (30%)
+      : (color.palette_harmony + color.cross_room_coherence) / 2;  // Fallback to global
+
     // Weighted average of all dimensions
     const mathScore =
-      WEIGHTS.color * ((color.palette_harmony + color.cross_room_coherence) / 2) +
+      WEIGHTS.color * itemColorScore +
       WEIGHTS.spatial * ((spatial.room_coverage_ratio + spatial.clearance_score) / 2) +
       WEIGHTS.material *
         ((material.material_balance + material.wood_coherence + material.metal_coherence + material.soft_hard_ratio) / 4) +
@@ -131,6 +338,7 @@ export function computeHarmonyScores(
     spatial,
     material,
     proportion,
+    lighting,
     itemScores,
   };
 }
@@ -188,14 +396,43 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
   }
   lines.push("");
 
-  // Per-item scores
-  lines.push("### Per-item math scores:");
-  for (const item of result.itemScores) {
-    const status = item.violations.length === 0 ? "no violations" : item.violations.join("; ");
-    lines.push(`- ${item.category}: ${item.math_score.toFixed(2)} | ${status}`);
+  // (q) Lighting adequacy
+  lines.push(`### Lighting Adequacy: ${result.lighting.adequacy_score.toFixed(2)}/1.0`);
+  lines.push(`- Light sources: ${result.lighting.light_source_count} (ambient: ${result.lighting.has_ambient ? "yes" : "NO"}, task: ${result.lighting.has_task ? "yes" : "NO"}, accent: ${result.lighting.has_accent ? "yes" : "NO"})`);
+  for (const issue of result.lighting.issues) {
+    lines.push(`- ISSUE: ${issue}`);
   }
   lines.push("");
-  lines.push("You CANNOT score an item 10/10 if it has math violations. Fix violations in revised_specs/placement. Focus your scoring on SUBJECTIVE aspects math can't capture (aesthetic feel, style coherence, visual appeal).");
+
+  // Per-item scores with per-dimension caps (h)
+  lines.push("### Per-item math scores and dimension caps:");
+  lines.push("Each item shows its math score + the maximum AI sub-score allowed per dimension.");
+  lines.push("If a math cap is below 9.0, your sub-score for that dimension WILL be capped to this value.");
+  lines.push("");
+  for (const item of result.itemScores) {
+    const status = item.violations.length === 0 ? "no violations" : item.violations.join("; ");
+    // (h) Compute per-dimension caps for this item so AI knows what's capped
+    const perItemFit = result.color.per_item_color_fit?.get(item.category);
+    const colorCap = perItemFit !== undefined
+      ? perItemFit * 0.7 + result.color.palette_harmony * 0.3
+      : result.color.palette_harmony;
+    const spatialCap = (result.spatial.room_coverage_ratio + result.spatial.clearance_score) / 2;
+    const matCap = result.material.material_balance * 0.3 + result.material.wood_coherence * 0.3 +
+      result.material.metal_coherence * 0.2 + result.material.soft_hard_ratio * 0.2;
+    const crossRoomCap = result.color.cross_room_coherence;
+
+    const capStr = [
+      colorCap < 0.9 ? `color_fit≤${(Math.sqrt(colorCap) * 8 + 2).toFixed(1)}` : null,
+      spatialCap < 0.9 ? `spatial_fit≤${(Math.sqrt(spatialCap) * 8 + 2).toFixed(1)}` : null,
+      matCap < 0.9 ? `material_fit≤${(Math.sqrt(matCap) * 8 + 2).toFixed(1)}` : null,
+      crossRoomCap < 0.9 ? `cross_room_fit≤${(Math.sqrt(crossRoomCap) * 8 + 2).toFixed(1)}` : null,
+    ].filter(Boolean).join(", ");
+
+    lines.push(`- ${item.category}: ${item.math_score.toFixed(2)} | ${status}${capStr ? ` | CAPS: ${capStr}` : " | no caps"}`);
+  }
+  lines.push("");
+  lines.push("You CANNOT score an item 10/10 if it has math violations. Fix violations in revised_specs/placement.");
+  lines.push("Dimensions with caps listed above WILL be algorithmically capped — spend your reasoning on the truly subjective dimensions (style_coherence, functional_fit) where you can actually improve scores.");
 
   return lines.join("\n");
 }

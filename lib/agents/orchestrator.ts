@@ -31,6 +31,8 @@ export interface OrchestrationStep {
 export interface OrchestrationResult {
   searchBrief: unknown;
   candidatesByCategory: Record<string, CandidateProduct[]>;
+  // (s) Additional alternatives the user can browse
+  alsoConsidered?: Record<string, CandidateProduct[]>;
   evaluations: Map<string, ProductEvaluationResult>;
   bundles: unknown[];
   steps: OrchestrationStep[];
@@ -441,6 +443,9 @@ export async function runAgenticSearch(
                     lifestyle_image_url: extractResult.data.lifestyle_image_url || null,
                     visual_style_tags: extractResult.data.visual_style_tags || [],
                     available_variants: extractResult.data.available_variants || [],
+                    // (r) Stock/availability info
+                    in_stock: extractResult.data.in_stock ?? null,
+                    stock_notes: extractResult.data.stock_notes || null,
                   },
                   status: "pending",
                   created_at: new Date().toISOString(),
@@ -630,16 +635,19 @@ export async function runAgenticSearch(
     });
 
     // ═══════════════════════════════════════════════════════════
-    // Organize final results: top 5 per tier per category
+    // Organize final results: top 5 per tier per category + alternatives
     // ═══════════════════════════════════════════════════════════
+    // (s) Also track "also considered" products (positions 6-20) for user browsing
+    const alsoConsidered: Record<string, CandidateProduct[]> = {};
+
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       const kept: CandidateProduct[] = [];
+      const alternatives: CandidateProduct[] = [];
 
       for (const tier of PRICE_TIERS) {
         const products = tierResults[tier].filter((p) => {
           const ev = evaluations.get(p.id);
           if (!ev) return false;
-          // Demote low-confidence deep scores — don't include in final results
           if (ev.scores?.confidence_score !== undefined && ev.scores.confidence_score < 4) return false;
           return true;
         });
@@ -649,9 +657,14 @@ export async function runAgenticSearch(
           return scoreB - scoreA;
         });
         kept.push(...products.slice(0, 5));
+        // (s) Keep positions 6-20 as "also considered" for user browsing
+        alternatives.push(...products.slice(5, 20));
       }
 
       candidatesByCategory[category] = kept;
+      if (alternatives.length > 0) {
+        alsoConsidered[category] = alternatives;
+      }
       stats.totalFinal += kept.length;
     }
 
@@ -1096,6 +1109,7 @@ export async function runAgenticSearch(
       data: {
         searchBrief: brief,
         candidatesByCategory,
+        alsoConsidered: Object.keys(alsoConsidered).length > 0 ? alsoConsidered : undefined,
         evaluations,
         bundles,
         steps,

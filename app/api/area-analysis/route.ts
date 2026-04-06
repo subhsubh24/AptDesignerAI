@@ -177,6 +177,15 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     ? `\n\nCLIENT PRIORITIES & LIFESTYLE NEEDS:\n${priorities.map((p: string) => `- ${p}`).join("\n")}\nWeight these heavily in your recommendations. If hosting is a priority, ensure enough seating and dining capacity. If comfort is key, prioritize deeply comfortable pieces over photogenic ones.`
     : "";
 
+  // (p) Budget context — inform the AI about the budget constraint
+  const budgetDollars = room.budget_dollars as number | null;
+  const budgetMode = room.budget_mode as string | null;
+  const budgetBlock = budgetDollars
+    ? `\n\nBUDGET: $${budgetDollars.toLocaleString()} total for this room (${budgetMode || "balanced"} tier).\nKeep your recommendations within this budget. Include approximate price ranges in specs to help stay on target. High-priority items should get more budget allocation.`
+    : budgetMode
+    ? `\n\nBUDGET MODE: ${budgetMode}. ${budgetMode === "budget" ? "Prioritize affordable options." : budgetMode === "best_possible" ? "Quality and design are more important than price." : "Balance quality with reasonable pricing."}`
+    : "";
+
   // ── TARGET ROOM PHOTOS (clearly labeled) ──
   const targetImageCount = (room.room_images || []).length;
   contentBlocks.push({
@@ -184,7 +193,7 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
     text: `═══════════════════════════════════════════════════════════
 >>> TARGET ROOM: ${room.name} (${room.room_type}) — THIS IS THE ROOM YOU ARE ANALYZING <<<
 ═══════════════════════════════════════════════════════════${userContextNote}
-${parsedContextBlock}${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}
+${parsedContextBlock}${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}${budgetBlock}
 
 The next ${targetImageCount} photo(s) are ALL from the ${room.name}. Your analysis, recommendations, and "what_it_needs" must be ONLY about this room.`,
   });
@@ -450,6 +459,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         roomType: room.room_type,
         floorPlan,
         otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+        buildingResearch: br,
       };
       latestMathResult = computeHarmonyScores(analysis, mathCtx);
       const mathScoresText = formatMathScoresForPrompt(latestMathResult);
@@ -531,6 +541,24 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         if (compositeResult.worstConflict) {
           const wc = compositeResult.worstConflict;
           console.log(`[area-analysis] Round ${round}: "${s.category}" pairwise penalty: ${wc.item_a}↔${wc.item_b} compatibility=${wc.compatibility} (${wc.conflict_type}: ${wc.reason})`);
+        }
+
+        // (i) Escalating penalty for persistent violations across rounds
+        if (round >= 2 && mathItem && mathItem.violations.length > 0) {
+          const prevHistory = revisionHistory.get(s.category);
+          if (prevHistory && prevHistory.length >= 1) {
+            // Check how many rounds this item has had violations
+            const persistentRounds = prevHistory.filter(h => h.score < TARGET_SCORE).length;
+            if (persistentRounds >= 2) {
+              // Escalating penalty: -0.3 per round of persistent violations (after the 2nd)
+              const escalation = Math.min((persistentRounds - 1) * 0.3, 1.5);
+              const penalizedScore = Math.max(0, s.harmony_score - escalation);
+              if (penalizedScore < s.harmony_score) {
+                console.log(`[area-analysis] Round ${round}: "${s.category}" persistent violation penalty: -${escalation.toFixed(1)} (${persistentRounds} rounds unresolved) → ${penalizedScore.toFixed(1)}`);
+                s.harmony_score = Math.round(penalizedScore * 10) / 10;
+              }
+            }
+          }
         }
       }
 
@@ -669,6 +697,25 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         break;
       }
 
+      // (g) Early exit: convergence velocity check — if average improvement < 0.2 per round, stop
+      if (round >= 3) {
+        let totalImprovement = 0;
+        let itemCount = 0;
+        for (const s of harmony.item_scores) {
+          if (stabilizedItems.has(s.category)) continue;
+          const prev = prevRoundScores.get(s.category);
+          if (prev !== undefined) {
+            totalImprovement += s.harmony_score - prev;
+            itemCount++;
+          }
+        }
+        const avgImprovement = itemCount > 0 ? totalImprovement / itemCount : 0;
+        if (avgImprovement < 0.2 && itemCount > 0) {
+          console.log(`[area-analysis] Round ${round}: convergence velocity ${avgImprovement.toFixed(2)} < 0.2 threshold — early exit to save LLM rounds`);
+          break;
+        }
+      }
+
       // Record current scores for next-round stale detection
       prevRoundScores.clear();
       for (const s of harmony.item_scores) {
@@ -760,6 +807,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       roomType: room.room_type,
       floorPlan,
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+      buildingResearch: br,
     };
     latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
     const finalMathText = formatMathScoresForPrompt(latestMathResult);
@@ -956,6 +1004,100 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         analysis = postHarmonyValidation.patched;
         console.log(`[area-analysis] Post-harmony re-validation patched ${postHarmonyValidation.issues.length} constraint violation(s):`,
           postHarmonyValidation.issues.map(i => `${i.type}: ${i.description}`).join("; "));
+      }
+    }
+
+    // (n) Add confidence intervals to per-item scores
+    // (o) Generate scoring_explanation summary for the final output
+    if (validation && latestMathResult) {
+      const itemScores = validation.item_scores as Array<Record<string, unknown>>;
+      for (const item of itemScores) {
+        const mathItem = latestMathResult.itemScores.find(m => m.category === item.category);
+        const hasFloorPlanDims = !!(floorPlan as Record<string, unknown> | undefined)?.room_dimensions;
+        const hasBuildingResearch = !!br;
+
+        // (n) Confidence interval: wider when data is sparse
+        let uncertainty = 0.5; // base uncertainty
+        if (!hasFloorPlanDims) uncertainty += 0.4; // no floor plan dims → spatial scores unreliable
+        if (!hasBuildingResearch) uncertainty += 0.3; // no building research → less context
+        if (mathItem && mathItem.violations.length > 0) uncertainty += 0.2; // violations introduce uncertainty
+        if (otherRoomsForHarmony.length === 0) uncertainty += 0.2; // no cross-room data
+
+        const score = (item.harmony_score as number) || 5;
+        item.confidence_interval = {
+          low: Math.max(0, Math.round((score - uncertainty) * 10) / 10),
+          high: Math.min(10, Math.round((score + uncertainty) * 10) / 10),
+          uncertainty: Math.round(uncertainty * 10) / 10,
+          factors: [
+            ...(!hasFloorPlanDims ? ["no room dimensions"] : []),
+            ...(!hasBuildingResearch ? ["no building research"] : []),
+            ...(mathItem && mathItem.violations.length > 0 ? ["has spatial violations"] : []),
+            ...(otherRoomsForHarmony.length === 0 ? ["no cross-room data"] : []),
+          ],
+        };
+      }
+
+      // (o) Generate scoring_explanation summary
+      const spatialViolations = latestMathResult.spatial.violations.length;
+      const materialConflicts = latestMathResult.material.conflicts.length;
+      const colorConflicts = latestMathResult.color.pair_conflicts.length;
+      const proportionIssues = latestMathResult.proportion.issues.length;
+
+      const summaryParts: string[] = [];
+      if (spatialViolations > 0) summaryParts.push(`${spatialViolations} spatial violation${spatialViolations > 1 ? "s" : ""}`);
+      if (materialConflicts > 0) summaryParts.push(`${materialConflicts} material conflict${materialConflicts > 1 ? "s" : ""}`);
+      if (colorConflicts > 0) summaryParts.push(`${colorConflicts} color conflict${colorConflicts > 1 ? "s" : ""}`);
+      if (proportionIssues > 0) summaryParts.push(`${proportionIssues} proportion issue${proportionIssues > 1 ? "s" : ""}`);
+
+      const overallQuality = latestMathResult.overall >= 0.85 ? "high"
+        : latestMathResult.overall >= 0.7 ? "good"
+        : latestMathResult.overall >= 0.5 ? "moderate"
+        : "needs improvement";
+
+      (validation as Record<string, unknown>).scoring_explanation = {
+        summary: summaryParts.length > 0
+          ? `Math analysis found: ${summaryParts.join(", ")}. Overall quality: ${overallQuality} (${latestMathResult.overall.toFixed(2)}/1.0).`
+          : `No math violations detected. Overall quality: ${overallQuality} (${latestMathResult.overall.toFixed(2)}/1.0).`,
+        math_overall: latestMathResult.overall,
+        color_harmony: latestMathResult.color.palette_harmony,
+        spatial_score: (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2,
+        material_balance: (latestMathResult.material.material_balance + latestMathResult.material.wood_coherence + latestMathResult.material.metal_coherence + latestMathResult.material.soft_hard_ratio) / 4,
+        proportion_score: (latestMathResult.proportion.rug_coverage + latestMathResult.proportion.height_relationships + latestMathResult.proportion.visual_balance) / 3,
+        total_violations: spatialViolations + materialConflicts + colorConflicts + proportionIssues,
+        rounds_completed: totalRoundsCompleted,
+      };
+    }
+
+    // (p) Add budget summary to output if budget is set
+    if (budgetDollars && analysis.what_it_needs) {
+      const items = analysis.what_it_needs as Array<{ category: string; specs?: string; priority?: string }>;
+      // Estimate prices from specs if they contain price ranges
+      let estimatedTotal = 0;
+      const itemBudgets: Array<{ category: string; estimated_price?: string }> = [];
+      for (const item of items) {
+        const priceMatch = item.specs?.match(/\$(\d[\d,]*)\s*[-–]\s*\$?(\d[\d,]*)/);
+        if (priceMatch) {
+          const low = parseInt(priceMatch[1].replace(",", ""), 10);
+          const high = parseInt(priceMatch[2].replace(",", ""), 10);
+          const mid = (low + high) / 2;
+          estimatedTotal += mid;
+          itemBudgets.push({ category: item.category, estimated_price: `$${low}-$${high}` });
+        } else {
+          itemBudgets.push({ category: item.category });
+        }
+      }
+
+      (analysis as Record<string, unknown>).budget_summary = {
+        budget_dollars: budgetDollars,
+        budget_mode: budgetMode,
+        estimated_total: estimatedTotal > 0 ? estimatedTotal : null,
+        within_budget: estimatedTotal > 0 ? estimatedTotal <= budgetDollars : null,
+        overage: estimatedTotal > budgetDollars ? estimatedTotal - budgetDollars : null,
+        per_item: itemBudgets.filter(b => b.estimated_price),
+      };
+
+      if (estimatedTotal > budgetDollars && estimatedTotal > 0) {
+        console.warn(`[area-analysis] Budget warning: estimated $${estimatedTotal} exceeds budget of $${budgetDollars} by $${estimatedTotal - budgetDollars}`);
       }
     }
 

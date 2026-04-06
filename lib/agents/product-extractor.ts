@@ -53,6 +53,9 @@ export interface ExtractedProduct {
   lifestyle_image_url?: string | null;
   visual_style_tags?: string[];
   available_variants?: string[];
+  // (r) Stock/availability info
+  in_stock?: boolean | null;
+  stock_notes?: string | null;
 }
 
 /**

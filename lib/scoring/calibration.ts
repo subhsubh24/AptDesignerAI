@@ -12,25 +12,17 @@
  */
 
 /**
- * Per-category score baselines.
- * Based on expected median scores when the model is well-calibrated.
- * Categories that systematically score high get negative adjustments.
- *
- * Adjust these empirically as you observe score distributions.
- * A value of 0 means no adjustment.
+ * (j) Static fallback baselines — used when drift monitor has insufficient data.
+ * These are initial estimates; dynamic computation overrides them when data is available.
  */
-export const CATEGORY_BASELINES: Record<string, number> = {
-  // Rugs tend to score high because they're "safe" additions
+const STATIC_CATEGORY_BASELINES: Record<string, number> = {
   rug: -0.3,
   area_rug: -0.3,
-  // Lighting is often rated too generously
   floor_lamp: -0.2,
   table_lamp: -0.2,
   pendant_light: -0.2,
-  // Statement pieces get harsher model scores (style polarization)
   accent_chair: 0.2,
   artwork: 0.2,
-  // Large furniture gets appropriate scrutiny — no adjustment needed
   sofa: 0,
   dining_table: 0,
   coffee_table: 0,
@@ -41,11 +33,36 @@ export const CATEGORY_BASELINES: Record<string, number> = {
   bed_frame: 0,
   nightstand: 0,
   desk: 0,
-  // Textiles
   curtains: -0.1,
   throw_pillows: -0.2,
   throw_blanket: -0.2,
 };
+
+/**
+ * (j) Dynamically compute category baselines from drift monitor data.
+ * If the observed median for a category is far from the target,
+ * compute a data-driven adjustment instead of using static guesses.
+ */
+import { getScoreDistributionSummary as getDriftSummary } from "./drift-monitor";
+
+export function computeDynamicBaseline(category: string, targetMedian = 6.0): number {
+  const summary = getDriftSummary();
+  // Look for category-specific score data (e.g., "rug_final_item_score")
+  const catKey = `${category.toLowerCase()}_final_item_score`;
+  const catDist = summary[catKey];
+
+  if (catDist && catDist.count >= 5) {
+    // Dynamic: adjustment = -(observedMedian - target) * dampingFactor
+    const adjustment = -(catDist.median - targetMedian) * 0.5;
+    return Math.max(-2, Math.min(2, adjustment)); // Clamp to prevent extreme swings
+  }
+
+  // Fall back to static baseline
+  return STATIC_CATEGORY_BASELINES[category.toLowerCase()] ?? 0;
+}
+
+/** Exported for backward compatibility — callers can use this or computeDynamicBaseline directly */
+export const CATEGORY_BASELINES: Record<string, number> = STATIC_CATEGORY_BASELINES;
 
 export interface CalibrationConfig {
   /** Apply per-category baseline shifts. Default: true */
@@ -67,12 +84,13 @@ const DEFAULT_CONFIG: Required<CalibrationConfig> = {
 
 /**
  * Apply category baseline adjustment to a final score.
+ * (j) Uses dynamic computation from drift data when available.
  */
 export function applyCategoryBaseline(
   score: number,
   category: string
 ): number {
-  const adjustment = CATEGORY_BASELINES[category.toLowerCase()] ?? 0;
+  const adjustment = computeDynamicBaseline(category);
   return clamp(score + adjustment, 0, 10);
 }
 

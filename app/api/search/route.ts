@@ -316,10 +316,26 @@ export async function POST(request: Request) {
     tokens_used: result.data.stats.tokensUsed,
   });
 
+  // (s) Include also-considered alternatives in the response
+  const alsoConsideredProducts = result.data.alsoConsidered
+    ? Object.values(result.data.alsoConsidered).flat().map(p => ({
+        title: p.title,
+        category: p.category,
+        retailer: p.retailer,
+        product_url: p.product_url,
+        image_url: p.image_url,
+        price: p.price,
+        materials: p.materials,
+        colors: p.colors,
+        metadata: p.metadata,
+      }))
+    : [];
+
   return NextResponse.json({
     session_id: session?.id,
     products_found: savedProducts?.length || 0,
     products: savedProducts,
+    also_considered: alsoConsideredProducts,
     steps: result.data.steps,
     stats: result.data.stats,
     validation: result.data.validation,

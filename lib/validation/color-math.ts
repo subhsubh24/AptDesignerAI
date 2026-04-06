@@ -259,7 +259,9 @@ function computeCrossRoomCoherence(
 export function computeColorHarmony(
   analysis: Record<string, unknown>,
   context: {
-    otherRooms?: Array<{ palette?: string[] }>;
+    otherRooms?: Array<{ palette?: string[]; materials?: string[] }>;
+    // (l) Apartment-wide palette anchors derived from building finishes
+    apartmentPaletteAnchors?: string[];
   }
 ): ColorHarmonyResult {
   // Extract palette from analysis
@@ -385,7 +387,19 @@ export function computeColorHarmony(
   }
 
   // 3. Cross-room coherence
+  // (l) Use apartment-wide palette anchors as baseline when available
   const otherRoomHsls: HSL[][] = [];
+
+  // If apartment palette anchors exist (from building finishes), use them as the primary baseline
+  if (context.apartmentPaletteAnchors?.length) {
+    const anchorHsls: HSL[] = [];
+    for (const c of context.apartmentPaletteAnchors) {
+      const hsl = lookupColor(c);
+      if (hsl) anchorHsls.push(hsl);
+    }
+    if (anchorHsls.length > 0) otherRoomHsls.push(anchorHsls);
+  }
+
   if (context.otherRooms) {
     for (const room of context.otherRooms) {
       if (room.palette) {
