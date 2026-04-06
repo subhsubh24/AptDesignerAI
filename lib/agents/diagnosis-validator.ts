@@ -260,11 +260,28 @@ export function validateDiagnosis(
       );
 
       if (!foundInActions && !foundInCategories) {
+        // Inject the missing request into action_list and missing_categories
+        const cleanItem = request.item.replace(/^(?:a|an|the|some)\s+/i, "").trim();
+        const categorySlug = cleanItem.replace(/\s+/g, "_").toLowerCase();
+
+        // Add to missing_categories if not already present
+        if (!patched.missing_categories.some((c) => normalize(c).includes(normalize(cleanItem)))) {
+          patched.missing_categories.push(categorySlug);
+        }
+
+        // Add a synthetic action to action_list
+        patched.action_list.push({
+          priority: patched.action_list.length + 1,
+          action: `Add ${cleanItem} — client explicitly requested this item`,
+          category: categorySlug,
+          reasoning: `The client specifically asked for a ${cleanItem}. This is a non-negotiable request that must be fulfilled.`,
+        });
+
         issues.push({
           type: "missing_request",
-          description: `Client explicitly requested "${request.item}" but it was not included in recommendations`,
+          description: `Client explicitly requested "${request.item}" but it was not included — injected into action_list and missing_categories`,
           field: "action_list",
-          action: "flagged",
+          action: "removed", // "removed" signals wasModified=true so the patched version is used
         });
       }
 

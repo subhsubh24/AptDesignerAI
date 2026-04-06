@@ -75,7 +75,11 @@ ${priorities.length > 0 ? `- The client specifically cares about: ${priorities.j
 Based on the existing finishes (floors, walls, fixed elements) AND how the client lives, recommend:
 - Specific color palette (name 6-10 actual colors like "warm ivory", "walnut brown", "muted sage")
 - Specific materials (name 5-8 like "solid walnut", "linen", "bouclé", "brushed brass")
-- Style direction in 3-4 sentences that reference the client's lifestyle and priorities, not just aesthetics
+- Style direction in 3-4 sentences that MUST:
+  1. Reference the client's specific lifestyle, age, personality, and how they use the space (e.g., "a 30-year-old bachelor who hosts frequently" — not just "someone who entertains")
+  2. Connect design choices to WHO the client is (e.g., "The aesthetic should feel effortlessly stylish — curated but not try-hard, reflecting someone with taste who doesn't need to prove it")
+  3. Reference the building's finishes and architectural context
+  4. Explain how the design serves their actual daily life, not just how it looks
 
 ## ARRAY SIZE REQUIREMENTS
 - what_is_working: List **at least 5-8 items**. Every room has things working — find them all.
@@ -135,7 +139,7 @@ Return a JSON object with this exact structure:
     "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen', 'bouclé', 'brushed brass', 'marble'"],
     "recommended_textures": ["4-6 textures to introduce — e.g. 'high-low pile wool', 'ribbed knit', 'woven rattan'"],
     "recommended_furniture_types": ["list every needed furniture type with specific notes — e.g. 'Area rug — at least 8x10, wool or wool-blend, warm neutral with subtle texture'"],
-    "style_notes": "string - 3-4 sentences on overall style direction, referencing the building's finishes and the client's life"
+    "style_notes": "string - 3-4 sentences on overall style direction. MUST reference the client's specific identity and lifestyle (age, personality, hosting habits, aesthetic sensibility) and explain how the design serves THEIR life specifically. Connect material/style choices to who they are as a person."
   },
   "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", etc.],
   "action_list": [

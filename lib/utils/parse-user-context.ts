@@ -169,7 +169,7 @@ IMPORTANT: Every item listed above MUST appear in your action_list and missing_c
   if (parsed.lifestyleNotes.length > 0) {
     sections.push(`## 👤 CLIENT LIFESTYLE CONTEXT
 ${parsed.lifestyleNotes.map((n) => `- ${n}`).join("\n")}
-Factor these into material choices, style direction, and functional recommendations.`);
+IMPORTANT: These details define WHO this client is. Your design direction and style_notes MUST explicitly reference their identity, age, personality, and lifestyle. For example, if the client is "a 30 year old bachelor working in tech who likes to be stylish but not performative," the style_notes should speak directly to that person — not generic design language. Every recommendation should feel like it was made FOR this specific person, not for an abstract "homeowner."`);
   }
 
   return sections.join("\n\n");
