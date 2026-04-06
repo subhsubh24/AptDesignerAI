@@ -56,8 +56,12 @@ const REQUEST_PATTERNS = [
 const KEEP_PATTERNS = [
   // "keep the X", "keep my X"
   /\bkeep\s+(?:the|my)\s+(.+?)(?:\.|,|$)/gi,
-  // "I want to keep the X"
+  // "keep both X", "keep all X", "keep these X", "keep those X"
+  /\bkeep\s+(?:both|all|these|those|both\s+of\s+the|the\s+two|the\s+\d+)\s+(.+?)(?:\.|,|$)/gi,
+  // "I want to keep the X", "I want to keep my X"
   /\bwant\s+to\s+keep\s+(?:the|my)\s+(.+?)(?:\.|,|$)/gi,
+  // "I want to keep both X"
+  /\bwant\s+to\s+keep\s+(?:both|all|these|those)\s+(.+?)(?:\.|,|$)/gi,
 ];
 
 // Patterns that signal lifestyle context

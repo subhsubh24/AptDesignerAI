@@ -72,6 +72,16 @@ describe("parseUserContext", () => {
       const result = parseUserContext("keep my sectional sofa");
       expect(result.additionalKeepItems.some((k) => k.includes("sectional sofa"))).toBe(true);
     });
+
+    it("should detect 'keep both' items", () => {
+      const result = parseUserContext("keep both lights next to the TV");
+      expect(result.additionalKeepItems.some((k) => k.includes("lights next to the TV") || k.includes("light"))).toBe(true);
+    });
+
+    it("should detect 'keep all' items", () => {
+      const result = parseUserContext("keep all the plants in the corner");
+      expect(result.additionalKeepItems.some((k) => k.includes("plant"))).toBe(true);
+    });
   });
 
   describe("lifestyle detection", () => {

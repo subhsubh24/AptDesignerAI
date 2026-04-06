@@ -31,7 +31,7 @@ export interface AreaAnalysisValidationResult {
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  return s.toLowerCase().replace(/_/g, " ").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function mentionsAny(text: string, terms: string[]): string | null {
@@ -52,7 +52,7 @@ function mentionsAny(text: string, terms: string[]): string | null {
  */
 function expandExclusionTerms(exclusions: string[]): string[] {
   const synonymMap: Record<string, string[]> = {
-    curtain: ["curtain", "curtains", "drapery", "drapes", "drape", "window treatment", "window panel", "sheer", "curtain panel"],
+    curtain: ["curtain", "curtains", "drapery", "drapes", "drape", "window treatment", "window treatments", "window panel", "window panels", "window covering", "window coverings", "window dressing", "sheer", "sheers", "curtain panel", "fabric panel", "linen panel"],
     blind: ["blind", "blinds", "shade", "shades", "roller shade"],
     rug: ["rug", "rugs", "carpet", "area rug"],
     lamp: ["lamp", "floor lamp", "arc lamp", "table lamp"],
@@ -77,15 +77,15 @@ function expandExclusionTerms(exclusions: string[]): string[] {
  */
 function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[] }> {
   const categoryPatterns: Record<string, string[]> = {
-    "floor lamp": ["floor_lamp", "floor lamp", "arc lamp", "standing lamp", "arc floor lamp"],
-    "table lamp": ["table_lamp", "table lamp", "desk lamp"],
+    "floor lamp": ["floor_lamp", "floor lamp", "arc lamp", "standing lamp", "arc floor lamp", "tripod lamp", "tripod floor lamp", "tripod light"],
+    "table lamp": ["table_lamp", "table lamp", "desk lamp", "accent lamp"],
     "sofa": ["sofa", "couch", "sectional"],
     "rug": ["area_rug", "rug", "area rug", "carpet"],
     "coffee table": ["coffee_table", "coffee table"],
     "dining table": ["dining_table", "dining table"],
     "bookshelf": ["bookshelf", "shelf", "shelving", "bookcase"],
     "tv console": ["media_console", "tv console", "media console", "tv stand", "entertainment center"],
-    "light": ["table_lamp", "table lamp", "light", "light stand"],
+    "light": ["table_lamp", "table lamp", "light", "lamp", "light stand", "sconce", "wall light", "accent light"],
   };
 
   return keepItems.map((item) => {

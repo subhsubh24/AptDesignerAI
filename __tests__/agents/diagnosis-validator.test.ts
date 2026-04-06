@@ -103,6 +103,44 @@ describe("validateDiagnosis", () => {
       )).toBe(false);
     });
 
+    it("should remove curtains from diagnosis.missing_furniture_categories", () => {
+      const diagnosis = makeDiagnosis();
+      diagnosis.diagnosis.missing_furniture_categories = [
+        "area_rug", "coffee_table", "curtains", "floor_lamp",
+      ];
+      const result = validateDiagnosis(
+        diagnosis,
+        [],
+        "don't need curtains"
+      );
+
+      expect(result.patched.diagnosis.missing_furniture_categories.some((c: string) =>
+        c.toLowerCase().includes("curtain")
+      )).toBe(false);
+      // Other categories should remain
+      expect(result.patched.diagnosis.missing_furniture_categories).toContain("area_rug");
+    });
+
+    it("should catch window covering synonyms as curtain exclusions", () => {
+      const diagnosis = makeDiagnosis({
+        action_list: [
+          { priority: 1, action: "Add soft window coverings for warmth", category: "window_treatment", reasoning: "Soften space" },
+          { priority: 2, action: "Add area rug", category: "area_rug", reasoning: "Ground furniture" },
+        ],
+      });
+
+      const result = validateDiagnosis(
+        diagnosis,
+        [],
+        "don't need curtains"
+      );
+
+      expect(result.patched.action_list.some(
+        (a) => a.action.includes("window covering")
+      )).toBe(false);
+      expect(result.patched.action_list.some((a) => a.category === "area_rug")).toBe(true);
+    });
+
     it("should not remove non-excluded items", () => {
       const diagnosis = makeDiagnosis();
       const result = validateDiagnosis(
@@ -145,6 +183,48 @@ describe("validateDiagnosis", () => {
       expect(result.patched.action_list.some(
         (a) => a.category === "floor_lamp" && a.action.includes("floor lamp")
       )).toBe(false);
+    });
+
+    it("should catch tripod lamp as replacement for kept floor lamp", () => {
+      const diagnosis = makeDiagnosis({
+        action_list: [
+          { priority: 1, action: "Add a modern tripod lamp", category: "floor_lamp", reasoning: "Add height" },
+          { priority: 2, action: "Add area rug", category: "area_rug", reasoning: "Ground furniture" },
+        ],
+      });
+
+      const result = validateDiagnosis(
+        diagnosis,
+        ["black arc floor lamp"],
+        undefined
+      );
+
+      // Tripod lamp should be removed — it's a replacement for the kept floor lamp
+      expect(result.patched.action_list.some(
+        (a) => a.action.includes("tripod lamp")
+      )).toBe(false);
+      expect(result.issues.some((i) => i.type === "keep_item_replaced")).toBe(true);
+    });
+
+    it("should catch keep items parsed from 'keep both' user context", () => {
+      const diagnosis = makeDiagnosis({
+        action_list: [
+          { priority: 1, action: "Add new accent lights beside the TV", category: "table_lamp", reasoning: "Improve lighting" },
+          { priority: 2, action: "Add area rug", category: "area_rug", reasoning: "Ground furniture" },
+        ],
+      });
+
+      const result = validateDiagnosis(
+        diagnosis,
+        [],
+        "keep both lights next to the TV"
+      );
+
+      // Light replacement should be removed
+      expect(result.patched.action_list.some(
+        (a) => a.action.includes("accent lights")
+      )).toBe(false);
+      expect(result.issues.some((i) => i.type === "keep_item_replaced")).toBe(true);
     });
 
     it("should remove kept items from what_is_not_working", () => {

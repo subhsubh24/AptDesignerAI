@@ -35,7 +35,7 @@ export interface DiagnosisValidationResult {
  * Normalize a string for fuzzy matching — lowercase, strip extra whitespace.
  */
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  return s.toLowerCase().replace(/_/g, " ").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -63,7 +63,7 @@ function mentionsAny(text: string, terms: string[]): string | null {
  */
 function expandExclusionTerms(exclusions: string[]): string[] {
   const synonymMap: Record<string, string[]> = {
-    curtain: ["curtain", "curtains", "drapery", "drapes", "drape", "window treatment", "window panel", "sheer"],
+    curtain: ["curtain", "curtains", "drapery", "drapes", "drape", "window treatment", "window treatments", "window panel", "window panels", "window covering", "window coverings", "window dressing", "sheer", "sheers", "curtain panel", "fabric panel", "linen panel"],
     blind: ["blind", "blinds", "shade", "shades", "roller shade"],
     rug: ["rug", "rugs", "carpet", "area rug"],
     lamp: ["lamp", "floor lamp", "arc lamp", "table lamp", "light"],
@@ -88,8 +88,9 @@ function expandExclusionTerms(exclusions: string[]): string[] {
  */
 function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[] }> {
   const categoryPatterns: Record<string, string[]> = {
-    "floor lamp": ["floor lamp", "arc lamp", "standing lamp"],
-    "table lamp": ["table lamp", "desk lamp"],
+    "floor lamp": ["floor lamp", "arc lamp", "standing lamp", "tripod lamp", "tripod floor lamp", "tripod light"],
+    "table lamp": ["table lamp", "desk lamp", "accent lamp"],
+    "light": ["light", "lamp", "sconce", "wall light", "accent light"],
     "sofa": ["sofa", "couch", "sectional"],
     "rug": ["rug", "area rug", "carpet"],
     "coffee table": ["coffee table"],
@@ -165,6 +166,23 @@ export function validateDiagnosis(
       }
       return true;
     });
+
+    // Check diagnosis.missing_furniture_categories (inner field)
+    if (patched.diagnosis.missing_furniture_categories) {
+      patched.diagnosis.missing_furniture_categories = patched.diagnosis.missing_furniture_categories.filter((cat: string) => {
+        const match = mentionsAny(cat, expandedExclusions);
+        if (match) {
+          issues.push({
+            type: "exclusion_violation",
+            description: `Removed "${cat}" from diagnosis.missing_furniture_categories — client explicitly excluded "${match}"`,
+            field: "diagnosis.missing_furniture_categories",
+            action: "removed",
+          });
+          return false;
+        }
+        return true;
+      });
+    }
 
     // Check design_direction.recommended_furniture_types
     if (patched.design_direction.recommended_furniture_types) {
