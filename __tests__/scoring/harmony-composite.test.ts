@@ -50,21 +50,39 @@ describe("computeCompositeScore", () => {
   });
 });
 
-describe("applyMathCaps", () => {
-  it("should cap AI scores that exceed math limits", () => {
+describe("applyMathCaps (soft caps)", () => {
+  it("should soft-cap AI scores that exceed math limits (max +2.0 override)", () => {
     const scores = makeScores({ color_fit: 9, spatial_fit: 8 });
     const { capped, cappedDimensions } = applyMathCaps(scores, {
-      color_fit: 0.6, // math says max 6.0
-      spatial_fit: 0.9, // math says max 9.0 — no cap needed
+      color_fit: 0.6, // math anchor 6.0 — AI can reach up to 8.0
+      spatial_fit: 0.9, // math anchor 9.0 — no cap needed
     });
 
-    expect(capped.color_fit).toBe(6);
+    // Soft cap: 6.0 + min(9 - 6, 2.0) = 8.0
+    expect(capped.color_fit).toBe(8);
     expect(capped.spatial_fit).toBe(8); // not capped (8 < 9)
     expect(cappedDimensions).toHaveLength(1);
     expect(cappedDimensions[0].dimension).toBe("color_fit");
   });
 
-  it("should not cap when math score is high (>= 0.95)", () => {
+  it("should bound the override to MAX_OVERRIDE (2.0)", () => {
+    const scores = makeScores({ color_fit: 10 });
+    const { capped } = applyMathCaps(scores, { color_fit: 0.3 }); // anchor at 3.0
+
+    // Soft cap: 3.0 + min(10 - 3, 2.0) = 5.0
+    expect(capped.color_fit).toBe(5);
+  });
+
+  it("should not modify scores below the math anchor", () => {
+    const scores = makeScores({ color_fit: 5 });
+    const { capped, cappedDimensions } = applyMathCaps(scores, { color_fit: 0.6 }); // anchor at 6.0
+
+    // AI score (5) is below anchor (6) — no change
+    expect(capped.color_fit).toBe(5);
+    expect(cappedDimensions).toHaveLength(0);
+  });
+
+  it("should not cap when math score is high (>= 0.90)", () => {
     const scores = makeScores({ color_fit: 9 });
     const { capped, cappedDimensions } = applyMathCaps(scores, { color_fit: 0.95 });
 
@@ -111,19 +129,19 @@ describe("computePairwisePenalty", () => {
 });
 
 describe("computeFinalHarmonyScore", () => {
-  it("should combine math caps, geometric mean, and pairwise penalty", () => {
+  it("should combine soft caps, geometric mean, and pairwise penalty", () => {
     const result = computeFinalHarmonyScore(
       makeScores({ color_fit: 9, spatial_fit: 9 }),
-      { color_fit: 0.6 }, // will cap color to 6.0
+      { color_fit: 0.6 }, // math anchor 6.0 — soft cap allows up to 8.0
       "coffee_table",
       [{ item_a: "coffee_table", item_b: "side_table", compatibility: 5, conflict_type: "clash", reason: "test" }]
     );
 
-    // color capped to 6, plus pairwise penalty
-    expect(result.harmony_score).toBeLessThan(8);
+    // color soft-capped to 8.0 (6.0 + 2.0), plus pairwise penalty
+    expect(result.harmony_score).toBeLessThan(9);
     expect(result.cappedDimensions).toHaveLength(1);
     expect(result.pairwise_factor).toBeLessThan(1.0);
-    expect(result.capped_sub_scores.color_fit).toBe(6);
+    expect(result.capped_sub_scores.color_fit).toBe(8); // soft cap: 6 + min(3, 2) = 8
   });
 
   it("should return full score when everything is perfect and no conflicts", () => {

@@ -75,88 +75,9 @@ const RUG_EXTENSIONS: Record<string, RugRule[]> = {
   ],
 };
 
-// --- Visual weight estimation ---
-
-function estimateVisualWeight(
-  category: string,
-  specs?: string,
-): number {
-  // Base weight by category type
-  const heavyItems = new Set([
-    "sofa", "sectional", "bed", "bookcase", "armoire", "dresser",
-    "entertainment_center", "china_cabinet", "wardrobe",
-  ]);
-  const mediumItems = new Set([
-    "chair", "armchair", "accent_chair", "desk", "dining_table",
-    "coffee_table", "console", "credenza", "sideboard",
-  ]);
-  const lightItems = new Set([
-    "side_table", "end_table", "nightstand", "floor_lamp",
-    "table_lamp", "throw_pillow", "throw_blanket", "plant",
-    "wall_art", "mirror", "vase", "candle",
-  ]);
-
-  const catLower = category.toLowerCase().replace(/[\s-]+/g, "_");
-  let baseWeight = 0.5;
-  if (heavyItems.has(catLower)) baseWeight = 0.85;
-  else if (mediumItems.has(catLower)) baseWeight = 0.55;
-  else if (lightItems.has(catLower)) baseWeight = 0.25;
-
-  // Adjust by size if available
-  if (specs) {
-    const dims = parseDimensions(specs);
-    if (dims) {
-      const footprint = dims.width * dims.depth;
-      if (footprint > 5000) baseWeight = Math.min(1, baseWeight + 0.15);
-      else if (footprint < 500) baseWeight = Math.max(0.1, baseWeight - 0.1);
-    }
-  }
-
-  return baseWeight;
-}
-
-function classifyZoneSide(placement: string): "left" | "right" | "center" | "unknown" {
-  const lower = placement.toLowerCase();
-  if (lower.includes("left") || lower.includes("west wall")) return "left";
-  if (lower.includes("right") || lower.includes("east wall")) return "right";
-  if (lower.includes("center") || lower.includes("middle") || lower.includes("between")) return "center";
-  return "unknown";
-}
-
-// --- Grouping ratio check (odd numbers preferred for decorative items) ---
-
-const DECORATIVE_CATEGORIES = new Set([
-  "throw_pillow", "throw_pillows", "decorative_pillow",
-  "vase", "candle", "decorative_object", "sculpture",
-  "plant", "planter",
-]);
-
-function checkGroupingRatio(
-  whatItNeeds: Array<{ category: string; specs?: string }>
-): Array<{ item: string; issue: string; suggestion: string }> {
-  const issues: Array<{ item: string; issue: string; suggestion: string }> = [];
-
-  // Count decorative items by category
-  const catCounts = new Map<string, number>();
-  for (const item of whatItNeeds) {
-    const catLower = item.category.toLowerCase().replace(/[\s-]+/g, "_");
-    if (DECORATIVE_CATEGORIES.has(catLower)) {
-      catCounts.set(catLower, (catCounts.get(catLower) || 0) + 1);
-    }
-  }
-
-  for (const [cat, count] of catCounts) {
-    if (count > 1 && count % 2 === 0 && count !== 2) {
-      issues.push({
-        item: cat,
-        issue: `${count} ${cat} items — even number`,
-        suggestion: `Use ${count - 1} or ${count + 1} for odd-number grouping (more visually dynamic)`,
-      });
-    }
-  }
-
-  return issues;
-}
+// Visual weight estimation, left/right balance, and odd-number grouping heuristics
+// removed — these are crude rules the AI handles better with its design judgment.
+// Height relationships and rug coverage (above) provide real ergonomic/functional value.
 
 // --- Main computation ---
 
@@ -244,52 +165,15 @@ export function computeProportionScores(
   if (heightChecks === 0) heightScore = 0.8; // Can't verify
   heightScore = Math.max(0.3, heightScore);
 
-  // 3. Visual balance (left/right weight distribution)
-  const sideWeights: Record<string, number> = { left: 0, right: 0, center: 0 };
-  let assignedItems = 0;
-
-  for (const item of whatItNeeds) {
-    if (item.placement) {
-      const side = classifyZoneSide(item.placement);
-      if (side !== "unknown") {
-        sideWeights[side] += estimateVisualWeight(item.category, item.specs);
-        assignedItems++;
-      }
-    }
-  }
-
-  let visualBalance = 0.8; // Default
-  if (assignedItems >= 3) {
-    const leftRight = sideWeights.left + sideWeights.right;
-    if (leftRight > 0) {
-      const leftRatio = sideWeights.left / leftRight;
-      // Ideal: 0.35-0.65 (not perfectly symmetric, but balanced)
-      if (leftRatio >= 0.35 && leftRatio <= 0.65) {
-        visualBalance = 1.0;
-      } else {
-        const imbalance = Math.max(
-          Math.abs(leftRatio - 0.35),
-          Math.abs(leftRatio - 0.65)
-        );
-        visualBalance = Math.max(0.4, 1.0 - imbalance * 2);
-        const heavySide = leftRatio > 0.65 ? "left" : "right";
-        issues.push({
-          item: "room_layout",
-          issue: `Visual weight skews ${heavySide} (${Math.round(leftRatio * 100)}% / ${Math.round((1 - leftRatio) * 100)}%)`,
-          suggestion: `Move a heavier piece to the ${heavySide === "left" ? "right" : "left"} or add visual weight with art/plant`,
-        });
-      }
-    }
-  }
-
-  // 4. Grouping ratios
-  const groupIssues = checkGroupingRatio(whatItNeeds);
-  issues.push(...groupIssues);
+  // Visual balance: neutral constant — the AI evaluates layout balance
+  // using its visual understanding of the room photos rather than crude
+  // left/right weight heuristics.
+  const visualBalance = 0.8;
 
   return {
     rug_coverage: Math.round(rugCoverage * 100) / 100,
     height_relationships: Math.round(heightScore * 100) / 100,
-    visual_balance: Math.round(visualBalance * 100) / 100,
+    visual_balance: visualBalance,
     issues,
   };
 }

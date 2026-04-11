@@ -521,6 +521,26 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         break;
       }
 
+      // Item attention guard: verify all items got scores (catch AI "forgetting" items)
+      const expectedCategories = (analysis.what_it_needs as Array<{ category: string }>).map(i => i.category);
+      const scoredCategories = new Set(harmony.item_scores.map((s: { category: string }) => s.category));
+      const missingCategories = expectedCategories.filter(c => !scoredCategories.has(c));
+      if (missingCategories.length > 0) {
+        console.warn(`[area-analysis] Round ${round}: AI missed ${missingCategories.length} item(s): ${missingCategories.join(", ")}. Injecting conservative defaults.`);
+        for (const cat of missingCategories) {
+          harmony.item_scores.push({
+            category: cat,
+            harmony_score: 5.0,
+            sub_scores: { color_fit: 5, spatial_fit: 5, material_fit: 5, style_coherence: 5, cross_room_fit: 5, functional_fit: 5 },
+            keeps_well_with: [],
+            clashes_with: [],
+            drop: false,
+            reason: "Not scored by AI — conservative defaults for next round",
+            root_cause: "missing_score",
+          });
+        }
+      }
+
       // Apply per-dimension math caps + composite scoring (weighted geometric mean + pairwise penalties)
       const mathItemMap = new Map(
         (latestMathResult?.itemScores || []).map((s) => [s.category, s])
@@ -546,9 +566,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           // Spatial: use per-item spatial score if available, otherwise fall back to global average
           mathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
             ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
-          // Material: combine balance + wood + metal coherence (weighted average)
-          const mat = latestMathResult.material;
-          mathCaps.material_fit = mat.material_balance * 0.3 + mat.wood_coherence * 0.3 + mat.metal_coherence * 0.2 + mat.soft_hard_ratio * 0.2;
+          // Material: evidence-only — no longer used as a cap.
+          // Material observations (wood species, metal finishes) are injected into
+          // the AI prompt as evidence; the AI scores material_fit freely.
           // Cross-room: use color cross_room_coherence
           mathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
         }
@@ -561,11 +581,21 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           harmony.pairwise_conflicts || []
         );
 
-        // Use the LOWER of AI's overall assessment and our computed composite
+        // Blend AI assessment with composite: AI expertise + math guardrails
         const computedScore = compositeResult.harmony_score;
         if (computedScore < s.harmony_score) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" composite ${computedScore} < AI ${s.harmony_score} — using composite (geoMean=${compositeResult.composite_before_pairwise}, pairFactor=${compositeResult.pairwise_factor})`);
-          s.harmony_score = computedScore;
+          const divergence = s.harmony_score - computedScore;
+          if (divergence > 3.0) {
+            // Wild divergence — hard floor with 1-point grace
+            const floored = Math.round((computedScore + 1.0) * 10) / 10;
+            console.log(`[area-analysis] Round ${round}: "${s.category}" wild divergence: AI=${s.harmony_score} vs composite=${computedScore} → floored to ${floored}`);
+            s.harmony_score = floored;
+          } else {
+            // Normal divergence — blend 70% AI + 30% composite
+            const blended = Math.round((s.harmony_score * 0.7 + computedScore * 0.3) * 10) / 10;
+            console.log(`[area-analysis] Round ${round}: "${s.category}" composite ${computedScore} < AI ${s.harmony_score} — blended to ${blended} (geoMean=${compositeResult.composite_before_pairwise}, pairFactor=${compositeResult.pairwise_factor})`);
+            s.harmony_score = blended;
+          }
         }
 
         // Log per-dimension caps if any were applied
@@ -579,23 +609,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           console.log(`[area-analysis] Round ${round}: "${s.category}" pairwise penalty: ${wc.item_a}↔${wc.item_b} compatibility=${wc.compatibility} (${wc.conflict_type}: ${wc.reason})`);
         }
 
-        // (i) Escalating penalty for persistent violations across rounds
-        if (round >= 2 && mathItem && mathItem.violations.length > 0) {
-          const prevHistory = revisionHistory.get(s.category);
-          if (prevHistory && prevHistory.length >= 1) {
-            // Check how many rounds this item has had violations
-            const persistentRounds = prevHistory.filter(h => h.score < TARGET_SCORE).length;
-            if (persistentRounds >= 2) {
-              // Escalating penalty: -0.3 per round of persistent violations (after the 2nd)
-              const escalation = Math.min((persistentRounds - 1) * 0.3, 1.5);
-              const penalizedScore = Math.max(0, s.harmony_score - escalation);
-              if (penalizedScore < s.harmony_score) {
-                console.log(`[area-analysis] Round ${round}: "${s.category}" persistent violation penalty: -${escalation.toFixed(1)} (${persistentRounds} rounds unresolved) → ${penalizedScore.toFixed(1)}`);
-                s.harmony_score = Math.round(penalizedScore * 10) / 10;
-              }
-            }
-          }
-        }
+        // Persistent violation penalty removed: with soft caps, violations are
+        // naturally reflected in dampened scores. The old escalating penalty
+        // (-0.3/round) created death spirals on items with unfixable math ceilings.
       }
 
       // Update best-ever scores and best versions
@@ -887,17 +903,24 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
               : latestMathResult.color.palette_harmony;
             finalMathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
               ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
-            const fMat = latestMathResult.material;
-            finalMathCaps.material_fit = fMat.material_balance * 0.3 + fMat.wood_coherence * 0.3 + fMat.metal_coherence * 0.2 + fMat.soft_hard_ratio * 0.2;
+            // Material: evidence-only — no cap
             finalMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
           }
-          // Only apply composite if sub_scores are present
+          // Apply composite with soft blending (same as main loop)
           let harmonyScore = s.final_score;
           if (s.sub_scores && latestMathResult) {
             const compositeResult = computeFinalHarmonyScore(s.sub_scores, finalMathCaps, s.category, finalPairwise);
             if (compositeResult.harmony_score < harmonyScore) {
-              console.log(`[area-analysis] Final assessment: "${s.category}" composite ${compositeResult.harmony_score} < AI ${harmonyScore} — using composite`);
-              harmonyScore = compositeResult.harmony_score;
+              const divergence = harmonyScore - compositeResult.harmony_score;
+              if (divergence > 3.0) {
+                const floored = Math.round((compositeResult.harmony_score + 1.0) * 10) / 10;
+                console.log(`[area-analysis] Final assessment: "${s.category}" wild divergence: AI=${harmonyScore} vs composite=${compositeResult.harmony_score} → floored to ${floored}`);
+                harmonyScore = floored;
+              } else {
+                const blended = Math.round((harmonyScore * 0.7 + compositeResult.harmony_score * 0.3) * 10) / 10;
+                console.log(`[area-analysis] Final assessment: "${s.category}" composite ${compositeResult.harmony_score} < AI ${harmonyScore} — blended to ${blended}`);
+                harmonyScore = blended;
+              }
             }
           }
           return {
@@ -979,14 +1002,21 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
               }
               postMathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
                 ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
-              const postMat = latestMathResult.material;
-              postMathCaps.material_fit = postMat.material_balance * 0.3 + postMat.wood_coherence * 0.3 + postMat.metal_coherence * 0.2 + postMat.soft_hard_ratio * 0.2;
+              // Material: evidence-only — no cap
               postMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
             }
             const compositeResult = computeFinalHarmonyScore(s.sub_scores, postMathCaps, s.category, harmony.pairwise_conflicts || []);
             if (compositeResult.harmony_score < s.harmony_score) {
-              console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" composite ${compositeResult.harmony_score} < AI ${s.harmony_score} — using composite`);
-              s.harmony_score = compositeResult.harmony_score;
+              const divergence = s.harmony_score - compositeResult.harmony_score;
+              if (divergence > 3.0) {
+                const floored = Math.round((compositeResult.harmony_score + 1.0) * 10) / 10;
+                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" wild divergence: AI=${s.harmony_score} vs composite=${compositeResult.harmony_score} → floored to ${floored}`);
+                s.harmony_score = floored;
+              } else {
+                const blended = Math.round((s.harmony_score * 0.7 + compositeResult.harmony_score * 0.3) * 10) / 10;
+                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" composite ${compositeResult.harmony_score} < AI ${s.harmony_score} — blended to ${blended}`);
+                s.harmony_score = blended;
+              }
             }
           }
 

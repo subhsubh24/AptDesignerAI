@@ -355,7 +355,7 @@ export function computeHarmonyScores(
 export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
   const lines: string[] = [];
 
-  lines.push("## MATHEMATICAL ANALYSIS (computed — these are FACTS, not opinions)");
+  lines.push("## MATHEMATICAL EVIDENCE (pre-computed measurements and observations)");
   lines.push(`Overall math score: ${result.overall.toFixed(2)}/1.0`);
   lines.push("");
 
@@ -412,39 +412,33 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
   }
   lines.push("");
 
-  // Per-item scores with per-dimension caps (h)
-  lines.push("### Per-item math scores and dimension caps:");
-  lines.push("Each item shows its math score + the maximum AI sub-score allowed per dimension.");
-  lines.push("If a math cap is below 9.0, your sub-score for that dimension WILL be capped to this value.");
+  // Per-item scores with per-dimension evidence
+  lines.push("### Per-item math scores and dimension evidence:");
+  lines.push("Each item shows its math score + evidence for each dimension.");
+  lines.push("Scores below 9.0 indicate math-detected issues — your sub-scores should reflect these but you may deviate up to ~2 points with reasoning.");
   lines.push("");
   for (const item of result.itemScores) {
     const status = item.violations.length === 0 ? "no violations" : item.violations.join("; ");
-    // (h) Compute per-dimension caps for this item so AI knows what's capped
     const perItemFit = result.color.per_item_color_fit?.get(item.category);
-    const colorCap = perItemFit !== undefined
+    const colorEvidence = perItemFit !== undefined
       ? perItemFit * 0.7 + result.color.palette_harmony * 0.3
       : result.color.palette_harmony;
-    // Use per-item spatial score if available — items without clearance violations get higher caps
-    const spatialCap = result.spatial.per_item_spatial?.get(item.category)
+    const spatialEvidence = result.spatial.per_item_spatial?.get(item.category)
       ?? (result.spatial.room_coverage_ratio + result.spatial.clearance_score) / 2;
-    const matCap = result.material.material_balance * 0.3 + result.material.wood_coherence * 0.3 +
-      result.material.metal_coherence * 0.2 + result.material.soft_hard_ratio * 0.2;
-    const crossRoomCap = result.color.cross_room_coherence;
+    const crossRoomEvidence = result.color.cross_room_coherence;
 
-    // Use the same formula as applyMathCaps in harmony-composite.ts: max(x*10, 2.0)
-    const toCapVal = (x: number) => Math.round(Math.max(x * 10, 2.0) * 10) / 10;
-    const capStr = [
-      colorCap < 0.9 ? `color_fit≤${toCapVal(colorCap).toFixed(1)}` : null,
-      spatialCap < 0.9 ? `spatial_fit≤${toCapVal(spatialCap).toFixed(1)}` : null,
-      matCap < 0.9 ? `material_fit≤${toCapVal(matCap).toFixed(1)}` : null,
-      crossRoomCap < 0.9 ? `cross_room_fit≤${toCapVal(crossRoomCap).toFixed(1)}` : null,
+    const toVal = (x: number) => Math.round(Math.max(x * 10, 2.0) * 10) / 10;
+    const evidenceStr = [
+      colorEvidence < 0.9 ? `color_fit=${toVal(colorEvidence).toFixed(1)} [Delta-E]` : null,
+      spatialEvidence < 0.9 ? `spatial_fit=${toVal(spatialEvidence).toFixed(1)} [clearance]` : null,
+      crossRoomEvidence < 0.9 ? `cross_room_fit=${toVal(crossRoomEvidence).toFixed(1)} [cross-room]` : null,
     ].filter(Boolean).join(", ");
 
-    lines.push(`- ${item.category}: ${item.math_score.toFixed(2)} | ${status}${capStr ? ` | CAPS: ${capStr}` : " | no caps"}`);
+    lines.push(`- ${item.category}: ${item.math_score.toFixed(2)} | ${status}${evidenceStr ? ` | EVIDENCE: ${evidenceStr}` : " | no issues"}`);
   }
   lines.push("");
-  lines.push("You CANNOT score an item 10/10 if it has math violations. Fix violations in revised_specs/placement.");
-  lines.push("Dimensions with caps listed above WILL be algorithmically capped — spend your reasoning on the truly subjective dimensions (style_coherence, functional_fit) where you can actually improve scores.");
+  lines.push("Items with clearance violations or high Delta-E conflicts should reflect those in sub-scores. Fix violations in revised_specs/placement.");
+  lines.push("For design convention signals (material coherence, visual balance), use your judgment — explain deviations in rationale.");
 
   return lines.join("\n");
 }

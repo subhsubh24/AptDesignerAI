@@ -96,8 +96,13 @@ export function applyMathCaps(
     const key = dim as keyof HarmonySubScores;
     const mathCap = mathToCapValue(mathNormalized);
     if (capped[key] > mathCap) {
+      // Soft cap: allow AI to exceed math anchor by up to MAX_OVERRIDE points.
+      // This lets AI override bad heuristics (e.g., wall art capped by floor
+      // coverage) while still anchoring to genuinely low math scores.
+      const MAX_OVERRIDE = 2.0;
+      const softCapped = mathCap + Math.min(capped[key] - mathCap, MAX_OVERRIDE);
       cappedDimensions.push({ dimension: dim, aiScore: capped[key], mathCap });
-      capped[key] = mathCap;
+      capped[key] = Math.round(softCapped * 10) / 10;
     }
   }
 
