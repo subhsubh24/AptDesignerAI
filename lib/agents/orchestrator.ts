@@ -576,7 +576,7 @@ export async function runAgenticSearch(
     const deepScorePromises: Promise<void>[] = [];
     let totalToDeepScore = 0;
 
-    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+    for (const tierResults of Object.values(extractedByCategory)) {
       for (const tier of PRICE_TIERS) {
         let products = tierResults[tier];
 

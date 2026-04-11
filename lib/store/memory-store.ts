@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 /**
  * In-memory data store that replaces Supabase.
  * Implements a Supabase-compatible query builder API so existing
@@ -12,7 +13,7 @@ import path from "path";
 
 // ─── Data Store ──────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type Row = any;
 
 const tables: Record<string, Row[]> = {

@@ -384,6 +384,7 @@ const HEIGHT_TARGETS: Record<string, { target: number; tolerance: number; descri
   console_table: { target: 30, tolerance: 4, description: "Console table standard height (26-34\")" },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function computeProportionFit(product: ProductData, _ctx: ProductMathContext): { score: number; issues: string[] } {
   const issues: string[] = [];
   const cat = (product.category || "").toLowerCase().replace(/[\s-]+/g, "_");

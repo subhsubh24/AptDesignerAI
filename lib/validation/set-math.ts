@@ -131,7 +131,7 @@ function computeColorCoherence(products: SetProduct[], ctx: SetMathContext): {
     let crossScore = avgCrossDist <= 35 ? 1.0 : Math.max(0.3, 1.0 - (avgCrossDist - 35) / 40);
     if (avgCrossDist < 5) crossScore = 0.7; // Too similar = monotone
 
-    let paletteScore = avgPaletteDist <= 20 ? 1.0 : Math.max(0.3, 1.0 - (avgPaletteDist - 20) / 40);
+    const paletteScore = avgPaletteDist <= 20 ? 1.0 : Math.max(0.3, 1.0 - (avgPaletteDist - 20) / 40);
 
     const productScore = crossScore * 0.6 + paletteScore * 0.4;
     perProduct.set(p.title, { score: Math.round(productScore * 100) / 100, issues: pIssues });

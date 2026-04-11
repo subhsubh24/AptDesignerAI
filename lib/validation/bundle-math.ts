@@ -7,7 +7,6 @@
 
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL, type MaterialProperties } from "./lookups";
 import { deltaE2000, hslToLab } from "./color-math";
-import { parseDimensions } from "./spatial-math";
 
 export interface BundleMathScores {
   palette_harmony: number;     // 0-1: cross-product color coherence
@@ -316,7 +315,8 @@ const SCALE_RELATIONS: Array<{
   },
 ];
 
-function computeBundleScaleBalance(products: BundleProduct[], ctx: BundleMathContext): { score: number; issues: string[] } {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function computeBundleScaleBalance(products: BundleProduct[], _ctx: BundleMathContext): { score: number; issues: string[] } {
   const issues: string[] = [];
   let score = 0.8;
 

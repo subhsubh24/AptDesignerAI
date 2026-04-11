@@ -77,12 +77,6 @@ const RUG_EXTENSIONS: Record<string, RugRule[]> = {
 
 // --- Visual weight estimation ---
 
-interface VisualWeight {
-  category: string;
-  weight: number; // 0-1
-  zone: string;
-}
-
 function estimateVisualWeight(
   category: string,
   specs?: string,

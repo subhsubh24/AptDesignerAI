@@ -261,10 +261,6 @@ describe("validateDiagnosis", () => {
         "I want a dining table. I want plants also."
       );
 
-      // Should flag that plants are missing if not in action list
-      const plantIssue = result.issues.find(
-        (i) => i.type === "missing_request" && i.description.includes("plant")
-      );
       // May or may not be flagged depending on matching
       // But dining table should be missing since action list only has rug
       const diningIssue = result.issues.find(

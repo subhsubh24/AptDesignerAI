@@ -2,11 +2,6 @@ import type { DesignDirection } from "@/lib/types/database";
 
 export type PriceTier = "budget" | "balanced" | "high_end";
 
-const TIER_LABELS: Record<PriceTier, string> = {
-  budget: "Budget-Friendly",
-  balanced: "Mid-Range / Balanced",
-  high_end: "High-End / Premium",
-};
 
 const TIER_RETAILERS: Record<PriceTier, string[]> = {
   budget: [

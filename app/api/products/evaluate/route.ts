@@ -61,6 +61,7 @@ export async function POST(request: Request) {
 
   if (otherRooms && otherRooms.length > 0) {
     otherRoomsContext = otherRooms
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join result
       .map((r: any) => {
         const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
         const summary = diag

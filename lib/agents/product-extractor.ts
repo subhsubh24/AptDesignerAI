@@ -332,7 +332,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
-  } catch (firstError) {
+  } catch {
     // Attempt 2: retry with urlContext after brief delay (transient errors)
     await new Promise((r) => setTimeout(r, 1500));
     try {

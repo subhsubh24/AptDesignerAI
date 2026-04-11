@@ -7,7 +7,6 @@ import type {
   AIProvider,
   AIMessage,
   AIResponse,
-  AIContentBlock,
   GeminiTool,
 } from "./provider";
 

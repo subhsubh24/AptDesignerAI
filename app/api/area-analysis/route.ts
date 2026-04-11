@@ -356,6 +356,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       thinkingConfig: { thinkingLevel: "high" },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response is unstructured JSON
     let analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // If the AI returned a truncated response, the JSON may be incomplete

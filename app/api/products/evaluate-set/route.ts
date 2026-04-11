@@ -357,7 +357,7 @@ export async function POST(request: Request) {
       : 0;
 
   const bestBundleScore = bestBundle?.final_bundle_score || 0;
-  const overallScore = Math.round(((avgItemScore * 0.5 + bestBundleScore * 0.5) / 10) * 100) / 10;
+  // overallScore (legacy) kept for reference: Math.round(((avgItemScore * 0.5 + bestBundleScore * 0.5) / 10) * 100) / 10
   // Normalize to 0-10 scale
   const overallScoreOutOf10 = Math.round((avgItemScore * 0.5 + bestBundleScore * 0.5) * 10) / 10;
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
-import { calibrateScore, applyCategoryBaseline, expandScore, correctInflation } from "@/lib/scoring/calibration";
+import { calibrateScore, applyCategoryBaseline } from "@/lib/scoring/calibration";
 import { recordProductScores, recordBundleScores, checkForDrift, resetScoreBuffer, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
-import { PRODUCT_WEIGHTS, BUNDLE_WEIGHTS, VERDICT_THRESHOLDS } from "@/lib/scoring/weights";
+import { PRODUCT_WEIGHTS, BUNDLE_WEIGHTS } from "@/lib/scoring/weights";
 import type { ProductScores, BundleScores } from "@/lib/types/scoring";
 
 /**

@@ -25,9 +25,18 @@ export interface AreaAnalysisValidationIssue {
 }
 
 export interface AreaAnalysisValidationResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
   patched: Record<string, any>;
   issues: AreaAnalysisValidationIssue[];
   wasModified: boolean;
+}
+
+interface AnalysisItem {
+  category?: string;
+  search_title?: string;
+  description?: string;
+  priority?: string;
+  [key: string]: unknown;
 }
 
 function normalize(s: string): string {
@@ -120,6 +129,7 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
 }
 
 export function validateAreaAnalysis(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
   analysis: Record<string, any>,
   keepItems: string[],
   userContext?: string
@@ -128,6 +138,7 @@ export function validateAreaAnalysis(
   const parsed = userContext ? parseUserContext(userContext) : null;
 
   // Deep clone to avoid mutating the original
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
   const patched: Record<string, any> = JSON.parse(JSON.stringify(analysis));
 
   // Merge keep items from both sources
@@ -142,7 +153,7 @@ export function validateAreaAnalysis(
 
     if (Array.isArray(patched.what_it_needs)) {
       const originalCount = patched.what_it_needs.length;
-      patched.what_it_needs = patched.what_it_needs.filter((item: any) => {
+      patched.what_it_needs = patched.what_it_needs.filter((item: AnalysisItem) => {
         const searchable = `${item.category || ""} ${item.search_title || ""} ${item.description || ""}`;
         const match = mentionsAny(searchable, expandedExclusions);
         if (match) {
@@ -200,7 +211,7 @@ export function validateAreaAnalysis(
 
       // Check if what_it_needs recommends a NEW item in the same category as a kept item
       if (Array.isArray(patched.what_it_needs)) {
-        patched.what_it_needs = patched.what_it_needs.filter((rec: any) => {
+        patched.what_it_needs = patched.what_it_needs.filter((rec: AnalysisItem) => {
           const recText = `${rec.category || ""} ${rec.search_title || ""}`;
           const match = mentionsAny(recText, keywords);
           if (match) {
@@ -273,7 +284,7 @@ export function validateAreaAnalysis(
         }
       }
       const foundInNeeds = Array.isArray(patched.what_it_needs) && patched.what_it_needs.some(
-        (item: any) => mentionsAny(`${item.category || ""} ${item.search_title || ""} ${item.description || ""}`, requestTerms)
+        (item: AnalysisItem) => mentionsAny(`${item.category || ""} ${item.search_title || ""} ${item.description || ""}`, requestTerms)
       );
 
       if (!foundInNeeds) {
@@ -289,7 +300,7 @@ export function validateAreaAnalysis(
         if (detectedCategory && Array.isArray(patched.what_it_needs)) {
           // Check the category isn't already present
           const categoryExists = patched.what_it_needs.some(
-            (item: any) => item.category === detectedCategory
+            (item: AnalysisItem) => item.category === detectedCategory
           );
           if (!categoryExists) {
             patched.what_it_needs.push({

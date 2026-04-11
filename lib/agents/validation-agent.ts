@@ -10,7 +10,7 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
-import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores, type PairwiseConflict as CompositePairwiseConflict } from "@/lib/scoring/harmony-composite";
+import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores } from "@/lib/scoring/harmony-composite";
 
 const log = createLogger("validation-agent");
 
@@ -888,7 +888,8 @@ ${setMathSection}
 ${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${roomContext.userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${roomContext.userContext}"\nIMPORTANT: Factor these notes into validation. If the user mentions constraints or preferences not visible in photos, consider them when checking product fit.` : ""}
 
 ## PRODUCTS TO VALIDATE
-${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
+${/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
 
 ## PER-PRODUCT SCORING — 6-DIMENSIONAL + PAIRWISE
 

@@ -97,6 +97,7 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
   // Other rooms context for cross-room coherence
   if (otherRooms && otherRooms.length > 0) {
     const otherRoomsSummary = otherRooms
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join result
       .map((r: any) => {
         const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
         const djson = diag?.diagnosis_json as Record<string, unknown> | undefined;
@@ -227,6 +228,7 @@ CRITICAL RULES:
       throw new Error("AI response was truncated (MAX_TOKENS). The refinement response was too long.");
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response is unstructured JSON
     const analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // Validate response structure

@@ -63,6 +63,7 @@ export default function BundlesPage() {
 
   useEffect(() => {
     loadBundles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   const handleCreateFromShortlisted = async () => {

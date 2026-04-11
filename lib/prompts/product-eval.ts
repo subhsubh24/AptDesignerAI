@@ -56,20 +56,6 @@ export function getProductEvalPrompt(
     ? `\n- **Intended placement**: ${placement}`
     : "";
 
-  const spatialContext = spatialLayout
-    ? `\n\n## SPATIAL LAYOUT PLAN\n${spatialLayout}`
-    : "";
-
-  const floorPlanContext = floorPlan
-    ? `\n\n## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}\nSpatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
-    : "";
-
-  const environmentContext = [
-    lightingConditions && `\n\n## LIGHTING CONDITIONS\n${lightingConditions}`,
-    windowDoorPositions && `\n\n## WINDOW & DOOR POSITIONS\n${windowDoorPositions}`,
-    outletPositions && `\n\n## OUTLET POSITIONS\n${outletPositions}`,
-  ].filter(Boolean).join("");
-
   // ─── Assemble context with priority-based truncation ──────
   // Priority 1 = critical (scoring instructions), 2 = important (room/design),
   // 3 = helpful (environment/spatial), 4 = nice-to-have (other rooms)

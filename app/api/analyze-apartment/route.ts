@@ -172,6 +172,7 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
       responseMimeType: "application/json",
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response is unstructured JSON
     const analysis = extractJsonObject<Record<string, any>>(response.content);
 
     // Save diagnosis for each room — normalize keys to handle case/format mismatches

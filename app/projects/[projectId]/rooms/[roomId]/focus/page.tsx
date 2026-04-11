@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingForm";
 import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
-import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -294,13 +294,6 @@ export default function FocusPage() {
 
   // Auto-trigger vision mockup when analysis is ready (runs in background)
   const visionTriggered = useRef(false);
-  useEffect(() => {
-    if (areaAnalysis && !visionTriggered.current && !visionUrl && step === "analysis") {
-      visionTriggered.current = true;
-      // Fire and forget — generates in background while user reviews assessment
-      generateVisionInBackground(areaAnalysis);
-    }
-  }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generateVisionInBackground = async (analysis: AreaAnalysis) => {
     setGeneratingVision(true);
@@ -326,13 +319,21 @@ export default function FocusPage() {
     setGeneratingVision(false);
   };
 
+  useEffect(() => {
+    if (areaAnalysis && !visionTriggered.current && !visionUrl && step === "analysis") {
+      visionTriggered.current = true;
+      // Fire and forget — generates in background while user reviews assessment
+      generateVisionInBackground(areaAnalysis);
+    }
+  }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Manual trigger for vision mockup (re-generate or generate from vision step)
   const handleGenerateVision = async () => {
     setGeneratingVision(true);
     if (step === "analysis") {
       // Just re-trigger background generation, don't change step
       if (areaAnalysis) {
-        visionTriggered.current = true;
+        visionTriggered.current = true; // eslint-disable-line react-hooks/immutability
         setVisionUrl(null);
         await generateVisionInBackground(areaAnalysis);
       }
@@ -1233,7 +1234,7 @@ function RecommendationTable({
               const budget = getBestForTier(category, "budget");
               const balanced = getBestForTier(category, "balanced");
               const highEnd = getBestForTier(category, "high_end");
-              const analysisItem = null; // rationale from area analysis
+              // analysisItem rationale from area analysis (reserved for future use)
 
               return (
                 <tr key={category} className={cn("border-t", idx % 2 === 0 ? "bg-background" : "bg-muted/20")}>
@@ -1383,13 +1384,3 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
   );
 }
 
-// ─── Step Indicator ──────────────────────────────────────────────
-
-function StepIndicator({ done, active, label }: { done?: boolean; active?: boolean; label: string }) {
-  return (
-    <div className={cn("flex items-center gap-2", done && "text-green-600", active && "text-primary font-medium")}>
-      {done ? <CheckCircle2 className="h-4 w-4" /> : active ? <Loader2 className="h-4 w-4 animate-spin" /> : <div className="h-4 w-4 rounded-full border-2" />}
-      {label}
-    </div>
-  );
-}

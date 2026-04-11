@@ -55,8 +55,7 @@ interface UploadedImage {
 }
 
 // ─── Step Components ─────────────────────────────────────────────────
-const STEPS = ["welcome", "layout", "location", "setup", "analyzing", "room_select"] as const;
-type Step = (typeof STEPS)[number];
+type Step = "welcome" | "layout" | "location" | "setup" | "analyzing" | "room_select";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -77,6 +76,7 @@ export default function DashboardPage() {
   const [roomIds, setRoomIds] = useState<Record<string, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzePhase, setAnalyzePhase] = useState<"building" | "photos" | "done">("building");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- setter used, value consumed in future iteration
   const [apartmentSummary, setApartmentSummary] = useState<{
     overall: string;
     rooms: Record<string, {
@@ -314,7 +314,7 @@ export default function DashboardPage() {
     } finally {
       setAnalyzing(false);
     }
-  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, ensureProject]);
+  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, ensureProject, buildingPlaceId]);
 
   const totalImages = Object.values(roomImages).flat().length;
 
@@ -551,7 +551,7 @@ export default function DashboardPage() {
           {(() => {
             const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
             const buildingConfirmed = !!buildingPlaceId;
-            const locationLabel = [neighborhood, city, state].filter(Boolean).join(", ");
+            // locationLabel available: [neighborhood, city, state].filter(Boolean).join(", ")
 
             const handleBuildingReset = () => {
               setBuildingName("");
