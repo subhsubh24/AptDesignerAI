@@ -542,15 +542,17 @@ export default function FocusPage() {
             <div className="flex flex-col items-center mb-8">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
               <h3 className="text-lg font-semibold">Studying this room</h3>
-              <p className="text-sm text-muted-foreground mt-1">Usually 15-30 seconds</p>
+              <p className="text-sm text-muted-foreground mt-1">Usually 2-3 minutes</p>
             </div>
             <div className="max-w-sm mx-auto space-y-2">
-              <AnalysisSubstep label="Reading room photos" delay={0} />
-              <AnalysisSubstep label="Checking building finishes" delay={2000} />
-              <AnalysisSubstep label="Cross-referencing other rooms" delay={5000} />
-              <AnalysisSubstep label="Forming design assessment" delay={8000} />
-              <AnalysisSubstep label="Validating recommendations" delay={15000} />
+              <AnalysisSubstep label="Reading room photos" delay={0} doneDelay={4000} />
+              <AnalysisSubstep label="Checking building finishes" delay={3000} doneDelay={7000} />
+              <AnalysisSubstep label="Cross-referencing other rooms" delay={6000} doneDelay={12000} />
+              <AnalysisSubstep label="Forming design assessment" delay={10000} doneDelay={25000} />
+              <AnalysisSubstep label="Scoring spatial fit & clearances" delay={22000} doneDelay={50000} />
+              <AnalysisSubstep label="Optimizing harmony across items" delay={45000} lastStep />
             </div>
+            <AnalysisElapsedTimer />
           </CardContent>
         </Card>
       )}
@@ -1098,14 +1100,17 @@ export default function FocusPage() {
 
 // ─── Analysis Substep (timed reveal) ────────────────────────────
 
-function AnalysisSubstep({ label, delay }: { label: string; delay: number }) {
+function AnalysisSubstep({ label, delay, doneDelay, lastStep }: { label: string; delay: number; doneDelay?: number; lastStep?: boolean }) {
   const [state, setState] = useState<"pending" | "active" | "done">("pending");
 
   useEffect(() => {
     const activateTimer = setTimeout(() => setState("active"), delay);
-    const doneTimer = setTimeout(() => setState("done"), delay + 3000);
-    return () => { clearTimeout(activateTimer); clearTimeout(doneTimer); };
-  }, [delay]);
+    // Last step stays "active" (spinning) until the real response arrives
+    const doneTimer = !lastStep && doneDelay
+      ? setTimeout(() => setState("done"), doneDelay)
+      : undefined;
+    return () => { clearTimeout(activateTimer); if (doneTimer) clearTimeout(doneTimer); };
+  }, [delay, doneDelay, lastStep]);
 
   return (
     <div className={cn(
@@ -1130,6 +1135,22 @@ function AnalysisSubstep({ label, delay }: { label: string; delay: number }) {
         {label}
       </span>
     </div>
+  );
+}
+
+function AnalysisElapsedTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const min = Math.floor(elapsed / 60);
+  const sec = elapsed % 60;
+  return (
+    <p className="text-xs text-muted-foreground text-center mt-6">
+      {min > 0 ? `${min}m ${sec}s` : `${sec}s`} elapsed
+    </p>
   );
 }
 

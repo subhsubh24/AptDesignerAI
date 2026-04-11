@@ -3,6 +3,8 @@
 export interface SpatialConstraintResult {
   room_coverage_ratio: number; // 0-1
   clearance_score: number; // 0-1
+  /** Per-item spatial score (0-1): blends room coverage with item-specific clearance pass/fail */
+  per_item_spatial: Map<string, number>;
   violations: Array<{
     item: string;
     constraint: string;
@@ -319,14 +321,19 @@ export function computeSpatialConstraints(
     }
   }
 
-  // 2. Clearance checks
+  // 2. Clearance checks — per-item tracking
   const violations: SpatialConstraintResult["violations"] = [];
   let clearancesPassed = 0;
   let clearancesTotal = 0;
+  // Track per-item clearance results for per-item spatial scoring
+  const itemClearanceResults = new Map<string, { passed: number; total: number }>();
 
   for (const item of whatItNeeds) {
     const rules = getClearanceRules(item.category);
     if (rules.length === 0) continue;
+
+    let itemPassed = 0;
+    let itemTotal = 0;
 
     // We can't measure actual clearance without a spatial solver,
     // but we can check if the item dimensions + placement leave room
@@ -334,24 +341,53 @@ export function computeSpatialConstraints(
 
     for (const rule of rules) {
       clearancesTotal++;
+      itemTotal++;
       if (roomDims && dims) {
-        // Check if item is too large relative to room
-        const maxAllowed = Math.min(roomDims.width, roomDims.depth) - rule.min * 2;
+        // Check against both room dimensions, not just the min.
+        // Use the longer dimension for items along the primary wall
+        // and the shorter for items in constrained positions.
+        const maxAllowedShort = Math.min(roomDims.width, roomDims.depth) - rule.min * 2;
+        const maxAllowedLong = Math.max(roomDims.width, roomDims.depth) - rule.min * 2;
         const itemSpan = Math.max(dims.width, dims.depth);
-        if (itemSpan > maxAllowed && maxAllowed > 0) {
+        // Item passes if it fits along at least one wall with clearance
+        if (itemSpan > maxAllowedLong && maxAllowedLong > 0) {
+          // Doesn't fit along ANY wall — definite violation
           violations.push({
             item: item.category,
             constraint: rule.context,
             actual: `${Math.round(itemSpan)}"`,
-            required: `≤${Math.round(maxAllowed)}" (leaves ${rule.min}" clearance)`,
+            required: `≤${Math.round(maxAllowedLong)}" (leaves ${rule.min}" clearance)`,
           });
+        } else if (itemSpan > maxAllowedShort && maxAllowedShort > 0) {
+          // Fits along the long wall but not the short wall — soft violation
+          // Only flag as violation for hard constraints
+          if (rule.hard) {
+            violations.push({
+              item: item.category,
+              constraint: rule.context,
+              actual: `${Math.round(itemSpan)}"`,
+              required: `≤${Math.round(maxAllowedShort)}" on short wall (fits on long wall at ${Math.round(maxAllowedLong)}")`,
+            });
+            // Give partial credit — it fits on one wall
+            itemPassed += 0.5;
+            clearancesPassed += 0.5;
+          } else {
+            // Soft constraint + fits on long wall = pass
+            clearancesPassed++;
+            itemPassed++;
+          }
         } else {
           clearancesPassed++;
+          itemPassed++;
         }
       } else {
         // Can't verify → assume OK (neutral)
         clearancesPassed++;
+        itemPassed++;
       }
+    }
+    if (itemTotal > 0) {
+      itemClearanceResults.set(item.category, { passed: itemPassed, total: itemTotal });
     }
   }
 
@@ -391,9 +427,28 @@ export function computeSpatialConstraints(
     }
   }
 
+  // 4. Per-item spatial scores — blend room coverage with item-specific clearance
+  const perItemSpatial = new Map<string, number>();
+  for (const item of whatItNeeds) {
+    const itemClearance = itemClearanceResults.get(item.category);
+    // Items with no clearance rules get full clearance credit
+    const itemClearanceScore = itemClearance
+      ? itemClearance.passed / itemClearance.total
+      : 1.0;
+    // Check if this item has placement conflicts
+    const hasConflict = placementConflicts.some(
+      (c) => c.item1 === item.category || c.item2 === item.category
+    );
+    const conflictPenalty = hasConflict ? 0.85 : 1.0;
+    // Blend: 40% room coverage (shared) + 60% item-specific clearance
+    const itemSpatial = (roomCoverageRatio * 0.4 + itemClearanceScore * 0.6) * conflictPenalty;
+    perItemSpatial.set(item.category, Math.round(Math.min(1, itemSpatial) * 100) / 100);
+  }
+
   return {
     room_coverage_ratio: Math.round(roomCoverageRatio * 100) / 100,
     clearance_score: Math.round(clearanceScore * 100) / 100,
+    per_item_spatial: perItemSpatial,
     violations,
     placement_conflicts: placementConflicts,
   };

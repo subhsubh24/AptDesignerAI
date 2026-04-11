@@ -509,8 +509,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
           } else {
             mathCaps.color_fit = latestMathResult.color.palette_harmony;
           }
-          // Spatial: combine coverage + clearance (0-1 each, average)
-          mathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+          // Spatial: use per-item spatial score if available, otherwise fall back to global average
+          mathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
+            ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
           // Material: combine balance + wood + metal coherence (weighted average)
           const mat = latestMathResult.material;
           mathCaps.material_fit = mat.material_balance * 0.3 + mat.wood_coherence * 0.3 + mat.metal_coherence * 0.2 + mat.soft_hard_ratio * 0.2;
@@ -673,7 +674,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         math_scores: latestMathResult ? {
           overall: latestMathResult.overall,
           color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
-          spatial: latestMathResult.spatial,
+          spatial: { ...latestMathResult.spatial, per_item_spatial: Object.fromEntries(latestMathResult.spatial.per_item_spatial) },
           material: latestMathResult.material,
           proportion: latestMathResult.proportion,
         } : undefined,
@@ -850,7 +851,8 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
             finalMathCaps.color_fit = perItemFit !== undefined
               ? perItemFit * 0.7 + latestMathResult.color.palette_harmony * 0.3
               : latestMathResult.color.palette_harmony;
-            finalMathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+            finalMathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
+              ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
             const fMat = latestMathResult.material;
             finalMathCaps.material_fit = fMat.material_balance * 0.3 + fMat.wood_coherence * 0.3 + fMat.metal_coherence * 0.2 + fMat.soft_hard_ratio * 0.2;
             finalMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
@@ -883,7 +885,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         math_scores: {
           overall: latestMathResult.overall,
           color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
-          spatial: latestMathResult.spatial,
+          spatial: { ...latestMathResult.spatial, per_item_spatial: Object.fromEntries(latestMathResult.spatial.per_item_spatial) },
           material: latestMathResult.material,
           proportion: latestMathResult.proportion,
         },
@@ -941,7 +943,8 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
               } else {
                 postMathCaps.color_fit = latestMathResult.color.palette_harmony;
               }
-              postMathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+              postMathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
+                ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
               const postMat = latestMathResult.material;
               postMathCaps.material_fit = postMat.material_balance * 0.3 + postMat.wood_coherence * 0.3 + postMat.metal_coherence * 0.2 + postMat.soft_hard_ratio * 0.2;
               postMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
@@ -1005,7 +1008,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
             math_scores: {
               overall: latestMathResult.overall,
               color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
-              spatial: latestMathResult.spatial,
+              spatial: { ...latestMathResult.spatial, per_item_spatial: Object.fromEntries(latestMathResult.spatial.per_item_spatial) },
               material: latestMathResult.material,
               proportion: latestMathResult.proportion,
             },

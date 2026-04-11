@@ -310,9 +310,12 @@ export function computeHarmonyScores(
     const materialScore =
       material.material_balance * 0.3 + material.wood_coherence * 0.3 +
       material.metal_coherence * 0.2 + material.soft_hard_ratio * 0.2;
+    // Use per-item spatial score if available, otherwise fall back to global average
+    const itemSpatialScore = spatial.per_item_spatial?.get(item.category)
+      ?? (spatial.room_coverage_ratio + spatial.clearance_score) / 2;
     const mathScore =
       WEIGHTS.color * itemColorScore +
-      WEIGHTS.spatial * ((spatial.room_coverage_ratio + spatial.clearance_score) / 2) +
+      WEIGHTS.spatial * itemSpatialScore +
       WEIGHTS.material * materialScore +
       WEIGHTS.proportion *
         ((proportion.rug_coverage + proportion.height_relationships + proportion.visual_balance) / 3) +
@@ -421,7 +424,9 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
     const colorCap = perItemFit !== undefined
       ? perItemFit * 0.7 + result.color.palette_harmony * 0.3
       : result.color.palette_harmony;
-    const spatialCap = (result.spatial.room_coverage_ratio + result.spatial.clearance_score) / 2;
+    // Use per-item spatial score if available — items without clearance violations get higher caps
+    const spatialCap = result.spatial.per_item_spatial?.get(item.category)
+      ?? (result.spatial.room_coverage_ratio + result.spatial.clearance_score) / 2;
     const matCap = result.material.material_balance * 0.3 + result.material.wood_coherence * 0.3 +
       result.material.metal_coherence * 0.2 + result.material.soft_hard_ratio * 0.2;
     const crossRoomCap = result.color.cross_room_coherence;
