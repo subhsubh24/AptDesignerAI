@@ -377,9 +377,10 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
   }
   lines.push("");
 
-  // Material
-  const matAvg = (result.material.material_balance + result.material.wood_coherence + result.material.metal_coherence + result.material.soft_hard_ratio) / 4;
-  lines.push(`### Material Balance: ${matAvg.toFixed(2)}/1.0`);
+  // Material — use the same weighted formula as applyMathCaps (0.3/0.3/0.2/0.2)
+  const matWeighted = result.material.material_balance * 0.3 + result.material.wood_coherence * 0.3 +
+    result.material.metal_coherence * 0.2 + result.material.soft_hard_ratio * 0.2;
+  lines.push(`### Material Balance: ${matWeighted.toFixed(2)}/1.0`);
   lines.push(`- Distribution balance: ${result.material.material_balance.toFixed(2)}`);
   lines.push(`- Wood coherence: ${result.material.wood_coherence.toFixed(2)}`);
   lines.push(`- Metal coherence: ${result.material.metal_coherence.toFixed(2)}`);

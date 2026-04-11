@@ -831,7 +831,10 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
       const final = finalResult.data;
       console.log(`[area-analysis] Final assessment: confidence=${final.confidence}/10, cohesion=${final.overall_cohesion}/10, needs_more=${final.needs_more_rounds}, budget=${final.round_budget}, scores=[${final.item_scores.map((s) => `${s.category}:${s.final_score}`).join(", ")}]`);
 
-      // Apply final scores as the definitive validation
+      // Apply final scores as the definitive validation.
+      // Apply per-dimension math caps to each final score (same logic as main loop).
+      // The AI prompt instructs the AI to respect math scores but we enforce it here too.
+      const finalPairwise = final.pairwise_conflicts || [];
       validation = {
         confidence: final.confidence,
         overall_cohesion: final.overall_cohesion,
@@ -839,20 +842,43 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         material_coherence: final.material_coherence,
         spatial_flow: final.spatial_flow,
         issues: final.issues,
-        item_scores: final.item_scores.map((s) => ({
-          category: s.category,
-          harmony_score: s.final_score,
-          sub_scores: s.sub_scores,
-          keeps_well_with: [] as string[],
-          clashes_with: [] as string[],
-          revised_search_title: s.revised_search_title,
-          revised_specs: s.revised_specs,
-          revised_placement: s.revised_placement,
-          drop: false,
-          root_cause: s.root_cause,
-          reason: s.reason,
-          rationale: s.rationale,
-        })),
+        item_scores: final.item_scores.map((s) => {
+          // Build math caps from final math result (same formula as main loop)
+          const finalMathCaps: MathDimensionCaps = {};
+          if (latestMathResult) {
+            const perItemFit = latestMathResult.color.per_item_color_fit?.get(s.category);
+            finalMathCaps.color_fit = perItemFit !== undefined
+              ? perItemFit * 0.7 + latestMathResult.color.palette_harmony * 0.3
+              : latestMathResult.color.palette_harmony;
+            finalMathCaps.spatial_fit = (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
+            const fMat = latestMathResult.material;
+            finalMathCaps.material_fit = fMat.material_balance * 0.3 + fMat.wood_coherence * 0.3 + fMat.metal_coherence * 0.2 + fMat.soft_hard_ratio * 0.2;
+            finalMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
+          }
+          // Only apply composite if sub_scores are present
+          let harmonyScore = s.final_score;
+          if (s.sub_scores && latestMathResult) {
+            const compositeResult = computeFinalHarmonyScore(s.sub_scores, finalMathCaps, s.category, finalPairwise);
+            if (compositeResult.harmony_score < harmonyScore) {
+              console.log(`[area-analysis] Final assessment: "${s.category}" composite ${compositeResult.harmony_score} < AI ${harmonyScore} — using composite`);
+              harmonyScore = compositeResult.harmony_score;
+            }
+          }
+          return {
+            category: s.category,
+            harmony_score: harmonyScore,
+            sub_scores: s.sub_scores,
+            keeps_well_with: [] as string[],
+            clashes_with: [] as string[],
+            revised_search_title: s.revised_search_title,
+            revised_specs: s.revised_specs,
+            revised_placement: s.revised_placement,
+            drop: false,
+            root_cause: s.root_cause,
+            reason: s.reason,
+            rationale: s.rationale,
+          };
+        }),
         pairwise_conflicts: final.pairwise_conflicts || [],
         math_scores: {
           overall: latestMathResult.overall,
