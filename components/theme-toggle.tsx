@@ -1,11 +1,14 @@
 "use client";
 
 import { Moon, Sun, Monitor } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils/cn";
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <div
@@ -26,7 +29,7 @@ export function ThemeToggle({ className }: { className?: string }) {
           onClick={() => setTheme(value)}
           className={cn(
             "flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-            theme === value
+            mounted && theme === value
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           )}
