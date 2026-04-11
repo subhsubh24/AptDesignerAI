@@ -18,14 +18,16 @@ interface DiagnosisStep {
   detail?: string;
 }
 
-function ConfettiParticle({ delay, x, y }: { delay: number; x: number; y: number }) {
+const CONFETTI_COLORS = ["#b4501e", "#d4733e", "#059669", "#0d9488", "#d97706"];
+
+function ConfettiParticle({ delay, x, y, colorIndex }: { delay: number; x: number; y: number; colorIndex: number }) {
   return (
     <div
       className="absolute h-2 w-2 rounded-full"
       style={{
         left: "50%",
         top: "50%",
-        background: ["#b4501e", "#d4733e", "#059669", "#0d9488", "#d97706"][Math.floor(Math.random() * 5)],
+        background: CONFETTI_COLORS[colorIndex % CONFETTI_COLORS.length],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ["--confetti-x" as any]: `${x}px`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -255,8 +257,9 @@ export default function DiagnosisPage() {
                 <ConfettiParticle
                   key={i}
                   delay={i * 60}
-                  x={(Math.random() - 0.5) * 200}
-                  y={-40 - Math.random() * 80}
+                  x={((((i * 7 + 3) % 12) / 12) - 0.5) * 200}
+                  y={-40 - ((i * 13 + 5) % 12) * (80 / 12)}
+                  colorIndex={i}
                 />
               ))}
             </div>

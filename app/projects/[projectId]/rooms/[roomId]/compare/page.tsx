@@ -47,6 +47,11 @@ const SCORE_LABELS = [
 
 type SortKey = typeof SCORE_LABELS[number]["key"] | "final_item_score" | null;
 
+function SortIcon({ k, sortKey, sortDir }: { k: SortKey; sortKey: SortKey; sortDir: "asc" | "desc" }) {
+  if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
+  return sortDir === "desc" ? <ArrowDown className="h-3 w-3 text-accent-warm" /> : <ArrowUp className="h-3 w-3 text-accent-warm" />;
+}
+
 export default function ComparePage() {
   const params = useParams();
   const projectId = params.projectId as string;
@@ -114,11 +119,6 @@ export default function ComparePage() {
       </div>
     );
   }
-
-  const SortIcon = ({ k }: { k: SortKey }) => {
-    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
-    return sortDir === "desc" ? <ArrowDown className="h-3 w-3 text-accent-warm" /> : <ArrowUp className="h-3 w-3 text-accent-warm" />;
-  };
 
   return (
     <div className="space-y-8">
@@ -189,7 +189,7 @@ export default function ComparePage() {
                   >
                     <td className="p-4 border-b font-semibold text-sm">
                       <div className="flex items-center gap-2">
-                        Overall Score <SortIcon k="final_item_score" />
+                        Overall Score <SortIcon k="final_item_score" sortKey={sortKey} sortDir={sortDir} />
                       </div>
                     </td>
                     {sortedProducts.map((product) => {
@@ -217,7 +217,7 @@ export default function ComparePage() {
                     >
                       <td className="p-4 border-b text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
-                          {label} <SortIcon k={key} />
+                          {label} <SortIcon k={key} sortKey={sortKey} sortDir={sortDir} />
                         </div>
                       </td>
                       {sortedProducts.map((product) => {

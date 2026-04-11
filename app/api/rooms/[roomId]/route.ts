@@ -12,11 +12,12 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("rooms")
-    .select("*, room_images(*)")
+    .select("*, room_images(*), projects!inner(user_id)")
     .eq("id", roomId)
+    .eq("projects.user_id", user.id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 404 : 500 });
   return NextResponse.json(data);
 }
 
@@ -28,6 +29,15 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Verify ownership
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, projects!inner(user_id)")
+    .eq("id", roomId)
+    .eq("projects.user_id", user.id)
+    .single();
+  if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await request.json();
 
@@ -60,6 +70,15 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Verify ownership
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, projects!inner(user_id)")
+    .eq("id", roomId)
+    .eq("projects.user_id", user.id)
+    .single();
+  if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { error } = await supabase.from("rooms").delete().eq("id", roomId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
