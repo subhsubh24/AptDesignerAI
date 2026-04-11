@@ -254,6 +254,37 @@ function getClearanceRules(category: string): ClearanceRule[] {
   return [];
 }
 
+// --- Footprint weight by category ---
+// Not every item with parsed dimensions occupies floor space.
+// Wall-mounted, on-furniture, and ceiling items should not inflate the
+// room coverage ratio.  Floor coverings (rugs) are flat and add visual
+// weight but minimal vertical congestion, so they get a reduced weight.
+
+const FOOTPRINT_WEIGHT: Record<string, number> = {
+  // Wall-mounted — zero floor impact
+  wall_art: 0, mirror: 0, shelf: 0, floating_shelf: 0,
+  picture_light: 0, wall_sconce: 0, wall_clock: 0,
+  // On-furniture — zero floor impact (sit on sofas, tables, shelves)
+  throw_pillow: 0, throw_pillows: 0, throw_blanket: 0, blanket: 0,
+  cushion: 0, tray: 0, vase: 0, candle: 0, decorative: 0,
+  table_lamp: 0, desk_lamp: 0, bookends: 0,
+  // Floor coverings — reduced (flat, no vertical congestion)
+  area_rug: 0.3, rug: 0.3,
+  // Ceiling-mounted — zero floor impact
+  pendant_light: 0, chandelier: 0, ceiling_light: 0, ceiling_fan: 0,
+  // Curtains/drapes — zero floor impact
+  curtains: 0, drapes: 0, blinds: 0,
+};
+
+function getFootprintWeight(category: string): number {
+  const key = category.toLowerCase().replace(/[\s-]+/g, "_");
+  if (key in FOOTPRINT_WEIGHT) return FOOTPRINT_WEIGHT[key];
+  for (const [ruleKey, weight] of Object.entries(FOOTPRINT_WEIGHT)) {
+    if (key.includes(ruleKey) || ruleKey.includes(key)) return weight;
+  }
+  return 1.0; // Default: full footprint for actual floor furniture
+}
+
 // --- Placement zone extraction ---
 
 function extractZone(placement: string): string {
@@ -301,7 +332,7 @@ export function computeSpatialConstraints(
       if (item.specs) {
         const dims = parseDimensions(item.specs);
         if (dims) {
-          totalFootprint += dims.width * dims.depth;
+          totalFootprint += dims.width * dims.depth * getFootprintWeight(item.category);
         }
       }
     }
@@ -418,6 +449,14 @@ export function computeSpatialConstraints(
             "bed|nightstand", "nightstand|bed",
             "desk|desk_chair", "desk_chair|desk",
             "dining_table|dining_chair", "dining_chair|dining_table",
+            // Area rug naturally co-locates with seating area furniture
+            "area_rug|coffee_table", "coffee_table|area_rug",
+            "area_rug|sofa", "sofa|area_rug",
+            // Tray sits on coffee table
+            "tray|coffee_table", "coffee_table|tray",
+            // Vase/decor sits on tables
+            "vase|dining_table", "dining_table|vase",
+            "vase|coffee_table", "coffee_table|vase",
           ];
           if (!naturalPairs.some((np) => pair.includes(np.split("|")[0]) && pair.includes(np.split("|")[1]))) {
             placementConflicts.push({ item1: items[i], item2: items[j], zone });
@@ -428,6 +467,7 @@ export function computeSpatialConstraints(
   }
 
   // 4. Per-item spatial scores — blend room coverage with item-specific clearance
+  // Items with less floor impact should be less penalized by room coverage ratio.
   const perItemSpatial = new Map<string, number>();
   for (const item of whatItNeeds) {
     const itemClearance = itemClearanceResults.get(item.category);
@@ -440,8 +480,11 @@ export function computeSpatialConstraints(
       (c) => c.item1 === item.category || c.item2 === item.category
     );
     const conflictPenalty = hasConflict ? 0.85 : 1.0;
-    // Blend: 40% room coverage (shared) + 60% item-specific clearance
-    const itemSpatial = (roomCoverageRatio * 0.4 + itemClearanceScore * 0.6) * conflictPenalty;
+    // Scale coverage weight by floor impact: 0.1 for non-floor items, up to 0.4 for full floor furniture
+    const fpWeight = getFootprintWeight(item.category);
+    const coverageWeight = 0.1 + 0.3 * fpWeight;
+    const clearanceWeight = 1 - coverageWeight;
+    const itemSpatial = (roomCoverageRatio * coverageWeight + itemClearanceScore * clearanceWeight) * conflictPenalty;
     perItemSpatial.set(item.category, Math.round(Math.min(1, itemSpatial) * 100) / 100);
   }
 
