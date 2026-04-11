@@ -52,7 +52,7 @@ export default async function ProjectPage({
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+            <h1 className="text-headline">{project.name}</h1>
             {project.description && (
               <p className="text-muted-foreground mt-1">{project.description}</p>
             )}
@@ -64,8 +64,8 @@ export default async function ProjectPage({
       {rooms.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="flex flex-col items-center justify-center py-20">
-            <div className="h-14 w-14 rounded-2xl bg-secondary flex items-center justify-center mb-4">
-              <DoorOpen className="h-7 w-7 text-muted-foreground" />
+            <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 animate-float">
+              <DoorOpen className="h-8 w-8 text-accent-warm/50" />
             </div>
             <h3 className="text-lg font-semibold mb-2">No rooms yet</h3>
             <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">

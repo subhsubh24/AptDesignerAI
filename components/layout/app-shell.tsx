@@ -9,12 +9,15 @@ interface AppShellProps {
       avatar_url?: string;
     };
   };
+  projectName?: string;
+  roomName?: string;
+  currentStep?: string;
 }
 
-export function AppShell({ children, user }: AppShellProps) {
+export function AppShell({ children, user, projectName, roomName, currentStep }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <Topbar user={user} />
+      <Topbar user={user} projectName={projectName} roomName={roomName} currentStep={currentStep} />
       <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
     </div>
   );

@@ -8,6 +8,74 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Plus, Sparkles, LayoutGrid } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
+import { cn } from "@/lib/utils/cn";
+
+// Pure SVG radar chart component
+function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
+  const size = 140;
+  const center = size / 2;
+  const radius = 50;
+  const angleStep = (2 * Math.PI) / scores.length;
+
+  const getPoint = (index: number, value: number) => {
+    const angle = angleStep * index - Math.PI / 2;
+    const r = (value / 10) * radius;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle),
+    };
+  };
+
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const dataPoints = scores.map((s, i) => getPoint(i, s.value));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[140px] mx-auto">
+      {/* Grid */}
+      {gridLevels.map((level) => {
+        const points = scores.map((_, i) => getPoint(i, level * 10));
+        const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+        return (
+          <path key={level} d={path} fill="none" stroke="var(--border)" strokeWidth="0.5" opacity={0.5} />
+        );
+      })}
+
+      {/* Axis lines */}
+      {scores.map((_, i) => {
+        const p = getPoint(i, 10);
+        return (
+          <line key={i} x1={center} y1={center} x2={p.x} y2={p.y} stroke="var(--border)" strokeWidth="0.5" opacity={0.3} />
+        );
+      })}
+
+      {/* Data polygon */}
+      <path d={dataPath} fill="var(--accent-warm)" fillOpacity={0.15} stroke="var(--accent-warm)" strokeWidth="1.5" />
+
+      {/* Data points */}
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill="var(--accent-warm)" />
+      ))}
+
+      {/* Labels */}
+      {scores.map((s, i) => {
+        const labelPoint = getPoint(i, 12.5);
+        return (
+          <text
+            key={i}
+            x={labelPoint.x}
+            y={labelPoint.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="text-[7px] fill-muted-foreground"
+          >
+            {s.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
 
 export default function BundlesPage() {
   const params = useParams();
@@ -127,7 +195,7 @@ export default function BundlesPage() {
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Bundles</h1>
+            <h1 className="text-headline">Bundles</h1>
             <p className="text-muted-foreground mt-1">
               Room concepts with holistic scoring
             </p>
@@ -146,17 +214,17 @@ export default function BundlesPage() {
       {bundles.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="py-20 text-center">
-            <div className="h-14 w-14 rounded-2xl bg-secondary flex items-center justify-center mb-4 mx-auto">
-              <LayoutGrid className="h-7 w-7 text-muted-foreground/40" />
+            <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
+              <LayoutGrid className="h-8 w-8 text-accent-warm/50" />
             </div>
             <h3 className="text-lg font-semibold mb-2">No bundles yet</h3>
             <p className="text-sm text-muted-foreground">
-              Shortlist some products, then create a bundle.
+              Shortlist some products, then create a bundle to see how they work together.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-stagger-children">
           {bundles.map((bundle) => {
             const evaluation = bundle.bundle_evaluations?.[0];
             const products = bundle.product_bundle_items?.map(
@@ -164,20 +232,20 @@ export default function BundlesPage() {
             ) || [];
 
             return (
-              <Card key={bundle.id} className="overflow-hidden">
+              <Card key={bundle.id} variant="elevated" className="overflow-hidden animate-fade-in-up">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>{bundle.name || "Untitled Bundle"}</CardTitle>
+                    <CardTitle className="text-lg">{bundle.name || "Untitled Bundle"}</CardTitle>
                     {evaluation ? (
                       <div className="flex items-center gap-2">
-                        <span className={`text-2xl font-bold ${getScoreColor(evaluation.final_bundle_score)}`}>
+                        <span className={cn("text-3xl font-bold animate-score-pop", getScoreColor(evaluation.final_bundle_score))}>
                           {evaluation.final_bundle_score.toFixed(1)}
                         </span>
                       </div>
                     ) : (
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="warm"
                         onClick={() => handleEvaluate(bundle.id)}
                         disabled={evaluating === bundle.id}
                       >
@@ -192,11 +260,12 @@ export default function BundlesPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {/* Product carousel */}
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x">
                     {products.map((product) => (
-                      <div key={product.id} className="space-y-2">
+                      <div key={product.id} className="shrink-0 w-28 snap-start space-y-2">
                         {product.image_url && (
-                          <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                          <div className="aspect-square rounded-xl overflow-hidden bg-muted shadow-sm">
                             <img
                               src={product.image_url}
                               alt={product.title}
@@ -218,40 +287,53 @@ export default function BundlesPage() {
                   </div>
 
                   {evaluation && (
-                    <div className="space-y-4 border-t pt-5">
-                      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                        {[
-                          { label: "Palette", score: evaluation.palette_harmony_score },
-                          { label: "Material", score: evaluation.material_balance_score },
-                          { label: "Scale", score: evaluation.scale_balance_score },
-                          { label: "Style", score: evaluation.style_consistency_score },
-                          { label: "Completion", score: evaluation.room_completion_score },
-                          { label: "Practical", score: evaluation.practicality_score },
-                        ].map((s) => (
-                          <div key={s.label} className="text-center p-3 rounded-xl bg-muted/50">
-                            <div className={`text-lg font-bold ${getScoreColor(s.score)}`}>
-                              {s.score.toFixed(1)}
+                    <div className="space-y-5 border-t pt-5">
+                      {/* Radar chart + score metrics side by side */}
+                      <div className="grid md:grid-cols-[auto_1fr] gap-6 items-center">
+                        <RadarChart
+                          scores={[
+                            { label: "Palette", value: evaluation.palette_harmony_score },
+                            { label: "Material", value: evaluation.material_balance_score },
+                            { label: "Scale", value: evaluation.scale_balance_score },
+                            { label: "Style", value: evaluation.style_consistency_score },
+                            { label: "Complete", value: evaluation.room_completion_score },
+                            { label: "Practical", value: evaluation.practicality_score },
+                          ]}
+                        />
+                        <div className="grid grid-cols-3 gap-3">
+                          {[
+                            { label: "Palette", score: evaluation.palette_harmony_score },
+                            { label: "Material", score: evaluation.material_balance_score },
+                            { label: "Scale", score: evaluation.scale_balance_score },
+                            { label: "Style", score: evaluation.style_consistency_score },
+                            { label: "Completion", score: evaluation.room_completion_score },
+                            { label: "Practical", score: evaluation.practicality_score },
+                          ].map((s) => (
+                            <div key={s.label} className="text-center p-3 rounded-xl bg-muted/50">
+                              <div className={cn("text-lg font-bold", getScoreColor(s.score))}>
+                                {s.score.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
                             </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
 
                       {evaluation.analysis && (
                         <div className="grid gap-3 md:grid-cols-2">
-                          <div className="text-sm rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-3">
-                            <span className="font-medium text-emerald-700 dark:text-emerald-300">Strongest: </span>
+                          <div className="text-sm rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-4 border border-emerald-200/50 dark:border-emerald-800/50">
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">Strongest: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.strongest_aspect}</span>
                           </div>
-                          <div className="text-sm rounded-xl bg-amber-50 dark:bg-amber-950/50 p-3">
-                            <span className="font-medium text-amber-700 dark:text-amber-300">Weakest: </span>
+                          <div className="text-sm rounded-xl bg-amber-50 dark:bg-amber-950/50 p-4 border border-amber-200/50 dark:border-amber-800/50">
+                            <span className="font-semibold text-amber-700 dark:text-amber-300">Weakest: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.weakest_aspect}</span>
                           </div>
-                          <div className="text-sm rounded-xl bg-muted/50 p-3">
+                          <div className="text-sm rounded-xl bg-muted/50 p-4">
                             <span className="font-medium">Missing: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.what_feels_missing}</span>
                           </div>
-                          <div className="text-sm rounded-xl bg-muted/50 p-3">
+                          <div className="text-sm rounded-xl bg-muted/50 p-4">
                             <span className="font-medium">Swap First: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.what_should_be_swapped_first}</span>
                           </div>
@@ -261,27 +343,28 @@ export default function BundlesPage() {
                       {evaluation.room_vibe && (
                         <div className="space-y-3 border-t pt-5">
                           <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-accent-warm" />
                             <h4 className="text-sm font-semibold">Room Vibe</h4>
                             {evaluation.room_vibe.mood && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="warm" className="text-xs">
                                 {evaluation.room_vibe.mood}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-muted-foreground leading-relaxed">
                             {evaluation.room_vibe.vibe_summary}
                           </p>
                           {evaluation.room_vibe.style_keywords?.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {evaluation.room_vibe.style_keywords.map((kw) => (
-                                <Badge key={kw} variant="outline" className="text-xs">
+                                <Badge key={kw} variant="outline" className="text-xs bg-accent-warm/5">
                                   {kw}
                                 </Badge>
                               ))}
                             </div>
                           )}
                           {evaluation.room_vibe.color_story && (
-                            <p className="text-sm text-muted-foreground italic">
+                            <p className="text-sm text-muted-foreground italic border-l-2 border-accent-warm/30 pl-3">
                               {evaluation.room_vibe.color_story}
                             </p>
                           )}

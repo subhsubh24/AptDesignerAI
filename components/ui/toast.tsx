@@ -15,12 +15,12 @@
 
 import * as React from "react";
 import * as ToastPrimitive from "@radix-ui/react-toast";
-import { X, CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
+import { X, CheckCircle2, AlertCircle, Info, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 // ─── Toast Types ─────────────────────────────────────────────
 
-type ToastVariant = "success" | "error" | "info" | "loading";
+type ToastVariant = "success" | "error" | "info" | "loading" | "celebration";
 
 interface ToastData {
   id: string;
@@ -65,6 +65,8 @@ export const toast = {
     addToast({ variant: "info", title, description, duration: 4000 }),
   loading: (title: string, description?: string) =>
     addToast({ variant: "loading", title, description, duration: 30000 }),
+  celebration: (title: string, description?: string) =>
+    addToast({ variant: "celebration" as ToastVariant, title, description, duration: 5000 }),
   dismiss: (id: string) => removeToast(id),
 };
 
@@ -90,6 +92,7 @@ const variantStyles: Record<ToastVariant, string> = {
   error: "border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100",
   info: "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100",
   loading: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100",
+  celebration: "border-accent-warm/30 bg-accent-warm/10 text-foreground shadow-warm-md",
 };
 
 const variantIcons: Record<ToastVariant, React.ReactNode> = {
@@ -97,6 +100,7 @@ const variantIcons: Record<ToastVariant, React.ReactNode> = {
   error: <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />,
   info: <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />,
   loading: <Loader2 className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-spin" />,
+  celebration: <Sparkles className="h-4 w-4 text-accent-warm" />,
 };
 
 function ToastItem({ data, onDismiss }: { data: ToastData; onDismiss: () => void }) {
@@ -147,7 +151,7 @@ export function ToastProvider() {
       {toasts.map((t) => (
         <ToastItem key={t.id} data={t} onDismiss={() => dismiss(t.id)} />
       ))}
-      <ToastPrimitive.Viewport className="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-[380px] max-w-[90vw] outline-none" />
+      <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2 w-[380px] max-w-[90vw] outline-none" />
     </ToastPrimitive.Provider>
   );
 }

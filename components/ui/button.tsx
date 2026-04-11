@@ -18,13 +18,17 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-accent-warm underline-offset-4 hover:underline",
-        warm: "bg-accent-warm text-white shadow-sm hover:bg-accent-warm/90 hover:shadow-md",
+        warm: "bg-gradient-warm-button text-white shadow-warm-sm hover:shadow-warm-md hover:brightness-110",
+        "warm-outline":
+          "border-2 border-accent-warm text-accent-warm bg-transparent hover:bg-accent-warm/10 shadow-sm",
+        "warm-ghost": "text-accent-warm hover:bg-accent-warm/10",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-lg px-3 text-xs",
         lg: "h-11 rounded-xl px-8",
         xl: "h-13 rounded-xl px-10 text-base",
+        "2xl": "h-16 rounded-2xl px-12 text-lg font-semibold",
         icon: "h-10 w-10",
       },
     },

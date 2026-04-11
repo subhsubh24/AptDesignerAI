@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut } from "lucide-react";
+import { LogOut, ChevronRight } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { cn } from "@/lib/utils/cn";
 
 interface TopbarProps {
   user?: {
@@ -25,10 +26,16 @@ interface TopbarProps {
       avatar_url?: string;
     };
   };
+  projectName?: string;
+  roomName?: string;
+  currentStep?: string;
 }
 
-export function Topbar({ user }: TopbarProps) {
+const STEP_KEYS = ["setup", "diagnosis", "products", "compare", "bundles", "mockups"];
+
+export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
 
   const handleSignOut = async () => {
@@ -44,16 +51,89 @@ export function Topbar({ user }: TopbarProps) {
     .toUpperCase()
     .slice(0, 2);
 
+  // Build breadcrumbs from pathname
+  const breadcrumbs: { label: string; href: string }[] = [];
+  if (pathname.startsWith("/projects") || pathname.startsWith("/dashboard")) {
+    breadcrumbs.push({ label: "Dashboard", href: "/dashboard" });
+  }
+  if (projectName && pathname.includes("/projects/")) {
+    const projectId = pathname.split("/projects/")[1]?.split("/")[0];
+    if (projectId) {
+      breadcrumbs.push({ label: projectName, href: `/projects/${projectId}` });
+    }
+  }
+  if (roomName && pathname.includes("/rooms/")) {
+    const parts = pathname.split("/rooms/");
+    const roomId = parts[1]?.split("/")[0];
+    const projectId = pathname.split("/projects/")[1]?.split("/")[0];
+    if (roomId && projectId) {
+      breadcrumbs.push({ label: roomName, href: `/projects/${projectId}/rooms/${roomId}` });
+    }
+    // Add current step
+    const stepFromPath = parts[1]?.split("/")[1];
+    if (stepFromPath && STEP_KEYS.includes(stepFromPath)) {
+      breadcrumbs.push({
+        label: stepFromPath.charAt(0).toUpperCase() + stepFromPath.slice(1),
+        href: pathname,
+      });
+    }
+  }
+
+  // Determine active step index for the mini progress indicator
+  const activeStepIndex = currentStep ? STEP_KEYS.indexOf(currentStep) : -1;
+
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background/80 backdrop-blur-sm px-6">
-      <Link href="/dashboard" className="flex items-center gap-2.5">
-        <LogoMark className="h-6 w-6 text-foreground" />
-        <span className="text-base font-semibold tracking-tight">
-          Apt<span className="text-accent-warm">Designer</span>
-        </span>
-      </Link>
+    <header className="flex h-14 items-center justify-between border-b glass px-6 sticky top-0 z-50">
+      <div className="flex items-center gap-3 min-w-0">
+        <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+          <LogoMark className="h-6 w-6 text-foreground" />
+          <span className="text-base font-semibold tracking-tight hidden sm:inline">
+            Apt<span className="text-accent-warm">Designer</span>
+          </span>
+        </Link>
+
+        {/* Breadcrumbs */}
+        {breadcrumbs.length > 1 && (
+          <nav className="hidden md:flex items-center gap-1 text-sm min-w-0">
+            {breadcrumbs.map((crumb, i) => (
+              <div key={crumb.href} className="flex items-center gap-1 min-w-0">
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                {i === breadcrumbs.length - 1 ? (
+                  <span className="font-medium text-foreground truncate">{crumb.label}</span>
+                ) : (
+                  <Link
+                    href={crumb.href}
+                    className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[120px]"
+                  >
+                    {crumb.label}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </nav>
+        )}
+      </div>
 
       <div className="flex items-center gap-3">
+        {/* Mini step indicator (when inside a room) */}
+        {activeStepIndex >= 0 && (
+          <div className="hidden md:flex items-center gap-1 mr-2">
+            {STEP_KEYS.map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-1.5 w-4 rounded-full transition-all duration-300",
+                  i < activeStepIndex
+                    ? "bg-emerald-500"
+                    : i === activeStepIndex
+                    ? "bg-accent-warm w-6"
+                    : "bg-border"
+                )}
+              />
+            ))}
+          </div>
+        )}
+
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
