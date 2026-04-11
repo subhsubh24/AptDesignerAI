@@ -305,12 +305,15 @@ export function computeHarmonyScores(
       ? perItemColorFit * 0.7 + color.palette_harmony * 0.3  // Blend per-item (70%) + global (30%)
       : (color.palette_harmony + color.cross_room_coherence) / 2;  // Fallback to global
 
-    // Weighted average of all dimensions
+    // Weighted average of all dimensions.
+    // Material uses the same weighted formula as applyMathCaps in route.ts (0.3/0.3/0.2/0.2).
+    const materialScore =
+      material.material_balance * 0.3 + material.wood_coherence * 0.3 +
+      material.metal_coherence * 0.2 + material.soft_hard_ratio * 0.2;
     const mathScore =
       WEIGHTS.color * itemColorScore +
       WEIGHTS.spatial * ((spatial.room_coverage_ratio + spatial.clearance_score) / 2) +
-      WEIGHTS.material *
-        ((material.material_balance + material.wood_coherence + material.metal_coherence + material.soft_hard_ratio) / 4) +
+      WEIGHTS.material * materialScore +
       WEIGHTS.proportion *
         ((proportion.rug_coverage + proportion.height_relationships + proportion.visual_balance) / 3) +
       WEIGHTS.specificity * specificity;
@@ -355,6 +358,7 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
 
   // Color
   lines.push(`### Color Harmony: ${result.color.palette_harmony.toFixed(2)}/1.0`);
+  lines.push(`- Palette scheme: ${result.color.palette_scheme} ✓`);
   lines.push(`- Cross-room coherence: ${result.color.cross_room_coherence.toFixed(2)}/1.0`);
   for (const c of result.color.pair_conflicts) {
     lines.push(`- CONFLICT: "${c.color1}" ↔ "${c.color2}" Delta-E=${c.deltaE} — ${c.issue}`);
@@ -421,11 +425,13 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
       result.material.metal_coherence * 0.2 + result.material.soft_hard_ratio * 0.2;
     const crossRoomCap = result.color.cross_room_coherence;
 
+    // Use the same formula as applyMathCaps in harmony-composite.ts: max(x*10, 2.0)
+    const toCapVal = (x: number) => Math.round(Math.max(x * 10, 2.0) * 10) / 10;
     const capStr = [
-      colorCap < 0.9 ? `color_fit≤${(Math.sqrt(colorCap) * 8 + 2).toFixed(1)}` : null,
-      spatialCap < 0.9 ? `spatial_fit≤${(Math.sqrt(spatialCap) * 8 + 2).toFixed(1)}` : null,
-      matCap < 0.9 ? `material_fit≤${(Math.sqrt(matCap) * 8 + 2).toFixed(1)}` : null,
-      crossRoomCap < 0.9 ? `cross_room_fit≤${(Math.sqrt(crossRoomCap) * 8 + 2).toFixed(1)}` : null,
+      colorCap < 0.9 ? `color_fit≤${toCapVal(colorCap).toFixed(1)}` : null,
+      spatialCap < 0.9 ? `spatial_fit≤${toCapVal(spatialCap).toFixed(1)}` : null,
+      matCap < 0.9 ? `material_fit≤${toCapVal(matCap).toFixed(1)}` : null,
+      crossRoomCap < 0.9 ? `cross_room_fit≤${toCapVal(crossRoomCap).toFixed(1)}` : null,
     ].filter(Boolean).join(", ");
 
     lines.push(`- ${item.category}: ${item.math_score.toFixed(2)} | ${status}${capStr ? ` | CAPS: ${capStr}` : " | no caps"}`);

@@ -4,6 +4,7 @@ import { lookupColor, type HSL } from "./lookups";
 
 export interface ColorHarmonyResult {
   palette_harmony: number; // 0-1
+  palette_scheme: string; // e.g. "neutral-accent", "analogous", "triadic", "unknown"
   cross_room_coherence: number; // 0-1
   per_item_color_fit: Map<string, number>; // category → 0-1 score for how well item's colors fit the palette
   pair_conflicts: Array<{
@@ -305,11 +306,11 @@ export function computeColorHarmony(
 
   if (resolved.length === 0) {
     // Can't compute, return neutral
-    return { palette_harmony: 0.5, cross_room_coherence: 1.0, per_item_color_fit: new Map(), pair_conflicts: [] };
+    return { palette_harmony: 0.5, palette_scheme: "unknown", cross_room_coherence: 1.0, per_item_color_fit: new Map(), pair_conflicts: [] };
   }
 
   // 1. Palette harmony score
-  const { score: paletteScore } = classifyPaletteScheme(resolved.map((r) => r.hsl));
+  const { score: paletteScore, scheme: paletteScheme } = classifyPaletteScheme(resolved.map((r) => r.hsl));
 
   // 2. Find pair conflicts (high Delta-E between adjacent colors)
   const pairConflicts: ColorHarmonyResult["pair_conflicts"] = [];
@@ -424,6 +425,7 @@ export function computeColorHarmony(
 
   return {
     palette_harmony: Math.round(finalPaletteHarmony * 100) / 100,
+    palette_scheme: paletteScheme,
     cross_room_coherence: Math.round(crossRoomCoherence * 100) / 100,
     per_item_color_fit: perItemColorFit,
     pair_conflicts: pairConflicts,
