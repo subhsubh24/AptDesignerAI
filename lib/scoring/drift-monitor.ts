@@ -151,8 +151,7 @@ export function getScoreDistributionSummary(): Record<string, { count: number; m
   }
 
   for (const [dimension, values] of byDimension.entries()) {
-    // Require minimum sample size for reliable statistics
-    if (values.length < 3) continue;
+    if (values.length === 0) continue;
     const sorted = [...values].sort((a, b) => a - b);
     const mean = values.reduce((s, v) => s + v, 0) / values.length;
     const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import { calibrateScore, applyCategoryBaseline, expandScore, correctInflation } from "@/lib/scoring/calibration";

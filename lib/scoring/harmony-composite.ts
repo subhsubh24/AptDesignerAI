@@ -66,26 +66,22 @@ export interface MathDimensionCaps {
 /**
  * Convert a math score (0-1) to a cap value on the 0-10 scale.
  *
- * Uses a softened curve instead of linear mapping to avoid being overly
- * punitive. The geometric mean already penalizes low scores aggressively,
- * so the cap doesn't need to be equally harsh.
+ * Uses linear mapping (×10) with a floor at 2.0 to prevent catastrophic
+ * geometric mean collapse from near-zero caps.
  *
  * Mapping:
  *  math 0.90+ → no cap (handled by threshold check)
- *  math 0.80  → cap at 8.5 (not 8.0)
- *  math 0.70  → cap at 7.5 (not 7.0)
- *  math 0.50  → cap at 5.5 (not 5.0)
- *  math 0.30  → cap at 4.0 (not 3.0)
- *  math 0.00  → cap at 2.0 (not 0.0 — floor)
+ *  math 0.80  → cap at 8.0
+ *  math 0.60  → cap at 6.0
+ *  math 0.50  → cap at 5.0
+ *  math 0.30  → cap at 3.0
+ *  math 0.00  → cap at 2.0 (floor)
  */
 function mathToCapValue(mathNormalized: number): number {
   // Floor at 2.0/10 — no dimension should be capped to near-zero
   // since that creates catastrophic geometric mean collapse
   const floor = 2.0;
-  const ceiling = 10.0;
-  // Softened mapping: sqrt curve gives more headroom to moderate scores
-  const softened = floor + (ceiling - floor) * Math.sqrt(mathNormalized);
-  return Math.round(softened * 10) / 10;
+  return Math.round(Math.max(mathNormalized * 10, floor) * 10) / 10;
 }
 
 export function applyMathCaps(

@@ -66,8 +66,8 @@ const KEEP_PATTERNS = [
 
 // Patterns that signal lifestyle context
 const LIFESTYLE_PATTERNS = [
-  // "I am a X", "I'm a X" — stop at period, comma, or "and I" conjunction
-  /\bi\s+(?:am|'m)\s+(?:a\s+)?(.+?)(?:\.\s|\.\s*$|,\s|\s+and\s+i\s+)/gi,
+  // "I am a X", "I'm a X" — stop at period, comma, "and I" conjunction, or end of string
+  /\bi\s+(?:am|'m)\s+(?:a\s+)?(.+?)(?:\.\s|\.\s*$|,\s|\s+and\s+i\s+|$)/gi,
   // "I like to X"
   /\bi\s+like\s+to\s+(.+?)(?:\.|,|$)/gi,
   // "I like X"
