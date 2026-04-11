@@ -86,7 +86,11 @@ Based on the existing finishes (floors, walls, fixed elements) AND how the clien
 - what_is_working: List **at least 5-8 items**. Every room has things working — find them all.
 - what_is_not_working: List **at least 5-8 issues**. Be thorough — don't stop at the obvious.
 - biggest_improvement_opportunities: List **5-7 changes** ranked by impact.
-- missing_furniture_categories: List **ALL missing categories** (typically 6-12). Include often-forgotten items like throw pillows, plants, art, table lamps, runners, trays.
+- missing_furniture_categories: List **ALL missing categories** — aim for 8-15 items. Walk through ALL THREE TIERS:
+  - ESSENTIAL: anchor furniture (sofa, bed, dining table), primary rug, primary lighting, main surfaces
+  - STANDARD: accent seating, secondary lighting, textiles (curtains, throw pillows, blankets), wall art, storage
+  - FINISHING: plants, decorative objects, vases, trays, candles, books/display items
+  Do NOT stop after listing the obvious large pieces. A well-furnished room has items from ALL three tiers.
 - color_issues: List **3-5 observations**. Map the actual colors you see.
 - texture_material_issues: List **3-5 observations**. Count distinct textures.
 - scale_proportion_issues: List **3-5 observations**. Reference specific items.
@@ -159,7 +163,9 @@ Return a JSON object with this exact structure:
 - Did I list at least 5 items in what_is_working?
 - Did I list at least 5 items in what_is_not_working?
 - Did I reference specific items by name, material, and color in every array?
-- Did I list ALL missing furniture categories (usually 6-12)?
+- Did I list AT LEAST 8 missing categories (covering ALL three tiers: essential, standard, finishing)?
+- Did I include finishing touches: plants, art, decorative objects, trays, candles — not just furniture?
+- Did I list ALL missing furniture categories (usually 8-15)?
 - Did I provide specific color names (not just "neutral" or "warm")?
 - Did I include 6+ recommended_palette colors, 5+ materials, 4+ textures?
 - ⚠️ Did I CHECK that NONE of my recommendations conflict with the client's EXCLUSIONS?

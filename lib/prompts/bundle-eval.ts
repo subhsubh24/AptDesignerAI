@@ -165,14 +165,19 @@ CRITICAL: Use the FULL 0-10 range. If the bundle is just okay, score it 5-6. Do 
    - 5-6: Mixed signals — some pieces are mid-century, some are farmhouse, some are industrial
    - Below 5: Jarring style clash — furniture looks randomly collected
 
-5. **room_completion_score**: Does this bundle solve the room's diagnosed problems?
+5. **room_completion_score**: Does this bundle make the room feel fully furnished?
    - Check the diagnosis: are all identified issues addressed?
    - List what's still missing after this bundle
    - **Dead zones & empty corners**: Does this bundle activate empty corners, fill awkward gaps behind furniture, and address unused wall stretches identified in the diagnosis? A room with barren corners or empty gaps behind the sofa loses points. A tall plant, arc lamp, corner shelf, or accent chair in a dead zone = bonus.
-   - 9-10: Every diagnosed issue is addressed, dead zones are activated, room will feel complete
-   - 7-8: Most issues addressed, 1-2 minor gaps remain (e.g., still needs a plant or tray)
-   - 5-6: Addresses some issues but leaves major gaps (e.g., still no rug, still no art, corners still empty)
-   - Below 5: Fails to address the main diagnosed problems
+   - **Tiered completeness scoring**:
+     - Missing ANY essential item (primary sofa/bed/table, rug, primary lighting) → score below 6
+     - Missing more than half the standard items (accent lighting, textiles, storage) → score below 7
+     - Zero finishing items (no art, no plants, no decorative objects) → cap at 7
+     - A bundle with ONLY essential items should score 4-5, not 7-8
+   - 9-10: All tiers represented, dead zones activated, room feels intentionally complete
+   - 7-8: Essentials + most standard items, minor finishing gaps (e.g., still needs plants)
+   - 5-6: Has essentials but significant standard/finishing gaps (no art, no textiles, no accent lighting)
+   - Below 5: Missing essential items or fails to address the main diagnosed problems
 
 6. **spatial_arrangement_score**: Does this bundle work as a physical arrangement?
    - Step 1: Mentally place every item in its intended position (see INTENDED PLACEMENTS above)

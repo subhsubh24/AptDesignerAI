@@ -12,6 +12,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
+import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -325,15 +326,24 @@ BAD search_title examples (will return category pages, not products):
 ✗ "Throw pillows" — no material, no color, no size, no quantity
 ✗ "Wall art" — no medium, no size, no color palette, no style
 
-## HOW MANY ITEMS TO RECOMMEND
-Be thorough. A typical living room needs 8-12 items. A combined living/dining room needs 12-18. Include:
-- Large anchor pieces (rug, sofa, dining table) — high priority
-- Functional pieces (coffee table, side tables, media console, storage) — high/medium priority
-- Lighting (floor lamp, table lamp, pendant) — medium/high priority
-- Soft furnishings (throw pillows, throw blanket, curtains) — medium priority
-- Decorative elements (art, plants, vases, trays, candles) — low/medium priority
+## HOW MANY ITEMS TO RECOMMEND — MINIMUM COUNTS BY ROOM TYPE
+You MUST recommend at least this many items (more is better):
+- Living room: 10+ items | Bedroom: 9+ items | Dining room: 8+ items
+- Studio/combined living+dining: 12+ items | Home office: 7+ items
+- Entryway: 6+ items | Nursery: 8+ items | Kitchen: 6+ items
 
-Do NOT stop at 5 items. Include everything the room needs to feel complete and intentional.
+Walk through ALL THREE TIERS before finalizing your list:
+
+**TIER 1 — ESSENTIAL** (room can't function without these):
+Anchor furniture, primary rug, primary lighting, main surfaces
+
+**TIER 2 — STANDARD** (expected in a well-furnished room):
+Accent seating, secondary lighting, textiles (curtains/throw pillows/blankets), wall art, storage
+
+**TIER 3 — FINISHING** (decorative completeness):
+Plants, decorative objects, vases, trays, candles, accent lighting, books/display items
+
+Do NOT return fewer items than the minimum. An incomplete list means the client's apartment will feel bare and unfinished. Include ALL THREE TIERS.
 
 Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.`,
   });
@@ -393,6 +403,30 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
         analysis = validation.patched;
         console.log(`[area-analysis] Post-validation patched ${validation.issues.length} constraint violation(s):`,
           validation.issues.map(i => `${i.type}: ${i.description}`).join("; "));
+      }
+    }
+
+    // ── Post-analysis: furnishing gap diagnostic ─────────────────────
+    {
+      const roomKey = (room.room_type || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+      const tiers = ROOM_FURNISHING_TIERS[roomKey] || ROOM_FURNISHING_TIERS["living_room"];
+      const itemCount = analysis.what_it_needs.length;
+      if (itemCount < tiers.minItemCount) {
+        const bundleCategories = new Set<string>(
+          analysis.what_it_needs.map((i: { category: string }) =>
+            (i.category || "").toLowerCase().replace(/[\s-]+/g, "_"))
+        );
+        const matchesCat = (set: Set<string>, cat: string) =>
+          [...set].some(bc => bc.includes(cat) || cat.includes(bc) || bc.replace(/s$/, "") === cat.replace(/s$/, ""));
+        const missingEssential = tiers.essential.filter(c => !matchesCat(bundleCategories, c));
+        const missingStandard = tiers.standard.filter(c => !matchesCat(bundleCategories, c));
+        console.warn(`[area-analysis] Furnishing gap: ${itemCount} items returned (minimum: ${tiers.minItemCount}). Missing essential: [${missingEssential.join(", ")}]. Missing standard: [${missingStandard.join(", ")}]`);
+        analysis._furnishing_gap = {
+          item_count: itemCount,
+          min_item_count: tiers.minItemCount,
+          missing_essential: missingEssential,
+          missing_standard: missingStandard,
+        };
       }
     }
 

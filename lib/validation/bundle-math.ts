@@ -7,6 +7,7 @@
 
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL, type MaterialProperties } from "./lookups";
 import { deltaE2000, hslToLab } from "./color-math";
+import { ROOM_FURNISHING_TIERS } from "../config/pipeline";
 
 export interface BundleMathScores {
   palette_harmony: number;     // 0-1: cross-product color coherence
@@ -419,45 +420,64 @@ function computeSpatialFeasibility(products: BundleProduct[], ctx: BundleMathCon
 
 // --- Room completeness ---
 
-const EXPECTED_CATEGORIES: Record<string, string[]> = {
-  living_room: ["sofa", "coffee_table", "area_rug", "floor_lamp", "side_table", "throw_pillows"],
-  bedroom: ["bed", "nightstand", "area_rug", "table_lamp", "dresser"],
-  dining_room: ["dining_table", "dining_chairs", "pendant_light", "area_rug"],
-  home_office: ["desk", "desk_chair", "table_lamp", "bookshelf"],
-  entryway: ["console_table", "mirror", "area_rug"],
-  nursery: ["crib", "dresser", "area_rug", "table_lamp", "rocking_chair"],
-  kitchen: ["bar_stools", "pendant_light", "kitchen_rug"],
-  bathroom: ["bath_mat", "mirror", "storage"],
-  guest_room: ["bed", "nightstand", "table_lamp", "dresser"],
-  studio: ["sofa", "area_rug", "floor_lamp", "coffee_table", "desk", "bookshelf"],
-};
+function categoryMatches(bundleCategories: Set<string>, cat: string): boolean {
+  return [...bundleCategories].some(bc =>
+    bc.includes(cat) || cat.includes(bc) ||
+    bc.replace(/s$/, "") === cat.replace(/s$/, "")
+  );
+}
 
 function computeCompleteness(products: BundleProduct[], ctx: BundleMathContext): { score: number; issues: string[] } {
   const issues: string[] = [];
   const roomKey = (ctx.roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
-  const expected = EXPECTED_CATEGORIES[roomKey] || EXPECTED_CATEGORIES["living_room"];
+  const tiers = ROOM_FURNISHING_TIERS[roomKey] || ROOM_FURNISHING_TIERS["living_room"];
 
   const bundleCategories = new Set(
     products.map(p => (p.category || "").toLowerCase().replace(/[\s-]+/g, "_"))
   );
 
-  const missing: string[] = [];
-  for (const cat of expected) {
-    // Flexible match: "area_rug" matches "rug", "dining_chairs" matches "dining_chair"
-    const found = [...bundleCategories].some(bc =>
-      bc.includes(cat) || cat.includes(bc) ||
-      bc.replace(/s$/, "") === cat.replace(/s$/, "")
-    );
-    if (!found) missing.push(cat);
+  // Check coverage per tier
+  const missingEssential = tiers.essential.filter(c => !categoryMatches(bundleCategories, c));
+  const missingStandard = tiers.standard.filter(c => !categoryMatches(bundleCategories, c));
+  const missingFinishing = tiers.finishing.filter(c => !categoryMatches(bundleCategories, c));
+
+  const essentialCoverage = tiers.essential.length > 0
+    ? (tiers.essential.length - missingEssential.length) / tiers.essential.length
+    : 1.0;
+  const standardCoverage = tiers.standard.length > 0
+    ? (tiers.standard.length - missingStandard.length) / tiers.standard.length
+    : 1.0;
+  const finishingCoverage = tiers.finishing.length > 0
+    ? (tiers.finishing.length - missingFinishing.length) / tiers.finishing.length
+    : 1.0;
+
+  // Tiered score: essential 65%, standard 25%, finishing 10%
+  let score = essentialCoverage * 0.65 + standardCoverage * 0.25 + finishingCoverage * 0.10;
+
+  // Under-minimum penalty
+  if (products.length < tiers.minItemCount) {
+    const gap = tiers.minItemCount - products.length;
+    score -= (gap / tiers.minItemCount) * 0.15;
+    issues.push(`Bundle has ${products.length} items (minimum: ${tiers.minItemCount}) — significant furnishing gap`);
   }
 
-  const coverage = expected.length > 0 ? (expected.length - missing.length) / expected.length : 0.7;
-
-  if (missing.length > 0) {
-    issues.push(`Missing expected categories: ${missing.join(", ")}`);
+  // Diminishing returns over optimal (gentle: -0.02 per excess item, max -0.10)
+  if (products.length > tiers.optimalRange[1]) {
+    const excess = products.length - tiers.optimalRange[1];
+    score -= Math.min(excess * 0.02, 0.10);
   }
 
-  return { score: Math.max(0, Math.min(1, coverage)), issues };
+  if (missingEssential.length > 0) {
+    issues.push(`Missing essential items: ${missingEssential.join(", ")}`);
+  }
+  if (missingStandard.length > 0) {
+    issues.push(`Missing standard items: ${missingStandard.join(", ")}`);
+  }
+  if (missingFinishing.length > 0) {
+    issues.push(`Missing finishing items: ${missingFinishing.join(", ")}`);
+  }
+
+  return { score: Math.max(0, Math.min(1, score)), issues };
 }
 
 // --- Price coherence (within-bundle consistency) ---
@@ -506,12 +526,12 @@ function computePriceCoherence(products: BundleProduct[]): { score: number; issu
 // --- Weights ---
 
 const BUNDLE_MATH_WEIGHTS = {
-  palette_harmony: 0.20,
-  material_balance: 0.20,
+  palette_harmony: 0.18,
+  material_balance: 0.18,
   scale_balance: 0.18,
-  spatial_feasibility: 0.15, // using scale_balance for spatial too
-  completeness: 0.15,
-  price_coherence: 0.12,
+  spatial_feasibility: 0.15,
+  completeness: 0.18,
+  price_coherence: 0.13,
 };
 
 // --- Main export ---
@@ -570,6 +590,12 @@ export function formatBundleMathForPrompt(scores: BundleMathScores): string {
   lines.push(`- Scale balance: ${scores.scale_balance.toFixed(2)}/1.0`);
   lines.push(`- Spatial feasibility: ${scores.spatial_feasibility.toFixed(2)}/1.0`);
   lines.push(`- Room completeness: ${scores.completeness.toFixed(2)}/1.0`);
+  const completenessIssues = scores.issues.filter(i =>
+    i.includes("essential") || i.includes("standard") || i.includes("finishing") || i.includes("minimum") || i.includes("items (minimum")
+  );
+  for (const issue of completenessIssues) {
+    lines.push(`  ⚠ ${issue}`);
+  }
   lines.push(`- Price coherence: ${scores.price_coherence.toFixed(2)}/1.0`);
 
   if (scores.issues.length > 0) {

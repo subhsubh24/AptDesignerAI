@@ -152,3 +152,94 @@ export const SCALE_RELATIONS_CONFIG = {
   nightstandTooBed: { maxWidthRatio: 0.4, description: "Nightstand should be ≤40% of bed width" },
   sideTableHeight: { minHeightRatio: 0.85, maxHeightRatio: 1.1, description: "Side table height should be 85-110% of sofa arm height" },
 } as const;
+
+// ─── Room Furnishing Tiers ────────────────────────────────────
+
+/**
+ * Three-tier furnishing model defining what "fully furnished" means per room type.
+ *
+ * essential: Must-have items for the room to function
+ * standard:  Expected in a well-furnished room
+ * finishing: Decorative completeness
+ *
+ * minItemCount: Minimum items before the pipeline logs a furnishing gap warning
+ * optimalRange: Target range for a complete, well-furnished room [min, max]
+ */
+export const ROOM_FURNISHING_TIERS: Record<string, {
+  essential: string[];
+  standard: string[];
+  finishing: string[];
+  minItemCount: number;
+  optimalRange: [number, number];
+}> = {
+  living_room: {
+    essential: ["sofa", "area_rug", "coffee_table", "floor_lamp"],
+    standard: ["side_table", "throw_pillows", "media_console", "curtains", "table_lamp", "accent_chair"],
+    finishing: ["wall_art", "plant", "throw_blanket", "vase", "tray", "decorative_objects", "bookshelf"],
+    minItemCount: 8,
+    optimalRange: [10, 15],
+  },
+  bedroom: {
+    essential: ["bed", "nightstand", "area_rug", "table_lamp"],
+    standard: ["dresser", "curtains", "throw_pillows", "mirror", "second_nightstand"],
+    finishing: ["plant", "wall_art", "throw_blanket", "decorative_objects", "bench"],
+    minItemCount: 7,
+    optimalRange: [9, 13],
+  },
+  dining_room: {
+    essential: ["dining_table", "dining_chairs", "pendant_light"],
+    standard: ["area_rug", "sideboard", "curtains", "table_runner"],
+    finishing: ["wall_art", "plant", "centerpiece", "candles", "decorative_bowl"],
+    minItemCount: 6,
+    optimalRange: [8, 12],
+  },
+  home_office: {
+    essential: ["desk", "desk_chair", "task_lamp"],
+    standard: ["bookshelf", "area_rug", "curtains", "storage"],
+    finishing: ["plant", "wall_art", "desk_accessories", "decorative_objects"],
+    minItemCount: 5,
+    optimalRange: [7, 10],
+  },
+  entryway: {
+    essential: ["console_table", "mirror", "area_rug"],
+    standard: ["coat_hooks", "storage_bench", "table_lamp"],
+    finishing: ["plant", "wall_art", "tray", "vase"],
+    minItemCount: 4,
+    optimalRange: [6, 9],
+  },
+  nursery: {
+    essential: ["crib", "dresser", "area_rug", "table_lamp"],
+    standard: ["rocking_chair", "curtains", "storage"],
+    finishing: ["wall_art", "plant", "decorative_objects", "mobile"],
+    minItemCount: 6,
+    optimalRange: [8, 11],
+  },
+  kitchen: {
+    essential: ["bar_stools", "pendant_light"],
+    standard: ["kitchen_rug", "curtains", "storage_containers"],
+    finishing: ["plant", "wall_art", "decorative_bowls", "cookbook_display"],
+    minItemCount: 4,
+    optimalRange: [6, 9],
+  },
+  bathroom: {
+    essential: ["bath_mat", "mirror", "storage"],
+    standard: ["curtains", "towel_rack", "plant"],
+    finishing: ["wall_art", "decorative_objects", "candles", "tray"],
+    minItemCount: 4,
+    optimalRange: [6, 8],
+  },
+  guest_room: {
+    essential: ["bed", "nightstand", "table_lamp"],
+    standard: ["dresser", "area_rug", "curtains", "mirror"],
+    finishing: ["wall_art", "plant", "throw_blanket", "decorative_objects"],
+    minItemCount: 6,
+    optimalRange: [8, 11],
+  },
+  studio: {
+    essential: ["sofa", "area_rug", "floor_lamp", "coffee_table", "desk"],
+    standard: ["bookshelf", "curtains", "throw_pillows", "side_table", "desk_chair"],
+    finishing: ["wall_art", "plant", "throw_blanket", "vase", "decorative_objects"],
+    minItemCount: 9,
+    optimalRange: [12, 17],
+  },
+};
