@@ -82,15 +82,50 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
 }
 
 /**
+ * Map our abstract media-resolution tier to the Gemini SDK's
+ * `PartMediaResolutionLevel` enum (applied per image Part).
+ *
+ * NOTE: The top-level `generation_config.media_resolution` field only accepts
+ * LOW/MEDIUM/HIGH. ULTRA_HIGH is only valid at the per-Part level. So for
+ * ultra_high we attach `mediaResolution: { level: ... }` to each inlineData
+ * part instead of setting the config-level field.
+ */
+function toPartMediaResolutionLevel(
+  tier: "low" | "medium" | "high" | "ultra_high" | undefined,
+): string | undefined {
+  switch (tier) {
+    case "low":
+      return "MEDIA_RESOLUTION_LOW";
+    case "medium":
+      return "MEDIA_RESOLUTION_MEDIUM";
+    case "high":
+      return "MEDIA_RESOLUTION_HIGH";
+    case "ultra_high":
+      return "MEDIA_RESOLUTION_ULTRA_HIGH";
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Convert our abstract AIMessage[] to Gemini content parts.
+ *
+ * When `partMediaResolutionLevel` is provided, it is attached to each image
+ * Part so the API tokenizes the media at that resolution. This is the only
+ * supported path for ULTRA_HIGH, which is rejected at the top-level config.
  */
 async function convertMessages(
-  messages: AIMessage[]
+  messages: AIMessage[],
+  partMediaResolutionLevel?: string,
 ): Promise<{ role: string; parts: Record<string, unknown>[] }[]> {
   const result: { role: string; parts: Record<string, unknown>[] }[] = [];
 
   let totalImages = 0;
   let failedImages = 0;
+
+  const imagePartExtras: Record<string, unknown> = partMediaResolutionLevel
+    ? { mediaResolution: { level: partMediaResolutionLevel } }
+    : {};
 
   for (const msg of messages) {
     const parts: Record<string, unknown>[] = [];
@@ -103,6 +138,7 @@ async function convertMessages(
           totalImages++;
           if (block.source.type === "base64" && block.source.data) {
             parts.push({
+              ...imagePartExtras,
               inlineData: {
                 mimeType: block.source.media_type || "image/jpeg",
                 data: block.source.data,
@@ -118,6 +154,7 @@ async function convertMessages(
             try {
               const { data, mimeType } = await fetchImageAsBase64(imgUrl);
               parts.push({
+                ...imagePartExtras,
                 inlineData: { mimeType, data },
               });
             } catch (err) {
@@ -188,7 +225,14 @@ export const geminiProvider: AIProvider = {
     const effectiveTemperature = resolveTemperature(temperature);
     const effectiveSeed = resolveSeed(seed);
     const ai = getClient();
-    const contents = await convertMessages(messages);
+
+    // ULTRA_HIGH is ONLY valid at the per-Part level; the top-level
+    // `generation_config.media_resolution` field rejects it with HTTP 400.
+    // For any requested tier, we attach it at the Part level on each image
+    // so behavior stays consistent (and we avoid the config-level path for
+    // ultra_high entirely).
+    const partMediaResolutionLevel = toPartMediaResolutionLevel(mediaResolution);
+    const contents = await convertMessages(messages, partMediaResolutionLevel);
 
     // ─── Prompt size monitoring ──────────────────────────────
     // Rough token estimate: ~4 chars per token for English text.
@@ -263,7 +307,12 @@ export const geminiProvider: AIProvider = {
       config.responseModalities = responseModalities;
     }
 
-    if (mediaResolution) {
+    // Top-level generation_config.media_resolution only accepts LOW/MEDIUM/HIGH.
+    // We already apply the requested tier per-Part (see convertMessages call
+    // above), which also covers ULTRA_HIGH. Mirror low/medium/high at the
+    // top level for parity with older SDK behavior, but drop ultra_high since
+    // the API rejects it there.
+    if (mediaResolution && mediaResolution !== "ultra_high") {
       config.mediaResolution = mediaResolution;
     }
 
