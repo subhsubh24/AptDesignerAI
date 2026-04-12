@@ -320,58 +320,90 @@ async function matchUnitVariant(
     };
   }
 
-  // Try exact sqft match
+  // Try sqft match. "Exact" allows ±5 sqft to absorb rounding differences
+  // between what a listing site shows (e.g. 724) and what a resident
+  // remembers (725). Anything beyond that is almost certainly a different
+  // floor plan and should NOT be silently accepted — buildings routinely
+  // have multiple unit types within 20-30 sqft of each other.
   if (userSqft) {
-    const exact = variants.filter((v) => parseSqft(v.sqft) === userSqft);
+    const EXACT_TOLERANCE = 5;
+    const CLOSEST_TOLERANCE = 15;
+
+    const scored = variants
+      .map((v) => ({ v, sqft: parseSqft(v.sqft), diff: parseSqft(v.sqft) !== null ? Math.abs(parseSqft(v.sqft)! - userSqft) : Infinity }))
+      .filter((s) => s.sqft !== null)
+      .sort((a, b) => a.diff - b.diff);
+
+    const exact = scored.filter((s) => s.diff <= EXACT_TOLERANCE);
 
     if (exact.length === 1) {
       return {
-        variant: exact[0],
+        variant: exact[0].v,
         match_method: "exact_sqft",
         confidence: "high",
-        match_notes: `Exact sqft match (${userSqft} sqft) for variant "${String(exact[0].name)}".`,
+        match_notes: `Exact sqft match (variant "${String(exact[0].v.name)}" at ${exact[0].sqft} sqft vs user's ${userSqft} sqft).`,
         candidates_considered: variants.map(variantLabel),
       };
     }
 
     if (exact.length > 1) {
       // Multiple variants share the sqft — try vision to disambiguate
-      const vision = await disambiguateWithVision(exact, userImageUrls, unitLabel, userSqft);
+      const exactVariants = exact.map((s) => s.v);
+      const vision = await disambiguateWithVision(exactVariants, userImageUrls, unitLabel, userSqft);
       if (vision) {
         return {
           variant: vision.variant,
           match_method: "vision_disambiguated",
           confidence: vision.confidence,
-          match_notes: `${exact.length} variants share ${userSqft} sqft; vision picked "${String(vision.variant.name)}". ${vision.reasoning}`,
-          candidates_considered: exact.map(variantLabel),
+          match_notes: `${exact.length} variants share ~${userSqft} sqft; vision picked "${String(vision.variant.name)}". ${vision.reasoning}`,
+          candidates_considered: exactVariants.map(variantLabel),
         };
       }
-      // Vision inconclusive — pick first with a clear note
       return {
-        variant: exact[0],
+        variant: exactVariants[0],
         match_method: "exact_sqft",
         confidence: "low",
-        match_notes: `${exact.length} variants share ${userSqft} sqft and vision could not disambiguate. Provisionally chose "${String(exact[0].name)}".`,
-        candidates_considered: exact.map(variantLabel),
+        match_notes: `${exact.length} variants share ~${userSqft} sqft and vision could not disambiguate. Provisionally chose "${String(exactVariants[0].name)}".`,
+        candidates_considered: exactVariants.map(variantLabel),
       };
     }
 
-    // No exact match — find closest within tolerance (±50 sqft)
-    const TOLERANCE = 50;
-    const scored = variants
-      .map((v) => ({ v, diff: parseSqft(v.sqft) !== null ? Math.abs(parseSqft(v.sqft)! - userSqft) : Infinity }))
-      .filter((s) => s.diff <= TOLERANCE)
-      .sort((a, b) => a.diff - b.diff);
-
-    if (scored.length > 0) {
+    // No exact match. Try "closest" ONLY within a tight window. Beyond that,
+    // it's honest to say we couldn't find the unit rather than pick a
+    // plausible-looking wrong one — that would pollute every downstream
+    // agent's context with the wrong room dimensions.
+    const closest = scored.filter((s) => s.diff <= CLOSEST_TOLERANCE);
+    if (closest.length > 0) {
       return {
-        variant: scored[0].v,
+        variant: closest[0].v,
         match_method: "closest_sqft",
-        confidence: scored[0].diff <= 10 ? "high" : "medium",
-        match_notes: `No exact sqft match; closest is "${String(scored[0].v.name)}" at ${parseSqft(scored[0].v.sqft)} sqft (user reported ${userSqft}, diff ${scored[0].diff}).`,
+        confidence: "medium",
+        match_notes: `No exact sqft match within ±${EXACT_TOLERANCE}; closest is "${String(closest[0].v.name)}" at ${closest[0].sqft} sqft (user reported ${userSqft}, diff ${closest[0].diff}).`,
         candidates_considered: variants.map(variantLabel),
       };
     }
+
+    // Nothing within tolerance — try vision as last resort before giving up
+    const vision = await disambiguateWithVision(variants, userImageUrls, unitLabel, userSqft);
+    if (vision) {
+      return {
+        variant: vision.variant,
+        match_method: "vision_only",
+        confidence: vision.confidence,
+        match_notes: `No variant within ±${CLOSEST_TOLERANCE} sqft of user's ${userSqft}. Vision picked "${String(vision.variant.name)}" (${parseSqft(vision.variant.sqft) ?? "?"} sqft) based on photo comparison. ${vision.reasoning}`,
+        candidates_considered: variants.map(variantLabel),
+      };
+    }
+
+    // Genuinely can't match — be honest. Include closest for user reference.
+    const closestSeen = scored[0];
+    return {
+      variant: null,
+      match_method: "no_match",
+      confidence: "low",
+      match_notes: `Could not confidently match user's ${userSqft} sqft unit. Closest variant is ${closestSeen ? `"${String(closestSeen.v.name)}" at ${closestSeen.sqft} sqft (${closestSeen.diff} sqft off)` : "unknown"}. The user's unit may not have been captured in research — consider re-running with the building's floor-plans page directly.`,
+      candidates_considered: variants.map(variantLabel),
+    };
   }
 
   // No sqft or nothing close enough — try vision alone
@@ -623,22 +655,53 @@ PROCESS:
       console.log(`[apartment-research] Primary pass captured: ${variants.length} variant(s), ${withImages} with image URLs; finishes filled: [${finishFields.join(", ") || "none"}]`);
     }
 
-    // (b) Retry/fallback for sparse data — if floor plan is empty, do a targeted second pass
+    // (b) Retry/fallback for sparse data — if floor plan is empty, finishes
+    // are missing, OR the user reported a sqft that doesn't appear in any
+    // variant we found, do a targeted second pass. The sqft check is critical:
+    // buildings often list 6-10 variants per bed/bath count, and the primary
+    // search may only extract the first 2-3. If the user's 725 sqft unit isn't
+    // in the list, the matcher will silently settle for "closest" (e.g. 705),
+    // which is wrong.
     const fp = research.floor_plan as Record<string, unknown> | undefined;
-    const hasFloorPlan = fp?.found === true && (fp?.unit_variants as unknown[] | undefined)?.length;
+    const existingVariants = (fp?.unit_variants as Array<Record<string, unknown>> | undefined) ?? [];
+    const hasFloorPlan = fp?.found === true && existingVariants.length > 0;
     const hasFinishes = research.finishes && Object.values(research.finishes as Record<string, unknown>).some(v => v && v !== "not specified");
+    const userSqftNum = typeof apartment_sqft === "number" ? apartment_sqft : null;
+    // "Missing user's unit" = user gave us a sqft but no variant is within ±5 of it.
+    // ±5 handles minor rounding (725 vs 724) without being permissive enough to
+    // accept genuinely different units (705 vs 725).
+    const missingUserUnit =
+      userSqftNum !== null &&
+      existingVariants.length > 0 &&
+      !existingVariants.some((v) => {
+        const s = parseSqft(v.sqft);
+        return s !== null && Math.abs(s - userSqftNum) <= 5;
+      });
 
-    if (!hasFloorPlan || !hasFinishes) {
-      console.log(`[apartment-research] Sparse data detected — floor_plan: ${hasFloorPlan ? "found" : "missing"}, finishes: ${hasFinishes ? "found" : "missing"}. Running targeted second pass.`);
+    if (!hasFloorPlan || !hasFinishes || missingUserUnit) {
+      const reasons: string[] = [];
+      if (!hasFloorPlan) reasons.push("floor_plan missing");
+      if (!hasFinishes) reasons.push("finishes missing");
+      if (missingUserUnit) reasons.push(`user's ${userSqftNum} sqft unit not in captured variants [${existingVariants.map(v => parseSqft(v.sqft)).filter(Boolean).join(", ")}]`);
+      console.log(`[apartment-research] Sparse data detected — ${reasons.join("; ")}. Running targeted second pass.`);
+
       const gaps: string[] = [];
       if (!hasFloorPlan) gaps.push(`floor plans for a ${unitLabel} unit`);
+      if (missingUserUnit) gaps.push(`the specific ${unitLabel} floor plan that is ${userSqftNum} sqft (the user's actual unit — we found other variants but not this one)`);
       if (!hasFinishes) gaps.push("standard finishes (flooring, countertops, cabinetry)");
+
+      // When we're missing the user's specific unit, include the partial list
+      // we already have so the model can avoid duplicating effort and focus
+      // on finding what's missing.
+      const knownVariantsHint = missingUserUnit && existingVariants.length > 0
+        ? `\n\nWe already found these variants for this bed/bath count — DO NOT just re-return these; find the missing ${userSqftNum} sqft one:\n${existingVariants.map(v => `- ${String(v.name ?? "unnamed")}${v.sqft ? ` (${v.sqft} sqft)` : ""}`).join("\n")}`
+        : "";
 
       try {
         const fallbackResponse = await geminiProvider.chat({
           model: selectModel("apartment_research"),
-          system: "You are a real estate researcher. Search specifically for the missing information about this apartment building. Return ONLY the fields you find — do NOT guess.",
-          messages: [{ role: "user", content: `Search for "${searchContext}" specifically to find: ${gaps.join(" and ")}.\n\nTry these sources:\n- apartments.com/${building_name?.toLowerCase().replace(/\s+/g, "-")}\n- zillow.com search for "${searchContext}"\n- The building's official website${building_url ? ` (${building_url})` : ""}\n\nReturn JSON with ONLY the fields you find:\n{\n  ${!hasFloorPlan ? '"floor_plan": { "found": true/false, "total_sqft": number_or_null, "unit_variants": [...], "room_dimensions": {...} },' : ''}\n  ${!hasFinishes ? '"finishes": { "flooring": "...", "countertops": "...", "cabinetry": "..." }' : ''}\n}` }],
+          system: "You are a real estate researcher. Search specifically for the missing information about this apartment building. Return ONLY the fields you find — do NOT guess. When the user specifies a sqft, the building's floor-plans page almost certainly has it — keep clicking through variants until you find it.",
+          messages: [{ role: "user", content: `Search for "${searchContext}" specifically to find: ${gaps.join(" and ")}.${knownVariantsHint}\n\nTry these sources:\n- The building's official floor-plans page${building_url ? ` (${building_url}/floor-plans or similar)` : ""}\n- apartments.com/${building_name?.toLowerCase().replace(/\s+/g, "-")}\n- zillow.com search for "${searchContext}"\n\nReturn JSON with ONLY the fields you find (unit_variants must be an array of OBJECTS, not strings):\n{\n  ${(!hasFloorPlan || missingUserUnit) ? '"floor_plan": { "found": true/false, "total_sqft": number_or_null, "unit_variants": [{ "name": "...", "sqft": "...", "floor_plan_image_url": "...", "room_layout": "...", "kitchen_style": "...", "room_dimensions": {...} }], "room_dimensions": {...} },' : ''}\n  ${!hasFinishes ? '"finishes": { "flooring": "...", "countertops": "...", "cabinetry": "..." }' : ''}\n}` }],
           max_tokens: 4000,
           temperature: 0.2,
           tools: [{ googleSearch: {} }, { urlContext: {} }],
@@ -650,10 +713,48 @@ PROCESS:
             // Use the shared parser so markdown-fenced or truncated responses
             // (e.g. "```json\n{...") are handled the same way as the primary pass.
             const fallbackData = parseModelJSON(fallbackRaw);
-            // Merge fallback data into research (only fill gaps)
+
+            // Coerce string variants in fallback data too (same bug can recur).
+            const fbFp = fallbackData.floor_plan as Record<string, unknown> | undefined;
+            const fbRawVariants = fbFp?.unit_variants;
+            if (Array.isArray(fbRawVariants)) {
+              fbFp!.unit_variants = fbRawVariants.map((v) => {
+                if (typeof v === "string") {
+                  const m = v.match(/^(.+?)\s*\(\s*([\d,]+)\s*(?:sf|sqft|ft²|sq ft)?\s*\)\s*$/i);
+                  return m ? { name: m[1].trim(), sqft: m[2].replace(/,/g, "") } : { name: v.trim(), sqft: null };
+                }
+                return v;
+              });
+            }
+
+            // Merge fallback data into research
             if (!hasFloorPlan && fallbackData.floor_plan) {
+              // No existing floor plan — replace wholesale
               research.floor_plan = fallbackData.floor_plan;
               console.log("[apartment-research] Fallback filled floor_plan data");
+            } else if (missingUserUnit && fallbackData.floor_plan) {
+              // Existing variants are good — MERGE new ones in, deduped by name.
+              // This preserves any vision-extracted dims on the original variants
+              // while picking up the user's missing unit from the fallback.
+              const fbVariants = (fallbackData.floor_plan as Record<string, unknown>).unit_variants as Array<Record<string, unknown>> | undefined;
+              if (Array.isArray(fbVariants) && fbVariants.length > 0) {
+                const existing = (research.floor_plan as Record<string, unknown>).unit_variants as Array<Record<string, unknown>>;
+                const byName = new Map<string, Record<string, unknown>>();
+                for (const v of existing) {
+                  const k = String(v.name ?? "").toLowerCase().trim();
+                  if (k) byName.set(k, v);
+                }
+                let added = 0;
+                for (const v of fbVariants) {
+                  const k = String(v.name ?? "").toLowerCase().trim();
+                  if (k && !byName.has(k)) {
+                    byName.set(k, v);
+                    added++;
+                  }
+                }
+                (research.floor_plan as Record<string, unknown>).unit_variants = Array.from(byName.values());
+                console.log(`[apartment-research] Fallback merged ${added} new variant(s) (total now ${byName.size})`);
+              }
             }
             if (!hasFinishes && fallbackData.finishes) {
               research.finishes = { ...(research.finishes as Record<string, unknown> || {}), ...(fallbackData.finishes as Record<string, unknown>) };
