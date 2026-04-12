@@ -1,7 +1,9 @@
 /**
  * Determinism controls for the AI pipeline.
  *
- * Set DETERMINISTIC_MODE=true to make LLM calls reproducible:
+ * Deterministic mode is ON by default. Set DETERMINISTIC_MODE=false to disable.
+ *
+ * When active, LLM calls are reproducible:
  *   - Forces a fixed seed on every Gemini call
  *   - Strips explicit temperature so Gemini 3's default of 1.0 applies
  *     (Google explicitly warns that sub-1.0 temperatures cause looping /
@@ -17,7 +19,7 @@
  *     (mitigated by the mockup cache keyed on product set)
  */
 
-export const DETERMINISTIC = process.env.DETERMINISTIC_MODE === "true";
+export const DETERMINISTIC = process.env.DETERMINISTIC_MODE !== "false";
 
 export const DETERMINISTIC_SEED = (() => {
   const raw = process.env.DETERMINISTIC_SEED;
