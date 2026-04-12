@@ -208,6 +208,25 @@ export const HarmonyValidationResponseSchema = z.object({
   revisedAnalysis: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
+// Split-pass sub-schemas for harmony validation (2 sequential calls merge into HarmonyValidationResponseSchema).
+
+/** Call A: per-item scoring with 6 sub-dimensions + optional revisions. */
+export const HarmonyItemScoresResponseSchema = z.object({
+  item_scores: z.array(HarmonyItemScoreSchema).min(1),
+});
+
+/** Call B: global harmony + gaps, consuming Call A's item scores. */
+export const HarmonyGlobalResponseSchema = z.object({
+  confidence: score,
+  pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
+  overall_cohesion: score,
+  palette_coherence: z.string().default(""),
+  material_coherence: z.string().default(""),
+  spatial_flow: z.string().default(""),
+  issues: stringArray,
+  revisedAnalysis: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 // ─── Final Harmony Assessment ─────────────────────────────────
 
 export const FinalAssessmentItemSchema = z.object({
@@ -235,6 +254,30 @@ export const FinalAssessmentResponseSchema = z.object({
   item_scores: z.array(FinalAssessmentItemSchema).min(1),
   /** Pairwise conflicts: pairs with compatibility < 9.0 */
   pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
+  needs_more_rounds: z.boolean().default(false),
+  round_budget: z.coerce.number().int().min(0).max(5).default(0),
+});
+
+// Split-pass sub-schemas for final assessment (3 sequential calls merge into FinalAssessmentResponseSchema).
+
+/** Call A: per-item final scoring with revision history context. */
+export const FinalItemScoresResponseSchema = z.object({
+  item_scores: z.array(FinalAssessmentItemSchema).min(1),
+});
+
+/** Call B: holistic assessment, consuming Call A's scores. */
+export const FinalHolisticResponseSchema = z.object({
+  confidence: score,
+  overall_cohesion: score,
+  palette_coherence: z.string().default(""),
+  material_coherence: z.string().default(""),
+  spatial_flow: z.string().default(""),
+  issues: stringArray,
+  pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
+});
+
+/** Call C: convergence decision — more rounds or stop? */
+export const FinalConvergenceResponseSchema = z.object({
   needs_more_rounds: z.boolean().default(false),
   round_budget: z.coerce.number().int().min(0).max(5).default(0),
 });

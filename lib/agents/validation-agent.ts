@@ -1,7 +1,14 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
-import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema, FinalAssessmentResponseSchema } from "@/lib/types/schemas";
+import {
+  HarmonyItemScoresResponseSchema,
+  HarmonyGlobalResponseSchema,
+  ProductSetValidationResponseSchema,
+  FinalItemScoresResponseSchema,
+  FinalHolisticResponseSchema,
+  FinalConvergenceResponseSchema,
+} from "@/lib/types/schemas";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -12,6 +19,77 @@ import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores } from "@/lib/scoring/harmony-composite";
+
+/**
+ * Shared context blocks used by harmony + final-assessment splits.
+ * Every sub-call sees the same room/building/apartment/floor-plan/other-rooms
+ * grounding so their outputs are rooted in identical evidence.
+ */
+interface HarmonySharedContextInput {
+  context: {
+    roomType: string;
+    roomName: string;
+    buildingResearch?: Record<string, unknown>;
+    apartmentAnalysis?: Record<string, unknown>;
+    floorPlan?: Record<string, unknown>;
+    userContext?: string;
+    otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
+  };
+}
+
+function buildHarmonyContextBlocks({ context }: HarmonySharedContextInput): {
+  buildingCtx: string;
+  apartmentCtx: string;
+  otherRoomsCtx: string;
+  floorPlanCtx: string;
+  userCtx: string;
+} {
+  const buildingCtx = context.buildingResearch
+    ? `\nBuilding: ${JSON.stringify({
+        style: (context.buildingResearch as Record<string, unknown>).building_style,
+        finishes: (context.buildingResearch as Record<string, unknown>).finishes,
+        aesthetic: (context.buildingResearch as Record<string, unknown>).design_aesthetic,
+      })}`
+    : "";
+
+  const aa = context.apartmentAnalysis as Record<string, unknown> | undefined;
+  const apartmentCtx = aa
+    ? `\nApartment overview: ${aa.overall || ""}${aa.rooms ? `\nPer-room summaries: ${JSON.stringify(aa.rooms)}` : ""}`
+    : "";
+
+  const otherRoomsCtx = context.otherRooms?.length
+    ? `\n\n## OTHER ROOMS IN THE APARTMENT (for cross-room coherence)
+${context.otherRooms.map((r) => {
+  const parts = [`- **${r.name}** (${r.roomType})`];
+  if (r.designDirection) parts.push(`  Direction: ${r.designDirection}`);
+  if (r.palette?.length) parts.push(`  Palette: ${r.palette.join(", ")}`);
+  if (r.materials?.length) parts.push(`  Materials: ${r.materials.join(", ")}`);
+  if (r.keyItems?.length) parts.push(`  Key items: ${r.keyItems.join("; ")}`);
+  return parts.join("\n");
+}).join("\n")}
+Items in THIS room must harmonize with the palette, materials, and style of the other rooms.`
+    : "";
+
+  const floorPlanCtx = context.floorPlan
+    ? `\n\n## FLOOR PLAN / ROOM DIMENSIONS
+Total sqft: ${context.floorPlan.total_sqft || "unknown"}
+Room dimensions: ${JSON.stringify(context.floorPlan.room_dimensions || {})}
+Room layout: ${context.floorPlan.room_layout || "unknown"}
+Living/dining combined: ${context.floorPlan.living_dining_combined ?? "unknown"}
+Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? context.floorPlan.notable_spatial_features.join(", ") : "unknown"}`
+    : "";
+
+  let userCtx = "";
+  if (context.userContext) {
+    const parsed = parseUserContext(context.userContext);
+    const structuredBlock = formatParsedContextForPrompt(parsed);
+    userCtx += `\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes. If the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor into material/durability checks.`;
+    if (structuredBlock) userCtx += `\n\n${structuredBlock}`;
+    userCtx += `\n\n⚠️ CRITICAL: If the user says they DON'T NEED something, any recommendation in that category MUST be flagged with drop=true and harmony_score=0. If they say to KEEP an item, any recommendation that replaces it MUST be flagged with drop=true.`;
+  }
+
+  return { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx };
+}
 
 const log = createLogger("validation-agent");
 
@@ -78,10 +156,13 @@ export interface HarmonyValidationResult {
 }
 
 /**
- * Harmony validation: checks that every recommended item fits with the room's
- * existing items (what_works), the apartment aesthetic, and each other.
- * Sees the actual room photos so it can judge visually, not just from text.
- * Uses Flash with high thinking for deep design reasoning.
+ * Harmony validation via two focused sequential passes:
+ *   A (per-item scoring): 6-dim sub-scores + revisions for each item
+ *   B (global + gaps):    overall cohesion, palette/material/spatial narratives,
+ *                         pairwise conflicts, issues — consumes A's item scores
+ *
+ * Splitting prevents the global narrative from crowding out per-item rationale
+ * (or vice versa) within a single 65K-token ceiling.
  */
 export async function validateRoomHarmony(
   analysis: Record<string, unknown>,
@@ -107,78 +188,23 @@ export async function validateRoomHarmony(
   const designDirection = (analysis.design_direction as string) || "";
   const spatialLayout = (analysis.spatial_layout as string) || "";
 
-  // Build the content with room images for visual validation
-  const content: AIContentBlock[] = [];
+  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx } =
+    buildHarmonyContextBlocks({ context });
 
-  // Send room photos so the model can SEE what's already there
+  // Shared image content — both passes see the room photos.
+  const roomImages: AIContentBlock[] = [];
   for (const url of context.roomImageUrls.slice(0, 4)) {
-    content.push({ type: "image", source: { type: "url", url } });
+    roomImages.push({ type: "image", source: { type: "url", url } });
   }
 
-  const buildingCtx = context.buildingResearch
-    ? `\nBuilding: ${JSON.stringify({
-        style: (context.buildingResearch as Record<string, unknown>).building_style,
-        finishes: (context.buildingResearch as Record<string, unknown>).finishes,
-        aesthetic: (context.buildingResearch as Record<string, unknown>).design_aesthetic,
-      })}`
-    : "";
-
-  const aa = context.apartmentAnalysis as Record<string, unknown> | undefined;
-  const apartmentCtx = aa
-    ? `\nApartment overview: ${aa.overall || ""}${aa.rooms ? `\nPer-room summaries: ${JSON.stringify(aa.rooms)}` : ""}`
-    : "";
-
-  // Cross-room context: what's in the OTHER rooms so we ensure apartment-wide coherence
-  const otherRoomsCtx = context.otherRooms?.length
-    ? `\n\n## OTHER ROOMS IN THE APARTMENT (for cross-room coherence)
-${context.otherRooms.map((r) => {
-  const parts = [`- **${r.name}** (${r.roomType})`];
-  if (r.designDirection) parts.push(`  Direction: ${r.designDirection}`);
-  if (r.palette?.length) parts.push(`  Palette: ${r.palette.join(", ")}`);
-  if (r.materials?.length) parts.push(`  Materials: ${r.materials.join(", ")}`);
-  if (r.keyItems?.length) parts.push(`  Key items: ${r.keyItems.join("; ")}`);
-  return parts.join("\n");
-}).join("\n")}
-Items in THIS room must harmonize with the palette, materials, and style of the other rooms. The apartment should feel like one cohesive home, not a collection of unrelated rooms.`
-    : "";
-
-  // Floor plan context for spatial validation
-  const floorPlanCtx = context.floorPlan
-    ? `\n\n## FLOOR PLAN / ROOM DIMENSIONS
-Total sqft: ${context.floorPlan.total_sqft || "unknown"}
-Room dimensions: ${JSON.stringify(context.floorPlan.room_dimensions || {})}
-Room layout: ${context.floorPlan.room_layout || "unknown"}
-Living/dining combined: ${context.floorPlan.living_dining_combined ?? "unknown"}
-Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? context.floorPlan.notable_spatial_features.join(", ") : "unknown"}`
-    : "";
-
-  content.push({
-    type: "text",
-    text: `You are a senior interior designer doing a HARMONY + SPATIAL CHECK on recommended items before they go to product search.
-
-IMPORTANT: Think step-by-step through each item. For each recommended item, evaluate it against EVERY existing item and EVERY other recommendation.
-
-## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${(() => {
-  const parts: string[] = [];
-  if (context.userContext) {
-    // Parse user context into structured constraints for the harmony validator
-    const parsed = parseUserContext(context.userContext);
-    const structuredBlock = formatParsedContextForPrompt(parsed);
-    parts.push(`\n\n## USER NOTES\n"${context.userContext}"\nRespect these notes when validating — e.g. if the user says to ignore something, don't flag it. If they mention lifestyle needs (pets, kids, entertaining), factor those into material/durability checks.`);
-    if (structuredBlock) {
-      parts.push(`\n\n${structuredBlock}`);
-    }
-    parts.push(`\n\n⚠️ CRITICAL: If the user says they DON'T NEED something (e.g., "don't need curtains", "have blinds"), any recommendation in that category MUST be flagged with drop=true and harmony_score=0. If the user says to KEEP an item (e.g., "keep the black arc floor lamp"), any recommendation that replaces it MUST be flagged with drop=true and harmony_score=0. When revising items, NEVER revise a search_title or specs to include excluded categories.`);
-  }
-  return parts.join("");
-})()}
+  const sharedHeader = `## ROOM
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}
 
 ## SPATIAL LAYOUT PLAN
-${spatialLayout || "Not specified — you should infer from the room photos"}
+${spatialLayout || "Not specified — infer from the room photos"}
 
 ## ITEMS TO KEEP (already in the room — note their CURRENT POSITIONS in the photos)
 ${whatWorks.length > 0 ? whatWorks.map((item, i) => `${i + 1}. ${item}`).join("\n") : "None specified"}
@@ -193,223 +219,118 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
    Priority: ${item.priority}
    Why: ${item.description}`).join("\n\n")}
 
-${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}
-## YOUR JOB — STEP BY STEP
-Step 1: Look at the room photos carefully. Note: floor material+color, wall color, ceiling height, window positions, door positions, existing furniture and their positions.
-Step 2: Estimate the room's dimensions from photos (or use floor plan if provided).
-Step 3: For EACH recommended item below, work through the harmony and spatial checks:
+${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}`;
 
-Evaluate EACH recommended item on BOTH harmony AND spatial fit:
+  // ─── Pass A: Per-item scoring ───────────────────────────────
+  const itemCount = whatItNeeds.length;
+  const passAMaxTokensBase = Math.min(8000 + itemCount * 2000, 48000);
 
-### HARMONY CHECKS
-1. **Harmony with keeps**: Does this item's material, color, and style work with the existing items staying in the room? A walnut coffee table next to existing oak furniture = clash. A brass lamp with existing chrome fixtures = clash.
+  const passAPrompt = `You are a senior interior designer running PASS 1 of 2 on recommended items. Your ONLY job here: for EVERY recommended item, produce 6-dimensional sub-scores + rationale + revisions if needed. A separate pass handles global cohesion, pairwise conflicts, and narrative — do NOT produce those here.
 
-2. **Harmony with other recommendations**: Do ALL the new items work together as a set? If you're recommending a warm cream rug AND cool gray throw pillows, that's a palette conflict. Check EVERY pair of recommendations against each other.
+${sharedHeader}
+## YOUR JOB — PER-ITEM SCORING (pass 1 of 2)
 
-3. **Apartment-wide coherence**: Does this fit with the OTHER rooms in the apartment? Check against the other rooms' palettes, materials, and key items listed above. The entire apartment must feel like one cohesive home. If the bedroom uses warm walnut and brass, the living room shouldn't introduce cool chrome and ash wood.
+For EACH recommended item, evaluate against:
+- Items to keep (palette/material/style harmony with existing pieces visible in the room photos)
+- Other recommendations (palette/material/style coherence as a SET)
+- Apartment-wide coherence (other rooms' palettes/materials/style)
+- Spatial fit (placement, scale, clearances, traffic flow, window/door/outlet access)
+- Functional fit (lifestyle, durability, acoustic, lighting adequacy)
 
-4. **Specificity check**: Is the search_title specific enough to find the RIGHT product? Does it include material, color, size, and style?
+### SUB-SCORES (0-10, DECIMALS) — all 6 per item:
+1. **color_fit**: color/palette harmony with keeps + other recs + palette
+2. **spatial_fit**: physical fit, clearances, traffic flow, placement validity
+3. **material_fit**: material compatibility (≤2 wood species, coherent metal finishes, soft/hard balance)
+4. **style_coherence**: design-direction alignment, style family, visual weight
+5. **cross_room_fit**: apartment-wide coherence with other rooms
+6. **functional_fit**: practicality, durability, lifestyle match, lighting/acoustic adequacy
 
-5. **Root cause identification**: If ANY item scores below 10, you MUST identify the SPECIFIC root cause — is it a color clash (name the two clashing colors)? A material mismatch (name which materials conflict)? A spatial issue (name the exact clearance or dimension problem)? An arrangement issue (name which items are positioned wrong relative to each other)? Then your revised_search_title/specs/placement must fix THAT specific root cause.
+### COMPOUNDING
+harmony_score ≈ min(sub_scores) × 0.4 + mean(sub_scores) × 0.6. ONE bad dim tanks the whole item.
 
-### SPATIAL CHECKS — CRITICAL
-5. **Placement validity**: Does the recommended placement make physical sense? Is there actually wall space, floor space, or clearance for this item where it's supposed to go? Look at the photos — if a floor lamp is supposed to go "next to the sofa" but there's no space between the sofa and the wall, that's a problem.
+### FOR ANY item where ANY sub_score < 9.5
+Provide revised_search_title, revised_specs, revised_placement that would bring ALL sub_scores to 9.5+, AND a root_cause naming the specific failing dimension and issue (e.g. "material_fit: oak legs clash with walnut — 3 wood species").
 
-6. **Scale/proportion**: Based on room photos (and floor plan dimensions if available), will this item be the right size? An 8x10 rug in a 9x10 room leaves no border. A 60-inch console on a 48-inch wall won't fit.
+### drop
+true if harmony_score ≤ 3 OR the user explicitly excluded the category / asked to keep a conflicting item.
 
-7. **Traffic flow**: Does the placement of all items together create clear walkways? Can people move through the room naturally? Standard clearances: 36" main paths, 18" between coffee table and sofa, 24" behind dining chairs, 30" next to beds.
+### rationale (REQUIRED, chain-of-thought)
+For every item, walk through all 6 dims + overall in 7 steps.
 
-8. **Spatial relationships**: Do items that belong together actually end up near each other? The floor lamp should be near the reading chair. Side tables should flank the sofa. The rug should anchor the seating area, not float randomly.
-
-9. **Orientation & sightlines**: Are items oriented to create natural conversation areas? Do they face logical focal points (TV, fireplace, window view)? Is there a clear visual anchor point when you enter the room?
-
-10. **Zone definition**: In multi-function rooms, do the items clearly define distinct zones (living vs dining, work vs relaxation) without blocking flow between them?
-
-### ENVIRONMENTAL CHECKS
-11. **Lighting adequacy**: Look at the room photos — which direction do windows face? How much natural light is there? Do the recommended items include sufficient lighting for dark areas? If the room is north-facing with limited light, it needs MORE light sources. Are any glossy/reflective items placed where they'd create glare from windows?
-
-12. **Window & door clearance**: From the photos, identify all windows and doors. Do any recommended items block windows (reducing natural light)? Do any obstruct door swings or crowd doorways? A tall bookshelf in front of a window or a console table blocking a closet door = must revise placement or drop.
-
-13. **Acoustic balance**: Look at the room's surfaces — hardwood floors, concrete walls, large windows. Is there enough soft material in the recommendation set (rug, curtains, upholstered furniture, throw pillows) to create acoustic comfort? An open floor plan with all hard surfaces needs textile elements. If the set lacks soft materials, flag it.
-
-14. **Durability & maintenance**: Consider the client's lifestyle (pets, kids, hosting, daily use). Are the recommended materials practical? White boucle with pets, glass with toddlers, delicate silk in high-traffic areas = flag as impractical.
-
-15. **Outlet access for powered items**: If recommending lamps, media consoles, or other powered items — is there likely an outlet near the intended placement? A floor lamp in the center of the room with no nearby wall = impractical placement.
-
-## SCORING — 6-DIMENSIONAL SUB-SCORES (per item) — AIM FOR 9.5+/10 ON EVERY DIMENSION
-
-For EACH item, score these 6 dimensions separately (ALL USE DECIMALS e.g. 7.3, 8.8, 9.6):
-
-### sub_scores object:
-1. **color_fit** (0-10): Color/palette harmony with keeps, other recommendations, and design palette.
-   - 9.5+: Colors perfectly complement keeps and other items; palette forms a coherent scheme
-   - 7-9: Good color story but minor undertone mismatch or shade that could be more precise
-   - 4-6: Noticeable color conflict or palette gap
-   - 1-3: Active color clash with keeps or other items
-
-2. **spatial_fit** (0-10): Physical fit, clearances, traffic flow, placement validity.
-   - 9.5+: Perfect dimensions for the space, ideal clearances, natural traffic flow
-   - 7-9: Fits but slightly tight clearances or could be positioned better
-   - 4-6: Tight fit, questionable clearances, blocks some flow
-   - 1-3: Doesn't physically fit or creates major traffic/access problems
-
-3. **material_fit** (0-10): Material compatibility, wood species coherence, metal finish coherence, soft-hard balance.
-   - 9.5+: Materials tell a cohesive texture story; wood species ≤2, metal finishes compatible
-   - 7-9: Mostly compatible but one material slightly off (e.g. 3rd wood species)
-   - 4-6: Material conflict (mixed warm/cool metals, too many wood species)
-   - 1-3: Fundamentally incompatible materials
-
-4. **style_coherence** (0-10): Alignment with design direction, style family, visual weight balance.
-   - 9.5+: Perfect style match; visually harmonious with the room's design language
-   - 7-9: Correct style family but slightly different era or formality level
-   - 4-6: Adjacent style that doesn't quite fit (transitional in a mid-century room)
-   - 1-3: Wrong style family entirely
-
-5. **cross_room_fit** (0-10): Apartment-wide palette/material/style coherence with other rooms.
-   - 9.5+: Flows naturally with other rooms' palettes, materials, and style
-   - 7-9: Compatible but could echo other rooms' materials/colors more
-   - 4-6: Noticeable disconnect from other rooms' aesthetic
-   - 1-3: Actively clashes with other rooms' established materials/palette
-
-6. **functional_fit** (0-10): Practical use, durability, lifestyle match, acoustic/lighting coverage.
-   - 9.5+: Perfect for the client's lifestyle; durable, practical, serves its function ideally
-   - 7-9: Mostly practical but minor durability/maintenance concern
-   - 4-6: Questionable for daily use (delicate fabric with pets, no outlet for lamp)
-   - 1-3: Fundamentally impractical for the use case
-
-### Also provide per item:
-- **harmony_score**: Your best overall assessment (0-10, decimal). Compute as: min(sub_scores) × 0.4 + mean(sub_scores) × 0.6 — one bad dimension tanks the score. The server computes a composite from your sub_scores using math evidence; your assessment and the composite are blended.
-- **drop**: true if harmony_score ≤ 3
-- For ANY item where ANY sub_score < 9.5, you MUST provide **revised_search_title**, **revised_specs**, AND **revised_placement** that would bring ALL sub_scores to 9.5+.
-
-### COMPOUNDING: Multiple bad dimensions are CATASTROPHIC
-If color_fit=9, spatial_fit=9, material_fit=3 → the overall score will be ~5-6, not ~7. One bad dimension tanks the whole item. This means you CANNOT compensate for a material clash by having good color. Fix the root cause.
-
-- **rationale** (REQUIRED for EVERY item): Your chain of reasoning. Walk through ALL 6 dimensions step by step:
-  1. COLOR: What does the math color score say? What do you see in photos? Score = [X.X]
-  2. SPATIAL: What does the math spatial score say? Will it physically fit? Score = [X.X]
-  3. MATERIAL: What does the math material score say? Wood/metal coherence? Score = [X.X]
-  4. STYLE: Does the style match the design direction? Score = [X.X]
-  5. CROSS-ROOM: How does it fit with other rooms? Score = [X.X]
-  6. FUNCTIONAL: Is it practical for daily life? Score = [X.X]
-  7. OVERALL: Why is the overall harmony_score [X.X]?
-
-## PAIRWISE COMPATIBILITY CHECK — CRITICAL
-After scoring each item individually, check EVERY PAIR of items (both recommendations AND keeps) for compatibility. Report pairs with compatibility < 9.0:
-- **A walnut coffee table + oak side table** = wood species clash → compatibility 4.5
-- **Chrome floor lamp + brass pendant** = metal finish clash → compatibility 5.0
-- **Warm ivory sofa + cool gray pillows** = undertone conflict → compatibility 6.0
-
-Only report pairs with problems. Omitted pairs are assumed 9.5+ (no conflict).
-
-## MATHEMATICAL EVIDENCE
-The math analysis provides objective measurements and design convention checks. Use them as evidence for your scoring:
-- **Hard constraints** (clearance violations, Delta-E color distances): your sub-scores should strongly reflect these — they measure physical/perceptual reality
-- **Soft signals** (material conventions, visual balance, coverage ratios): use your design judgment — you may score higher than the math evidence when your visual assessment warrants it
-- If you deviate significantly from a math signal, explain WHY in your rationale
-- style_coherence and functional_fit remain AI-only — use your full design expertise
-
-## OUTPUT FORMAT
-Return JSON:
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
-  "confidence": 0-10 (use decimals e.g. 8.3),
   "item_scores": [
     {
-      "category": "the category slug",
-      "harmony_score": number (USE DECIMALS e.g. 8.4, 9.6),
+      "category": "category slug",
+      "harmony_score": number (decimal),
       "sub_scores": {
-        "color_fit": number,
-        "spatial_fit": number,
-        "material_fit": number,
-        "style_coherence": number,
-        "cross_room_fit": number,
-        "functional_fit": number
+        "color_fit": number, "spatial_fit": number, "material_fit": number,
+        "style_coherence": number, "cross_room_fit": number, "functional_fit": number
       },
       "keeps_well_with": ["items it pairs well with"],
-      "clashes_with": ["items it conflicts with — include spatial and environmental conflicts"],
-      "revised_search_title": "if any sub_score < 9.5, the improved search title",
-      "revised_specs": "if any sub_score < 9.5, the improved specs",
-      "revised_placement": "if any sub_score < 9.5, the improved placement",
+      "clashes_with": ["items it conflicts with — include spatial/environmental"],
+      "revised_search_title": "only if any sub_score < 9.5",
+      "revised_specs": "only if any sub_score < 9.5",
+      "revised_placement": "only if any sub_score < 9.5",
       "drop": true/false,
-      "root_cause": "if any sub_score < 9.5, the SPECIFIC root cause with the failing dimension: 'color_fit: warm cream conflicts with cool gray pillows', 'material_fit: oak legs clash with walnut — 3 wood species', 'spatial_fit: 48-inch table too wide for 52-inch wall'",
+      "root_cause": "only if any sub_score < 9.5 — name the failing dimension(s) and specific issue",
       "reason": "1-2 sentence explanation",
-      "rationale": "REQUIRED 7-step chain-of-thought covering all 6 dimensions + overall"
+      "rationale": "REQUIRED 7-step chain covering 6 dims + overall"
     }
-  ],
-  "pairwise_conflicts": [
-    {
-      "item_a": "category_slug_of_item_a",
-      "item_b": "category_slug_of_item_b",
-      "compatibility": number (0-10, decimal),
-      "conflict_type": "wood_species_clash | metal_finish_clash | color_clash | style_mismatch | scale_conflict | material_texture_clash",
-      "reason": "specific explanation of why these two items conflict"
-    }
-  ],
-  "overall_cohesion": 0-10 (use decimals),
-  "palette_coherence": "1 sentence: color palette assessment",
-  "material_coherence": "1 sentence: material/texture story assessment",
-  "spatial_flow": "2-3 sentences: traffic flow, zones, spatial relationships",
-  "issues": ["cross-cutting problems"],
-  "revisedAnalysis": null or { revised analysis if confidence < 7 }
-}
+  ]
+}`;
 
-YOUR GOAL IS 9.5+/10 ON EVERY SUB-DIMENSION OF EVERY ITEM. Be extremely precise — one bad dimension tanks the whole item due to compounding. Use the math evidence to inform your scoring — hard constraints (clearances, Delta-E) should be strongly reflected, while you may use your design judgment on softer signals.`,
-  });
+  let itemScoresResult: HarmonyValidationResult["item_scores"] | undefined;
+  let passATokens = 0;
+  let responseModel = model;
 
-  // Scale max_tokens based on item count: each item needs ~2.5K tokens for
-  // 6D scoring + rationale + revisions + thinking overhead
-  const itemCount = ((analysis.what_it_needs as unknown[]) || []).length;
-  const baseMaxTokens = Math.min(16000 + itemCount * 2500, 65000);
+  {
+    let lastError: string | undefined;
+    let attempt = 0;
+    let wasTruncated = false;
 
-  let lastError: string | undefined;
-  let attempt = 0;
-  let wasTruncated = false;
+    const passAContent: AIContentBlock[] = [
+      ...roomImages,
+      { type: "text", text: passAPrompt },
+    ];
 
-  try {
-    return await withRetry(
-      async () => {
-        attempt++;
+    try {
+      const res = await withRetry(
+        async () => {
+          attempt++;
+          const maxTokens = wasTruncated
+            ? Math.min(passAMaxTokensBase + 16000, 64000)
+            : passAMaxTokensBase;
+          const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
 
-        // On truncation retries: increase token budget + reduce thinking overhead
-        const maxTokens = wasTruncated
-          ? Math.min(baseMaxTokens + 16000, 65000)
-          : baseMaxTokens;
-        const thinkingLevel = wasTruncated ? "medium" as const : (attempt === 1 ? "high" as const : "medium" as const);
+          const retryContent = attempt > 1 && lastError
+            ? [...passAContent, { type: "text" as const, text: wasTruncated
+                ? `\n\n**IMPORTANT**: Your previous response was truncated. Be MORE CONCISE: keep rationales to 1-2 sentences, omit revised fields for items scoring above 9.0.`
+                : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+            : passAContent;
 
-        const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: wasTruncated
-              ? `\n\n**IMPORTANT**: Your previous response was truncated due to length. Be MORE CONCISE: keep rationales to 1-2 sentences max, omit revised fields for items scoring above 9.0. Return ONLY valid JSON matching the exact schema above.`
-              : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. Ensure confidence and overall_cohesion are numbers 0-10, and item_scores is a non-empty array.` }]
-          : content;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: retryContent }],
+            max_tokens: maxTokens,
+            seed: DETERMINISTIC_SEED,
+            thinkingConfig: { thinkingLevel },
+            responseMimeType: "application/json",
+            mediaResolution: "ultra_high",
+          });
 
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: retryContent }],
-          max_tokens: maxTokens,
-          seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel },
-          responseMimeType: "application/json",
-          mediaResolution: "ultra_high",
-        });
+          if (response.truncated) {
+            wasTruncated = true;
+            throw new Error("Response truncated (MAX_TOKENS)");
+          }
 
-        if (response.truncated) {
-          wasTruncated = true;
-          throw new Error("Response truncated (MAX_TOKENS)");
-        }
-
-        const raw = extractJsonObject(response.content);
-        const unwrapped = Array.isArray(raw) ? raw[0] : raw;
-        const parsed = HarmonyValidationResponseSchema.parse(unwrapped);
-        const result: HarmonyValidationResult = {
-          ...parsed,
-          revisedAnalysis: parsed.revisedAnalysis ?? undefined,
-          pairwise_conflicts: (parsed.pairwise_conflicts || []).map((c) => ({
-            ...c,
-            conflict_type: c.conflict_type || "",
-            reason: c.reason || "",
-          })),
-          item_scores: parsed.item_scores.map((s) => ({
+          const raw = extractJsonObject(response.content);
+          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+          const parsed = HarmonyItemScoresResponseSchema.parse(unwrapped);
+          passATokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+          responseModel = response.model;
+          return parsed.item_scores.map((s) => ({
             ...s,
             sub_scores: s.sub_scores,
             revised_search_title: s.revised_search_title ?? undefined,
@@ -417,51 +338,163 @@ YOUR GOAL IS 9.5+/10 ON EVERY SUB-DIMENSION OF EVERY ITEM. Be extremely precise 
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
             rationale: s.rationale ?? undefined,
-          })),
-        };
-
-        log.info("Harmony validation complete", {
-          phase: "harmony",
-          confidence: result.confidence,
-          cohesion: result.overall_cohesion,
-          items: result.item_scores.length,
-          pairwise_conflicts: result.pairwise_conflicts.length,
-          scores: result.item_scores.map((s) => {
-            const ss = s.sub_scores;
-            return `${s.category}=${s.harmony_score}(c${ss.color_fit}/sp${ss.spatial_fit}/m${ss.material_fit}/st${ss.style_coherence}/cr${ss.cross_room_fit}/f${ss.functional_fit})`;
-          }).join(", "),
-        });
-
-        return {
-          success: true as const,
-          data: result,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-          model: response.model,
-        };
-      },
-      {
-        maxAttempts: 3,
-        baseDelayMs: 1500,
-        maxDelayMs: 15000,
-        isRetryable: (error) => {
-          if (isRetryableError(error)) return true;
-          if (error instanceof SyntaxError) return true;
-          if (error instanceof Error && error.name === "ZodError") return true;
-          if (error instanceof Error && error.message.includes("truncated")) return true;
-          return false;
+          }));
         },
-        onRetry: (retryAttempt, delayMs, error) => {
-          lastError = error instanceof Error ? error.message : "Harmony validation failed";
-          log.warn(`Harmony validation retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
-        },
-      }
-    );
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : "Harmony validation failed after retries";
-    log.error("Harmony validation failed", { error: errMsg });
-    return { success: false, error: errMsg };
+        {
+          maxAttempts: 3,
+          baseDelayMs: 1500,
+          maxDelayMs: 15000,
+          isRetryable: (error) => {
+            if (isRetryableError(error)) return true;
+            if (error instanceof SyntaxError) return true;
+            if (error instanceof Error && error.name === "ZodError") return true;
+            if (error instanceof Error && error.message.includes("truncated")) return true;
+            return false;
+          },
+          onRetry: (retryAttempt, delayMs, error) => {
+            lastError = error instanceof Error ? error.message : "Harmony item-scoring failed";
+            log.warn(`Harmony item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          },
+        }
+      );
+      itemScoresResult = res;
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Harmony item-scoring failed after retries";
+      log.error("Harmony item-scoring failed", { error: errMsg });
+      return { success: false, error: errMsg };
+    }
   }
+
+  log.info("Harmony pass A (item scoring) complete", {
+    tokens: { total: passATokens },
+    items: itemScoresResult.length,
+    scores: itemScoresResult.map((s) => {
+      const ss = s.sub_scores;
+      return `${s.category}=${s.harmony_score}(c${ss.color_fit}/sp${ss.spatial_fit}/m${ss.material_fit}/st${ss.style_coherence}/cr${ss.cross_room_fit}/f${ss.functional_fit})`;
+    }).join(", "),
+  });
+
+  // ─── Pass B: Global cohesion + pairwise + gaps ──────────────
+  const itemScoresJson = JSON.stringify(itemScoresResult, null, 2);
+  const passBPrompt = `You are a senior interior designer running PASS 2 of 2 on a room's recommended items. Pass 1 produced per-item 6-dim sub-scores — below. Your job: step back to the whole set and assess global cohesion, pairwise conflicts, narrative coherence, and overall confidence.
+
+Do NOT re-score individual items; that's already done. Trust Pass 1's item_scores and build on them.
+
+${sharedHeader}
+## PASS 1 ITEM SCORES (source of truth for per-item quality)
+${itemScoresJson}
+
+## YOUR JOB — GLOBAL ASSESSMENT
+
+1. **overall_cohesion** (0-10, decimal): the full set evaluated holistically.
+2. **palette_coherence** (1 sentence): does the color story work across all items + keeps + apartment?
+3. **material_coherence** (1 sentence): does the material story work (wood species count, metal finishes, soft/hard balance)?
+4. **spatial_flow** (2-3 sentences): traffic flow, zone definition, spatial relationships, focal points.
+5. **pairwise_conflicts**: check every pair of items (recommendations AND keeps) for compatibility. Report ONLY pairs with compatibility < 9.0. Name the conflict_type (color_clash, material_mismatch, scale_conflict, style_conflict, wood_species_clash, metal_finish_clash, spatial_crowding, etc.) and reason.
+6. **issues**: cross-cutting problems not tied to a single item (e.g., "set lacks any soft material in an all-hard-surface room").
+7. **confidence** (0-10, decimal): how confident are you in the overall set after Pass 1's scoring + your global check?
+8. **revisedAnalysis**: null unless confidence < 7 AND you have a concrete alternative — then propose a revised analysis object.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "confidence": number,
+  "overall_cohesion": number,
+  "palette_coherence": "1 sentence",
+  "material_coherence": "1 sentence",
+  "spatial_flow": "2-3 sentences",
+  "pairwise_conflicts": [
+    { "item_a": "cat_a", "item_b": "cat_b", "compatibility": number, "conflict_type": "type", "reason": "why" }
+  ],
+  "issues": ["cross-cutting problems"],
+  "revisedAnalysis": null
+}`;
+
+  let passBResult: ReturnType<typeof HarmonyGlobalResponseSchema.parse> | undefined;
+  let passBTokens = 0;
+
+  {
+    let lastError: string | undefined;
+    try {
+      passBResult = await withRetry(
+        async () => {
+          const textBlock = lastError
+            ? `${passBPrompt}\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.`
+            : passBPrompt;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
+            max_tokens: 10000,
+            seed: DETERMINISTIC_SEED,
+            thinkingConfig: { thinkingLevel: "high" },
+            responseMimeType: "application/json",
+            mediaResolution: "ultra_high",
+          });
+          const raw = extractJsonObject(response.content);
+          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+          const parsed = HarmonyGlobalResponseSchema.parse(unwrapped);
+          passBTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+          return parsed;
+        },
+        {
+          maxAttempts: 3,
+          baseDelayMs: 1500,
+          maxDelayMs: 15000,
+          isRetryable: (error) => {
+            if (isRetryableError(error)) return true;
+            if (error instanceof SyntaxError) return true;
+            if (error instanceof Error && error.name === "ZodError") return true;
+            return false;
+          },
+          onRetry: (retryAttempt, delayMs, error) => {
+            lastError = error instanceof Error ? error.message : "Harmony global pass failed";
+            log.warn(`Harmony global retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          },
+        }
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Harmony global pass failed after retries";
+      log.error("Harmony global pass failed", { error: errMsg });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  // Merge into legacy HarmonyValidationResult shape
+  const result: HarmonyValidationResult = {
+    confidence: passBResult.confidence,
+    item_scores: itemScoresResult,
+    pairwise_conflicts: (passBResult.pairwise_conflicts || []).map((c) => ({
+      ...c,
+      conflict_type: c.conflict_type || "",
+      reason: c.reason || "",
+    })),
+    overall_cohesion: passBResult.overall_cohesion,
+    palette_coherence: passBResult.palette_coherence,
+    material_coherence: passBResult.material_coherence,
+    spatial_flow: passBResult.spatial_flow,
+    issues: passBResult.issues,
+    revisedAnalysis: passBResult.revisedAnalysis ?? undefined,
+  };
+
+  log.info("Harmony validation complete (split pass)", {
+    phase: "harmony",
+    confidence: result.confidence,
+    cohesion: result.overall_cohesion,
+    items: result.item_scores.length,
+    pairwise_conflicts: result.pairwise_conflicts.length,
+    tokens: { total: passATokens + passBTokens },
+    passATokens,
+    passBTokens,
+  });
+
+  return {
+    success: true,
+    data: result,
+    tokensUsed: passATokens + passBTokens,
+    model: responseModel,
+  };
 }
+
 
 export interface FinalAssessmentResult {
   confidence: number;
@@ -489,9 +522,13 @@ export interface FinalAssessmentResult {
 }
 
 /**
- * Final comprehensive assessment: one deep AI pass after iterative rounds stabilize.
- * Sees the full revision history, all math scores, room photos, and all context.
- * Produces definitive scores and decides if more iteration is needed.
+ * Final comprehensive assessment via three focused sequential passes:
+ *   A (per-item final scoring): 6-dim sub-scores per item, with revision history context
+ *   B (holistic):               overall cohesion + palette/material/spatial narratives + pairwise
+ *   C (convergence):            tight call deciding if more rounds are needed + round budget
+ *
+ * Splitting prevents per-item rationale, holistic narrative, and the convergence
+ * decision from trading off against each other within one 65K ceiling.
  */
 export async function performFinalAssessment(
   analysis: Record<string, unknown>,
@@ -520,48 +557,11 @@ export async function performFinalAssessment(
   const designDirection = (analysis.design_direction as string) || "";
   const spatialLayout = (analysis.spatial_layout as string) || "";
 
-  const content: AIContentBlock[] = [];
+  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx } =
+    buildHarmonyContextBlocks({ context });
+  const userNotesShort = context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"` : "";
 
-  // Send room photos
-  for (const url of context.roomImageUrls.slice(0, 4)) {
-    content.push({ type: "image", source: { type: "url", url } });
-  }
-
-  const buildingCtx = context.buildingResearch
-    ? `\nBuilding: ${JSON.stringify({
-        style: (context.buildingResearch as Record<string, unknown>).building_style,
-        finishes: (context.buildingResearch as Record<string, unknown>).finishes,
-        aesthetic: (context.buildingResearch as Record<string, unknown>).design_aesthetic,
-      })}`
-    : "";
-
-  const aa = context.apartmentAnalysis as Record<string, unknown> | undefined;
-  const apartmentCtx = aa
-    ? `\nApartment overview: ${aa.overall || ""}${aa.rooms ? `\nPer-room summaries: ${JSON.stringify(aa.rooms)}` : ""}`
-    : "";
-
-  const otherRoomsCtx = context.otherRooms?.length
-    ? `\n\n## OTHER ROOMS IN THE APARTMENT
-${context.otherRooms.map((r) => {
-  const parts = [`- **${r.name}** (${r.roomType})`];
-  if (r.designDirection) parts.push(`  Direction: ${r.designDirection}`);
-  if (r.palette?.length) parts.push(`  Palette: ${r.palette.join(", ")}`);
-  if (r.materials?.length) parts.push(`  Materials: ${r.materials.join(", ")}`);
-  if (r.keyItems?.length) parts.push(`  Key items: ${r.keyItems.join("; ")}`);
-  return parts.join("\n");
-}).join("\n")}`
-    : "";
-
-  const floorPlanCtx = context.floorPlan
-    ? `\n\n## FLOOR PLAN / ROOM DIMENSIONS
-Total sqft: ${context.floorPlan.total_sqft || "unknown"}
-Room dimensions: ${JSON.stringify(context.floorPlan.room_dimensions || {})}
-Room layout: ${context.floorPlan.room_layout || "unknown"}
-Living/dining combined: ${context.floorPlan.living_dining_combined ?? "unknown"}
-Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? context.floorPlan.notable_spatial_features.join(", ") : "unknown"}`
-    : "";
-
-  // Build revision history summary
+  // Revision history summary (only used by Pass A and Pass C)
   let revisionHistoryText = "";
   if (context.revisionHistory && Object.keys(context.revisionHistory).length > 0) {
     revisionHistoryText = `\n\n## REVISION HISTORY (what the iterative rounds tried)
@@ -579,17 +579,16 @@ This analysis went through ${context.roundsCompleted} iterative rounds. Here's w
     if (context.stabilizedItems?.length) {
       revisionHistoryText += `\nItems that stabilized early (locked in): ${context.stabilizedItems.join(", ")}`;
     }
-    revisionHistoryText += `\n\n⚠️ IMPORTANT: Some items oscillated (flip-flopped between options across rounds). If you see that pattern in the history above, pick the BEST version from the history — don't propose yet another alternative. The iterative rounds already explored the design space.`;
+    revisionHistoryText += `\n\n⚠️ IMPORTANT: If any items oscillated across rounds, pick the BEST version from the history — don't propose yet another alternative.`;
   }
 
-  content.push({
-    type: "text",
-    text: `You are a LEAD INTERIOR DESIGNER doing the FINAL QUALITY REVIEW of a room design recommendation.
+  const roomImages: AIContentBlock[] = [];
+  for (const url of context.roomImageUrls.slice(0, 4)) {
+    roomImages.push({ type: "image", source: { type: "url", url } });
+  }
 
-This recommendation has already been through ${context.roundsCompleted} rounds of iterative harmony checking. Your job is to do ONE comprehensive, definitive assessment — not to nitpick endlessly.
-
-## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"` : ""}
+  const sharedHeader = `## ROOM
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userNotesShort}
 
 ## DESIGN DIRECTION
 ${designDirection}
@@ -610,127 +609,112 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
    Priority: ${item.priority}
    Why: ${item.description}`).join("\n\n")}
 
-${context.mathScoresText || ""}
+${context.mathScoresText || ""}`;
+
+  // ─── Pass A: Per-item final scoring with revision history ───
+  const finalItemCount = whatItNeeds.length;
+  const passAMaxTokensBase = Math.min(8000 + finalItemCount * 2000, 48000);
+
+  const passAPrompt = `You are a LEAD INTERIOR DESIGNER doing the FINAL per-item quality review. This is PASS 1 of 3: produce DEFINITIVE 6-dim sub-scores + revisions for EACH item. Do NOT produce global narrative or convergence decisions — those are separate passes.
+
+${sharedHeader}
 ${revisionHistoryText}
 
-## YOUR JOB — FINAL COMPREHENSIVE ASSESSMENT
+## YOUR JOB — PER-ITEM FINAL SCORING
 
-Step 1: Look at the room photos. Understand the actual space, finishes, lighting, dimensions.
-Step 2: Evaluate the FULL SET of recommended items as a cohesive whole — palette coherence, material story, spatial flow, zone definition.
-Step 3: For each item, give a DEFINITIVE score. This is the final word — be fair and realistic.
-Step 4: Decide if the set needs MORE iteration or if it's ready.
+For EACH item, provide 6 sub-scores (USE DECIMALS):
+1. **color_fit** — math color score is ground truth where provided
+2. **spatial_fit** — math spatial score is ground truth where provided
+3. **material_fit** — math material score is ground truth where provided
+4. **style_coherence** — AI judgment (design direction alignment)
+5. **cross_room_fit** — math cross-room score helps where provided
+6. **functional_fit** — AI judgment (practicality, durability)
 
-### SCORING PHILOSOPHY FOR FINAL ASSESSMENT — 6-DIMENSIONAL + PAIRWISE
-Score with DECIMALS (e.g. 7.3, 8.8, 9.6) — not just integers.
+Also provide **final_score** (holistic assessment, decimal).
+Server computes a composite from sub_scores using weighted geometric mean; min(your final_score, composite) is used.
 
-For EACH item, provide 6 sub-scores:
-1. **color_fit** (0-10): Color harmony — math color score is ground truth
-2. **spatial_fit** (0-10): Physical fit — math spatial score is ground truth
-3. **material_fit** (0-10): Material coherence — math material score is ground truth
-4. **style_coherence** (0-10): Design direction alignment (AI judgment)
-5. **cross_room_fit** (0-10): Apartment-wide coherence — math cross-room score helps
-6. **functional_fit** (0-10): Practical/lifestyle fit (AI judgment)
+## COMPOUNDING
+One dim at 3/10 + all others at 9/10 → composite ~5-6/10. Fix root causes.
 
-Also provide **final_score** as your overall holistic assessment. The server will compute a composite from sub_scores using weighted geometric mean — the LOWER of your final_score and the computed composite is used.
+## needs_more_work
+true if ANY sub_score < 9.5 AND fixable.
 
-### COMPOUNDING: Bad dimensions are CATASTROPHIC
-One dimension at 3/10 with all others at 9/10 → composite ~5-6/10, not ~8/10. Fix root causes.
+## Revisions (REQUIRED when needs_more_work = true)
+revised_search_title, revised_specs, revised_placement, root_cause (name failing dim + issue)
 
-### PAIRWISE COMPATIBILITY CHECK
-After individual scoring, check every pair of items for conflicts. Report pairs with compatibility < 9.0.
+## rationale (REQUIRED for every item)
+7 steps: COLOR → SPATIAL → MATERIAL → STYLE → CROSS-ROOM → FUNCTIONAL → OVERALL.
 
-### CHAIN OF REASONING — REQUIRED
-For EVERY item, provide a **rationale** covering all 6 dimensions + overall.
-
-### WHEN TO REQUEST MORE ROUNDS
-Set needs_more_rounds = true if ANY item has any sub_score below 9.5 with a concrete fixable issue.
-
-## OUTPUT FORMAT
-Return JSON:
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
-  "confidence": 0-10 (use decimals),
-  "overall_cohesion": 0-10 (use decimals),
-  "palette_coherence": "color story assessment",
-  "material_coherence": "material/texture story assessment",
-  "spatial_flow": "traffic flow, zones, spatial relationships",
-  "issues": ["genuine cross-cutting problems"],
   "item_scores": [
     {
       "category": "category slug",
-      "final_score": number (USE DECIMALS),
+      "final_score": number (decimal),
       "sub_scores": {
         "color_fit": number, "spatial_fit": number, "material_fit": number,
         "style_coherence": number, "cross_room_fit": number, "functional_fit": number
       },
-      "needs_more_work": true/false (true if any sub_score < 9.5 AND fixable),
+      "needs_more_work": true/false,
       "revised_search_title": "only if needs_more_work",
       "revised_specs": "only if needs_more_work",
       "revised_placement": "only if needs_more_work",
-      "root_cause": "if needs_more_work — specify which dimension(s) failed",
+      "root_cause": "if needs_more_work — name failing dimension(s) and issue",
       "reason": "1-2 sentence assessment",
-      "rationale": "REQUIRED 7-step chain covering all 6 dims + overall"
+      "rationale": "REQUIRED 7-step chain"
     }
-  ],
-  "pairwise_conflicts": [
-    { "item_a": "category_a", "item_b": "category_b", "compatibility": number, "conflict_type": "type", "reason": "why" }
-  ],
-  "needs_more_rounds": true/false,
-  "round_budget": number (0-5)
-}`,
-  });
+  ]
+}`;
 
-  // Scale max_tokens based on item count (same logic as harmony validation)
-  const finalItemCount = whatItNeeds.length;
-  const finalBaseMaxTokens = Math.min(16000 + finalItemCount * 2500, 65000);
+  let itemScores: FinalAssessmentResult["item_scores"] | undefined;
+  let passATokens = 0;
+  let responseModel = model;
 
-  let lastError: string | undefined;
-  let attempt = 0;
-  let wasTruncated = false;
+  {
+    let lastError: string | undefined;
+    let attempt = 0;
+    let wasTruncated = false;
+    const passAContent: AIContentBlock[] = [
+      ...roomImages,
+      { type: "text", text: passAPrompt },
+    ];
 
-  try {
-    return await withRetry(
-      async () => {
-        attempt++;
+    try {
+      itemScores = await withRetry(
+        async () => {
+          attempt++;
+          const maxTokens = wasTruncated
+            ? Math.min(passAMaxTokensBase + 16000, 64000)
+            : passAMaxTokensBase;
+          const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+          const retryContent = attempt > 1 && lastError
+            ? [...passAContent, { type: "text" as const, text: wasTruncated
+                ? `\n\n**IMPORTANT**: Previous response was truncated. Be MORE CONCISE.`
+                : `\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.` }]
+            : passAContent;
 
-        // On truncation retries: increase token budget + reduce thinking overhead
-        const maxTokens = wasTruncated
-          ? Math.min(finalBaseMaxTokens + 16000, 65000)
-          : finalBaseMaxTokens;
-        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: retryContent }],
+            max_tokens: maxTokens,
+            seed: DETERMINISTIC_SEED,
+            thinkingConfig: { thinkingLevel },
+            responseMimeType: "application/json",
+            mediaResolution: "ultra_high",
+          });
 
-        const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: wasTruncated
-              ? `\n\n**IMPORTANT**: Your previous response was truncated due to length. Be MORE CONCISE: keep rationales to 1-2 sentences max, omit revised fields for items scoring above 9.0. Return ONLY valid JSON matching the exact schema above.`
-              : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
-          : content;
+          if (response.truncated) {
+            wasTruncated = true;
+            throw new Error("Response truncated (MAX_TOKENS)");
+          }
 
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: retryContent }],
-          max_tokens: maxTokens,
-          seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel },
-          responseMimeType: "application/json",
-          mediaResolution: "ultra_high",
-        });
-
-        if (response.truncated) {
-          wasTruncated = true;
-          throw new Error("Response truncated (MAX_TOKENS)");
-        }
-
-        const raw = extractJsonObject(response.content);
-        const unwrapped = Array.isArray(raw) ? raw[0] : raw;
-        const parsed = FinalAssessmentResponseSchema.parse(unwrapped);
-        const result: FinalAssessmentResult = {
-          ...parsed,
-          pairwise_conflicts: (parsed.pairwise_conflicts || []).map((c) => ({
-            ...c,
-            conflict_type: c.conflict_type || "",
-            reason: c.reason || "",
-          })),
-          item_scores: parsed.item_scores.map((s) => ({
+          const raw = extractJsonObject(response.content);
+          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+          const parsed = FinalItemScoresResponseSchema.parse(unwrapped);
+          passATokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+          responseModel = response.model;
+          return parsed.item_scores.map((s) => ({
             ...s,
             sub_scores: s.sub_scores ?? undefined,
             revised_search_title: s.revised_search_title ?? undefined,
@@ -738,53 +722,238 @@ Return JSON:
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
             rationale: s.rationale ?? undefined,
-          })),
-        };
-
-        log.info("Final assessment complete", {
-          phase: "final-assessment",
-          confidence: result.confidence,
-          cohesion: result.overall_cohesion,
-          items: result.item_scores.length,
-          pairwise_conflicts: result.pairwise_conflicts.length,
-          scores: result.item_scores.map((s) => {
-            const ss = s.sub_scores;
-            const dims = ss ? `(c${ss.color_fit}/sp${ss.spatial_fit}/m${ss.material_fit}/st${ss.style_coherence}/cr${ss.cross_room_fit}/f${ss.functional_fit})` : "";
-            return `${s.category}=${s.final_score}${dims}`;
-          }).join(", "),
-          needsMoreRounds: result.needs_more_rounds,
-          roundBudget: result.round_budget,
-        });
-
-        return {
-          success: true as const,
-          data: result,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-          model: response.model,
-        };
-      },
-      {
-        maxAttempts: 3,
-        baseDelayMs: 1500,
-        maxDelayMs: 15000,
-        isRetryable: (error) => {
-          if (isRetryableError(error)) return true;
-          if (error instanceof SyntaxError) return true;
-          if (error instanceof Error && error.name === "ZodError") return true;
-          if (error instanceof Error && error.message.includes("truncated")) return true;
-          return false;
+          }));
         },
-        onRetry: (retryAttempt, delayMs, error) => {
-          lastError = error instanceof Error ? error.message : "Final assessment failed";
-          log.warn(`Final assessment retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
-        },
-      }
-    );
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : "Final assessment failed after retries";
-    log.error("Final assessment failed", { error: errMsg });
-    return { success: false, error: errMsg };
+        {
+          maxAttempts: 3,
+          baseDelayMs: 1500,
+          maxDelayMs: 15000,
+          isRetryable: (error) => {
+            if (isRetryableError(error)) return true;
+            if (error instanceof SyntaxError) return true;
+            if (error instanceof Error && error.name === "ZodError") return true;
+            if (error instanceof Error && error.message.includes("truncated")) return true;
+            return false;
+          },
+          onRetry: (retryAttempt, delayMs, error) => {
+            lastError = error instanceof Error ? error.message : "Final item scoring failed";
+            log.warn(`Final item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          },
+        }
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Final item-scoring failed after retries";
+      log.error("Final item-scoring failed", { error: errMsg });
+      return { success: false, error: errMsg };
+    }
   }
+
+  log.info("Final assessment pass A (item scoring) complete", {
+    tokens: { total: passATokens },
+    items: itemScores.length,
+  });
+
+  // ─── Pass B: Holistic assessment ────────────────────────────
+  const itemScoresJson = JSON.stringify(itemScores, null, 2);
+  const passBPrompt = `You are a LEAD INTERIOR DESIGNER doing the holistic final review. Pass 1 produced per-item sub-scores — below. Your job: assess the set as a WHOLE. Do NOT re-score items; trust Pass 1's scores. Do NOT decide whether more rounds are needed — that's Pass 3.
+
+${sharedHeader}
+
+## PASS 1 ITEM SCORES
+${itemScoresJson}
+
+## YOUR JOB — HOLISTIC ASSESSMENT
+
+1. **overall_cohesion** (0-10, decimal): the full set holistically.
+2. **palette_coherence**: color story assessment (1 sentence).
+3. **material_coherence**: material/texture story (1 sentence).
+4. **spatial_flow**: traffic flow, zones, spatial relationships (2-3 sentences).
+5. **pairwise_conflicts**: check every pair. Report ONLY pairs with compatibility < 9.0.
+6. **issues**: genuine cross-cutting problems not tied to a single item.
+7. **confidence** (0-10, decimal): overall confidence in this final design after all rounds + Pass 1.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "confidence": number,
+  "overall_cohesion": number,
+  "palette_coherence": "color story",
+  "material_coherence": "material/texture story",
+  "spatial_flow": "traffic flow, zones, relationships",
+  "pairwise_conflicts": [
+    { "item_a": "cat_a", "item_b": "cat_b", "compatibility": number, "conflict_type": "type", "reason": "why" }
+  ],
+  "issues": ["cross-cutting problems"]
+}`;
+
+  let holistic: ReturnType<typeof FinalHolisticResponseSchema.parse> | undefined;
+  let passBTokens = 0;
+
+  {
+    let lastError: string | undefined;
+    try {
+      holistic = await withRetry(
+        async () => {
+          const textBlock = lastError
+            ? `${passBPrompt}\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.`
+            : passBPrompt;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
+            max_tokens: 10000,
+            seed: DETERMINISTIC_SEED,
+            thinkingConfig: { thinkingLevel: "high" },
+            responseMimeType: "application/json",
+            mediaResolution: "ultra_high",
+          });
+          const raw = extractJsonObject(response.content);
+          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+          const parsed = FinalHolisticResponseSchema.parse(unwrapped);
+          passBTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+          return parsed;
+        },
+        {
+          maxAttempts: 3,
+          baseDelayMs: 1500,
+          maxDelayMs: 15000,
+          isRetryable: (error) => {
+            if (isRetryableError(error)) return true;
+            if (error instanceof SyntaxError) return true;
+            if (error instanceof Error && error.name === "ZodError") return true;
+            return false;
+          },
+          onRetry: (retryAttempt, delayMs, error) => {
+            lastError = error instanceof Error ? error.message : "Final holistic pass failed";
+            log.warn(`Final holistic retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          },
+        }
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Final holistic pass failed after retries";
+      log.error("Final holistic pass failed", { error: errMsg });
+      return { success: false, error: errMsg };
+    }
+  }
+
+  // ─── Pass C: Convergence decision ───────────────────────────
+  const convergenceCtx = JSON.stringify({
+    rounds_completed: context.roundsCompleted,
+    overall_cohesion: holistic.overall_cohesion,
+    confidence: holistic.confidence,
+    issues: holistic.issues,
+    items_needing_work: itemScores.filter((s) => s.needs_more_work).map((s) => ({
+      category: s.category,
+      final_score: s.final_score,
+      root_cause: s.root_cause,
+    })),
+    pairwise_conflict_count: holistic.pairwise_conflicts.length,
+  }, null, 2);
+
+  const passCPrompt = `You are making a convergence decision for an iterative room-design pipeline. Pass 1 scored items, Pass 2 assessed the whole. Now decide: keep iterating, or stop?
+
+## INPUT
+${convergenceCtx}
+
+## DECISION RULES
+- needs_more_rounds = true if ANY item has a fixable root_cause AND rounds_completed < 8
+- round_budget 0-5: how many more rounds are warranted?
+  * 0 = ship it as-is
+  * 1-2 = minor issues, quick to fix
+  * 3-5 = substantial issues, would benefit from more iteration
+- Factor in diminishing returns: if rounds_completed is high and items are oscillating (check revision history patterns in your knowledge of how Pass 1 flagged items), lower the budget.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "needs_more_rounds": true/false,
+  "round_budget": 0-5
+}`;
+
+  let convergence: ReturnType<typeof FinalConvergenceResponseSchema.parse> | undefined;
+  let passCTokens = 0;
+
+  {
+    let lastError: string | undefined;
+    try {
+      convergence = await withRetry(
+        async () => {
+          const textBlock = lastError
+            ? `${passCPrompt}\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.`
+            : passCPrompt;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
+            max_tokens: 1500,
+            seed: DETERMINISTIC_SEED,
+            responseMimeType: "application/json",
+          });
+          const raw = extractJsonObject(response.content);
+          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+          const parsed = FinalConvergenceResponseSchema.parse(unwrapped);
+          passCTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+          return parsed;
+        },
+        {
+          maxAttempts: 2,
+          baseDelayMs: 1000,
+          isRetryable: (error) => {
+            if (isRetryableError(error)) return true;
+            if (error instanceof SyntaxError) return true;
+            if (error instanceof Error && error.name === "ZodError") return true;
+            return false;
+          },
+          onRetry: (retryAttempt, delayMs, error) => {
+            lastError = error instanceof Error ? error.message : "Convergence pass failed";
+            log.warn(`Convergence retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          },
+        }
+      );
+    } catch (error) {
+      // Convergence is cheap and the default is safe — don't fail the whole assessment.
+      log.warn("Convergence pass failed, defaulting to no-more-rounds", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      convergence = { needs_more_rounds: false, round_budget: 0 };
+    }
+  }
+
+  const result: FinalAssessmentResult = {
+    confidence: holistic.confidence,
+    overall_cohesion: holistic.overall_cohesion,
+    palette_coherence: holistic.palette_coherence,
+    material_coherence: holistic.material_coherence,
+    spatial_flow: holistic.spatial_flow,
+    issues: holistic.issues,
+    item_scores: itemScores,
+    pairwise_conflicts: (holistic.pairwise_conflicts || []).map((c) => ({
+      ...c,
+      conflict_type: c.conflict_type || "",
+      reason: c.reason || "",
+    })),
+    needs_more_rounds: convergence.needs_more_rounds,
+    round_budget: convergence.round_budget,
+  };
+
+  log.info("Final assessment complete (split pass)", {
+    phase: "final-assessment",
+    confidence: result.confidence,
+    cohesion: result.overall_cohesion,
+    items: result.item_scores.length,
+    pairwise_conflicts: result.pairwise_conflicts.length,
+    needsMoreRounds: result.needs_more_rounds,
+    roundBudget: result.round_budget,
+    tokens: { total: passATokens + passBTokens + passCTokens },
+    passATokens,
+    passBTokens,
+    passCTokens,
+  });
+
+  return {
+    success: true,
+    data: result,
+    tokensUsed: passATokens + passBTokens + passCTokens,
+    model: responseModel,
+  };
 }
 
 /**
