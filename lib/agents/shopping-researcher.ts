@@ -33,7 +33,9 @@ interface TierBrief {
 
 interface SearchBriefCategory {
   category: string;
-  tiers: Record<PriceTier, TierBrief>;
+  // Each tier is optional — the model may omit a tier if it can't propose
+  // queries for it. Orchestrator skips undefined tiers.
+  tiers: Partial<Record<PriceTier, TierBrief>>;
   key_requirements: string[];
 }
 

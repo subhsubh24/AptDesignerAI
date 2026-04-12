@@ -377,9 +377,20 @@ export const TierBriefSchema = z.object({
   retailers_to_target: stringArray,
 });
 
+// NOTE: `tiers` MUST use an explicit object with fixed keys rather than
+// z.record(...). When converted to JSON Schema, z.record emits the shape via
+// `additionalProperties`, which Gemini's responseSchema does not support and
+// we strip in lib/ai/schema.ts. The result is an empty schema — Gemini then
+// happily returns `tiers: {}`, Zod accepts it (records allow empty), and the
+// orchestrator ends up with zero search tasks. Explicit keys give Gemini a
+// concrete schema to fill in.
 export const SearchBriefCategorySchema = z.object({
   category: z.string().min(1),
-  tiers: z.record(z.string(), TierBriefSchema),
+  tiers: z.object({
+    budget: TierBriefSchema.optional(),
+    balanced: TierBriefSchema.optional(),
+    high_end: TierBriefSchema.optional(),
+  }),
   key_requirements: stringArray,
 });
 
