@@ -265,88 +265,32 @@ These photos show the REST of the apartment. Study them to understand:
     });
   }
 
-  contentBlocks.push({
-    type: "text",
-    text: `\nDo a deep, thorough analysis of the ${room.name}. You know the owner's preferences (see system prompt). Also consider the other rooms so everything stays cohesive across the apartment.
+  // ── SHARED CONTEXT (goes into both Pass A and Pass B) ──
+  // Pass A prompt — UNDERSTAND the room. No what_it_needs here; that's Pass B.
+  const passAPrompt = `\nStudy the ${room.name} photos carefully. This is PASS 1 of 2. Your job is to UNDERSTAND the room — diagnose it, determine design direction, and capture spatial/environmental context. A separate pass will produce the shopping list (what_it_needs) — do NOT produce recommendations here.
 
-## ANALYSIS PROCESS — Follow these steps in order:
-Step 1: Study ALL room photos carefully. Note every piece of furniture, every finish, every lighting condition, every window/door.
-Step 2: Identify what's working (keep) and what's not (replace/remove). Be specific — name items with material + color.
-Step 3: Determine the design direction based on the apartment's existing finishes and the client's preferences.
-Step 4: List EVERY item the room needs, starting with the highest-impact pieces.
-Step 5: For each recommended item, specify EXACT placement in the room with spatial reasoning.
-Step 6: Verify that all items work together as a set — consistent palette, varied materials, correct scale.
+## ANALYSIS PROCESS
+Step 1: Study ALL room photos. Note every piece of furniture, finish, lighting condition, window/door.
+Step 2: Identify what's working (keep) and what's not (replace/remove). Name items with material + color.
+Step 3: Determine design direction based on the apartment's finishes and client preferences.
+Step 4: Capture spatial & environmental context (layout, lighting, windows/doors, outlets) precisely — Pass 2 depends on this to place items.
 
-IMPORTANT — MULTI-FUNCTION ROOMS: If this room serves multiple functions (e.g. a living room with a dining area, or a combined living/dining space), you MUST include items for ALL zones — dining table, dining chairs, lighting for the dining zone, seating for the living zone, etc. Do NOT limit recommendations to just the primary function. A living/dining combo typically needs 8-15 items across both zones.
-
-Return JSON:
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
 {
-  "summary": "3-4 sentence assessment of the current state — mention dominant colors, materials, what's working, what's broken. Be specific.",
-  "what_it_needs": [
-    {
-      "category": "snake_case category slug: area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, media_console, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light, throw_blanket, plant, vase, tray, kitchen_runner",
-      "search_title": "A highly specific search query — see SEARCH TITLE FORMAT below",
-      "description": "Why this item is needed — what specific problem it solves from the diagnosis. 2-3 sentences.",
-      "priority": "high | medium | low",
-      "specs": "Exact ideal dimensions (e.g. '48-54 inches wide, 20 inches deep'), preferred materials (e.g. 'solid walnut or oak'), color range (e.g. 'warm ivory, cream, or oatmeal'), approximate price range for the tier",
-      "placement": "WHERE in the room this item goes and HOW it's oriented. Be spatial and specific. Consider window positions (don't block natural light), door swings (leave clearance), outlet access (lamps/media need power), and traffic paths. Examples: 'Centered under the pendant light, between the sofa and TV wall, long edge parallel to the sofa' or 'Left of the sofa, angled 15° toward the window to create a reading nook with natural light — outlet on south wall within 3ft' or 'On the wall opposite the entry, centered between the two windows at eye level (58 inches center)' or 'Under the dining table, extending 24 inches beyond the table on all sides for chair pullback'"
-    }
-  ],
-  "what_works": ["5-8 specific items that should stay — name each item with material + color + WHERE it currently sits"],
-  "what_should_go": ["specific items to replace or remove — name each item and explain why"],
-  "design_direction": "A detailed paragraph (4-6 sentences) describing the overall design direction — color strategy (name exact colors), material mixing strategy, texture layering plan, the feeling we're going for. Reference the apartment's finishes and overall coherence.",
-  "recommended_palette": ["List of 4-8 specific colors recommended for this room, e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
-  "recommended_materials": ["List of 4-6 materials to use, e.g. 'solid walnut', 'linen', 'brushed brass', 'natural wool'"],
-  "recommended_textures": ["List of 3-5 textures to layer, e.g. 'bouclé', 'woven rattan', 'matte ceramic', 'raw linen'"],
-  "spatial_layout": "A paragraph describing the overall furniture arrangement strategy — traffic flow, conversation zones, sightlines, focal points, how the zones connect. Think about how someone moves through the room and how groups of furniture relate to each other spatially.",
-  "lighting_conditions": "Describe the room's lighting: which direction windows face (north/south/east/west), how much natural light at different times of day, existing artificial lighting (overhead, recessed, lamps), dark corners or areas that need task lighting. Note if south-facing (bright, warm) or north-facing (cooler, diffused). Mention any glare issues on screens or reflective surfaces.",
-  "window_door_positions": "List every window and door with its wall position and approximate size. E.g. 'Large window centered on south wall (~6ft wide), entry door on east wall (left corner), closet door on north wall (right side), balcony slider on west wall (~8ft wide)'. Note which open inward/outward and door swing clearance needed.",
-  "outlet_positions": "Best-guess locations of electrical outlets based on photos and typical apartment layouts. E.g. 'Outlets visible: south wall flanking window, east wall near entry, north wall behind where TV sits. Likely outlets: west wall for kitchen peninsula.' Note any spots where lamps or media consoles would need extension cords."
+  "summary": "3-4 sentence assessment — dominant colors, materials, what's working, what's broken",
+  "what_works": ["5-8 specific items that should stay — material + color + current position"],
+  "what_should_go": ["specific items to replace/remove — name each and why"],
+  "design_direction": "4-6 sentences describing color strategy, material mixing, texture layering, and the feeling. Reference apartment finishes.",
+  "recommended_palette": ["4-8 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
+  "recommended_materials": ["4-6 materials — e.g. 'solid walnut', 'linen', 'brushed brass', 'natural wool'"],
+  "recommended_textures": ["3-5 textures — e.g. 'bouclé', 'woven rattan', 'matte ceramic', 'raw linen'"],
+  "spatial_layout": "paragraph describing arrangement strategy — traffic flow, conversation zones, sightlines, focal points",
+  "lighting_conditions": "window direction, natural light at different times, existing artificial lighting, dark corners needing task lighting, glare concerns",
+  "window_door_positions": "every window and door with wall position + approximate size, door swing clearance",
+  "outlet_positions": "best-guess outlet locations from photos + typical layouts — note spots where lamps/media would need extension cords"
 }
 
-## SEARCH TITLE FORMAT — CRITICAL
-Each search_title will be used to find real products on furniture websites. Before writing each one, verify it includes:
-✓ Material (required for all furniture): "solid walnut", "linen", "wool", "bouclé", "brass"
-✓ Color or finish (required): "warm ivory", "natural oak", "matte black"
-✓ Size/dimensions (required except small decor): "8x10", "48 inch", "36 inch diameter"
-✓ Style descriptor (required): "mid-century", "modern", "organic", "minimalist"
-✓ Product type (required): "area rug", "coffee table", "floor lamp"
-
-GOOD search_title examples:
-✓ "Large 8x10 hand-knotted wool area rug in warm cream with subtle geometric texture"
-✓ "Solid walnut round coffee table 36-40 inch diameter with tapered legs and lower shelf"
-✓ "Modern arc floor lamp in brushed brass with linen drum shade 72 inches tall"
-✓ "Set of 2 mid-century upholstered dining chairs walnut frame cream fabric"
-✓ "Woven rattan media console 60-70 inches wide with closed storage natural finish"
-
-BAD search_title examples (will return category pages, not products):
-✗ "Coffee table" — no material, no color, no size
-✗ "Area rug in cream" — no size, no material, no texture description
-✗ "Modern lamp" — no material, no size, no specific type
-✗ "Throw pillows" — no material, no color, no size, no quantity
-✗ "Wall art" — no medium, no size, no color palette, no style
-
-## HOW MANY ITEMS TO RECOMMEND — MINIMUM COUNTS BY ROOM TYPE
-You MUST recommend at least this many items (more is better):
-- Living room: 10+ items | Bedroom: 9+ items | Dining room: 8+ items
-- Studio/combined living+dining: 12+ items | Home office: 7+ items
-- Entryway: 6+ items | Nursery: 8+ items | Kitchen: 6+ items
-
-Walk through ALL THREE TIERS before finalizing your list:
-
-**TIER 1 — ESSENTIAL** (room can't function without these):
-Anchor furniture, primary rug, primary lighting, main surfaces
-
-**TIER 2 — STANDARD** (expected in a well-furnished room):
-Accent seating, secondary lighting, textiles (curtains/throw pillows/blankets), wall art, storage
-
-**TIER 3 — FINISHING** (decorative completeness):
-Plants, decorative objects, vases, trays, candles, accent lighting, books/display items
-
-Do NOT return fewer items than the minimum. An incomplete list means the client's apartment will feel bare and unfinished. Include ALL THREE TIERS.
-
-Be extremely specific. Name exact colors, materials, dimensions. Think like a world-class designer charging $500/hr.`,
-  });
+Be extremely specific. Name exact colors, materials, dimensions. Do NOT include what_it_needs or any shopping recommendations.`;
 
   const agentRun = await createAgentRun(supabase, {
     room_id,
@@ -356,41 +300,144 @@ Be extremely specific. Name exact colors, materials, dimensions. Think like a wo
 
   try {
     const profile = buildDesignProfile(project);
-    const response = await geminiProvider.chat({
-      model: selectModel("area_analysis"),
-      system: getSystemPrompt(profile),
-      messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 16000,
+    const model = selectModel("area_analysis");
+    const system = getSystemPrompt(profile);
+
+    /**
+     * Pass A — UNDERSTAND the room.
+     * Vision-heavy. Consumes all the shared context + room photos + apartment
+     * context photos. Produces everything EXCEPT what_it_needs.
+     */
+    const passAContent: AIContentBlock[] = [
+      ...contentBlocks,
+      { type: "text", text: passAPrompt },
+    ];
+    const passAResponse = await geminiProvider.chat({
+      model,
+      system,
+      messages: [{ role: "user", content: passAContent }],
+      max_tokens: 6000,
       temperature: 0.3,
       responseMimeType: "application/json",
       thinkingConfig: { thinkingLevel: "high" },
     });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response is unstructured JSON
-    let analysis = extractJsonObject<Record<string, any>>(response.content);
-
-    // If the AI returned a truncated response, the JSON may be incomplete
-    if (response.truncated) {
-      throw new Error("AI response was truncated (MAX_TOKENS). The analysis was too long to complete. Try with fewer room photos.");
+    if (passAResponse.truncated) {
+      throw new Error("AI response was truncated during Pass A (understanding). Try with fewer photos.");
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    const understandingRaw = extractJsonObject<any>(passAResponse.content);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
+    const understanding: Record<string, any> = Array.isArray(understandingRaw) && understandingRaw.length > 0
+      ? understandingRaw[0]
+      : understandingRaw;
+    const passATokens = (passAResponse.usage?.input_tokens || 0) + (passAResponse.usage?.output_tokens || 0);
 
-    // If the AI returned an array instead of an object, unwrap the first element
-    if (Array.isArray(analysis)) {
-      if (analysis.length > 0 && typeof analysis[0] === "object" && analysis[0] !== null) {
-        console.log(`[area-analysis] AI returned an array — unwrapping first element with keys: ${Object.keys(analysis[0]).join(", ")}`);
-        analysis = analysis[0];
-      } else {
-        throw new Error(`AI returned an empty or invalid array. This is a model output format error — retrying should fix it.`);
-      }
+    console.log(`[area-analysis] Pass A (understanding) complete — ${understanding.what_works?.length || 0} keeps, palette: ${(understanding.recommended_palette || []).length}, materials: ${(understanding.recommended_materials || []).length}`);
+
+    /**
+     * Pass B — FURNISH the room.
+     * Consumes Pass A's understanding as an explicit design brief. No photos
+     * here — the job is pure planning (what to buy, specs, placement)
+     * grounded in Pass A's direction and spatial context.
+     */
+    const roomKey = (room.room_type || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+    const tiersForRoom = ROOM_FURNISHING_TIERS[roomKey] || ROOM_FURNISHING_TIERS["living_room"];
+
+    const passBPrompt = `You are an interior designer producing the shopping list for the ${room.name}. Pass 1 already analyzed the room and produced the design brief below — your only job now is to translate that brief into a complete tiered list of items with specs and placements.
+
+Do NOT re-diagnose the room. Do NOT produce what_works / what_should_go / design_direction / palette / materials / textures / spatial_layout / lighting_conditions / window_door_positions / outlet_positions — those come from Pass 1 unchanged. Only produce \`what_it_needs\`.
+
+## PASS 1 DESIGN BRIEF (SOURCE OF TRUTH — do not contradict)
+${JSON.stringify(understanding, null, 2)}
+${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}${budgetBlock}${userContextNote}${parsedContextBlock ? `\n\n${parsedContextBlock}` : ""}
+
+## YOUR TASK
+Produce a tiered, complete \`what_it_needs\` list:
+
+**TIER 1 — ESSENTIAL**: anchor furniture, primary rug, primary lighting, main surfaces
+**TIER 2 — STANDARD**: accent seating, secondary lighting, textiles, wall art, storage
+**TIER 3 — FINISHING**: plants, decorative objects, vases, trays, candles, books
+
+MINIMUM item count for ${room.room_type}: ${tiersForRoom.minItemCount}. More is better.
+Essential categories: ${tiersForRoom.essential.join(", ")}
+Standard categories: ${tiersForRoom.standard.join(", ")}
+
+MULTI-FUNCTION ROOMS: if the room serves multiple functions (e.g. combined living/dining), include items for ALL zones — don't limit to primary function. A living/dining combo typically needs 8-15 items across both.
+
+## SEARCH TITLE FORMAT — CRITICAL
+Each search_title must include: material + color/finish + size + style + product type.
+✓ "Large 8x10 hand-knotted wool area rug in warm cream with subtle geometric texture"
+✓ "Solid walnut round coffee table 36-40 inch diameter with tapered legs and lower shelf"
+✗ "Coffee table" — no material, color, size
+
+## PLACEMENT must be SPATIAL
+Reference Pass 1's \`spatial_layout\`, \`window_door_positions\`, and \`outlet_positions\`. Examples:
+✓ "Centered under the pendant, between the sofa and TV wall, long edge parallel to the sofa"
+✓ "Left of the sofa, angled 15° toward the south window — outlet on south wall within 3ft"
+
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
+{
+  "what_it_needs": [
+    {
+      "category": "snake_case slug (area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, media_console, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light, throw_blanket, plant, vase, tray)",
+      "search_title": "Highly specific search query — material + color + size + style + type",
+      "description": "Why this item — what problem from Pass 1's diagnosis it solves. 2-3 sentences.",
+      "priority": "high | medium | low",
+      "specs": "Exact dimensions, materials, color range, approximate price range for the budget tier",
+      "placement": "WHERE in the room and HOW oriented — reference windows, doors, outlets, traffic paths from Pass 1"
     }
+  ]
+}
+
+At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all three tiers.`;
+
+    const passBResponse = await geminiProvider.chat({
+      model,
+      system,
+      messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
+      max_tokens: 12000,
+      temperature: 0.3,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "high" },
+    });
+    if (passBResponse.truncated) {
+      throw new Error("AI response was truncated during Pass B (furnishing). The item list was too long.");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    const furnishingRaw = extractJsonObject<any>(passBResponse.content);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
+    const furnishing: Record<string, any> = Array.isArray(furnishingRaw) && furnishingRaw.length > 0
+      ? furnishingRaw[0]
+      : furnishingRaw;
+    const passBTokens = (passBResponse.usage?.input_tokens || 0) + (passBResponse.usage?.output_tokens || 0);
+
+    console.log(`[area-analysis] Pass B (furnishing) complete — ${furnishing.what_it_needs?.length || 0} items`);
+
+    // Merge Pass A + Pass B into the legacy analysis shape
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
+    let analysis: Record<string, any> = {
+      ...understanding,
+      what_it_needs: furnishing.what_it_needs,
+    };
+
+    // Synthesize a response-compatible object for downstream code that reads `response.usage`.
+    const response = {
+      usage: {
+        input_tokens: (passAResponse.usage?.input_tokens || 0) + (passBResponse.usage?.input_tokens || 0),
+        output_tokens: (passAResponse.usage?.output_tokens || 0) + (passBResponse.usage?.output_tokens || 0),
+      },
+    } as { usage: { input_tokens: number; output_tokens: number } };
+
+    void passATokens; void passBTokens;
+
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
-      throw new Error(`AI response missing required field "what_it_needs". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error — retrying should fix it.`);
+      throw new Error(`AI Pass B missing required field "what_it_needs". Got keys: ${Object.keys(furnishing).join(", ")}.`);
     }
     if (!analysis.what_works || !Array.isArray(analysis.what_works)) {
-      throw new Error(`AI response missing required field "what_works". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error.`);
+      throw new Error(`AI Pass A missing required field "what_works". Got keys: ${Object.keys(understanding).join(", ")}.`);
     }
     if (!analysis.design_direction || typeof analysis.design_direction !== "string") {
-      throw new Error(`AI response missing required field "design_direction". Got keys: ${Object.keys(analysis).join(", ")}. This is a model output format error.`);
+      throw new Error(`AI Pass A missing required field "design_direction". Got keys: ${Object.keys(understanding).join(", ")}.`);
     }
 
     console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
