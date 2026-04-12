@@ -36,8 +36,10 @@ async function updateProject(
   const allowedFields: Record<string, unknown> = {};
   const ALLOWED_KEYS = [
     "name", "description", "status", "cover_image_url",
-    "bedrooms", "bathrooms", "city", "state", "neighborhood",
+    "bedrooms", "bathrooms", "apartment_sqft", "unit_plan_name",
+    "city", "state", "neighborhood",
     "building_name", "building_url", "building_research", "apartment_analysis",
+    "location_place_id", "building_place_id", "latitude", "longitude",
   ];
   for (const key of ALLOWED_KEYS) {
     if (key in body) allowedFields[key] = body[key];

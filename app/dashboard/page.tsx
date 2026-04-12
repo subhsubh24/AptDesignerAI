@@ -62,6 +62,9 @@ export default function DashboardPage() {
   const [step, setStep] = useState<Step>("welcome");
   const [bedrooms, setBedrooms] = useState(1);
   const [bathrooms, setBathrooms] = useState(1);
+  // User's apartment square footage — optional but drives unit-plan matching
+  // against the building's floor-plan variants (apartment-research agent).
+  const [apartmentSqft, setApartmentSqft] = useState<string>("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
@@ -108,6 +111,7 @@ export default function DashboardPage() {
           // Restore onboarding state
           if (project.bedrooms) setBedrooms(project.bedrooms);
           if (project.bathrooms) setBathrooms(project.bathrooms);
+          if (project.apartment_sqft) setApartmentSqft(String(project.apartment_sqft));
           if (project.city) setCity(project.city);
           if (project.state) setState(project.state);
           if (project.neighborhood) setNeighborhood(project.neighborhood);
@@ -280,6 +284,7 @@ export default function DashboardPage() {
               city, state, neighborhood,
               project_id: projId,
               bedrooms, bathrooms,
+              apartment_sqft: apartmentSqft ? parseInt(apartmentSqft, 10) || undefined : undefined,
               building_place_id: buildingPlaceId || undefined,
             }),
           });
@@ -314,7 +319,7 @@ export default function DashboardPage() {
     } finally {
       setAnalyzing(false);
     }
-  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, ensureProject, buildingPlaceId]);
+  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, apartmentSqft, ensureProject, buildingPlaceId]);
 
   const totalImages = Object.values(roomImages).flat().length;
 
@@ -408,6 +413,22 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-3 block">
+              Square footage <span className="text-xs opacity-60">(optional — helps match your exact unit plan)</span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={100}
+              max={10000}
+              placeholder="e.g. 725"
+              value={apartmentSqft}
+              onChange={(e) => setApartmentSqft(e.target.value.replace(/[^\d]/g, ""))}
+              className="h-12 w-full rounded-full border-2 border-border bg-background px-5 text-sm font-medium outline-none transition-all focus:border-accent-warm"
+            />
+          </div>
+
           <div className="pt-4">
             <p className="text-sm text-muted-foreground mb-4">
               We&apos;ll need photos of: {getRoomSections(bedrooms, bathrooms).map((s) => s.label).join(", ")}
@@ -416,7 +437,12 @@ export default function DashboardPage() {
               size="lg"
               className="w-full h-12"
               onClick={async () => {
-                await saveProjectMeta({ bedrooms, bathrooms });
+                const sqftNum = apartmentSqft ? parseInt(apartmentSqft, 10) : null;
+                await saveProjectMeta({
+                  bedrooms,
+                  bathrooms,
+                  ...(sqftNum && !Number.isNaN(sqftNum) ? { apartment_sqft: sqftNum } : {}),
+                });
                 setStep("location");
               }}
             >

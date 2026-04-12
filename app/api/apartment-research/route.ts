@@ -47,6 +47,23 @@ const ResearchOutputSchema = z.object({
   website_url: z.string().nullable().optional(),
   confidence_notes: z.array(z.string()).nullable().optional(),
   summary: z.string().nullable().optional(),
+  // Populated by the unit-matching pass (post-research). Identifies the
+  // specific floor-plan variant the user's apartment corresponds to,
+  // so every downstream agent references one unit layout — not the whole list.
+  matched_unit: z.object({
+    variant: FloorPlanVariantSchema.nullable(),
+    match_method: z.enum([
+      "exact_sqft",
+      "closest_sqft",
+      "vision_disambiguated",
+      "vision_only",
+      "single_variant",
+      "no_match",
+    ]),
+    confidence: z.enum(["high", "medium", "low"]),
+    match_notes: z.string(),
+    candidates_considered: z.array(z.string()).nullable().optional(),
+  }).nullable().optional(),
   // Populated by the googleMaps enrichment pass (post-primary research).
   location_context: z.object({
     primary_orientation: z.string().nullable().optional(),
@@ -155,6 +172,229 @@ function parseModelJSON(raw: string): Record<string, unknown> {
   }
 }
 
+// ─── Unit matching helpers ────────────────────────────────────────────
+
+type Variant = Record<string, unknown>;
+
+type MatchMethod =
+  | "exact_sqft"
+  | "closest_sqft"
+  | "vision_disambiguated"
+  | "vision_only"
+  | "single_variant"
+  | "no_match";
+
+interface UnitMatchResult {
+  variant: Variant | null;
+  match_method: MatchMethod;
+  confidence: "high" | "medium" | "low";
+  match_notes: string;
+  candidates_considered?: string[];
+}
+
+function parseSqft(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const m = v.match(/[\d,]+/);
+    if (m) {
+      const n = parseInt(m[0].replace(/,/g, ""), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
+}
+
+function variantLabel(v: Variant): string {
+  const name = (v.name as string | null | undefined) ?? "unnamed";
+  const sqft = parseSqft(v.sqft);
+  return sqft !== null ? `${name} (${sqft} sf)` : name;
+}
+
+/**
+ * Ask Gemini vision to pick which candidate floor-plan variant matches the
+ * user's actual room photos. Returns null if the model is unsure or if no
+ * candidates have floor-plan images to compare against.
+ */
+async function disambiguateWithVision(
+  candidates: Variant[],
+  userImageUrls: string[],
+  unitLabel: string,
+  userSqft: number | null,
+): Promise<{ variant: Variant; confidence: "high" | "medium" | "low"; reasoning: string } | null> {
+  const withImages = candidates.filter((c) => c.floor_plan_image_url);
+  if (withImages.length === 0 || userImageUrls.length === 0) return null;
+
+  const blocks: Array<
+    | { type: "image"; source: { type: "url"; url: string } }
+    | { type: "text"; text: string }
+  > = [
+    {
+      type: "text",
+      text: `The user lives in a ${unitLabel} apartment${userSqft ? ` of approximately ${userSqft} sqft` : ""}. Below are floor-plan images for ${withImages.length} candidate unit variants, followed by photos the user took INSIDE their actual apartment. Your job is to decide which floor plan matches the user's apartment.`,
+    },
+  ];
+
+  for (let i = 0; i < withImages.length; i++) {
+    const c = withImages[i];
+    const sqft = parseSqft(c.sqft);
+    blocks.push({
+      type: "text",
+      text: `\n--- Candidate ${i + 1}: "${String(c.name ?? "unnamed")}"${sqft ? ` (${sqft} sqft)` : ""} ---`,
+    });
+    blocks.push({ type: "image", source: { type: "url", url: c.floor_plan_image_url as string } });
+    if (c.room_layout) {
+      blocks.push({ type: "text", text: `Layout description: ${String(c.room_layout)}` });
+    }
+  }
+
+  blocks.push({ type: "text", text: "\n--- USER'S APARTMENT PHOTOS ---" });
+  for (const url of userImageUrls.slice(0, 6)) {
+    blocks.push({ type: "image", source: { type: "url", url } });
+  }
+
+  blocks.push({
+    type: "text",
+    text: `\nCompare the user's photos to each floor plan. Match on:\n- number of windows per wall and window placement\n- room adjacencies (which rooms connect to which)\n- kitchen layout (galley / open to living / L-shape / U-shape)\n- presence of dining area, balcony door, walk-in closet, en-suite bath\n- any unique architectural features\n\nReturn JSON only:\n{\n  "matched_variant_name": "exact name of the chosen candidate, or null if you cannot confidently pick",\n  "confidence": "high | medium | low",\n  "reasoning": "1-2 sentences citing the specific visual evidence"\n}`,
+  });
+
+  try {
+    const res = await geminiProvider.chat({
+      model: selectModel("apartment_research"),
+      system: "You are an architectural vision assistant. Match user-provided apartment photos to floor-plan diagrams by comparing visible features. Never guess — if the photos don't show enough to decide, return matched_variant_name: null.",
+      messages: [{ role: "user", content: blocks }],
+      max_tokens: 800,
+      temperature: 0.1,
+    });
+
+    const raw = res.content.trim();
+    if (!raw) return null;
+    const data = parseModelJSON(raw) as {
+      matched_variant_name?: string | null;
+      confidence?: "high" | "medium" | "low";
+      reasoning?: string;
+    };
+    if (!data.matched_variant_name) return null;
+
+    const picked = withImages.find(
+      (c) => String(c.name ?? "").toLowerCase().trim() === String(data.matched_variant_name).toLowerCase().trim(),
+    );
+    if (!picked) return null;
+
+    return {
+      variant: picked,
+      confidence: data.confidence ?? "medium",
+      reasoning: data.reasoning ?? "",
+    };
+  } catch (e) {
+    console.warn("[apartment-research] Vision disambiguation failed:", (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Decide which variant corresponds to the user's actual apartment, combining
+ * sqft matching (primary signal) with vision disambiguation (tiebreaker).
+ */
+async function matchUnitVariant(
+  variants: Variant[],
+  userSqft: number | null,
+  userImageUrls: string[],
+  unitLabel: string,
+): Promise<UnitMatchResult> {
+  if (variants.length === 0) {
+    return {
+      variant: null,
+      match_method: "no_match",
+      confidence: "low",
+      match_notes: "No unit variants were found in building research.",
+    };
+  }
+
+  if (variants.length === 1) {
+    return {
+      variant: variants[0],
+      match_method: "single_variant",
+      confidence: "medium",
+      match_notes: `Only one ${unitLabel} variant found; assumed to be the user's unit.`,
+      candidates_considered: [variantLabel(variants[0])],
+    };
+  }
+
+  // Try exact sqft match
+  if (userSqft) {
+    const exact = variants.filter((v) => parseSqft(v.sqft) === userSqft);
+
+    if (exact.length === 1) {
+      return {
+        variant: exact[0],
+        match_method: "exact_sqft",
+        confidence: "high",
+        match_notes: `Exact sqft match (${userSqft} sqft) for variant "${String(exact[0].name)}".`,
+        candidates_considered: variants.map(variantLabel),
+      };
+    }
+
+    if (exact.length > 1) {
+      // Multiple variants share the sqft — try vision to disambiguate
+      const vision = await disambiguateWithVision(exact, userImageUrls, unitLabel, userSqft);
+      if (vision) {
+        return {
+          variant: vision.variant,
+          match_method: "vision_disambiguated",
+          confidence: vision.confidence,
+          match_notes: `${exact.length} variants share ${userSqft} sqft; vision picked "${String(vision.variant.name)}". ${vision.reasoning}`,
+          candidates_considered: exact.map(variantLabel),
+        };
+      }
+      // Vision inconclusive — pick first with a clear note
+      return {
+        variant: exact[0],
+        match_method: "exact_sqft",
+        confidence: "low",
+        match_notes: `${exact.length} variants share ${userSqft} sqft and vision could not disambiguate. Provisionally chose "${String(exact[0].name)}".`,
+        candidates_considered: exact.map(variantLabel),
+      };
+    }
+
+    // No exact match — find closest within tolerance (±50 sqft)
+    const TOLERANCE = 50;
+    const scored = variants
+      .map((v) => ({ v, diff: parseSqft(v.sqft) !== null ? Math.abs(parseSqft(v.sqft)! - userSqft) : Infinity }))
+      .filter((s) => s.diff <= TOLERANCE)
+      .sort((a, b) => a.diff - b.diff);
+
+    if (scored.length > 0) {
+      return {
+        variant: scored[0].v,
+        match_method: "closest_sqft",
+        confidence: scored[0].diff <= 10 ? "high" : "medium",
+        match_notes: `No exact sqft match; closest is "${String(scored[0].v.name)}" at ${parseSqft(scored[0].v.sqft)} sqft (user reported ${userSqft}, diff ${scored[0].diff}).`,
+        candidates_considered: variants.map(variantLabel),
+      };
+    }
+  }
+
+  // No sqft or nothing close enough — try vision alone
+  const vision = await disambiguateWithVision(variants, userImageUrls, unitLabel, userSqft);
+  if (vision) {
+    return {
+      variant: vision.variant,
+      match_method: "vision_only",
+      confidence: vision.confidence,
+      match_notes: `Matched via vision comparison: "${String(vision.variant.name)}". ${vision.reasoning}`,
+      candidates_considered: variants.map(variantLabel),
+    };
+  }
+
+  return {
+    variant: null,
+    match_method: "no_match",
+    confidence: "low",
+    match_notes: `Could not confidently match the user's unit${userSqft ? ` (${userSqft} sqft)` : ""}. ${variants.length} variants considered; ${userImageUrls.length === 0 ? "no user photos available for vision disambiguation" : "vision was inconclusive"}.`,
+    candidates_considered: variants.map(variantLabel),
+  };
+}
+
 /**
  * Research an apartment building using Gemini Google Search + URL Context.
  * Gemini 3 models support combining these tools with structured JSON output.
@@ -164,7 +404,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, building_place_id } = await request.json();
+  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id } = await request.json();
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
@@ -489,6 +729,47 @@ PROCESS:
       }
     }
 
+    // ─── Unit matching pass ─────────────────────────────────────
+    // Identify which specific variant corresponds to the user's apartment.
+    // Priority: exact sqft → vision-disambiguated (for sqft ties) → closest
+    // sqft within tolerance → vision-only (when no sqft provided). Result is
+    // attached to research.floor_plan.matched_unit and also denormalized to
+    // project.unit_plan_name for cheap access by downstream agents.
+    {
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      const variants = (fp?.unit_variants as Variant[] | undefined) ?? [];
+      if (variants.length > 0) {
+        // Fetch user room images (if we have a project_id) to enable vision matching
+        let userImageUrls: string[] = [];
+        if (project_id) {
+          try {
+            const { data: imgs } = await supabase
+              .from("room_images")
+              .select("image_url, rooms!inner(project_id)")
+              .eq("rooms.project_id", project_id)
+              .eq("image_type", "room")
+              .limit(12);
+            userImageUrls = ((imgs ?? []) as Array<{ image_url: string | null }>)
+              .map((r) => r.image_url)
+              .filter((u: string | null): u is string => typeof u === "string" && u.length > 0);
+          } catch (e) {
+            console.warn("[apartment-research] Could not fetch user room images:", (e as Error).message);
+          }
+        }
+
+        const userSqft = typeof apartment_sqft === "number" ? apartment_sqft : null;
+        try {
+          const match = await matchUnitVariant(variants, userSqft, userImageUrls, unitLabel);
+          (research.floor_plan as Record<string, unknown>).matched_unit = match;
+          console.log(
+            `[apartment-research] Unit match: ${match.variant ? String(match.variant.name) : "none"} (${match.match_method}, ${match.confidence}). ${match.match_notes}`,
+          );
+        } catch (e) {
+          console.warn("[apartment-research] Unit matching failed:", (e as Error).message);
+        }
+      }
+    }
+
     // ─── Google Maps enrichment pass ─────────────────────────────
     // googleMaps can't be combined with googleSearch OR urlContext in the
     // same call (Gemini rejects with INVALID_ARGUMENT). It must run solo.
@@ -550,6 +831,9 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
 
     // Save to project if project_id provided
     if (project_id) {
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      const matched = fp?.matched_unit as { variant: Variant | null } | undefined;
+      const matchedName = matched?.variant?.name as string | null | undefined;
       await supabase
         .from("projects")
         .update({
@@ -559,6 +843,8 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           city,
           state,
           neighborhood,
+          ...(typeof apartment_sqft === "number" ? { apartment_sqft } : {}),
+          ...(matchedName ? { unit_plan_name: matchedName } : {}),
           ...(building_place_id ? { building_place_id } : {}),
         })
         .eq("id", project_id);

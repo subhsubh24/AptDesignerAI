@@ -82,33 +82,64 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
 
     if (building.floor_plan) {
       const fp = building.floor_plan;
+
+      // Prefer the matched_unit when available — it represents the user's
+      // *actual* apartment, so downstream agents should focus on that single
+      // layout rather than iterating every variant in the building.
+      const matched = fp.matched_unit as
+        | { variant?: Record<string, unknown> | null; match_method?: string; confidence?: string; match_notes?: string }
+        | undefined;
+      const matchedVariant = matched?.variant ?? null;
+
       const fpLines: string[] = [];
       if (fp.unit_type_searched) fpLines.push(`- Unit type: ${fp.unit_type_searched}`);
-      if (fp.total_sqft) fpLines.push(`- Total: ~${fp.total_sqft} sqft`);
-      if (fp.room_layout) fpLines.push(`- Layout: ${fp.room_layout}`);
-      if (fp.living_dining_combined) fpLines.push(`- Living/dining: combined open space`);
-      if (fp.kitchen_style) fpLines.push(`- Kitchen: ${fp.kitchen_style}`);
-      if (fp.room_dimensions) {
-        const dims = fp.room_dimensions as Record<string, string>;
-        for (const [room, dim] of Object.entries(dims)) {
-          if (dim) fpLines.push(`- ${room}: ~${dim}`);
+
+      if (matchedVariant && matched?.match_method !== "no_match") {
+        // Use the matched variant as the authoritative layout
+        const v = matchedVariant;
+        if (v.name) fpLines.push(`- User's unit plan: "${v.name as string}" (${matched?.confidence ?? "medium"} confidence, matched via ${matched?.match_method ?? "sqft"})`);
+        if (v.sqft) fpLines.push(`- Total: ~${v.sqft} sqft`);
+        if (v.room_layout) fpLines.push(`- Layout: ${v.room_layout}`);
+        if (v.living_dining_combined) fpLines.push(`- Living/dining: combined open space`);
+        if (v.kitchen_style) fpLines.push(`- Kitchen: ${v.kitchen_style}`);
+        if (v.room_dimensions) {
+          const dims = v.room_dimensions as Record<string, string>;
+          for (const [room, dim] of Object.entries(dims)) {
+            if (dim) fpLines.push(`- ${room}: ~${dim}`);
+          }
+        }
+        if (Array.isArray(v.notable_spatial_features) && (v.notable_spatial_features as string[]).length > 0) {
+          fpLines.push(`- Spatial notes: ${(v.notable_spatial_features as string[]).join(", ")}`);
+        }
+      } else {
+        // No confident match — fall back to the building-wide summary
+        if (fp.total_sqft) fpLines.push(`- Total: ~${fp.total_sqft} sqft`);
+        if (fp.room_layout) fpLines.push(`- Layout: ${fp.room_layout}`);
+        if (fp.living_dining_combined) fpLines.push(`- Living/dining: combined open space`);
+        if (fp.kitchen_style) fpLines.push(`- Kitchen: ${fp.kitchen_style}`);
+        if (fp.room_dimensions) {
+          const dims = fp.room_dimensions as Record<string, string>;
+          for (const [room, dim] of Object.entries(dims)) {
+            if (dim) fpLines.push(`- ${room}: ~${dim}`);
+          }
+        }
+        const variants = fp.unit_variants as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(variants) && variants.length > 0) {
+          const names = variants
+            .map((v) => {
+              const parts: string[] = [];
+              if (v.name) parts.push(v.name as string);
+              if (v.sqft) parts.push(`${v.sqft} sqft`);
+              return parts.join(" — ");
+            })
+            .filter(Boolean);
+          if (names.length > 0) fpLines.push(`- Possible variants (unit not yet matched): ${names.join("; ")}`);
+        }
+        if (Array.isArray(fp.notable_spatial_features) && fp.notable_spatial_features.length > 0) {
+          fpLines.push(`- Spatial notes: ${fp.notable_spatial_features.join(", ")}`);
         }
       }
-      // Surface per-variant details if available
-      const variants = fp.unit_variants as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(variants) && variants.length > 0) {
-        for (const v of variants) {
-          const vParts: string[] = [];
-          if (v.name) vParts.push(v.name as string);
-          if (v.sqft) vParts.push(`${v.sqft} sqft`);
-          if (v.kitchen_style) vParts.push(`kitchen: ${v.kitchen_style}`);
-          if (v.living_dining_combined) vParts.push("combined living/dining");
-          if (vParts.length > 0) fpLines.push(`- Variant: ${vParts.join(" — ")}`);
-        }
-      }
-      if (Array.isArray(fp.notable_spatial_features) && fp.notable_spatial_features.length > 0) {
-        fpLines.push(`- Spatial notes: ${fp.notable_spatial_features.join(", ")}`);
-      }
+
       if (fpLines.length > 0) {
         sections.push(`## FLOOR PLAN\n${fpLines.join("\n")}`);
       }
