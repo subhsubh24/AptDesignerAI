@@ -5,6 +5,7 @@ import { getDiagnosisPrompt } from "@/lib/prompts/diagnosis";
 import { DiagnosisResponseSchema } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
@@ -66,7 +67,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
         system,
         messages: [{ role: "user", content: retryContent }],
         max_tokens: 8000,
-        temperature: attempt === 0 ? 0.3 : 0.4,
+        seed: DETERMINISTIC_SEED,
         responseSchema: DIAGNOSIS_GEMINI_SCHEMA,
       });
 

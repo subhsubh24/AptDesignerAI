@@ -62,6 +62,12 @@ export interface AIProvider {
     messages: AIMessage[];
     max_tokens?: number;
     temperature?: number;
+    /**
+     * Seed for deterministic sampling. When set with the same prompt+config,
+     * Gemini will best-effort return the same result. See
+     * lib/ai/determinism.ts for the global DETERMINISTIC_MODE override.
+     */
+    seed?: number;
     tools?: GeminiTool[];
     responseSchema?: Record<string, unknown>;
     responseMimeType?: string;

@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { HarmonyValidationResponseSchema, ProductSetValidationResponseSchema, FinalAssessmentResponseSchema } from "@/lib/types/schemas";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
@@ -386,7 +387,7 @@ YOUR GOAL IS 9.5+/10 ON EVERY SUB-DIMENSION OF EVERY ITEM. Be extremely precise 
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: maxTokens,
-          temperature: attempt === 1 ? 0.2 : 0.3,
+          seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
         });
@@ -707,7 +708,7 @@ Return JSON:
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: maxTokens,
-          temperature: 0.2,
+          seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
         });
@@ -964,7 +965,7 @@ Return JSON:
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 16000,
-          temperature: attempt === 1 ? 0.2 : 0.3,
+          seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel: "high" },
           responseMimeType: "application/json",
         });

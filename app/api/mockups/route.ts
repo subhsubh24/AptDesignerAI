@@ -1,9 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage } from "@/lib/agents/mockup-agent";
 import type { MockupContext } from "@/lib/agents/mockup-agent";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+
+/**
+ * Canonical JSON stringify — keys sorted recursively. Used for building
+ * cache keys where any ordering drift in a Map/object could defeat the cache.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  const keys = Object.keys(value as Record<string, unknown>).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson((value as Record<string, unknown>)[k])).join(",") + "}";
+}
+
+/**
+ * Compute a content-addressed cache key for a mockup render. Identical
+ * (room photos, product set, placement map, style prompt) → identical key
+ * → identical saved file. Subsequent requests with the same inputs short-
+ * circuit the (expensive) image model call.
+ */
+function computeMockupCacheKey(input: {
+  roomImageUrls: string[];
+  productIds: string[];
+  placementMap: Record<string, string> | undefined;
+  designDirection: string;
+  iterationNotes?: string;
+}): string {
+  const payload = [
+    [...input.roomImageUrls].sort().join("|"),
+    [...input.productIds].sort().join(","),
+    canonicalJson(input.placementMap ?? {}),
+    input.designDirection || "",
+    input.iterationNotes || "",
+  ].join("||");
+  return crypto.createHash("sha256").update(payload).digest("hex").slice(0, 32);
+}
+
+/**
+ * Check the local filesystem mockups dir for an already-rendered image at
+ * the given cache key. Returns the public URL if present, null otherwise.
+ */
+function findCachedMockup(cacheKey: string): { url: string } | null {
+  const mockupsDir = path.join(process.cwd(), "public", "uploads", "room-images", "mockups");
+  try {
+    if (!fs.existsSync(mockupsDir)) return null;
+    const files = fs.readdirSync(mockupsDir);
+    const hit = files.find((f) => f.startsWith(cacheKey + "."));
+    if (hit) return { url: `/uploads/room-images/mockups/${hit}` };
+  } catch {
+    // Ignore — fall through to regenerate
+  }
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -151,6 +205,29 @@ RULES:
 - Use natural lighting consistent with the window positions in the reference photos.
 - The result should look like a real photograph taken in this exact apartment, not a generic render.`;
 
+    // Check mockup cache first — identical room photos + identical prompt =
+    // identical render, no need to re-run the image model.
+    const visionCacheKey = computeMockupCacheKey({
+      roomImageUrls,
+      productIds: [],  // vision mode has no products, just the prompt
+      placementMap: undefined,
+      designDirection: visionPrompt,  // the full prompt is the "design"
+    });
+    const cachedVision = findCachedMockup(visionCacheKey);
+    if (cachedVision) {
+      console.log(`[mockup] vision cache hit key=${visionCacheKey}`);
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "completed",
+        output_json: { image_url: cachedVision.url, cache_hit: true },
+      });
+      return NextResponse.json({
+        image_url: cachedVision.url,
+        prompt: visionPrompt,
+        vision_mode: true,
+        cache_hit: true,
+      });
+    }
+
     const imageResult = await generateMockupImage(visionPrompt, roomImageUrls);
 
     if (!imageResult.success || !imageResult.data) {
@@ -161,8 +238,8 @@ RULES:
       return NextResponse.json({ error: imageResult.error }, { status: 500 });
     }
 
-    // Upload generated image to Supabase Storage
-    const imageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type);
+    // Upload generated image to storage under the cache key
+    const imageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type, visionCacheKey);
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
@@ -193,6 +270,41 @@ RULES:
     products = data || [];
   } else {
     return NextResponse.json({ error: "bundle_id or product_ids required" }, { status: 400 });
+  }
+
+  // Compute cache key from the inputs that actually determine the render.
+  // Same (room, products, placement, style direction, iteration notes) →
+  // same cache key → return the existing file without re-running the model.
+  const productIdList = products.map((p: { id: string }) => p.id);
+  const cacheKey = computeMockupCacheKey({
+    roomImageUrls,
+    productIds: productIdList,
+    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+    designDirection: (ddJson?.style_notes as string) || (ddJson?.direction as string) || "",
+    iterationNotes: iteration_notes || undefined,
+  });
+  const cached = findCachedMockup(cacheKey);
+  if (cached) {
+    console.log(`[mockup] cache hit key=${cacheKey}`);
+    // Still record this as a mockup job so the UI can reference it
+    const { data: cachedJob } = await supabase
+      .from("mockup_jobs")
+      .insert({
+        room_id,
+        bundle_id,
+        selected_products: products,
+        status: "completed",
+        result_image_url: cached.url,
+        generation_provider: "cache",
+        completed_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    return NextResponse.json({
+      id: cachedJob?.id,
+      image_url: cached.url,
+      cache_hit: true,
+    });
   }
 
   // Create mockup job
@@ -283,8 +395,9 @@ RULES:
     return NextResponse.json({ error: imageResult.error }, { status: 500 });
   }
 
-  // Upload generated image to Supabase Storage
-  const finalImageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type);
+  // Upload generated image under the content-addressed cache key, so a
+  // repeat request with the same inputs hits the cache next time.
+  const finalImageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type, cacheKey);
 
   // Update mockup job
   await supabase
@@ -312,19 +425,24 @@ RULES:
 }
 
 /**
- * Upload base64 image data to Supabase Storage and return the public URL.
+ * Upload base64 image data to storage and return the public URL.
+ *
+ * The filename is content-addressed when `cacheKey` is provided so that
+ * identical inputs produce identical paths (enables the mockup cache).
+ * When omitted, falls back to a sha256 of the bytes themselves.
  */
 async function uploadMockupImage(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   base64Data: string,
   mimeType?: string,
+  cacheKey?: string,
 ): Promise<string> {
   const mime = mimeType || "image/png";
   const ext = mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : "png";
-  const fileName = `mockups/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
   const buffer = Buffer.from(base64Data, "base64");
+  const stem = cacheKey ?? crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 32);
+  const fileName = `mockups/${stem}.${ext}`;
 
   const { data, error } = await supabase.storage
     .from("room-images")

@@ -7,6 +7,7 @@ import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -177,7 +178,9 @@ export async function scoreProduct(
     const result = await withRetry(
       async () => {
         attempt++;
-        // On retry: include previous error context and bump temperature slightly
+        // On retry: include previous error context. We no longer bump
+        // temperature — Gemini 3 is optimized for its default (1.0) and
+        // escalating temperature was degrading reasoning.
         const retryContent = attempt > 1 && lastError
           ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Please return ONLY valid JSON matching the exact schema above. Ensure all score fields are numbers 0-10.` }]
           : content;
@@ -187,7 +190,7 @@ export async function scoreProduct(
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 16000,
-          temperature: attempt === 1 ? 0.2 : 0.35,
+          seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "high" },
         });
@@ -453,7 +456,7 @@ Return JSON:
               system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. If product images are provided, use them to verify style, color, and material claims. Return ONLY the JSON scores, no explanations.",
               messages: [{ role: "user", content: [...qsContent, { type: "text" as const, text: retryHint }] }],
               max_tokens: 1500,
-              temperature: 0.1,
+              seed: DETERMINISTIC_SEED,
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
             });
 

@@ -3,12 +3,24 @@ import fs from "fs";
 import path from "path";
 import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
+import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import type {
   AIProvider,
   AIMessage,
   AIResponse,
   GeminiTool,
 } from "./provider";
+
+// NOTE on thought signatures (Gemini 3):
+// Gemini 3 returns encrypted `thoughtSignature` parts inside
+// response.candidates[0].content.parts. For single-turn calls (our current
+// usage throughout the agent pipeline), we can safely discard them. If we
+// ever start passing the model's response back as a `model`-role message
+// (i.e., multi-turn chat or function-calling continuations), we MUST preserve
+// the full parts array including any `thoughtSignature` fields — otherwise
+// reasoning quality degrades (and function-calling will 400). The
+// convertMessages() function below currently only emits text + inlineData;
+// update it if we introduce multi-turn flows.
 
 const log = createLogger("gemini");
 
@@ -159,13 +171,20 @@ export const geminiProvider: AIProvider = {
     system,
     messages,
     max_tokens = 4000,
-    temperature = 0.3,
+    temperature,
+    seed,
     tools,
     responseSchema,
     responseMimeType,
     thinkingConfig,
     responseModalities,
   }): Promise<AIResponse> {
+    // Gemini 3 is optimized for temperature=1.0 (its default). Google warns
+    // that sub-1.0 values can cause looping / degraded reasoning. We no
+    // longer set a 0.3 fallback; if the caller doesn't pass a temperature,
+    // we let Gemini 3 use its own default.
+    const effectiveTemperature = resolveTemperature(temperature);
+    const effectiveSeed = resolveSeed(seed);
     const ai = getClient();
     const contents = await convertMessages(messages);
 
@@ -200,8 +219,19 @@ export const geminiProvider: AIProvider = {
     // Build config
     const config: Record<string, unknown> = {
       maxOutputTokens: max_tokens,
-      temperature,
     };
+
+    if (typeof effectiveTemperature === "number") {
+      config.temperature = effectiveTemperature;
+    }
+
+    if (typeof effectiveSeed === "number") {
+      config.seed = effectiveSeed;
+    }
+
+    if (DETERMINISTIC) {
+      log.debug("deterministic call", { model, seed: effectiveSeed, temperatureOverridden: effectiveTemperature === undefined });
+    }
 
     if (system) {
       config.systemInstruction = system;

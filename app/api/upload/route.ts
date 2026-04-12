@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -15,17 +16,23 @@ export async function POST(request: Request) {
   }
 
   const fileExt = file.name.split(".").pop();
-  const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
 
   // Convert File to Buffer before uploading — some Next.js runtimes don't
   // pass the Blob through correctly to downstream consumers
   const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+  // Content-addressed filename: same bytes → same path. This makes uploads
+  // idempotent (useful for deterministic replay) and lets us dedupe
+  // accidental re-uploads naturally. `upsert: true` so a repeat upload of
+  // the same image doesn't 409.
+  const contentHash = crypto.createHash("sha256").update(fileBuffer).digest("hex").slice(0, 16);
+  const fileName = `${user.id}/${contentHash}.${fileExt}`;
+
   const { data, error } = await supabase.storage
     .from(bucket)
     .upload(fileName, fileBuffer, {
       contentType: file.type,
-      upsert: false,
+      upsert: true,
     });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

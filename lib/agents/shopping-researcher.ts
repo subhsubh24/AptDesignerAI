@@ -5,6 +5,7 @@ import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { PriceTier } from "@/lib/prompts/search-brief";
@@ -17,6 +18,7 @@ const log = createLogger("shopping-researcher");
 /** Pre-computed Gemini-compatible schemas. */
 const SEARCH_BRIEF_GEMINI_SCHEMA = zodToGeminiSchema(SearchBriefResponseSchema);
 const QUICK_SCREEN_GEMINI_SCHEMA = zodToGeminiSchema(QuickScreenResponseSchema);
+const SEARCH_PRODUCTS_GEMINI_SCHEMA = zodToGeminiSchema(SearchProductsResponseSchema);
 
 interface QueryWithAngle {
   query: string;
@@ -309,7 +311,7 @@ export async function generateSearchBrief(
           system,
           messages: [{ role: "user", content: prompt + retryHint }],
           max_tokens: 8000,
-          temperature: attempt === 1 ? 0.3 : 0.4,
+          seed: DETERMINISTIC_SEED,
           responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
         });
 
@@ -402,14 +404,37 @@ Return ONLY a valid JSON object — no text before or after:
 }`;
 
   try {
-    const response = await geminiProvider.chat({
-      model: selectModel("search"),
-      system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-      messages: [{ role: "user", content: searchPrompt }],
-      max_tokens: 2000,
-      temperature: 0.2,
-      tools: [{ googleSearch: {} }],
-    });
+    // Gemini 3 supports structured output alongside googleSearch grounding in
+    // the same call (new capability). We try the combined form first; if the
+    // SDK or model rejects it, fall back to free-text JSON parsing via
+    // existing error handling below.
+    let response;
+    try {
+      response = await geminiProvider.chat({
+        model: selectModel("search"),
+        system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
+        messages: [{ role: "user", content: searchPrompt }],
+        max_tokens: 2000,
+        seed: DETERMINISTIC_SEED,
+        tools: [{ googleSearch: {} }],
+        responseSchema: SEARCH_PRODUCTS_GEMINI_SCHEMA,
+        responseMimeType: "application/json",
+      });
+    } catch (schemaErr) {
+      // If the combined request is rejected, retry without responseSchema and
+      // fall through to the existing text-parse / grounding-metadata fallback.
+      log.warn("structured+grounding call failed, falling back to text parsing", {
+        error: schemaErr instanceof Error ? schemaErr.message : String(schemaErr),
+      });
+      response = await geminiProvider.chat({
+        model: selectModel("search"),
+        system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
+        messages: [{ role: "user", content: searchPrompt }],
+        max_tokens: 2000,
+        seed: DETERMINISTIC_SEED,
+        tools: [{ googleSearch: {} }],
+      });
+    }
 
     try {
       const raw = response.content.trim();
@@ -557,7 +582,7 @@ Return JSON:
           system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category. Return ONLY the JSON ratings array.",
           messages: [{ role: "user", content: prompt }],
           max_tokens: 2000,
-          temperature: 0.1,
+          seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
         });
 

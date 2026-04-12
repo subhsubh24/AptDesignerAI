@@ -87,6 +87,18 @@ function cleanForGemini(
     }
   }
 
+  // Gemini 3 honors `propertyOrdering` for object schemas — emitting JSON
+  // keys in a fixed, known order makes the stringified response byte-
+  // identical across runs (helpful for response-level caching or diffing).
+  // We derive it from the order of keys in `properties` when present.
+  if (result.type === "object" && typeof result.properties === "object" && result.properties !== null) {
+    const props = result.properties as Record<string, unknown>;
+    // Only set if not already supplied by the caller.
+    if (!result.propertyOrdering) {
+      result.propertyOrdering = Object.keys(props);
+    }
+  }
+
   return result;
 }
 

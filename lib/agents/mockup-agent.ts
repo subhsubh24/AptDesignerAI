@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import type { AgentResult } from "./types";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -75,7 +76,7 @@ export async function generateMockupPrompt(
       system,
       messages: [{ role: "user", content: prompt }],
       max_tokens: 2000,
-      temperature: 0.4,
+      seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
 
@@ -146,11 +147,16 @@ You are ONLY replacing/adding furniture and decor items. The room shell (walls, 
 
 Generate images in a photorealistic, editorial interior photography style — warm natural light, slight depth of field, as if shot with a professional camera for Architectural Digest.`;
 
+    // Image generation benefits from some stochasticity — we keep a moderate
+    // temperature but add seed for best-effort reproducibility. Full
+    // byte-identical reproducibility is handled at the route level by
+    // caching rendered images keyed on (room image hash + product set).
     const response = await geminiProvider.chat({
       model: selectModel("image_generation"),
       system: imageSystemPrompt,
       messages: [{ role: "user", content }],
       temperature: 0.4,
+      seed: DETERMINISTIC_SEED,
       responseModalities: ["Text", "Image"],
     });
 

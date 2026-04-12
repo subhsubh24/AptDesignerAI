@@ -20,6 +20,22 @@ import type { PriceTier } from "@/lib/prompts/search-brief";
 
 const log = createLogger("orchestrator");
 
+// ─── Deterministic tiebreakers ─────────────────────────────────
+// When two items have equal scores, JavaScript's .sort is unstable: ties
+// fall out in insertion order, which depends on which async extraction
+// finished first. We add URL-based tiebreakers so the same candidate set
+// always produces the same ranking.
+function tiebreakProduct(a: CandidateProduct, b: CandidateProduct): number {
+  const au = a.product_url || "";
+  const bu = b.product_url || "";
+  return au.localeCompare(bu);
+}
+function tiebreakBundle(a: CandidateProduct[], b: CandidateProduct[]): number {
+  const au = [...a.map((p) => p.product_url || "")].sort().join("|");
+  const bu = [...b.map((p) => p.product_url || "")].sort().join("|");
+  return au.localeCompare(bu);
+}
+
 // ─── Types ─────────────────────────────────────────────────────
 
 export interface OrchestrationStep {
@@ -584,7 +600,7 @@ export async function runAgenticSearch(
         products.sort((a, b) => {
           const scoreA = quickScoresByProduct.get(a.id) || 0;
           const scoreB = quickScoresByProduct.get(b.id) || 0;
-          return scoreB - scoreA;
+          return (scoreB - scoreA) || tiebreakProduct(a, b);
         });
 
         // Filter out low-confidence products (quick score confidence < 4)
@@ -662,7 +678,7 @@ export async function runAgenticSearch(
           products.sort((a, b) => {
             const scoreA = evaluations.get(a.id)?.final_item_score || 0;
             const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-            return scoreB - scoreA;
+            return (scoreB - scoreA) || tiebreakProduct(a, b);
           });
           kept.push(...products.slice(0, 5));
         }
@@ -710,7 +726,7 @@ export async function runAgenticSearch(
         products.sort((a, b) => {
           const scoreA = evaluations.get(a.id)?.final_item_score || 0;
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-          return scoreB - scoreA;
+          return (scoreB - scoreA) || tiebreakProduct(a, b);
         });
         kept.push(...products.slice(0, 5));
         // (s) Keep positions 6-20 as "also considered" for user browsing
@@ -855,7 +871,7 @@ export async function runAgenticSearch(
         tierFiltered.sort((a, b) => {
           const scoreA = evaluations.get(a.id)?.final_item_score || 0;
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-          return scoreB - scoreA;
+          return (scoreB - scoreA) || tiebreakProduct(a, b);
         });
         if (tierFiltered.length > 0) topByCategory.push(tierFiltered.slice(0, 3));
       }
@@ -871,7 +887,7 @@ export async function runAgenticSearch(
         combos.sort((a, b) => {
           const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
           const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
-          return avgB - avgA;
+          return (avgB - avgA) || tiebreakBundle(a, b);
         });
         combos = combos.slice(0, 27);
       }
@@ -903,7 +919,7 @@ export async function runAgenticSearch(
       if (validResults.length === 0) return null;
 
       // Pick the best bundle
-      validResults.sort((a, b) => b.final_bundle_score - a.final_bundle_score);
+      validResults.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
       const best = validResults[0];
       for (const r of validResults) {
         tracer.trace({ phase: "bundle", action: "evaluated", tier, score: r.final_bundle_score, metadata: { verdict: r.verdict } });
@@ -1051,7 +1067,7 @@ export async function runAgenticSearch(
             tierFiltered.sort((a, b) => {
               const scoreA = evaluations.get(a.id)?.final_item_score || 0;
               const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-              return scoreB - scoreA;
+              return (scoreB - scoreA) || tiebreakProduct(a, b);
             });
             if (tierFiltered.length > 0) topByCategory.push(tierFiltered.slice(0, 3));
           }
@@ -1063,7 +1079,7 @@ export async function runAgenticSearch(
             combos.sort((a, b) => {
               const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
               const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
-              return avgB - avgA;
+              return (avgB - avgA) || tiebreakBundle(a, b);
             });
             combos = combos.slice(0, 27);
           }
@@ -1092,7 +1108,7 @@ export async function runAgenticSearch(
           }>;
 
           if (validResults.length > 0) {
-            validResults.sort((a, b) => b.final_bundle_score - a.final_bundle_score);
+            validResults.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
             const best = validResults[0];
             // Replace existing bundle for this tier
             const existingIdx = bundles.findIndex((b) => (b as { tier: string }).tier === tier);

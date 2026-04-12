@@ -5,7 +5,12 @@
  * - Exponential backoff with jitter for transient failures
  * - Circuit breaker to fail fast during sustained outages
  * - Configurable per-operation retry policies
+ *
+ * When DETERMINISTIC_MODE=true (see lib/ai/determinism.ts), jitter is
+ * disabled so retry timing is reproducible run-to-run.
  */
+
+import { DETERMINISTIC } from "./determinism";
 
 export interface RetryOptions {
   /** Maximum number of attempts (including the first). Default: 3 */
@@ -75,8 +80,9 @@ export async function withRetry<T>(
       // Exponential backoff: baseDelay * 2^(attempt-1)
       let delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxDelayMs);
 
-      // Add jitter: random value between 0 and delay
-      if (jitter) {
+      // Add jitter: random value between 0 and delay.
+      // Disabled under DETERMINISTIC_MODE so retry timing is reproducible.
+      if (jitter && !DETERMINISTIC) {
         delay = Math.round(delay * (0.5 + Math.random() * 0.5));
       }
 

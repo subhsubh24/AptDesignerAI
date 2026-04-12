@@ -4,6 +4,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import { ExtractedProductSchema } from "@/lib/types/schemas";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { DETERMINISTIC, DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
@@ -16,6 +17,10 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const extractionCache = new Map<string, { data: ExtractedProduct; timestamp: number }>();
 
 function getCachedExtraction(url: string): ExtractedProduct | null {
+  // Bypass cache entirely in deterministic mode — we always want the
+  // extraction step to run through the seeded LLM call so runs are
+  // reproducible regardless of cache warmth.
+  if (DETERMINISTIC) return null;
   const entry = extractionCache.get(url);
   if (!entry) return null;
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
@@ -316,7 +321,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
       system,
       messages: [{ role: "user", content: userContent }],
       max_tokens: 3000,
-      temperature: 0.1,
+      seed: DETERMINISTIC_SEED,
       tools: [{ urlContext: {} }],
     });
 
@@ -341,7 +346,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
         system,
         messages: [{ role: "user", content: userContent }],
         max_tokens: 3000,
-        temperature: 0.1,
+        seed: DETERMINISTIC_SEED,
         tools: [{ urlContext: {} }],
       });
 
@@ -369,7 +374,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
           system,
           messages: [{ role: "user", content: fallbackContent }],
           max_tokens: 3000,
-          temperature: 0.1,
+          seed: DETERMINISTIC_SEED,
         });
 
         const raw = response.content.trim();

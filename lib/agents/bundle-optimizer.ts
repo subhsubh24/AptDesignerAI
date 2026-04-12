@@ -6,6 +6,7 @@ import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import { BundleEvalResponseSchema } from "@/lib/types/schemas";
 import { recordBundleScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -139,7 +140,7 @@ export async function evaluateBundle(
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 10000,
-          temperature: attempt === 1 ? 0.2 : 0.35,
+          seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "high" },
         });
