@@ -193,6 +193,7 @@ export async function scoreProduct(
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "high" },
+          mediaResolution: "ultra_high",
         });
 
         const raw = extractJsonObject(response.content);
@@ -458,6 +459,7 @@ Return JSON:
               max_tokens: 1500,
               seed: DETERMINISTIC_SEED,
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
+              mediaResolution: "high",
             });
 
             const raw = extractJsonObject(response.content);

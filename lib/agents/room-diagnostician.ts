@@ -69,6 +69,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
         max_tokens: 8000,
         seed: DETERMINISTIC_SEED,
         responseSchema: DIAGNOSIS_GEMINI_SCHEMA,
+        mediaResolution: "ultra_high",
       });
 
       const raw = extractJsonObject(response.content);

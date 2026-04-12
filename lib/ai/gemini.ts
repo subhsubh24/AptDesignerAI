@@ -178,6 +178,7 @@ export const geminiProvider: AIProvider = {
     responseMimeType,
     thinkingConfig,
     responseModalities,
+    mediaResolution,
   }): Promise<AIResponse> {
     // Gemini 3 is optimized for temperature=1.0 (its default). Google warns
     // that sub-1.0 values can cause looping / degraded reasoning. We no
@@ -259,6 +260,10 @@ export const geminiProvider: AIProvider = {
 
     if (responseModalities) {
       config.responseModalities = responseModalities;
+    }
+
+    if (mediaResolution) {
+      config.mediaResolution = mediaResolution;
     }
 
     let response;

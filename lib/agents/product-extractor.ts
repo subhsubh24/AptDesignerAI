@@ -426,6 +426,7 @@ export async function extractFromImage(imageUrl: string, designProfile?: Dynamic
       max_tokens: 2000,
       temperature: 0.1,
       responseMimeType: "application/json",
+      mediaResolution: "high",
     });
 
     const validated = ExtractedProductSchema.parse(extractJsonObject(response.content)) as ExtractedProduct;

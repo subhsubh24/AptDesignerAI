@@ -73,5 +73,6 @@ export interface AIProvider {
     responseMimeType?: string;
     thinkingConfig?: { thinkingLevel?: "minimal" | "low" | "medium" | "high" };
     responseModalities?: string[];
+    mediaResolution?: "low" | "medium" | "high" | "ultra_high";
   }): Promise<AIResponse>;
 }
