@@ -87,9 +87,9 @@ function mathToCapValue(mathNormalized: number): number {
 export function applyMathCaps(
   subScores: HarmonySubScores,
   mathCaps: MathDimensionCaps
-): { capped: HarmonySubScores; cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number }> } {
+): { capped: HarmonySubScores; cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number; cappedTo: number }> } {
   const capped = { ...subScores };
-  const cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number }> = [];
+  const cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number; cappedTo: number }> = [];
 
   for (const [dim, mathNormalized] of Object.entries(mathCaps)) {
     if (mathNormalized === undefined || mathNormalized >= 0.90) continue;
@@ -100,9 +100,15 @@ export function applyMathCaps(
       // This lets AI override bad heuristics (e.g., wall art capped by floor
       // coverage) while still anchoring to genuinely low math scores.
       const MAX_OVERRIDE = 2.0;
-      const softCapped = mathCap + Math.min(capped[key] - mathCap, MAX_OVERRIDE);
-      cappedDimensions.push({ dimension: dim, aiScore: capped[key], mathCap });
-      capped[key] = Math.round(softCapped * 10) / 10;
+      const softCapped = Math.round((mathCap + Math.min(capped[key] - mathCap, MAX_OVERRIDE)) * 10) / 10;
+      // Only report an actual reduction. Previously this logged every time
+      // the soft-cap logic ran, including no-op cases where softCapped
+      // equalled aiScore — producing dozens of misleading "capped to 8.4"
+      // log lines per round that had zero effect on the score.
+      if (softCapped < capped[key]) {
+        cappedDimensions.push({ dimension: dim, aiScore: capped[key], mathCap, cappedTo: softCapped });
+        capped[key] = softCapped;
+      }
     }
   }
 
@@ -114,11 +120,18 @@ export function applyMathCaps(
  *
  * Formula: exp(Σ(w_i × ln(max(score_i, floor))) / Σ(w_i))
  *
- * The floor prevents log(0) and ensures a minimum contribution.
- * A score of 0.5/10 is the floor — anything below is equally catastrophic.
+ * The floor serves two purposes:
+ *  1. Prevents log(0) (mathematical requirement).
+ *  2. Bounds how hard one weak dimension can drag the composite down.
+ *
+ * FLOOR = 2.0 keeps the "one catastrophic failure tanks everything" behaviour
+ * for genuine 2-3/10 sub-scores while preventing AI-only dimensions
+ * (style_coherence, functional_fit) from pulling a well-balanced item from
+ * 9/10 down to 7/10 when the model honestly scores them at 5-6. A 2.0 floor
+ * lets a 5/10 drag composite from ~9.2 to ~8.3, not to ~7.2.
  */
 export function computeCompositeScore(subScores: HarmonySubScores): number {
-  const FLOOR = 0.5; // Minimum score for log computation
+  const FLOOR = 2.0;
   let weightedLogSum = 0;
   let totalWeight = 0;
 
@@ -192,7 +205,7 @@ export function computeFinalHarmonyScore(
   composite_before_pairwise: number;
   pairwise_factor: number;
   capped_sub_scores: HarmonySubScores;
-  cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number }>;
+  cappedDimensions: Array<{ dimension: string; aiScore: number; mathCap: number; cappedTo: number }>;
   worstConflict?: PairwiseConflict;
 } {
   // Step 1: Math caps

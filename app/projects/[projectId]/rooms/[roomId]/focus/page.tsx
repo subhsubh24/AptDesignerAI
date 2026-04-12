@@ -183,8 +183,18 @@ export default function FocusPage() {
     return () => clearInterval(interval);
   }, [searchStartTime, step]);
 
+  // React 18 StrictMode fires useEffect twice on mount in dev. Without a
+  // ref-guard, both invocations race past the GET (no existing analysis
+  // saved yet) and both fire the expensive POST in parallel. The backend
+  // in-flight lock will coalesce them, but skipping the second call here
+  // avoids the wasted fetch + wasted render cycles.
+  const analysisStartedRef = useRef(false);
+
   // Run deep area analysis on mount — parallel data fetches
   useEffect(() => {
+    if (analysisStartedRef.current) return;
+    analysisStartedRef.current = true;
+
     async function analyze() {
       // Fetch room info, project, and existing analysis in parallel
       const [roomRes, projRes, existingRes] = await Promise.all([

@@ -91,7 +91,41 @@ function extractMatches(text: string, patterns: RegExp[]): string[] {
       }
     }
   }
-  return [...new Set(matches)];
+  return dedupNearDuplicates(matches);
+}
+
+/**
+ * Remove exact duplicates AND near-duplicates where one capture is a
+ * substring of another. Overlapping regex patterns (e.g. "keep the X" vs
+ * "keep the two X") produce captures like "two lights and light stands..."
+ * and "lights and light stands..." from the same source text. Set-dedup
+ * only catches exact matches, so we need substring-containment dedup.
+ * Keep the longer (more specific) version when one contains the other.
+ */
+function dedupNearDuplicates(raw: string[]): string[] {
+  // First pass: exact dedup (cheap)
+  const unique = [...new Set(raw)];
+  if (unique.length <= 1) return unique;
+
+  // Second pass: substring-containment dedup. Sort by length desc so the
+  // longer (more specific) capture is seen first and short duplicates get
+  // suppressed.
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const sorted = [...unique].sort((a, b) => b.length - a.length);
+  const kept: string[] = [];
+  for (const candidate of sorted) {
+    const cn = norm(candidate);
+    // Skip if any already-kept entry contains this candidate OR this
+    // candidate contains an already-kept entry (the longer one wins).
+    const isSubstringOfKept = kept.some(
+      (k) => {
+        const kn = norm(k);
+        return kn.includes(cn) || cn.includes(kn);
+      }
+    );
+    if (!isSubstringOfKept) kept.push(candidate);
+  }
+  return kept;
 }
 
 export function parseUserContext(rawContext: string): ParsedUserContext {

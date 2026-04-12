@@ -43,6 +43,14 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ analysis: null });
 }
 
+// In-flight lock: coalesces concurrent POSTs for the same room.
+// React 18 StrictMode double-mounts the focus page's useEffect, which
+// fires two identical POSTs ~ms apart. The DB-level dedup check below
+// only catches already-saved analyses; two in-flight requests would both
+// see "nothing saved" and both run the 3-5 minute pipeline. This Map
+// short-circuits the second caller to await the first caller's response.
+const inFlightAnalyses = new Map<string, Promise<NextResponse>>();
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -51,8 +59,25 @@ export async function POST(request: Request) {
   const { room_id, project_id } = await request.json();
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
+  // If another request for the same room is already running, wait for it.
+  const existing = inFlightAnalyses.get(room_id);
+  if (existing) {
+    console.log(`[area-analysis] Coalescing in-flight request for room ${room_id}`);
+    return existing;
+  }
+
+  const work = runAnalysis(supabase, room_id, project_id);
+  inFlightAnalyses.set(room_id, work);
+  try {
+    return await work;
+  } finally {
+    inFlightAnalyses.delete(room_id);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client type is complex
+async function runAnalysis(supabase: any, room_id: string, project_id: string | undefined): Promise<NextResponse> {
   // Dedup: if a valid area-analysis already exists for this room, return it
-  // (prevents duplicate work from React StrictMode double-mount)
   const { data: existingDiagnosis } = await supabase
     .from("room_diagnoses")
     .select("*")
@@ -435,6 +460,44 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
 
     console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
 
+    // ── Category dedup: collapse duplicate categories into one item ──
+    // Pass B occasionally emits the same category twice (e.g. two "plant"
+    // entries). Downstream scoring treats them as independent items, which
+    // wastes tokens and produces "plant:8.4 / plant:8.4" style duplicates
+    // in the final output. Collapse them by category, keeping the higher-
+    // priority entry and concatenating placement hints.
+    {
+      const seen = new Map<string, Record<string, unknown>>();
+      const dropped: string[] = [];
+      const priorityRank = (p: unknown) =>
+        p === "high" ? 3 : p === "medium" ? 2 : p === "low" ? 1 : 0;
+      for (const item of analysis.what_it_needs as Array<Record<string, unknown>>) {
+        const cat = String(item.category || "").toLowerCase().replace(/[\s-]+/g, "_");
+        if (!cat) continue;
+        const existing = seen.get(cat);
+        if (!existing) {
+          seen.set(cat, item);
+          continue;
+        }
+        // Duplicate category — keep the higher-priority version, merge placement.
+        dropped.push(cat);
+        const keep = priorityRank(item.priority) > priorityRank(existing.priority) ? item : existing;
+        const drop = keep === item ? existing : item;
+        const keepPlacement = String(keep.placement || "").trim();
+        const dropPlacement = String(drop.placement || "").trim();
+        if (dropPlacement && keepPlacement && !keepPlacement.includes(dropPlacement)) {
+          keep.placement = `${keepPlacement}; alt: ${dropPlacement}`;
+        } else if (dropPlacement && !keepPlacement) {
+          keep.placement = dropPlacement;
+        }
+        seen.set(cat, keep);
+      }
+      if (dropped.length > 0) {
+        analysis.what_it_needs = Array.from(seen.values());
+        console.log(`[area-analysis] Deduplicated ${dropped.length} duplicate categor${dropped.length === 1 ? "y" : "ies"}: ${dropped.join(", ")} — now ${analysis.what_it_needs.length} items`);
+      }
+    }
+
     // ── Post-validation: enforce user constraints ────────────────────
     // Catch cases where the LLM ignored exclusions, keep items, or explicit requests
     if (parsedContext || allKeepItems.length > 0) {
@@ -509,9 +572,13 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
     };
 
-    const MAX_HARMONY_ROUNDS = 10;
-    /** Target: every item must score >= 9.5/10 to stop iterating */
-    const TARGET_SCORE = 9.5;
+    // Target + round budget tuned after observing the AI converges at 8.5-9.2
+    // for soft categories (plants, art, rugs) within ~2 rounds. Chasing 9.5
+    // across 10 rounds burned ~420k tokens/run with no quality gain — items
+    // stabilized at the same "best" score they hit in round 2.
+    const MAX_HARMONY_ROUNDS = 4;
+    /** Target: items at or above this score are "locked in" and skip revision. */
+    const TARGET_SCORE = 9.0;
     let validation = null;
     let latestMathResult: MathHarmonyResult | null = null;
 
@@ -638,9 +705,9 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
           }
         }
 
-        // Log per-dimension caps if any were applied
+        // Log per-dimension caps if any were applied (only real reductions).
         for (const cap of compositeResult.cappedDimensions) {
-          console.log(`[area-analysis] Round ${round}: "${s.category}" ${cap.dimension}: AI=${cap.aiScore} capped to ${cap.mathCap} by math`);
+          console.log(`[area-analysis] Round ${round}: "${s.category}" ${cap.dimension}: AI=${cap.aiScore} → ${cap.cappedTo} (math anchor ${cap.mathCap})`);
         }
 
         // Log worst pairwise conflict
@@ -991,9 +1058,14 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       };
 
       // ── Phase 3: If final assessment says more work needed, do targeted rounds ──
-      if (final.needs_more_rounds && final.round_budget > 0) {
+      // Cap the post-final budget at 1 round. The final assessment historically
+      // requested 2+ rounds even when items were converged, cascading token cost
+      // without measurable quality gain.
+      const POST_FINAL_ROUND_CAP = 1;
+      const effectiveRoundBudget = Math.min(final.round_budget, POST_FINAL_ROUND_CAP);
+      if (final.needs_more_rounds && effectiveRoundBudget > 0) {
         const itemsNeedingWork = final.item_scores.filter((s) => s.needs_more_work);
-        console.log(`[area-analysis] Final assessment requests ${final.round_budget} more rounds for ${itemsNeedingWork.length} items: ${itemsNeedingWork.map((s) => s.category).join(", ")}`);
+        console.log(`[area-analysis] Final assessment requests ${final.round_budget} more rounds (capped to ${effectiveRoundBudget}) for ${itemsNeedingWork.length} items: ${itemsNeedingWork.map((s) => s.category).join(", ")}`);
 
         // Apply the final assessment's revisions first
         const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
@@ -1012,9 +1084,9 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
           if (!s.needs_more_work) postFinalStabilized.add(s.category);
         }
 
-        for (let extraRound = 1; extraRound <= final.round_budget; extraRound++) {
+        for (let extraRound = 1; extraRound <= effectiveRoundBudget; extraRound++) {
           const postRound = totalRoundsCompleted + extraRound;
-          console.log(`[area-analysis] Post-final round ${extraRound}/${final.round_budget} (total round ${postRound})`);
+          console.log(`[area-analysis] Post-final round ${extraRound}/${effectiveRoundBudget} (total round ${postRound})`);
 
           latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
           const mathText = formatMathScoresForPrompt(latestMathResult);
