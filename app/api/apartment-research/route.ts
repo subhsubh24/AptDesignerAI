@@ -337,6 +337,29 @@ PROCESS:
       throw new Error((e as Error).message || "Could not parse building research response");
     }
 
+    // Coerce common malformed variant shapes BEFORE Zod validation.
+    // The model sometimes returns unit_variants as bare strings like
+    // "N J1.6 (604 sf)" instead of objects. Convert those into the
+    // expected { name, sqft } shape so downstream code (vision analysis,
+    // dashboard rendering) still works.
+    {
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      const rawVariants = fp?.unit_variants;
+      if (Array.isArray(rawVariants)) {
+        fp!.unit_variants = rawVariants.map((v) => {
+          if (typeof v === "string") {
+            // Parse patterns like "N J1.6 (604 sf)" → { name: "N J1.6", sqft: "604" }
+            const match = v.match(/^(.+?)\s*\(\s*([\d,]+)\s*(?:sf|sqft|ft²|sq ft)?\s*\)\s*$/i);
+            if (match) {
+              return { name: match[1].trim(), sqft: match[2].replace(/,/g, "") };
+            }
+            return { name: v.trim(), sqft: null };
+          }
+          return v;
+        });
+      }
+    }
+
     // (c) Validate research output with Zod — coerce bad types to null
     const validated = ResearchOutputSchema.safeParse(research);
     if (validated.success) {
@@ -348,6 +371,16 @@ PROCESS:
       if (fp?.total_sqft && typeof fp.total_sqft !== "number" && typeof fp.total_sqft !== "string") {
         fp.total_sqft = null;
       }
+    }
+
+    // Diagnostic: what did the primary pass actually capture?
+    {
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      const variants = (fp?.unit_variants as Array<Record<string, unknown>> | undefined) ?? [];
+      const withImages = variants.filter(v => v?.floor_plan_image_url).length;
+      const finishes = (research.finishes as Record<string, unknown> | undefined) ?? {};
+      const finishFields = Object.entries(finishes).filter(([, v]) => v && v !== "not specified").map(([k]) => k);
+      console.log(`[apartment-research] Primary pass captured: ${variants.length} variant(s), ${withImages} with image URLs; finishes filled: [${finishFields.join(", ") || "none"}]`);
     }
 
     // (b) Retry/fallback for sparse data — if floor plan is empty, do a targeted second pass
