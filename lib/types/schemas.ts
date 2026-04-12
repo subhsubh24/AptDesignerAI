@@ -44,6 +44,36 @@ export const ProductEvalResponseSchema = z.object({
   apartment_fit_note: z.string().optional().default(""),
 });
 
+// Split-pass sub-schemas (scoreProduct runs two focused calls in parallel).
+// The final response merges these into ProductEvalResponseSchema shape.
+
+/** Aesthetic-pass scores: style/palette/material/cohesion (vision + taste). */
+export const AestheticScoresSchema = z.object({
+  style_fit_score: score,
+  palette_fit_score: score,
+  material_fit_score: score,
+  cohesion_fit_score: score,
+});
+
+export const AestheticEvalResponseSchema = z.object({
+  scores: AestheticScoresSchema,
+  reasoning: ProductEvalReasoningSchema,
+  area_fit_note: z.string().optional().default(""),
+  apartment_fit_note: z.string().optional().default(""),
+});
+
+/** Functional-pass scores: scale/function/value/confidence (objective/math-vetoed). */
+export const FunctionalScoresSchema = z.object({
+  scale_fit_score: score,
+  function_fit_score: score,
+  value_fit_score: score,
+  confidence_score: score,
+});
+
+export const FunctionalEvalResponseSchema = z.object({
+  scores: FunctionalScoresSchema,
+});
+
 // ─── Quick Score ──────────────────────────────────────────────
 
 export const QuickScoreEntrySchema = z.object({

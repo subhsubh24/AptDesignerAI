@@ -1,25 +1,51 @@
 import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
-export function getProductEvalPrompt(
-  roomType: string,
-  category: string,
-  existingItems: string[],
-  budgetMode: string,
-  otherRoomsContext?: string,
-  priorities?: string[],
-  diagnosis?: DiagnosisData,
-  designDirection?: DesignDirection,
-  placement?: string,
-  spatialLayout?: string,
-  floorPlan?: Record<string, unknown>,
-  lightingConditions?: string,
-  windowDoorPositions?: string,
-  outletPositions?: string,
-  userContext?: string,
-  replaceItems?: string[]
-): string {
-  // Build dynamic design direction from diagnosis — no hardcoded values
+export interface EvalContextArgs {
+  roomType: string;
+  category: string;
+  existingItems: string[];
+  budgetMode: string;
+  otherRoomsContext?: string;
+  priorities?: string[];
+  diagnosis?: DiagnosisData;
+  designDirection?: DesignDirection;
+  placement?: string;
+  spatialLayout?: string;
+  floorPlan?: Record<string, unknown>;
+  lightingConditions?: string;
+  windowDoorPositions?: string;
+  outletPositions?: string;
+  userContext?: string;
+  replaceItems?: string[];
+}
+
+/**
+ * Build the shared context section used by every product-eval prompt variant.
+ * Extracted so aesthetic / functional / full prompts all share identical
+ * situational grounding — different scoring instructions don't get different
+ * diagnoses or room context.
+ */
+function buildEvalContext(args: EvalContextArgs): string {
+  const {
+    roomType,
+    category,
+    existingItems,
+    budgetMode,
+    otherRoomsContext,
+    priorities,
+    diagnosis,
+    designDirection,
+    placement,
+    spatialLayout,
+    floorPlan,
+    lightingConditions,
+    windowDoorPositions,
+    outletPositions,
+    userContext,
+    replaceItems,
+  } = args;
+
   const paletteInfo = designDirection?.recommended_palette?.length
     ? `Target palette: ${designDirection.recommended_palette.join(", ")}`
     : "Infer the appropriate palette from the room photos and apartment context in the system prompt.";
@@ -32,7 +58,6 @@ export function getProductEvalPrompt(
     ? `Style direction: ${designDirection.style_notes}`
     : "Infer the style direction from room photos and apartment context.";
 
-  // Build diagnosis context so scorer knows what problems to solve
   const diagnosisContext = diagnosis
     ? [
         diagnosis.what_is_working?.length && `What's working in this room: ${diagnosis.what_is_working.join("; ")}`,
@@ -46,19 +71,14 @@ export function getProductEvalPrompt(
       ].filter(Boolean).join("\n")
     : "";
 
-  // Build priorities context — this captures hosting, seating, lifestyle needs
   const prioritiesContext = priorities?.length
     ? `User priorities: ${priorities.join(", ")}`
     : "";
 
-  // Build spatial context
   const placementContext = placement
     ? `\n- **Intended placement**: ${placement}`
     : "";
 
-  // ─── Assemble context with priority-based truncation ──────
-  // Priority 1 = critical (scoring instructions), 2 = important (room/design),
-  // 3 = helpful (environment/spatial), 4 = nice-to-have (other rooms)
   const sections: ContextSection[] = [];
 
   sections.push({
@@ -121,11 +141,36 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
     });
   }
 
-  // Truncate context sections to fit within a reasonable token budget.
-  // Model max_tokens is 16000 with thinking enabled; reserve ~8000 for scoring
-  // instructions + output format + thinking overhead. Context gets ~8000 tokens.
+  // Reserve 8K of 16K budget for scoring instructions + output format + thinking.
   const contextResult = truncateContext(sections, 8000, 0);
-  const assembledContext = contextResult.text;
+  return contextResult.text;
+}
+
+export function getProductEvalPrompt(
+  roomType: string,
+  category: string,
+  existingItems: string[],
+  budgetMode: string,
+  otherRoomsContext?: string,
+  priorities?: string[],
+  diagnosis?: DiagnosisData,
+  designDirection?: DesignDirection,
+  placement?: string,
+  spatialLayout?: string,
+  floorPlan?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string,
+  outletPositions?: string,
+  userContext?: string,
+  replaceItems?: string[]
+): string {
+  const assembledContext = buildEvalContext({
+    roomType, category, existingItems, budgetMode,
+    otherRoomsContext, priorities, diagnosis, designDirection,
+    placement, spatialLayout, floorPlan,
+    lightingConditions, windowDoorPositions, outletPositions,
+    userContext, replaceItems,
+  });
 
   return `You are a world-class interior designer evaluating a specific product for a specific client. Think like a designer who has visited this apartment, studied the photos, knows the building's finishes, and understands how this person lives.
 
@@ -242,4 +287,134 @@ Return a JSON object:
 - Am I using the full 0-10 scale, not clustering everything in 6-8?
 
 Be honest and specific. Do not inflate scores. A 7+ means it's genuinely strong. A 5 is mediocre. Below 4 means real problems.`;
+}
+
+/**
+ * Aesthetic-pass prompt: 4 visual/taste dimensions + reasoning + notes.
+ * Paired with getFunctionalEvalPrompt — together they replace the 8-dim
+ * monolith with two focused parallel calls so each pass gets full model
+ * attention on its own question.
+ */
+export function getAestheticEvalPrompt(args: EvalContextArgs): string {
+  const { budgetMode } = args;
+  const assembledContext = buildEvalContext(args);
+
+  return `You are a world-class interior designer evaluating a specific product for a specific client. This pass focuses exclusively on **aesthetic fit** — does the product look right in this apartment? A separate pass handles spatial/functional fit; do not score those dimensions here.
+
+## SCORING PROCESS — For each dimension below:
+1. What specific evidence (in the product image and room photos) supports a high score?
+2. What specific evidence supports a low score?
+3. Based on the balance of evidence, what score is fair?
+
+${assembledContext}
+
+## AESTHETIC SCORING (4 dimensions, each 0-10)
+
+1. **style_fit_score**: Does it match the design direction above? Score based on the ACTUAL style direction for this apartment — not generic assumptions.
+   - Example: If direction is "warm modern" and product is "industrial chrome wire shelf" → 2-3. If "walnut shelf with clean lines" → 8-9.
+
+2. **palette_fit_score**: Does it complement the apartment's actual palette? Consider building finishes (floors, cabinetry, countertops) and colors visible in room photos.
+   - Example: "warm oak" in a room with cool gray floors and chrome fixtures → 4-5 (undertone clash). "warm walnut" in warm oak + brass room → 8-9.
+
+3. **material_fit_score**: Does the material work with existing finishes visible in room photos?
+   - Also consider **durability/maintenance**: white boucle with pets = problem. Glass coffee table with toddlers = risk. Velvet in humid climates degrades.
+   - Consider **climate suitability** of the material for the apartment's climate.
+
+4. **cohesion_fit_score**: Does it work with what's already in the room? Look at the room photos — consider existing furniture, finishes, and overall vibe. Base this on what you SEE.
+
+## SCORE CALIBRATION — READ ALL, THEN SCORE
+- **9-10 (Exceptional)**: Materials/palette match exactly, style is cohesive. RARE.
+- **7-8 (Strong)**: Genuinely good fit with minor concerns.
+- **5-6 (Mediocre)**: Safe but uninspired. THIS IS AVERAGE.
+- **3-4 (Poor)**: Actively conflicts (wrong finish family, clashing undertones).
+- **1-2 (Wrong)**: Completely wrong style family.
+
+CRITICAL: Use the full 0-10 scale. Do NOT cluster scores in 6-8.
+
+${budgetMode ? "" : ""}## AREA FIT NOTE
+2-3 sentences on how this product works with OTHER pieces in the same area. Reference specific existing furniture.
+
+## APARTMENT FIT NOTE
+1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?
+
+## OUTPUT FORMAT (JSON, no prose, no markdown fences)
+{
+  "scores": {
+    "style_fit_score": number,
+    "palette_fit_score": number,
+    "material_fit_score": number,
+    "cohesion_fit_score": number
+  },
+  "reasoning": {
+    "top_reasons": ["3-5 strongest reasons — reference actual product attributes and diagnosis"],
+    "risks": ["2-4 specific risks — e.g. 'brass legs may clash with chrome kitchen fixtures'"],
+    "suggestions": ["1-3 alternatives or modifications"]
+  },
+  "area_fit_note": "2-3 sentences on area-level fit",
+  "apartment_fit_note": "1-2 sentences on apartment-wide coherence"
+}`;
+}
+
+/**
+ * Functional-pass prompt: 3 spatial/objective dimensions + confidence.
+ * No reasoning text — just scores. Paired with getAestheticEvalPrompt.
+ */
+export function getFunctionalEvalPrompt(args: EvalContextArgs): string {
+  const { budgetMode } = args;
+  const assembledContext = buildEvalContext(args);
+
+  return `You are a world-class interior designer evaluating the **spatial and functional fit** of a specific product. This pass focuses exclusively on: will it fit, will it work, is it good value? A separate pass handles aesthetic fit — do not score style/palette/material/cohesion here.
+
+## SCORING PROCESS — For each dimension below:
+1. What specific evidence (dimensions, placement, room photos, floor plan) supports a high score?
+2. What specific evidence supports a low score?
+3. Based on the balance of evidence, what score is fair?
+
+${assembledContext}
+
+## FUNCTIONAL SCORING (4 dimensions, each 0-10)
+
+1. **scale_fit_score**: Will it physically fit and be correctly scaled? Use the floor plan, placement, and room photos.
+   - Check dimensions against available space and the intended placement description.
+   - Rugs too small for the seating area: heavily penalize.
+   - Dining tables must seat the right number AND leave 24" pullback for chairs.
+   - Art too small for the wall: penalize. Oversized pieces that block walkways: penalize.
+   - **Window/door clearance**: Would this block a window, obstruct a door swing, or crowd a doorway?
+   - If no dimensions listed, score 5 (neutral).
+
+2. **function_fit_score**: Does it solve a real problem AND work in its intended position?
+   - Seating capacity for hosting; dining capacity; storage for clutter; task lighting near reading areas.
+   - **Flow**: does it work with the room's traffic patterns and spatial layout?
+   - **Lighting suitability**: reading lamp near reading spot? Glossy surfaces near windows creating glare?
+   - **Acoustic impact**: in all-hard-surface rooms (hardwood + glass + concrete), textiles matter. Penalize adding MORE hard surfaces to an acoustically harsh room.
+   - **Outlet proximity**: lamps, media consoles, powered items — is there a likely outlet near the intended placement?
+
+3. **value_fit_score**: Price vs. quality/impact. ${budgetMode === "budget" ? "Weight HEAVILY. Over-tier products → score 3 or below." : budgetMode === "best_possible" ? "Weight less — quality over price." : "Balance quality and price."}
+   - If price is missing, score 5 (neutral) — do NOT assume good value.
+
+4. **confidence_score**: How reliable is the product data?
+   - 9-10: complete — title, price, materials, dimensions, multiple clear images, lifestyle photo
+   - 7-8: mostly complete, missing one field
+   - 5-6: partial — title and maybe price, but materials/dimensions unclear
+   - 3-4: minimal — only title and retailer
+   - 1-2: almost no reliable data
+
+## SCORE CALIBRATION
+- **9-10**: Perfect fit for the space, solves a diagnosed problem, strong value.
+- **7-8**: Works with minor concerns.
+- **5-6**: Acceptable but not ideal. THIS IS AVERAGE.
+- **3-4**: Obvious issues (wrong size, blocks flow, missing dimensions = likely trouble).
+- **1-2**: Clearly wrong (won't fit, blocks a walkway, completely impractical).
+
+CRITICAL: Use the full 0-10 scale. If the room diagnosis lists scale_proportion_issues, you MUST check this product's dimensions against them and penalize if it repeats the problem.
+
+## OUTPUT FORMAT (JSON, no prose, no markdown fences)
+{
+  "scores": {
+    "scale_fit_score": number,
+    "function_fit_score": number,
+    "value_fit_score": number,
+    "confidence_score": number
+  }
+}`;
 }

@@ -1,9 +1,17 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
-import { getProductEvalPrompt } from "@/lib/prompts/product-eval";
+import {
+  getAestheticEvalPrompt,
+  getFunctionalEvalPrompt,
+  type EvalContextArgs,
+} from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
-import { ProductEvalResponseSchema, QuickScoreResponseSchema } from "@/lib/types/schemas";
+import {
+  AestheticEvalResponseSchema,
+  FunctionalEvalResponseSchema,
+  QuickScoreResponseSchema,
+} from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -70,9 +78,16 @@ Before scoring, calibrate against these reference examples. Read ALL of them fir
 CRITICAL: Use the FULL range. If a product is just okay, score it 5-6. If it has real problems, score it 3-4. Do NOT give everything 6-8 out of politeness.`;
 
 /**
- * Score a single product with the Pro model using extended thinking.
- * Includes score calibration anchors and optional user feedback context.
- * Retries once on failure before returning error.
+ * Score a single product via two parallel focused calls:
+ *   1. Aesthetic pass — style / palette / material / cohesion + reasoning + notes
+ *   2. Functional pass — scale / function / value + confidence
+ *
+ * Splitting prevents the 8-dim monolith from trading one dimension off against
+ * another within a single token budget. Both passes see identical context
+ * (room, diagnosis, design direction, product images) so their scores are
+ * rooted in the same evidence — they just focus on different questions.
+ *
+ * Math veto (scale / palette / material) and calibration anchors are preserved.
  */
 export async function scoreProduct(
   product: CandidateProduct,
@@ -80,24 +95,27 @@ export async function scoreProduct(
 ): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
   const model = selectModel("scoring");
   const system = getSystemPrompt(scoringCtx.designProfile);
-  const evalPrompt = getProductEvalPrompt(
-    scoringCtx.roomType,
-    product.category || "unknown",
-    scoringCtx.existingItems,
-    scoringCtx.budgetMode,
-    scoringCtx.otherRoomsContext,
-    scoringCtx.priorities,
-    scoringCtx.diagnosis,
-    scoringCtx.designDirection,
-    scoringCtx.placement,
-    scoringCtx.spatialLayout,
-    scoringCtx.floorPlan,
-    scoringCtx.lightingConditions,
-    scoringCtx.windowDoorPositions,
-    scoringCtx.outletPositions,
-    scoringCtx.userContext,
-    scoringCtx.replaceItems
-  );
+
+  const evalCtx: EvalContextArgs = {
+    roomType: scoringCtx.roomType,
+    category: product.category || "unknown",
+    existingItems: scoringCtx.existingItems,
+    budgetMode: scoringCtx.budgetMode,
+    otherRoomsContext: scoringCtx.otherRoomsContext,
+    priorities: scoringCtx.priorities,
+    diagnosis: scoringCtx.diagnosis,
+    designDirection: scoringCtx.designDirection,
+    placement: scoringCtx.placement,
+    spatialLayout: scoringCtx.spatialLayout,
+    floorPlan: scoringCtx.floorPlan,
+    lightingConditions: scoringCtx.lightingConditions,
+    windowDoorPositions: scoringCtx.windowDoorPositions,
+    outletPositions: scoringCtx.outletPositions,
+    userContext: scoringCtx.userContext,
+    replaceItems: scoringCtx.replaceItems,
+  };
+  const aestheticPrompt = getAestheticEvalPrompt(evalCtx);
+  const functionalPrompt = getFunctionalEvalPrompt(evalCtx);
 
   // Extract visual metadata from product metadata
   const meta = product.metadata as Record<string, unknown> | null;
@@ -120,21 +138,16 @@ export async function scoreProduct(
     .filter(Boolean)
     .join("\n");
 
-  const content: AIContentBlock[] = [];
-
-  // Add room images for context (up to 3 for better spatial understanding)
+  // Shared image content — both passes see the same photos.
+  const sharedImages: AIContentBlock[] = [];
   for (const url of scoringCtx.roomImageUrls.slice(0, 3)) {
-    content.push({ type: "image", source: { type: "url", url } });
+    sharedImages.push({ type: "image", source: { type: "url", url } });
   }
-
-  // Add product image if available
   if (product.image_url) {
-    content.push({ type: "image", source: { type: "url", url: product.image_url } });
+    sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
   }
-
-  // Add lifestyle/room-setting image if available
   if (lifestyleImageUrl) {
-    content.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
+    sharedImages.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
   }
 
   // Compute deterministic math scores before LLM evaluation
@@ -158,38 +171,44 @@ export async function scoreProduct(
     }
   );
   const mathSection = formatProductMathForPrompt(mathScores);
-
-  // Build the full prompt with calibration anchors and optional user feedback
   const feedbackSection = scoringCtx.userFeedbackContext
     ? `\n\n${scoringCtx.userFeedbackContext}`
     : "";
 
-  content.push({
-    type: "text",
-    text: `${evalPrompt}\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images (actual color, texture, proportions, style) — not just the text description. If a lifestyle image is included, use it to assess real-world scale and how the product looks in a room setting.`,
-  });
+  const productTextTail = `\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images — not just the text description. If a lifestyle image is included, use it to assess real-world scale and setting.`;
 
-  // Attempt scoring with retry (exponential backoff for API errors,
-  // prompt-level retry for parse errors)
-  let lastError: string | undefined;
-  let attempt = 0;
+  const aestheticContent: AIContentBlock[] = [
+    ...sharedImages,
+    { type: "text", text: `${aestheticPrompt}${productTextTail}` },
+  ];
+  const functionalContent: AIContentBlock[] = [
+    ...sharedImages,
+    { type: "text", text: `${functionalPrompt}${productTextTail}` },
+  ];
 
-  try {
-    const result = await withRetry(
+  // Run a single pass with retry, then merge. Failures in either pass bubble up
+  // to the shared retry wrapper — but since we Promise.all, one failing retries
+  // don't block the other's success.
+  const runPass = async <T>(
+    passName: "aesthetic" | "functional",
+    content: AIContentBlock[],
+    parse: (raw: unknown) => T,
+  ): Promise<{ data: T; tokens: number; model: string }> => {
+    let lastError: string | undefined;
+    let attempt = 0;
+    return await withRetry(
       async () => {
         attempt++;
-        // On retry: include previous error context. We no longer bump
-        // temperature — Gemini 3 is optimized for its default (1.0) and
-        // escalating temperature was degrading reasoning.
         const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Please return ONLY valid JSON matching the exact schema above. Ensure all score fields are numbers 0-10.` }]
+          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
           : content;
 
         const response = await geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 16000,
+          // Aesthetic pass carries the reasoning + notes; functional is pure scores.
+          max_tokens: passName === "aesthetic" ? 8000 : 4000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "high" },
@@ -197,75 +216,23 @@ export async function scoreProduct(
         });
 
         const raw = extractJsonObject(response.content);
-        const validated = ProductEvalResponseSchema.parse(raw);
-        const scores = validated.scores;
-
-        // Apply math veto: cap AI dimension scores where math found violations
-        // Threshold is configurable via MATH_VETO config
-        const VETO_THRESHOLD = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
-        if (mathScores.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
-          log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
-          scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);
-        }
-        if (mathScores.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
-          log.info(`Math capping palette_fit: AI=${scores.palette_fit_score} → ${Math.round(mathScores.palette_fit * 10)}`, { product: product.title });
-          scores.palette_fit_score = Math.round(mathScores.palette_fit * 10);
-        }
-        if (mathScores.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
-          log.info(`Math capping material_fit: AI=${scores.material_fit_score} → ${Math.round(mathScores.material_fit * 10)}`, { product: product.title });
-          scores.material_fit_score = Math.round(mathScores.material_fit * 10);
-        }
-
-        const finalScore = computeFinalItemScore(scores, product.category || undefined);
-        const verdict = determineVerdict(finalScore, scores.confidence_score);
-
-        // Record scores for drift monitoring (include final score and category-keyed score)
-        const categoryKey = (product.category || "unknown").toLowerCase().replace(/[\s-]+/g, "_");
-        recordProductScores({
-          ...scores as unknown as Record<string, number>,
-          final_item_score: finalScore,
-          [`${categoryKey}_final_item_score`]: finalScore,
-        });
-
-        const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-        log.info("Product scored", {
-          productId: product.id,
-          model: response.model,
-          tokens: { input: response.usage.input_tokens, output: response.usage.output_tokens, thinking: response.usage.thinking_tokens, total: totalTokens },
-          finalScore,
-          verdict,
-          category: product.category || "unknown",
-        });
-
-        return {
-          success: true as const,
-          data: {
-            scores,
-            final_item_score: finalScore,
-            verdict,
-            reasoning: validated.reasoning,
-            area_fit_note: validated.area_fit_note,
-            apartment_fit_note: validated.apartment_fit_note,
-          },
-          tokensUsed: totalTokens,
-          model: response.model,
-        };
+        const data = parse(raw);
+        const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+        return { data, tokens, model: response.model };
       },
       {
         maxAttempts: 3,
         baseDelayMs: 1500,
         maxDelayMs: 10000,
         isRetryable: (error) => {
-          // Retry both API errors and parse errors (with corrected prompt on next attempt)
           if (isRetryableError(error)) return true;
-          // Also retry JSON parse / Zod validation errors (model returned bad format)
           if (error instanceof SyntaxError) return true;
           if (error instanceof Error && error.name === "ZodError") return true;
           return false;
         },
         onRetry: (retryAttempt, delayMs, error) => {
-          lastError = error instanceof Error ? error.message : "Scoring failed";
-          log.warn(`Retry ${retryAttempt} for "${product.title}"`, {
+          lastError = error instanceof Error ? error.message : `${passName} scoring failed`;
+          log.warn(`Retry ${retryAttempt} for ${passName} pass on "${product.title}"`, {
             productId: product.id,
             durationMs: delayMs,
             error: lastError,
@@ -273,8 +240,77 @@ export async function scoreProduct(
         },
       }
     );
+  };
 
-    return result;
+  try {
+    const [aestheticRes, functionalRes] = await Promise.all([
+      runPass("aesthetic", aestheticContent, (raw) => AestheticEvalResponseSchema.parse(raw)),
+      runPass("functional", functionalContent, (raw) => FunctionalEvalResponseSchema.parse(raw)),
+    ]);
+
+    // Merge into the legacy 8-dim ProductScores shape. The two passes agree on
+    // product image + room image; their outputs compose without double-counting.
+    const scores = {
+      style_fit_score: aestheticRes.data.scores.style_fit_score,
+      palette_fit_score: aestheticRes.data.scores.palette_fit_score,
+      material_fit_score: aestheticRes.data.scores.material_fit_score,
+      cohesion_fit_score: aestheticRes.data.scores.cohesion_fit_score,
+      scale_fit_score: functionalRes.data.scores.scale_fit_score,
+      function_fit_score: functionalRes.data.scores.function_fit_score,
+      value_fit_score: functionalRes.data.scores.value_fit_score,
+      confidence_score: functionalRes.data.scores.confidence_score,
+    };
+
+    // Math veto: cap AI dimension scores where deterministic math found violations.
+    const VETO_THRESHOLD = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
+    if (mathScores.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
+      log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
+      scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);
+    }
+    if (mathScores.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
+      log.info(`Math capping palette_fit: AI=${scores.palette_fit_score} → ${Math.round(mathScores.palette_fit * 10)}`, { product: product.title });
+      scores.palette_fit_score = Math.round(mathScores.palette_fit * 10);
+    }
+    if (mathScores.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
+      log.info(`Math capping material_fit: AI=${scores.material_fit_score} → ${Math.round(mathScores.material_fit * 10)}`, { product: product.title });
+      scores.material_fit_score = Math.round(mathScores.material_fit * 10);
+    }
+
+    const finalScore = computeFinalItemScore(scores, product.category || undefined);
+    const verdict = determineVerdict(finalScore, scores.confidence_score);
+
+    const categoryKey = (product.category || "unknown").toLowerCase().replace(/[\s-]+/g, "_");
+    recordProductScores({
+      ...scores as unknown as Record<string, number>,
+      final_item_score: finalScore,
+      [`${categoryKey}_final_item_score`]: finalScore,
+    });
+
+    const totalTokens = aestheticRes.tokens + functionalRes.tokens;
+    log.info("Product scored (split pass)", {
+      productId: product.id,
+      model: aestheticRes.model,
+      tokens: { total: totalTokens },
+      aestheticTokens: aestheticRes.tokens,
+      functionalTokens: functionalRes.tokens,
+      finalScore,
+      verdict,
+      category: product.category || "unknown",
+    });
+
+    return {
+      success: true,
+      data: {
+        scores,
+        final_item_score: finalScore,
+        verdict,
+        reasoning: aestheticRes.data.reasoning,
+        area_fit_note: aestheticRes.data.area_fit_note,
+        apartment_fit_note: aestheticRes.data.apartment_fit_note,
+      },
+      tokensUsed: totalTokens,
+      model: aestheticRes.model,
+    };
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Scoring failed after retries";
     log.error(`Scoring failed for "${product.title}"`, { productId: product.id, error: errMsg });
