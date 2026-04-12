@@ -113,6 +113,49 @@ function repairAndParseJSON(raw: string): Record<string, unknown> {
 }
 
 /**
+ * Robustly parse a model response that may be raw JSON, wrapped in markdown
+ * code fences (```json ... ```), or truncated. Used for both the primary
+ * research pass and the targeted second pass.
+ */
+function parseModelJSON(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // Fallback: extract JSON from markdown code blocks first
+    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      const inner = jsonMatch[1].trim();
+      try {
+        return JSON.parse(inner);
+      } catch {
+        return repairAndParseJSON(inner);
+      }
+    }
+    // Or locate the outermost { ... } span
+    const braceStart = raw.indexOf("{");
+    const braceEnd = raw.lastIndexOf("}");
+    if (braceStart !== -1 && braceEnd > braceStart) {
+      try {
+        return JSON.parse(raw.slice(braceStart, braceEnd + 1));
+      } catch {
+        return repairAndParseJSON(raw.slice(braceStart));
+      }
+    }
+    if (braceStart !== -1) {
+      // Truncated — only opening brace found, try to repair
+      return repairAndParseJSON(raw.slice(braceStart));
+    }
+    // Last resort: attempt to repair the raw text after stripping a leading
+    // fence marker if present (handles unterminated ```json blocks).
+    const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    if (stripped.startsWith("{")) {
+      return repairAndParseJSON(stripped);
+    }
+    throw new Error("Could not parse model JSON response");
+  }
+}
+
+/**
  * Research an apartment building using Gemini Google Search + URL Context.
  * Gemini 3 models support combining these tools with structured JSON output.
  */
@@ -288,33 +331,10 @@ PROCESS:
       throw new Error("Building research returned empty response — please try again");
     }
     try {
-      research = JSON.parse(raw);
-    } catch {
-      // Fallback: extract JSON from markdown code blocks or raw braces
-      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try {
-          research = JSON.parse(jsonMatch[1].trim());
-        } catch {
-          research = repairAndParseJSON(jsonMatch[1].trim());
-        }
-      } else {
-        const braceStart = raw.indexOf("{");
-        const braceEnd = raw.lastIndexOf("}");
-        if (braceStart !== -1 && braceEnd > braceStart) {
-          try {
-            research = JSON.parse(raw.slice(braceStart, braceEnd + 1));
-          } catch {
-            research = repairAndParseJSON(raw.slice(braceStart));
-          }
-        } else if (braceStart !== -1) {
-          // Truncated — only opening brace found, try to repair
-          research = repairAndParseJSON(raw.slice(braceStart));
-        } else {
-          console.error("[apartment-research] Unparseable response:", raw.slice(0, 500));
-          throw new Error("Could not parse building research response");
-        }
-      }
+      research = parseModelJSON(raw);
+    } catch (e) {
+      console.error("[apartment-research] Unparseable response:", raw.slice(0, 500));
+      throw new Error((e as Error).message || "Could not parse building research response");
     }
 
     // (c) Validate research output with Zod — coerce bad types to null
@@ -354,12 +374,9 @@ PROCESS:
         const fallbackRaw = fallbackResponse.content.trim();
         if (fallbackRaw) {
           try {
-            let fallbackData: Record<string, unknown>;
-            try {
-              fallbackData = JSON.parse(fallbackRaw);
-            } catch {
-              fallbackData = repairAndParseJSON(fallbackRaw);
-            }
+            // Use the shared parser so markdown-fenced or truncated responses
+            // (e.g. "```json\n{...") are handled the same way as the primary pass.
+            const fallbackData = parseModelJSON(fallbackRaw);
             // Merge fallback data into research (only fill gaps)
             if (!hasFloorPlan && fallbackData.floor_plan) {
               research.floor_plan = fallbackData.floor_plan;
@@ -409,12 +426,7 @@ PROCESS:
           const visionRaw = visionResponse.content.trim();
           if (visionRaw) {
             try {
-              let visionData: Record<string, unknown>;
-              try {
-                visionData = JSON.parse(visionRaw);
-              } catch {
-                visionData = repairAndParseJSON(visionRaw);
-              }
+              const visionData = parseModelJSON(visionRaw);
               // Merge vision-extracted data into floor plan
               if (visionData.extracted_dimensions) {
                 const existingDims = (floorPlanData?.room_dimensions as Record<string, string | null>) || {};
@@ -445,8 +457,9 @@ PROCESS:
     }
 
     // ─── Google Maps enrichment pass ─────────────────────────────
-    // googleMaps can't be combined with googleSearch in the same call, so
-    // we run a separate lookup that pulls *location-aware* context the web
+    // googleMaps can't be combined with googleSearch OR urlContext in the
+    // same call (Gemini rejects with INVALID_ARGUMENT). It must run solo.
+    // We use it as a separate lookup for *location-aware* context the web
     // search alone misses: building orientation (→ natural light planning),
     // view character (→ palette cues), and neighborhood design vibe.
     // Results are merged into research.location_context — purely additive.
@@ -477,24 +490,15 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           }],
           max_tokens: 1500,
           temperature: 0.2,
-          tools: [{ googleMaps: {} }, { urlContext: {} }],
+          // googleMaps must run alone — combining with urlContext or googleSearch
+          // produces INVALID_ARGUMENT from the Gemini API.
+          tools: [{ googleMaps: {} }],
         });
 
         const mapsRaw = mapsResponse.content.trim();
         if (mapsRaw) {
           try {
-            let locationContext: Record<string, unknown>;
-            try {
-              locationContext = JSON.parse(mapsRaw);
-            } catch {
-              const braceStart = mapsRaw.indexOf("{");
-              const braceEnd = mapsRaw.lastIndexOf("}");
-              if (braceStart !== -1 && braceEnd > braceStart) {
-                locationContext = JSON.parse(mapsRaw.slice(braceStart, braceEnd + 1));
-              } else {
-                locationContext = repairAndParseJSON(mapsRaw);
-              }
-            }
+            const locationContext = parseModelJSON(mapsRaw);
             research.location_context = locationContext;
             console.log("[apartment-research] Maps enrichment merged location_context", {
               orientation: locationContext.primary_orientation,
