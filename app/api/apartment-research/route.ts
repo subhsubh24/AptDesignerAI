@@ -47,6 +47,15 @@ const ResearchOutputSchema = z.object({
   website_url: z.string().nullable().optional(),
   confidence_notes: z.array(z.string()).nullable().optional(),
   summary: z.string().nullable().optional(),
+  // Populated by the googleMaps enrichment pass (post-primary research).
+  location_context: z.object({
+    primary_orientation: z.string().nullable().optional(),
+    likely_light_direction: z.string().nullable().optional(),
+    view_character: z.string().nullable().optional(),
+    nearby_design_references: z.array(z.string()).nullable().optional(),
+    neighborhood_aesthetic_cues: z.array(z.string()).nullable().optional(),
+    confidence: z.string().nullable().optional(),
+  }).nullable().optional(),
 }).passthrough(); // Allow extra fields
 
 /**
@@ -432,6 +441,73 @@ PROCESS:
         } catch (e) {
           console.warn("[apartment-research] Floor plan vision analysis failed:", (e as Error).message);
         }
+      }
+    }
+
+    // ─── Google Maps enrichment pass ─────────────────────────────
+    // googleMaps can't be combined with googleSearch in the same call, so
+    // we run a separate lookup that pulls *location-aware* context the web
+    // search alone misses: building orientation (→ natural light planning),
+    // view character (→ palette cues), and neighborhood design vibe.
+    // Results are merged into research.location_context — purely additive.
+    if (building_name || building_place_id) {
+      try {
+        const locationQuery = building_place_id
+          ? `Google Maps place_id: ${building_place_id}`
+          : [building_name, neighborhood, city, state].filter(Boolean).join(", ");
+
+        const mapsResponse = await geminiProvider.chat({
+          model: selectModel("apartment_research"),
+          system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Never invent — return null for anything Maps doesn't reveal.",
+          messages: [{
+            role: "user",
+            content: `Using Google Maps, look up: ${locationQuery}.
+
+Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby places). Return JSON:
+{
+  "primary_orientation": "N | S | E | W | NE | NW | SE | SW | null — which way does the building's main facade face?",
+  "likely_light_direction": "morning | afternoon | evening | mixed | null — based on orientation, when is natural light strongest in typical units?",
+  "view_character": "skyline | water | park | street | mixed-urban | industrial | residential | null",
+  "nearby_design_references": ["up to 3 notable design-relevant nearby places — art museum, design district, architectural landmark"],
+  "neighborhood_aesthetic_cues": ["2-4 short phrases describing the visual/material character of the block — e.g. 'prewar brick', 'modern glass towers', 'tree-lined brownstones'"],
+  "confidence": "high | medium | low"
+}
+
+If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
+          }],
+          max_tokens: 1500,
+          temperature: 0.2,
+          tools: [{ googleMaps: {} }, { urlContext: {} }],
+        });
+
+        const mapsRaw = mapsResponse.content.trim();
+        if (mapsRaw) {
+          try {
+            let locationContext: Record<string, unknown>;
+            try {
+              locationContext = JSON.parse(mapsRaw);
+            } catch {
+              const braceStart = mapsRaw.indexOf("{");
+              const braceEnd = mapsRaw.lastIndexOf("}");
+              if (braceStart !== -1 && braceEnd > braceStart) {
+                locationContext = JSON.parse(mapsRaw.slice(braceStart, braceEnd + 1));
+              } else {
+                locationContext = repairAndParseJSON(mapsRaw);
+              }
+            }
+            research.location_context = locationContext;
+            console.log("[apartment-research] Maps enrichment merged location_context", {
+              orientation: locationContext.primary_orientation,
+              light: locationContext.likely_light_direction,
+              confidence: locationContext.confidence,
+            });
+          } catch (e) {
+            console.warn("[apartment-research] Maps response unparseable:", (e as Error).message);
+          }
+        }
+      } catch (e) {
+        // Non-fatal — primary research is already complete
+        console.warn("[apartment-research] Maps enrichment failed:", (e as Error).message);
       }
     }
 
