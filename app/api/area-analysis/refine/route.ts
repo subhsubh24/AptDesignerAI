@@ -149,63 +149,6 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
     ? `\n\n⚠️ ITEMS THE CLIENT WANTS TO KEEP — NON-NEGOTIABLE:\n${allKeepItems.map((item: string) => `- ${item}`).join("\n")}\nThese MUST appear in "what_works". NEVER put them in "what_should_go". Do NOT recommend buying a NEW version of these items — the client already has them and wants to keep them.`
     : "";
 
-  // The refinement prompt — this is where the magic happens
-  contentBlocks.push({
-    type: "text",
-    text: `--- PREVIOUS ANALYSIS ---
-${JSON.stringify(previous_analysis, null, 2)}
----
-
---- CLIENT FEEDBACK ---
-"${user_feedback}"
----${keepItemsWarning}
-
-The client has reviewed your previous analysis and provided feedback above. As their personal interior designer, you need to:
-
-1. **Understand their intent** — figure out what they're really asking for. If they say "keep the floor lamp," they want it to stay and the rest of the design should work around it.
-
-2. **Assess the impact** — explain honestly how this feedback changes the design. Does keeping a particular item affect the palette? Does it limit options? Is it actually fine and works with the direction? Be specific and honest.
-
-3. **Regenerate the full analysis** incorporating their feedback. Adjust what_it_needs, what_works, what_should_go, and design_direction accordingly.
-
-4. **Write an impact summary** explaining what changed and why, so the client understands the design trade-offs.
-
-Return JSON:
-{
-  "impact_summary": "2-4 sentences explaining what the client's feedback means for the design. Be specific about trade-offs. Example: 'Keeping the floor lamp works well — its warm brass finish complements the walnut direction. However, it means we should avoid another brass piece nearby to prevent the metallic feeling from dominating. I adjusted the side table recommendation from brass to wood.'",
-  "changes_made": ["List of specific changes from the previous analysis, e.g. 'Moved floor lamp from should_go to what_works', 'Adjusted coffee table specs to complement existing lamp height'"],
-  "summary": "2-3 sentence assessment of the current state of this area (updated)",
-  "what_it_needs": [
-    {
-      "category": "snake_case category slug",
-      "search_title": "Detailed product search query with material, color, size, style",
-      "description": "Why this item is needed — updated to reflect client feedback",
-      "priority": "high | medium | low",
-      "specs": "Ideal dimensions, material, color range, price range",
-      "placement": "WHERE in the room this item goes — be spatial and specific"
-    }
-  ],
-  "what_works": ["Updated list — include items the client wants to keep"],
-  "what_should_go": ["Updated list — remove items the client wants to keep"],
-  "design_direction": "Updated paragraph reflecting the client's feedback",
-  "recommended_palette": ["Updated list of 4-8 specific colors for this room"],
-  "recommended_materials": ["Updated list of 4-6 materials to use"],
-  "recommended_textures": ["Updated list of 3-5 textures to layer"],
-  "spatial_layout": "Updated furniture arrangement strategy — traffic flow, zones, sightlines",
-  "lighting_conditions": "Updated lighting assessment for the room",
-  "window_door_positions": "Carry forward or update window/door positions",
-  "outlet_positions": "Carry forward or update outlet positions"
-}
-
-CRITICAL RULES:
-1. If the client says to KEEP something, it goes in "what_works" and NEVER in "what_should_go". Design around it. Make it shine. This is non-negotiable.
-2. If the client says they like something or want something, honor that preference completely.
-3. Only push back on a client preference if it creates a genuine, specific, measurable problem (e.g., "the 8-foot sofa physically won't fit in the 7-foot alcove") — and even then, offer alternatives, don't just reject.
-4. Think like a designer who LISTENS to the client and adapts. Your ego about the "best" design direction is less important than the client's happiness.
-5. Carry forward ALL spatial context (spatial_layout, lighting_conditions, window_door_positions, outlet_positions) from the previous analysis — update them only if the feedback requires changes. Do not drop these fields.
-6. Every item in what_it_needs MUST include a "placement" field describing exactly where it goes in the room.`,
-  });
-
   const agentRun = await createAgentRun(supabase, {
     room_id,
     agent_type: "area_analyzer",
@@ -214,11 +157,133 @@ CRITICAL RULES:
 
   try {
     const profile = buildDesignProfile(project);
+    const model = selectModel("area_analysis");
+    const system = getSystemPrompt(profile);
+
+    /**
+     * Pass A — INTERPRET FEEDBACK.
+     * Text-only, no images. Focus: understand what the client is asking for,
+     * which items/categories are affected, and what trade-offs the change
+     * implies. Keeping this tight prevents misinterpretation from compounding
+     * into the full regenerated analysis.
+     */
+    const interpretPrompt = `You are an interior designer reviewing a client's feedback on your previous analysis. This is PASS 1 of 2: interpret the feedback and identify what needs to change. Do NOT regenerate the full analysis yet — that's a separate pass.
+
+--- PREVIOUS ANALYSIS (summary) ---
+${JSON.stringify({
+  summary: previous_analysis?.summary,
+  what_it_needs: previous_analysis?.what_it_needs?.map((n: { category: string; search_title?: string }) => ({ category: n.category, search_title: n.search_title })),
+  what_works: previous_analysis?.what_works,
+  what_should_go: previous_analysis?.what_should_go,
+  design_direction: previous_analysis?.design_direction,
+  recommended_palette: previous_analysis?.recommended_palette,
+  recommended_materials: previous_analysis?.recommended_materials,
+}, null, 2)}
+---
+
+--- CLIENT FEEDBACK ---
+"${user_feedback}"
+---${keepItemsWarning}
+
+## YOUR TASK
+1. Restate the client's intent in your own words (1-2 sentences)
+2. List each SPECIFIC change they're asking for (keep X, replace Y, change palette, etc.)
+3. For each change, identify which categories in what_it_needs are affected
+4. Call out any trade-offs or downstream implications (e.g., "keeping the brass lamp means the side table should be wood to avoid brass dominance")
+5. Rate confidence in your interpretation (0-10) — if the feedback is ambiguous, say so
+
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
+{
+  "client_intent": "1-2 sentences restating what they want",
+  "changes_requested": [
+    { "type": "keep | replace | add | adjust_palette | adjust_style | other", "description": "specific change", "affected_categories": ["category slugs affected in what_it_needs"] }
+  ],
+  "tradeoffs": ["implications of the changes — e.g. 'keeping brass lamp means no brass side table'"],
+  "confidence": 0-10
+}`;
+
+    const interpretResponse = await geminiProvider.chat({
+      model,
+      system,
+      messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
+      max_tokens: 2500,
+      temperature: 0.3,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "medium" },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    const interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
+    const interpretTokens = (interpretResponse.usage?.input_tokens || 0) + (interpretResponse.usage?.output_tokens || 0);
+
+    console.log(`[area-analysis/refine] Interpretation pass complete. Confidence: ${interpretation.confidence}/10, changes: ${interpretation.changes_requested?.length || 0}`);
+
+    /**
+     * Pass B — REGENERATE analysis.
+     * Consumes Pass A's interpretation as an explicit constraint + the full
+     * room context + images. The model's job here is narrower: apply the
+     * interpretation, don't re-derive it.
+     */
+    contentBlocks.push({
+      type: "text",
+      text: `--- PREVIOUS ANALYSIS ---
+${JSON.stringify(previous_analysis, null, 2)}
+---
+
+--- CLIENT FEEDBACK (raw) ---
+"${user_feedback}"
+---
+
+--- PASS 1 INTERPRETATION (follow this, don't re-derive) ---
+${JSON.stringify(interpretation, null, 2)}
+---${keepItemsWarning}
+
+This is PASS 2 of 2. Pass 1 already interpreted the client's intent — above. Your job now is to APPLY that interpretation to the previous analysis, regenerating the full structure with the requested changes.
+
+## YOUR TASK
+1. Walk through each \`changes_requested\` item from the interpretation and apply it to the analysis
+2. Honor the \`tradeoffs\` — if Pass 1 flagged "no brass side table," make sure no brass side table appears
+3. Write an impact_summary explaining what changed in human-friendly language
+4. List changes_made — the specific edits made from the previous analysis
+
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
+{
+  "impact_summary": "2-4 sentences explaining what the client's feedback means for the design. Be specific about trade-offs.",
+  "changes_made": ["List of specific changes from the previous analysis"],
+  "summary": "2-3 sentence assessment of the current state of this area (updated)",
+  "what_it_needs": [
+    {
+      "category": "snake_case category slug",
+      "search_title": "Detailed product search query with material, color, size, style",
+      "description": "Why this item is needed — updated to reflect client feedback",
+      "priority": "high | medium | low",
+      "specs": "Ideal dimensions, material, color range, price range",
+      "placement": "WHERE in the room this item goes"
+    }
+  ],
+  "what_works": ["Updated list — include items the client wants to keep"],
+  "what_should_go": ["Updated list — remove items the client wants to keep"],
+  "design_direction": "Updated paragraph reflecting the client's feedback",
+  "recommended_palette": ["Updated list of 4-8 specific colors"],
+  "recommended_materials": ["Updated list of 4-6 materials"],
+  "recommended_textures": ["Updated list of 3-5 textures"],
+  "spatial_layout": "Updated furniture arrangement strategy",
+  "lighting_conditions": "Updated lighting assessment",
+  "window_door_positions": "Carry forward or update",
+  "outlet_positions": "Carry forward or update"
+}
+
+CRITICAL RULES:
+1. If the client says to KEEP something, it goes in "what_works" and NEVER in "what_should_go".
+2. Only push back on a client preference if it creates a specific measurable problem.
+3. Carry forward ALL spatial context (spatial_layout, lighting_conditions, window_door_positions, outlet_positions). Update only if feedback requires.
+4. Every item in what_it_needs MUST include a "placement" field.`,
+    });
+
     const response = await geminiProvider.chat({
-      model: selectModel("area_analysis"),
-      system: getSystemPrompt(profile),
+      model,
+      system,
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 12000,
+      max_tokens: 10000,
       temperature: 0.3,
       responseMimeType: "application/json",
       thinkingConfig: { thinkingLevel: "medium" },
@@ -275,10 +340,11 @@ CRITICAL RULES:
     // overwriting them would cause cascading contradictions in future operations.
     await supabase.from("rooms").update({ updated_at: new Date().toISOString() }).eq("id", room_id);
 
+    const regenTokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
-      output_json: { analysis, impact_summary: impactSummary, changes_made: changesMade },
-      tokens_used: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+      output_json: { analysis, interpretation, impact_summary: impactSummary, changes_made: changesMade },
+      tokens_used: interpretTokens + regenTokens,
     });
 
     return NextResponse.json({
