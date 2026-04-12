@@ -18,6 +18,7 @@ const UNSUPPORTED_KEYS = new Set([
   "$defs",
   "definitions",
   "additionalProperties",
+  "propertyNames",
   "$id",
   "title",
   "examples",
