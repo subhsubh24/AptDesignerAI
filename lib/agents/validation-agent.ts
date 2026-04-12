@@ -12,6 +12,7 @@ import {
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { createLogger } from "@/lib/logging/logger";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -92,6 +93,19 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
 }
 
 const log = createLogger("validation-agent");
+
+// Gemini responseSchema objects converted once from our Zod schemas.
+// Passing these with each call constrains Gemini's output to the exact
+// shape the Zod parser expects, eliminating the occasional "returned a
+// bare array" / "wrong wrapper key" shape drift we otherwise paper over
+// with retries. Mirrors the pattern already used by room-diagnostician,
+// shopping-researcher, and fit-scorer.
+const HARMONY_ITEM_SCORES_GEMINI_SCHEMA = zodToGeminiSchema(HarmonyItemScoresResponseSchema);
+const HARMONY_GLOBAL_GEMINI_SCHEMA = zodToGeminiSchema(HarmonyGlobalResponseSchema);
+const FINAL_ITEM_SCORES_GEMINI_SCHEMA = zodToGeminiSchema(FinalItemScoresResponseSchema);
+const FINAL_HOLISTIC_GEMINI_SCHEMA = zodToGeminiSchema(FinalHolisticResponseSchema);
+const FINAL_CONVERGENCE_GEMINI_SCHEMA = zodToGeminiSchema(FinalConvergenceResponseSchema);
+const PRODUCT_SET_VALIDATION_GEMINI_SCHEMA = zodToGeminiSchema(ProductSetValidationResponseSchema);
 
 export interface ValidationResult {
   isValid: boolean;
@@ -319,6 +333,7 @@ For every item, walk through all 6 dims + overall in 7 steps.
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
+          responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
         });
 
@@ -483,6 +498,7 @@ ${itemScoresJson}
             seed: DETERMINISTIC_SEED,
             thinkingConfig: { thinkingLevel: "high" },
             responseMimeType: "application/json",
+            responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
           });
           const raw = extractJsonObject(response.content);
@@ -759,6 +775,7 @@ revised_search_title, revised_specs, revised_placement, root_cause (name failing
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
+          responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
         });
 
@@ -914,6 +931,7 @@ ${itemScoresJson}
             seed: DETERMINISTIC_SEED,
             thinkingConfig: { thinkingLevel: "high" },
             responseMimeType: "application/json",
+            responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
           });
           const raw = extractJsonObject(response.content);
@@ -996,6 +1014,7 @@ ${convergenceCtx}
             max_tokens: 1500,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
+            responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1249,6 +1268,7 @@ Return JSON:
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel: "high" },
           responseMimeType: "application/json",
+          responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
         });
 
