@@ -38,18 +38,25 @@ const UNSUPPORTED_KEYS = new Set([
 
 /**
  * Recursively strip keys that Gemini doesn't understand and inline $refs.
+ *
+ * `isPropertyMap` indicates that `schema` is the value of a `properties` (or
+ * `$defs`/`definitions`) map — its keys are user-defined property names, not
+ * JSON Schema keywords, so they must NOT be filtered against UNSUPPORTED_KEYS
+ * (otherwise a Zod field named e.g. `title` would be silently dropped, leaving
+ * the parent's `required` array referencing a missing property).
  */
 function cleanForGemini(
   schema: Record<string, unknown>,
-  defs?: Record<string, unknown>
+  defs?: Record<string, unknown>,
+  isPropertyMap = false
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(schema)) {
-    if (UNSUPPORTED_KEYS.has(key)) continue;
+    if (!isPropertyMap && UNSUPPORTED_KEYS.has(key)) continue;
 
-    // Resolve $ref if present
-    if (key === "$ref" && typeof value === "string" && defs) {
+    // Resolve $ref if present (only meaningful when NOT inside a property map)
+    if (!isPropertyMap && key === "$ref" && typeof value === "string" && defs) {
       const refName = value.replace("#/$defs/", "").replace("#/definitions/", "");
       const resolved = defs[refName];
       if (resolved && typeof resolved === "object") {
@@ -58,7 +65,7 @@ function cleanForGemini(
       continue;
     }
 
-    if (key === "anyOf" && Array.isArray(value)) {
+    if (!isPropertyMap && key === "anyOf" && Array.isArray(value)) {
       // Gemini doesn't support anyOf well. If it's a nullable pattern
       // (anyOf: [{type: X}, {type: "null"}]), convert to nullable.
       const nonNull = value.filter(
@@ -75,8 +82,17 @@ function cleanForGemini(
       continue;
     }
 
+    // When we recurse into `properties`, its direct children are property-name
+    // keys → sub-schemas. We must treat that nested object as a property map
+    // so we don't filter property names against the keyword blacklist.
+    const childIsPropertyMap = !isPropertyMap && key === "properties";
+
     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      result[key] = cleanForGemini(value as Record<string, unknown>, defs);
+      result[key] = cleanForGemini(
+        value as Record<string, unknown>,
+        defs,
+        childIsPropertyMap
+      );
     } else if (Array.isArray(value)) {
       result[key] = value.map((item) =>
         typeof item === "object" && item !== null
