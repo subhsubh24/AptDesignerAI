@@ -78,19 +78,12 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
-  // Load project with building research and apartment analysis
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", project_id || room.project_id)
-    .single();
-
-  // Load other rooms for cross-room awareness
-  const { data: otherRooms } = await supabase
-    .from("rooms")
-    .select("*, room_images(*), room_diagnoses(*)")
-    .eq("project_id", project_id || room.project_id)
-    .neq("id", room_id);
+  // Load project + other rooms in parallel (both need project_id which we have after room load)
+  const effectiveProjectId = project_id || room.project_id;
+  const [{ data: project }, { data: otherRooms }] = await Promise.all([
+    supabase.from("projects").select("*").eq("id", effectiveProjectId).single(),
+    supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id),
+  ]);
 
   // Build vision content
   const contentBlocks: AIContentBlock[] = [];

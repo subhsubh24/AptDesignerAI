@@ -221,16 +221,23 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
 
 ${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}`;
 
-  // ─── Pass A: Per-item scoring ───────────────────────────────
+  // ─── Pass A: Per-item scoring (parallel chunks for large sets) ────────────
   const itemCount = whatItNeeds.length;
   const passAMaxTokensBase = Math.min(8000 + itemCount * 2000, 48000);
 
-  const passAPrompt = `You are a senior interior designer running PASS 1 of 2 on recommended items. Your ONLY job here: for EVERY recommended item, produce 6-dimensional sub-scores + rationale + revisions if needed. A separate pass handles global cohesion, pairwise conflicts, and narrative — do NOT produce those here.
+  // Build Pass A prompt. In chunked mode the full item list stays in sharedHeader for
+  // cross-item context; a restriction note tells each parallel scorer to output only its group.
+  const buildPassAPromptText = (assignedItems: Array<Record<string, unknown>>, isChunked: boolean): string => {
+    const restriction = isChunked
+      ? `\n\n## ⚠️ PARALLEL SCORING ASSIGNMENT\nThis is a parallel scoring session. Score ONLY the ${assignedItems.length} items listed below. A separate parallel call scores the remaining items.\nYOUR ASSIGNED ITEMS TO SCORE:\n${assignedItems.map(item => `- [${item.category}] ${item.search_title}`).join("\n")}\n\nThe full item list above (in RECOMMENDED NEW ITEMS) is for cross-item palette/material/spatial conflict detection — reference it freely. But OUTPUT item_scores ONLY for your assigned items above.\n`
+      : "";
 
-${sharedHeader}
+    return `You are a senior interior designer running PASS 1 of 2 on recommended items. Your ONLY job here: for ${isChunked ? "items in your SCORING ASSIGNMENT" : "EVERY recommended item"}, produce 6-dimensional sub-scores + rationale + revisions if needed. A separate pass handles global cohesion, pairwise conflicts, and narrative — do NOT produce those here.
+
+${sharedHeader}${restriction}
 ## YOUR JOB — PER-ITEM SCORING (pass 1 of 2)
 
-For EACH recommended item, evaluate against:
+For EACH ${isChunked ? "ASSIGNED" : "recommended"} item, evaluate against:
 - Items to keep (palette/material/style harmony with existing pieces visible in the room photos)
 - Other recommendations (palette/material/style coherence as a SET)
 - Apartment-wide coherence (other rooms' palettes/materials/style)
@@ -279,58 +286,52 @@ For every item, walk through all 6 dims + overall in 7 steps.
     }
   ]
 }`;
+  };
 
-  let itemScoresResult: HarmonyValidationResult["item_scores"] | undefined;
-  let passATokens = 0;
-  let responseModel = model;
-
-  {
+  // Helper: run one Pass A LLM call with retry for a given prompt + token budget.
+  type HarmonyPassAResult = { scores: HarmonyValidationResult["item_scores"]; tokens: number; usedModel: string };
+  const runHarmonyPassAChunk = async (promptText: string, maxTokensBase: number): Promise<HarmonyPassAResult> => {
     let lastError: string | undefined;
     let attempt = 0;
     let wasTruncated = false;
-
-    const passAContent: AIContentBlock[] = [
+    const content: AIContentBlock[] = [
       ...roomImages,
-      { type: "text", text: passAPrompt },
+      { type: "text", text: promptText },
     ];
+    return withRetry(
+      async () => {
+        attempt++;
+        const maxTokens = wasTruncated
+          ? Math.min(maxTokensBase + 16000, 64000)
+          : maxTokensBase;
+        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: wasTruncated
+              ? `\n\n**IMPORTANT**: Your previous response was truncated. Be MORE CONCISE: keep rationales to 1-2 sentences, omit revised fields for items scoring above 9.0.`
+              : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+          : content;
 
-    try {
-      const res = await withRetry(
-        async () => {
-          attempt++;
-          const maxTokens = wasTruncated
-            ? Math.min(passAMaxTokensBase + 16000, 64000)
-            : passAMaxTokensBase;
-          const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: maxTokens,
+          seed: DETERMINISTIC_SEED,
+          thinkingConfig: { thinkingLevel },
+          responseMimeType: "application/json",
+          mediaResolution: "ultra_high",
+        });
 
-          const retryContent = attempt > 1 && lastError
-            ? [...passAContent, { type: "text" as const, text: wasTruncated
-                ? `\n\n**IMPORTANT**: Your previous response was truncated. Be MORE CONCISE: keep rationales to 1-2 sentences, omit revised fields for items scoring above 9.0.`
-                : `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
-            : passAContent;
+        if (response.truncated) {
+          wasTruncated = true;
+          throw new Error("Response truncated (MAX_TOKENS)");
+        }
 
-          const response = await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content: retryContent }],
-            max_tokens: maxTokens,
-            seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel },
-            responseMimeType: "application/json",
-            mediaResolution: "ultra_high",
-          });
-
-          if (response.truncated) {
-            wasTruncated = true;
-            throw new Error("Response truncated (MAX_TOKENS)");
-          }
-
-          const raw = extractJsonObject(response.content);
-          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
-          const parsed = HarmonyItemScoresResponseSchema.parse(unwrapped);
-          passATokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-          responseModel = response.model;
-          return parsed.item_scores.map((s) => ({
+        const raw = extractJsonObject(response.content);
+        const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+        const parsed = HarmonyItemScoresResponseSchema.parse(unwrapped);
+        return {
+          scores: parsed.item_scores.map((s) => ({
             ...s,
             sub_scores: s.sub_scores,
             revised_search_title: s.revised_search_title ?? undefined,
@@ -338,31 +339,85 @@ For every item, walk through all 6 dims + overall in 7 steps.
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
             rationale: s.rationale ?? undefined,
-          }));
+          })) as HarmonyValidationResult["item_scores"],
+          tokens: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+          usedModel: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 15000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          if (error instanceof Error && error.message.includes("truncated")) return true;
+          return false;
         },
-        {
-          maxAttempts: 3,
-          baseDelayMs: 1500,
-          maxDelayMs: 15000,
-          isRetryable: (error) => {
-            if (isRetryableError(error)) return true;
-            if (error instanceof SyntaxError) return true;
-            if (error instanceof Error && error.name === "ZodError") return true;
-            if (error instanceof Error && error.message.includes("truncated")) return true;
-            return false;
-          },
-          onRetry: (retryAttempt, delayMs, error) => {
-            lastError = error instanceof Error ? error.message : "Harmony item-scoring failed";
-            log.warn(`Harmony item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
-          },
-        }
-      );
-      itemScoresResult = res;
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Harmony item-scoring failed after retries";
-      log.error("Harmony item-scoring failed", { error: errMsg });
-      return { success: false, error: errMsg };
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Harmony item-scoring failed";
+          log.warn(`Harmony item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+        },
+      }
+    );
+  };
+
+  let itemScoresResult: HarmonyValidationResult["item_scores"] | undefined;
+  let passATokens = 0;
+  let responseModel = model;
+
+  // Use parallel chunks for large item sets (≥ 8): each chunk sees the full list for
+  // cross-item context but only outputs scores for its assigned subset.
+  const HARMONY_CHUNK_THRESHOLD = 8;
+  try {
+    if (itemCount < HARMONY_CHUNK_THRESHOLD) {
+      // Single-call path (original behaviour for small sets)
+      const result = await runHarmonyPassAChunk(buildPassAPromptText(whatItNeeds, false), passAMaxTokensBase);
+      itemScoresResult = result.scores;
+      passATokens = result.tokens;
+      responseModel = result.usedModel;
+    } else {
+      // Parallel chunked path: two groups scored simultaneously
+      const midpoint = Math.ceil(itemCount / 2);
+      const group1 = whatItNeeds.slice(0, midpoint);
+      const group2 = whatItNeeds.slice(midpoint);
+      // Each chunk outputs ~half the items so the token budget is proportionally smaller
+      const chunkMaxTokens = Math.min(8000 + Math.ceil(itemCount / 2) * 2000, 28000);
+
+      log.info("Harmony Pass A: splitting into parallel chunks", {
+        totalItems: itemCount, group1: group1.length, group2: group2.length, chunkMaxTokens,
+      });
+
+      const [r1, r2] = await Promise.all([
+        runHarmonyPassAChunk(buildPassAPromptText(group1, true), chunkMaxTokens),
+        runHarmonyPassAChunk(buildPassAPromptText(group2, true), chunkMaxTokens),
+      ]);
+
+      // Merge in original item order; filter each chunk to its assigned categories only
+      // (guards against the model accidentally scoring items outside its group)
+      const group1Cats = new Set(group1.map(item => item.category as string));
+      const group2Cats = new Set(group2.map(item => item.category as string));
+      const mergedScores = new Map<string, HarmonyValidationResult["item_scores"][number]>([
+        ...r1.scores.filter(s => group1Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
+        ...r2.scores.filter(s => group2Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
+      ]);
+      itemScoresResult = whatItNeeds
+        .map(item => mergedScores.get(item.category as string))
+        .filter((s): s is HarmonyValidationResult["item_scores"][number] => s !== undefined);
+
+      passATokens = r1.tokens + r2.tokens;
+      responseModel = r1.usedModel;
+
+      log.info("Harmony Pass A: parallel chunks complete", {
+        r1Items: r1.scores.length, r2Items: r2.scores.length,
+        merged: itemScoresResult.length, totalTokens: passATokens,
+      });
     }
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Harmony item-scoring failed after retries";
+    log.error("Harmony item-scoring failed", { error: errMsg });
+    return { success: false, error: errMsg };
   }
 
   log.info("Harmony pass A (item scoring) complete", {
@@ -611,18 +666,24 @@ ${whatItNeeds.map((item, i) => `${i + 1}. [${item.category}] ${item.search_title
 
 ${context.mathScoresText || ""}`;
 
-  // ─── Pass A: Per-item final scoring with revision history ───
+  // ─── Pass A: Per-item final scoring with revision history (parallel for large sets) ───
   const finalItemCount = whatItNeeds.length;
   const passAMaxTokensBase = Math.min(8000 + finalItemCount * 2000, 48000);
 
-  const passAPrompt = `You are a LEAD INTERIOR DESIGNER doing the FINAL per-item quality review. This is PASS 1 of 3: produce DEFINITIVE 6-dim sub-scores + revisions for EACH item. Do NOT produce global narrative or convergence decisions — those are separate passes.
+  // Build Pass A prompt. In chunked mode the full item list stays in sharedHeader for
+  // cross-item context; a restriction note tells each parallel scorer to output only its group.
+  const buildFinalPassAPromptText = (assignedItems: Array<Record<string, unknown>>, isChunked: boolean): string => {
+    const restriction = isChunked
+      ? `\n\n## ⚠️ PARALLEL SCORING ASSIGNMENT\nThis is a parallel scoring session. Score ONLY the ${assignedItems.length} items listed below. A separate parallel call scores the remaining items.\nYOUR ASSIGNED ITEMS TO SCORE:\n${assignedItems.map(item => `- [${item.category}] ${item.search_title}`).join("\n")}\n\nThe full item list above (in CURRENT RECOMMENDED ITEMS) is for cross-item conflict detection — reference it freely. But OUTPUT item_scores ONLY for your assigned items above.\n`
+      : "";
+
+    return `You are a LEAD INTERIOR DESIGNER doing the FINAL per-item quality review. This is PASS 1 of 3: produce DEFINITIVE 6-dim sub-scores + revisions for ${isChunked ? "items in your SCORING ASSIGNMENT" : "EACH item"}. Do NOT produce global narrative or convergence decisions — those are separate passes.
 
 ${sharedHeader}
-${revisionHistoryText}
-
+${revisionHistoryText}${restriction}
 ## YOUR JOB — PER-ITEM FINAL SCORING
 
-For EACH item, provide 6 sub-scores (USE DECIMALS):
+For EACH ${isChunked ? "ASSIGNED" : ""} item, provide 6 sub-scores (USE DECIMALS):
 1. **color_fit** — math color score is ground truth where provided
 2. **spatial_fit** — math spatial score is ground truth where provided
 3. **material_fit** — math material score is ground truth where provided
@@ -665,56 +726,52 @@ revised_search_title, revised_specs, revised_placement, root_cause (name failing
     }
   ]
 }`;
+  };
 
-  let itemScores: FinalAssessmentResult["item_scores"] | undefined;
-  let passATokens = 0;
-  let responseModel = model;
-
-  {
+  // Helper: run one final Pass A LLM call with retry.
+  type FinalPassAResult = { scores: FinalAssessmentResult["item_scores"]; tokens: number; usedModel: string };
+  const runFinalPassAChunk = async (promptText: string, maxTokensBase: number): Promise<FinalPassAResult> => {
     let lastError: string | undefined;
     let attempt = 0;
     let wasTruncated = false;
-    const passAContent: AIContentBlock[] = [
+    const content: AIContentBlock[] = [
       ...roomImages,
-      { type: "text", text: passAPrompt },
+      { type: "text", text: promptText },
     ];
+    return withRetry(
+      async () => {
+        attempt++;
+        const maxTokens = wasTruncated
+          ? Math.min(maxTokensBase + 16000, 64000)
+          : maxTokensBase;
+        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: wasTruncated
+              ? `\n\n**IMPORTANT**: Previous response was truncated. Be MORE CONCISE.`
+              : `\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.` }]
+          : content;
 
-    try {
-      itemScores = await withRetry(
-        async () => {
-          attempt++;
-          const maxTokens = wasTruncated
-            ? Math.min(passAMaxTokensBase + 16000, 64000)
-            : passAMaxTokensBase;
-          const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
-          const retryContent = attempt > 1 && lastError
-            ? [...passAContent, { type: "text" as const, text: wasTruncated
-                ? `\n\n**IMPORTANT**: Previous response was truncated. Be MORE CONCISE.`
-                : `\n\n**IMPORTANT**: Previous response was invalid: "${lastError}". Return ONLY valid JSON.` }]
-            : passAContent;
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: maxTokens,
+          seed: DETERMINISTIC_SEED,
+          thinkingConfig: { thinkingLevel },
+          responseMimeType: "application/json",
+          mediaResolution: "ultra_high",
+        });
 
-          const response = await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content: retryContent }],
-            max_tokens: maxTokens,
-            seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel },
-            responseMimeType: "application/json",
-            mediaResolution: "ultra_high",
-          });
+        if (response.truncated) {
+          wasTruncated = true;
+          throw new Error("Response truncated (MAX_TOKENS)");
+        }
 
-          if (response.truncated) {
-            wasTruncated = true;
-            throw new Error("Response truncated (MAX_TOKENS)");
-          }
-
-          const raw = extractJsonObject(response.content);
-          const unwrapped = Array.isArray(raw) ? raw[0] : raw;
-          const parsed = FinalItemScoresResponseSchema.parse(unwrapped);
-          passATokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-          responseModel = response.model;
-          return parsed.item_scores.map((s) => ({
+        const raw = extractJsonObject(response.content);
+        const unwrapped = Array.isArray(raw) ? raw[0] : raw;
+        const parsed = FinalItemScoresResponseSchema.parse(unwrapped);
+        return {
+          scores: parsed.item_scores.map((s) => ({
             ...s,
             sub_scores: s.sub_scores ?? undefined,
             revised_search_title: s.revised_search_title ?? undefined,
@@ -722,30 +779,83 @@ revised_search_title, revised_specs, revised_placement, root_cause (name failing
             revised_placement: s.revised_placement ?? undefined,
             root_cause: s.root_cause ?? undefined,
             rationale: s.rationale ?? undefined,
-          }));
+          })) as FinalAssessmentResult["item_scores"],
+          tokens: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+          usedModel: response.model,
+        };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 15000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          if (error instanceof Error && error.message.includes("truncated")) return true;
+          return false;
         },
-        {
-          maxAttempts: 3,
-          baseDelayMs: 1500,
-          maxDelayMs: 15000,
-          isRetryable: (error) => {
-            if (isRetryableError(error)) return true;
-            if (error instanceof SyntaxError) return true;
-            if (error instanceof Error && error.name === "ZodError") return true;
-            if (error instanceof Error && error.message.includes("truncated")) return true;
-            return false;
-          },
-          onRetry: (retryAttempt, delayMs, error) => {
-            lastError = error instanceof Error ? error.message : "Final item scoring failed";
-            log.warn(`Final item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
-          },
-        }
-      );
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Final item-scoring failed after retries";
-      log.error("Final item-scoring failed", { error: errMsg });
-      return { success: false, error: errMsg };
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Final item scoring failed";
+          log.warn(`Final item-scoring retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+        },
+      }
+    );
+  };
+
+  let itemScores: FinalAssessmentResult["item_scores"] | undefined;
+  let passATokens = 0;
+  let responseModel = model;
+
+  // Use parallel chunks for large item sets (≥ 8): each chunk sees the full list for
+  // cross-item context but only outputs scores for its assigned subset.
+  const FINAL_CHUNK_THRESHOLD = 8;
+  try {
+    if (finalItemCount < FINAL_CHUNK_THRESHOLD) {
+      // Single-call path (original behaviour)
+      const result = await runFinalPassAChunk(buildFinalPassAPromptText(whatItNeeds, false), passAMaxTokensBase);
+      itemScores = result.scores;
+      passATokens = result.tokens;
+      responseModel = result.usedModel;
+    } else {
+      // Parallel chunked path: two groups scored simultaneously
+      const midpoint = Math.ceil(finalItemCount / 2);
+      const group1 = whatItNeeds.slice(0, midpoint);
+      const group2 = whatItNeeds.slice(midpoint);
+      const chunkMaxTokens = Math.min(8000 + Math.ceil(finalItemCount / 2) * 2000, 28000);
+
+      log.info("Final assessment Pass A: splitting into parallel chunks", {
+        totalItems: finalItemCount, group1: group1.length, group2: group2.length, chunkMaxTokens,
+      });
+
+      const [r1, r2] = await Promise.all([
+        runFinalPassAChunk(buildFinalPassAPromptText(group1, true), chunkMaxTokens),
+        runFinalPassAChunk(buildFinalPassAPromptText(group2, true), chunkMaxTokens),
+      ]);
+
+      // Merge in original order; filter each chunk to its assigned categories only
+      const group1Cats = new Set(group1.map(item => item.category as string));
+      const group2Cats = new Set(group2.map(item => item.category as string));
+      const mergedFinal = new Map<string, FinalAssessmentResult["item_scores"][number]>([
+        ...r1.scores.filter(s => group1Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
+        ...r2.scores.filter(s => group2Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
+      ]);
+      itemScores = whatItNeeds
+        .map(item => mergedFinal.get(item.category as string))
+        .filter((s): s is FinalAssessmentResult["item_scores"][number] => s !== undefined);
+
+      passATokens = r1.tokens + r2.tokens;
+      responseModel = r1.usedModel;
+
+      log.info("Final assessment Pass A: parallel chunks complete", {
+        r1Items: r1.scores.length, r2Items: r2.scores.length,
+        merged: itemScores.length, totalTokens: passATokens,
+      });
     }
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Final item-scoring failed after retries";
+    log.error("Final item-scoring failed", { error: errMsg });
+    return { success: false, error: errMsg };
   }
 
   log.info("Final assessment pass A (item scoring) complete", {
