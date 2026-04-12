@@ -122,6 +122,25 @@ export const BundlePairwiseConflictSchema = z.object({
   reason: z.string().default(""),
 });
 
+// Split-pass sub-schemas for bundle evaluation (3 focused calls merge into BundleEvalResponseSchema).
+
+/** Call A: dimension scores + verdict + analysis (holistic bundle quality). */
+export const BundleScoringResponseSchema = z.object({
+  scores: BundleScoresSchema,
+  verdict: z.string().default("No verdict provided"),
+  analysis: BundleAnalysisSchema,
+});
+
+/** Call B: pairwise conflicts between products (focused O(n²) compatibility analysis). */
+export const BundlePairwiseResponseSchema = z.object({
+  pairwise_conflicts: z.array(BundlePairwiseConflictSchema).default([]),
+});
+
+/** Call C: room vibe narrative (purely descriptive, consumes Call A's verdict). */
+export const BundleVibeResponseSchema = z.object({
+  room_vibe: RoomVibeSchema,
+});
+
 export const BundleEvalResponseSchema = z.object({
   scores: BundleScoresSchema,
   verdict: z.string().default("No verdict provided"),

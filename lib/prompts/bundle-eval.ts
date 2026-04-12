@@ -1,23 +1,34 @@
 import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 
-export function getBundleEvalPrompt(
-  roomType: string,
-  priorities?: string[],
-  diagnosis?: DiagnosisData,
-  designDirection?: DesignDirection,
-  spatialLayout?: string,
-  placementMap?: Record<string, string>,
-  floorPlan?: Record<string, unknown>,
-  lightingConditions?: string,
-  windowDoorPositions?: string,
-  outletPositions?: string,
-  existingItems?: string[],
-  userContext?: string,
-  replaceItems?: string[],
-  whatShouldGo?: string[]
-): string {
-  // Build dynamic context from diagnosis — no hardcoded apartment references
+export interface BundleEvalContextArgs {
+  roomType: string;
+  priorities?: string[];
+  diagnosis?: DiagnosisData;
+  designDirection?: DesignDirection;
+  spatialLayout?: string;
+  placementMap?: Record<string, string>;
+  floorPlan?: Record<string, unknown>;
+  lightingConditions?: string;
+  windowDoorPositions?: string;
+  outletPositions?: string;
+  existingItems?: string[];
+  userContext?: string;
+  replaceItems?: string[];
+  whatShouldGo?: string[];
+}
+
+/**
+ * Shared context builder for bundle-eval prompt variants.
+ * Extracted so scoring / pairwise / vibe passes all see identical grounding.
+ */
+function buildBundleContext(args: BundleEvalContextArgs): string {
+  const {
+    roomType, priorities, diagnosis, designDirection, spatialLayout, placementMap, floorPlan,
+    lightingConditions, windowDoorPositions, outletPositions,
+    existingItems, userContext, replaceItems, whatShouldGo,
+  } = args;
+
   const existingContext = diagnosis?.what_is_working?.length
     ? `What's already working in this room: ${diagnosis.what_is_working.join("; ")}`
     : "Refer to the room photos and building context in the system prompt for existing elements.";
@@ -42,7 +53,6 @@ export function getBundleEvalPrompt(
     ? `Client priorities: ${priorities.join(", ")}`
     : "";
 
-  // ─── Assemble context with priority-based truncation ──────
   const sections: ContextSection[] = [];
 
   sections.push({
@@ -95,13 +105,34 @@ export function getBundleEvalPrompt(
   }
 
   if (userContext) {
-    sections.push({ key: "user_notes", priority: 2, content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle. If the user mentions constraints or preferences not visible in photos, factor them into your scoring.` });
+    sections.push({ key: "user_notes", priority: 2, content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when evaluating the bundle.` });
   }
 
-  // Model max_tokens is 10000 with thinking; reserve ~5000 for scoring
-  // instructions + output + thinking overhead. Context gets ~5000 tokens.
   const contextResult = truncateContext(sections, 5000, 0);
-  const assembledContext = contextResult.text;
+  return contextResult.text;
+}
+
+export function getBundleEvalPrompt(
+  roomType: string,
+  priorities?: string[],
+  diagnosis?: DiagnosisData,
+  designDirection?: DesignDirection,
+  spatialLayout?: string,
+  placementMap?: Record<string, string>,
+  floorPlan?: Record<string, unknown>,
+  lightingConditions?: string,
+  windowDoorPositions?: string,
+  outletPositions?: string,
+  existingItems?: string[],
+  userContext?: string,
+  replaceItems?: string[],
+  whatShouldGo?: string[]
+): string {
+  const assembledContext = buildBundleContext({
+    roomType, priorities, diagnosis, designDirection, spatialLayout, placementMap, floorPlan,
+    lightingConditions, windowDoorPositions, outletPositions,
+    existingItems, userContext, replaceItems, whatShouldGo,
+  });
 
   return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. Score how well these items work TOGETHER as a set, not just individually.
 
@@ -262,4 +293,123 @@ Return a JSON object:
 - Use the FULL 0-10 scale. Not everything is 6-8.
 - Every claim in analysis must reference a specific product by name.
 - If you're unsure about dimensions fitting, say so and lower spatial_arrangement_score.`;
+}
+
+/**
+ * Split-pass Call A: dimension scores + verdict + analysis.
+ * The 7-dimension holistic scoring — no pairwise or vibe. Paired with
+ * getBundlePairwisePrompt and getBundleVibePrompt.
+ */
+export function getBundleScoringPrompt(args: BundleEvalContextArgs): string {
+  const assembledContext = buildBundleContext(args);
+  return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. This pass scores the bundle on 7 dimensions plus a summary verdict and analysis. Pairwise conflicts and room vibe are handled by separate passes — do NOT produce them here.
+
+You are a world-class designer reviewing a proposed set for a real client's apartment. You know their building, finishes, room, and how they live.
+
+${assembledContext}
+
+## SCORE CALIBRATION — READ BEFORE SCORING
+- **9-10 (Exceptional)**: Professional-grade curation. Every piece intentional. THIS IS RARE.
+- **7-8 (Strong)**: Solid set with minor concerns.
+- **5-6 (Mediocre)**: Safe but uninspired. THIS IS AVERAGE.
+- **3-4 (Poor)**: Active conflicts. Wrong scale, clashing materials, or missing key pieces.
+- **1-2 (Wrong)**: Incoherent set.
+
+CRITICAL: Use the FULL 0-10 range.
+
+## SCORING DIMENSIONS (each 0-10)
+
+1. **palette_harmony_score**: Do the colors work together? List each product's primary colors, map to warm/cool/neutral, check against actual apartment finishes, verdict: cohesive or clash?
+2. **material_balance_score**: Is there a healthy mix of 3-4+ distinct material types (wood, textile, metal, stone/ceramic, glass, leather)? Check durability/maintenance for the room's use (pets/kids/humidity) and climate suitability.
+3. **scale_balance_score**: Pieces correctly proportioned vs. each other AND the room? Rug covers 60-80% of seating area; coffee table ⅔-full width of sofa; dining table seats the needed count.
+4. **style_consistency_score**: Unified aesthetic. Use visual style tags. Conflicting tags = lower score.
+5. **room_completion_score**: Does this make the room feel fully furnished? Tiered: missing essentials (sofa/bed/table/rug/primary light) → below 6. Only essentials, no standard → below 7. No finishing (art/plants/objects) → cap at 7. Dead-zone activation = bonus.
+6. **spatial_arrangement_score**: Physical arrangement feasible. Traffic flow (36" main paths, 18" between coffee table and sofa), zone clarity, window/door clearance, outlet access for powered items.
+7. **practicality_score**: Livable. Seating capacity for hosting, dining capacity, durability, lighting adequacy, acoustic balance (textiles in hard-surface rooms).
+
+## COMPOUNDING SCORING
+Your 7 dimensions are combined using a weighted geometric mean. ONE bad dimension tanks the overall score. Be PRECISE — inflating one score cannot compensate.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "scores": {
+    "palette_harmony_score": number,
+    "material_balance_score": number,
+    "scale_balance_score": number,
+    "style_consistency_score": number,
+    "room_completion_score": number,
+    "spatial_arrangement_score": number,
+    "practicality_score": number
+  },
+  "analysis": {
+    "strongest_aspect": "what works best — be specific, name items",
+    "weakest_aspect": "biggest weakness — name item and problem",
+    "what_feels_missing": "specific categories/elements still needed",
+    "what_should_be_swapped_first": "which item, replaced with what, and why"
+  },
+  "verdict": "2-3 sentence summary. Would a designer recommend this?"
+}`;
+}
+
+/**
+ * Split-pass Call B: pairwise conflicts between all products.
+ * Focused O(n²) compatibility analysis.
+ */
+export function getBundlePairwisePrompt(args: BundleEvalContextArgs): string {
+  const assembledContext = buildBundleContext(args);
+  return `You are evaluating PAIRWISE COMPATIBILITY between products in a bundle. This pass has ONE job: identify which pairs of items don't work well together, and why. Do NOT score the bundle overall; that's a separate pass.
+
+${assembledContext}
+
+## YOUR TASK
+For every PAIR of products in the bundle, silently assess compatibility (0-10). Then:
+
+- Report ONLY pairs with compatibility < 9.0. Omit pairs that work well together.
+- For each reported pair: compatibility (0-10), conflict_type, reason.
+- conflict_type examples: "color_clash", "material_mismatch", "scale_conflict", "style_conflict", "spatial_crowding"
+- Two individually great products can be terrible together (two different wood species; warm lamp + cool art; oversized sofa + oversized coffee table).
+
+## CRITICAL
+- Be specific. Name product titles or categories.
+- If all pairs are compatible (all ≥ 9.0), return an empty array.
+- Do NOT invent conflicts that aren't visible in product attributes/images.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "pairwise_conflicts": [
+    {
+      "product_a": "category_or_title_of_first_item",
+      "product_b": "category_or_title_of_second_item",
+      "compatibility": number_0_to_10,
+      "conflict_type": "type_of_clash",
+      "reason": "specific explanation"
+    }
+  ]
+}`;
+}
+
+/**
+ * Split-pass Call C: room vibe narrative.
+ * Purely descriptive — paints what the room FEELS like. Consumes Call A's
+ * verdict so the narrative aligns with the scored assessment.
+ */
+export function getBundleVibePrompt(args: BundleEvalContextArgs, scoringVerdict?: string): string {
+  const assembledContext = buildBundleContext(args);
+  return `You are writing the "vibe" narrative for a proposed bundle of products. This pass is purely descriptive — imagine walking into the finished room and describe what it feels like. Do NOT score dimensions or identify conflicts; those are separate passes.
+
+${scoringVerdict ? `## SCORING VERDICT (from earlier pass — match the tone of your vibe to this)\n${scoringVerdict}\n` : ""}
+${assembledContext}
+
+## YOUR TASK
+Write a designer's pitch of the room's atmosphere. Reference specific products that drive the vibe. Be evocative, not generic.
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "room_vibe": {
+    "vibe_summary": "2-3 sentences describing the mood and feeling of walking into this room. Reference specific products that create the vibe.",
+    "style_keywords": ["3-5 style keywords — e.g., 'warm minimalist', 'lived-in modern', 'earthy calm'"],
+    "color_story": "1-2 sentences on the color narrative — dominant tone, accents, light interaction",
+    "mood": "one word or short phrase capturing the emotional quality — e.g., 'cozy refuge', 'calm sophistication'"
+  }
+}`;
 }

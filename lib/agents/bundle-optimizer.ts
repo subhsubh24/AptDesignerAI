@@ -1,9 +1,18 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
-import { getBundleEvalPrompt } from "@/lib/prompts/bundle-eval";
+import {
+  getBundleScoringPrompt,
+  getBundlePairwisePrompt,
+  getBundleVibePrompt,
+  type BundleEvalContextArgs,
+} from "@/lib/prompts/bundle-eval";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
-import { BundleEvalResponseSchema } from "@/lib/types/schemas";
+import {
+  BundleScoringResponseSchema,
+  BundlePairwiseResponseSchema,
+  BundleVibeResponseSchema,
+} from "@/lib/types/schemas";
 import { recordBundleScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -38,30 +47,41 @@ export interface BundleContext {
   whatShouldGo?: string[];
 }
 
+/**
+ * Evaluate a bundle via three focused calls:
+ *   A (scoring):  7 dimension scores + verdict + analysis
+ *   B (pairwise): O(n²) pairwise conflicts between products
+ *   C (vibe):     room_vibe narrative (depends on A's verdict for tone)
+ *
+ * A and B run in parallel (independent); C runs after A. Each pass has a
+ * focused budget so no single job crowds out another within a token ceiling.
+ * Math veto applied to Call A scores.
+ */
 export async function evaluateBundle(
   products: CandidateProduct[],
   bundleCtx: BundleContext
 ): Promise<AgentResult<BundleEvaluationResult>> {
   const model = selectModel("bundle");
   const system = getSystemPrompt(bundleCtx.designProfile);
-  const bundlePrompt = getBundleEvalPrompt(
-    bundleCtx.roomType,
-    bundleCtx.priorities,
-    bundleCtx.diagnosis,
-    bundleCtx.designDirection,
-    bundleCtx.spatialLayout,
-    bundleCtx.placementMap,
-    bundleCtx.floorPlan,
-    bundleCtx.lightingConditions,
-    bundleCtx.windowDoorPositions,
-    bundleCtx.outletPositions,
-    bundleCtx.existingItems,
-    bundleCtx.userContext,
-    bundleCtx.replaceItems,
-    bundleCtx.whatShouldGo
-  );
 
-  // Build bundle context with visual metadata
+  const evalCtx: BundleEvalContextArgs = {
+    roomType: bundleCtx.roomType,
+    priorities: bundleCtx.priorities,
+    diagnosis: bundleCtx.diagnosis,
+    designDirection: bundleCtx.designDirection,
+    spatialLayout: bundleCtx.spatialLayout,
+    placementMap: bundleCtx.placementMap,
+    floorPlan: bundleCtx.floorPlan,
+    lightingConditions: bundleCtx.lightingConditions,
+    windowDoorPositions: bundleCtx.windowDoorPositions,
+    outletPositions: bundleCtx.outletPositions,
+    existingItems: bundleCtx.existingItems,
+    userContext: bundleCtx.userContext,
+    replaceItems: bundleCtx.replaceItems,
+    whatShouldGo: bundleCtx.whatShouldGo,
+  };
+
+  // Build bundle product description (shared across all three calls)
   const bundleInfo = products
     .map((p, i) => {
       const meta = p.metadata as Record<string, unknown> | null;
@@ -79,22 +99,19 @@ export async function evaluateBundle(
     })
     .join("\n\n");
 
-  const content: AIContentBlock[] = [];
-
-  // Add room images
+  // Shared image context for all three calls
+  const sharedImages: AIContentBlock[] = [];
   for (const url of bundleCtx.roomImageUrls.slice(0, 2)) {
-    content.push({ type: "image", source: { type: "url", url } });
+    sharedImages.push({ type: "image", source: { type: "url", url } });
   }
-
-  // Add product images + lifestyle images
   for (const product of products) {
     if (product.image_url) {
-      content.push({ type: "image", source: { type: "url", url: product.image_url } });
+      sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
     }
     const meta = product.metadata as Record<string, unknown> | null;
     const lifestyleUrl = meta?.lifestyle_image_url as string | undefined;
     if (lifestyleUrl) {
-      content.push({ type: "image", source: { type: "url", url: lifestyleUrl } });
+      sharedImages.push({ type: "image", source: { type: "url", url: lifestyleUrl } });
     }
   }
 
@@ -118,100 +135,42 @@ export async function evaluateBundle(
     }
   );
   const bundleMathSection = formatBundleMathForPrompt(bundleMathScores);
+  const productTail = `\n\n${bundleMathSection}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate based on what you SEE — real colors, textures, proportions, and style.`;
 
-  content.push({
-    type: "text",
-    text: `${bundlePrompt}\n\n${bundleMathSection}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study ALL product images carefully. Evaluate whether these items visually work together as a cohesive set based on what you SEE — real colors, textures, proportions, and style.`,
-  });
-
-  let lastError: string | undefined;
-  let attempt = 0;
-
-  try {
+  // Generic single-pass runner with retry
+  const runPass = async <T>(
+    passName: "scoring" | "pairwise" | "vibe",
+    promptText: string,
+    maxTokens: number,
+    parse: (raw: unknown) => T,
+  ): Promise<{ data: T; tokens: number; model: string }> => {
+    let lastError: string | undefined;
+    let attempt = 0;
     return await withRetry(
       async () => {
         attempt++;
+        const baseContent: AIContentBlock[] = [
+          ...sharedImages,
+          { type: "text" as const, text: `${promptText}${productTail}` },
+        ];
         const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above. All score fields must be numbers 0-10.` }]
-          : content;
+          ? [...baseContent, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+          : baseContent;
 
         const response = await geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 10000,
+          max_tokens: maxTokens,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "high" },
         });
 
         const raw = extractJsonObject(response.content);
-        const validated = BundleEvalResponseSchema.parse(raw);
-        const scores = validated.scores;
-
-        // Apply math veto: cap AI bundle dimension scores where math found violations
-        const VETO_T = MATH_VETO.threshold;
-        if (bundleMathScores.palette_harmony < VETO_T && scores.palette_harmony_score > VETO_T * 10) {
-          log.info(`Math capping palette_harmony: AI=${scores.palette_harmony_score} → ${Math.round(bundleMathScores.palette_harmony * 10)}`);
-          scores.palette_harmony_score = Math.round(bundleMathScores.palette_harmony * 10);
-        }
-        if (bundleMathScores.material_balance < VETO_T && scores.material_balance_score > VETO_T * 10) {
-          log.info(`Math capping material_balance: AI=${scores.material_balance_score} → ${Math.round(bundleMathScores.material_balance * 10)}`);
-          scores.material_balance_score = Math.round(bundleMathScores.material_balance * 10);
-        }
-        if (bundleMathScores.scale_balance < VETO_T && scores.scale_balance_score > VETO_T * 10) {
-          log.info(`Math capping scale_balance: AI=${scores.scale_balance_score} → ${Math.round(bundleMathScores.scale_balance * 10)}`);
-          scores.scale_balance_score = Math.round(bundleMathScores.scale_balance * 10);
-        }
-        if (bundleMathScores.spatial_feasibility < VETO_T && scores.spatial_arrangement_score !== undefined && scores.spatial_arrangement_score > VETO_T * 10) {
-          log.info(`Math capping spatial_arrangement: AI=${scores.spatial_arrangement_score} → ${Math.round(bundleMathScores.spatial_feasibility * 10)}`);
-          scores.spatial_arrangement_score = Math.round(bundleMathScores.spatial_feasibility * 10);
-        }
-        if (bundleMathScores.completeness < VETO_T && scores.room_completion_score > VETO_T * 10) {
-          log.info(`Math capping room_completion: AI=${scores.room_completion_score} → ${Math.round(bundleMathScores.completeness * 10)}`);
-          scores.room_completion_score = Math.round(bundleMathScores.completeness * 10);
-        }
-        if (bundleMathScores.price_coherence < VETO_T && scores.practicality_score > VETO_T * 10) {
-          log.info(`Math capping practicality (price_coherence): AI=${scores.practicality_score} → ${Math.round(bundleMathScores.price_coherence * 10)}`);
-          scores.practicality_score = Math.round(bundleMathScores.price_coherence * 10);
-        }
-
-        const finalScore = computeFinalBundleScore(scores);
-
-        // Record scores for drift monitoring (include final score for calibration)
-        recordBundleScores({
-          ...scores as unknown as Record<string, number>,
-          final_bundle_score: finalScore,
-        });
-
-        const totalTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-
-        if (validated.pairwise_conflicts.length > 0) {
-          log.info("Bundle pairwise conflicts detected", {
-            count: validated.pairwise_conflicts.length,
-            conflicts: validated.pairwise_conflicts.map(c => `${c.product_a} ↔ ${c.product_b}: ${c.compatibility}/10 (${c.conflict_type})`),
-          });
-        }
-
-        log.info("Bundle evaluated", {
-          model: response.model,
-          tokens: { total: totalTokens },
-          finalScore,
-        });
-
-        return {
-          success: true as const,
-          data: {
-            scores,
-            final_bundle_score: finalScore,
-            verdict: validated.verdict,
-            analysis: validated.analysis,
-            room_vibe: validated.room_vibe,
-            pairwise_conflicts: validated.pairwise_conflicts,
-          },
-          tokensUsed: totalTokens,
-          model: response.model,
-        };
+        const data = parse(raw);
+        const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+        return { data, tokens, model: response.model };
       },
       {
         maxAttempts: 3,
@@ -224,11 +183,93 @@ export async function evaluateBundle(
           return false;
         },
         onRetry: (retryAttempt, delayMs, error) => {
-          lastError = error instanceof Error ? error.message : "Bundle evaluation failed";
-          log.warn(`Retry ${retryAttempt}`, { durationMs: delayMs, error: lastError });
+          lastError = error instanceof Error ? error.message : `Bundle ${passName} failed`;
+          log.warn(`Retry ${retryAttempt} for bundle ${passName} pass`, { durationMs: delayMs, error: lastError });
         },
       }
     );
+  };
+
+  try {
+    // Calls A + B run in parallel; C runs after A (vibe tone uses A's verdict).
+    const [scoringRes, pairwiseRes] = await Promise.all([
+      runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw)),
+      runPass("pairwise", getBundlePairwisePrompt(evalCtx), 3000, (raw) => BundlePairwiseResponseSchema.parse(raw)),
+    ]);
+    const vibeRes = await runPass(
+      "vibe",
+      getBundleVibePrompt(evalCtx, scoringRes.data.verdict),
+      2500,
+      (raw) => BundleVibeResponseSchema.parse(raw),
+    );
+
+    const scores = scoringRes.data.scores;
+
+    // Apply math veto: cap AI bundle dimension scores where math found violations
+    const VETO_T = MATH_VETO.threshold;
+    if (bundleMathScores.palette_harmony < VETO_T && scores.palette_harmony_score > VETO_T * 10) {
+      log.info(`Math capping palette_harmony: AI=${scores.palette_harmony_score} → ${Math.round(bundleMathScores.palette_harmony * 10)}`);
+      scores.palette_harmony_score = Math.round(bundleMathScores.palette_harmony * 10);
+    }
+    if (bundleMathScores.material_balance < VETO_T && scores.material_balance_score > VETO_T * 10) {
+      log.info(`Math capping material_balance: AI=${scores.material_balance_score} → ${Math.round(bundleMathScores.material_balance * 10)}`);
+      scores.material_balance_score = Math.round(bundleMathScores.material_balance * 10);
+    }
+    if (bundleMathScores.scale_balance < VETO_T && scores.scale_balance_score > VETO_T * 10) {
+      log.info(`Math capping scale_balance: AI=${scores.scale_balance_score} → ${Math.round(bundleMathScores.scale_balance * 10)}`);
+      scores.scale_balance_score = Math.round(bundleMathScores.scale_balance * 10);
+    }
+    if (bundleMathScores.spatial_feasibility < VETO_T && scores.spatial_arrangement_score !== undefined && scores.spatial_arrangement_score > VETO_T * 10) {
+      log.info(`Math capping spatial_arrangement: AI=${scores.spatial_arrangement_score} → ${Math.round(bundleMathScores.spatial_feasibility * 10)}`);
+      scores.spatial_arrangement_score = Math.round(bundleMathScores.spatial_feasibility * 10);
+    }
+    if (bundleMathScores.completeness < VETO_T && scores.room_completion_score > VETO_T * 10) {
+      log.info(`Math capping room_completion: AI=${scores.room_completion_score} → ${Math.round(bundleMathScores.completeness * 10)}`);
+      scores.room_completion_score = Math.round(bundleMathScores.completeness * 10);
+    }
+    if (bundleMathScores.price_coherence < VETO_T && scores.practicality_score > VETO_T * 10) {
+      log.info(`Math capping practicality (price_coherence): AI=${scores.practicality_score} → ${Math.round(bundleMathScores.price_coherence * 10)}`);
+      scores.practicality_score = Math.round(bundleMathScores.price_coherence * 10);
+    }
+
+    const finalScore = computeFinalBundleScore(scores);
+
+    recordBundleScores({
+      ...scores as unknown as Record<string, number>,
+      final_bundle_score: finalScore,
+    });
+
+    const totalTokens = scoringRes.tokens + pairwiseRes.tokens + vibeRes.tokens;
+
+    if (pairwiseRes.data.pairwise_conflicts.length > 0) {
+      log.info("Bundle pairwise conflicts detected", {
+        count: pairwiseRes.data.pairwise_conflicts.length,
+        conflicts: pairwiseRes.data.pairwise_conflicts.map(c => `${c.product_a} ↔ ${c.product_b}: ${c.compatibility}/10 (${c.conflict_type})`),
+      });
+    }
+
+    log.info("Bundle evaluated (split pass)", {
+      model: scoringRes.model,
+      tokens: { total: totalTokens },
+      scoringTokens: scoringRes.tokens,
+      pairwiseTokens: pairwiseRes.tokens,
+      vibeTokens: vibeRes.tokens,
+      finalScore,
+    });
+
+    return {
+      success: true,
+      data: {
+        scores,
+        final_bundle_score: finalScore,
+        verdict: scoringRes.data.verdict,
+        analysis: scoringRes.data.analysis,
+        room_vibe: vibeRes.data.room_vibe,
+        pairwise_conflicts: pairwiseRes.data.pairwise_conflicts,
+      },
+      tokensUsed: totalTokens,
+      model: scoringRes.model,
+    };
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Bundle evaluation failed after retries";
     log.error("Bundle evaluation failed", { error: errMsg });
