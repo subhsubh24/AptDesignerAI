@@ -219,9 +219,23 @@ class QueryBuilder {
   private getFilteredRows(): Row[] {
     return (tables[this.table] || []).filter((row) => {
       return this.filters.every(({ column, op, value }) => {
-        if (op === "eq") return row[column] === value;
-        if (op === "neq") return row[column] !== value;
-        if (op === "in") return (value as unknown[]).includes(row[column]);
+        // Handle dot-notation for relation filters (e.g., "projects.user_id")
+        let actual: unknown;
+        if (column.includes(".")) {
+          const [relTable, relColumn] = column.split(".");
+          // Derive FK column: "projects" -> "project_id"
+          const fkColumn = `${relTable.replace(/s$/, "")}_id`;
+          const relatedId = row[fkColumn];
+          if (relatedId === undefined) return true; // no FK — skip filter
+          const relatedRow = (tables[relTable] || []).find((r: Row) => r.id === relatedId);
+          actual = relatedRow?.[relColumn];
+        } else {
+          actual = row[column];
+        }
+
+        if (op === "eq") return actual === value;
+        if (op === "neq") return actual !== value;
+        if (op === "in") return (value as unknown[]).includes(actual);
         return true;
       });
     });

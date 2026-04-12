@@ -44,7 +44,7 @@ export async function PATCH(
   const allowedFields: Record<string, unknown> = {};
   const ALLOWED_KEYS = [
     "name", "room_type", "status", "budget_mode", "sourcing_mode",
-    "priorities", "keep_items", "replace_items", "user_context",
+    "priorities", "keep_items", "replace_items", "user_context", "budget_dollars",
   ];
   for (const key of ALLOWED_KEYS) {
     if (key in body) allowedFields[key] = body[key];
