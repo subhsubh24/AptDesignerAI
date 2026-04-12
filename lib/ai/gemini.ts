@@ -179,6 +179,7 @@ export const geminiProvider: AIProvider = {
     thinkingConfig,
     responseModalities,
     mediaResolution,
+    imageConfig,
   }): Promise<AIResponse> {
     // Gemini 3 is optimized for temperature=1.0 (its default). Google warns
     // that sub-1.0 values can cause looping / degraded reasoning. We no
@@ -264,6 +265,16 @@ export const geminiProvider: AIProvider = {
 
     if (mediaResolution) {
       config.mediaResolution = mediaResolution;
+    }
+
+    // Image generation config (Gemini 3.1 Flash Image Preview / Nano Banana 2).
+    // Controls output resolution (0.5K / 1K / 2K / 4K) and aspect ratio.
+    // Only honored by the image-capable model; text models ignore it.
+    if (imageConfig && (imageConfig.imageSize || imageConfig.aspectRatio)) {
+      const ic: Record<string, unknown> = {};
+      if (imageConfig.imageSize) ic.imageSize = imageConfig.imageSize;
+      if (imageConfig.aspectRatio) ic.aspectRatio = imageConfig.aspectRatio;
+      config.imageConfig = ic;
     }
 
     let response;

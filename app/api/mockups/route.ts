@@ -4,7 +4,9 @@ import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage } from "@/lib/agents/mockup-agent";
-import type { MockupContext } from "@/lib/agents/mockup-agent";
+import type { MockupContext, MockupImageOptions } from "@/lib/agents/mockup-agent";
+import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
+import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
@@ -31,6 +33,9 @@ function computeMockupCacheKey(input: {
   placementMap: Record<string, string> | undefined;
   designDirection: string;
   iterationNotes?: string;
+  imageSize?: string;
+  aspectRatio?: string;
+  grounded?: boolean;
 }): string {
   const payload = [
     [...input.roomImageUrls].sort().join("|"),
@@ -38,8 +43,44 @@ function computeMockupCacheKey(input: {
     canonicalJson(input.placementMap ?? {}),
     input.designDirection || "",
     input.iterationNotes || "",
+    input.imageSize || "",
+    input.aspectRatio || "",
+    input.grounded ? "grounded" : "",
   ].join("||");
   return crypto.createHash("sha256").update(payload).digest("hex").slice(0, 32);
+}
+
+/**
+ * Validate incoming resolution / aspect ratio from the request body against
+ * the allowed set from IMAGE_GENERATION_CONFIG. Falls back to defaults on
+ * invalid input so a bad client can't break rendering.
+ */
+function resolveImageOptions(body: Record<string, unknown>): MockupImageOptions {
+  const rawSize = body.image_size as string | undefined;
+  const rawAspect = body.aspect_ratio as string | undefined;
+  const rawGrounding = body.image_search_grounding as boolean | undefined;
+  const rawRefs = body.grounding_references as unknown;
+
+  const imageSize = (IMAGE_GENERATION_CONFIG.allowedImageSizes as readonly string[]).includes(rawSize || "")
+    ? (rawSize as ImageSize)
+    : (IMAGE_GENERATION_CONFIG.defaultImageSize as ImageSize);
+
+  const aspectRatio = (IMAGE_GENERATION_CONFIG.allowedAspectRatios as readonly string[]).includes(rawAspect || "")
+    ? (rawAspect as ImageAspectRatio)
+    : (IMAGE_GENERATION_CONFIG.defaultAspectRatio as ImageAspectRatio);
+
+  const groundingReferences = Array.isArray(rawRefs)
+    ? (rawRefs as unknown[]).filter((r): r is string => typeof r === "string" && r.length > 0).slice(0, 10)
+    : undefined;
+
+  return {
+    imageSize,
+    aspectRatio,
+    imageSearchGrounding: typeof rawGrounding === "boolean"
+      ? rawGrounding
+      : IMAGE_GENERATION_CONFIG.imageSearchGroundingDefault,
+    groundingReferences,
+  };
 }
 
 /**
@@ -96,6 +137,14 @@ export async function POST(request: Request) {
   const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description, iteration_notes } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+
+  // Resolve optional Nano Banana 2 image generation options (resolution,
+  // aspect ratio, Image Search Grounding). Accepts body fields:
+  //   image_size: "0.5K" | "1K" | "2K" | "4K"
+  //   aspect_ratio: "1:1" | "16:9" | "4:3" | "1:4" | "4:1" | ...
+  //   image_search_grounding: boolean (default: true)
+  //   grounding_references: string[] — product/style hints for web search
+  const imageOptions = resolveImageOptions(body);
 
   // Fetch room and diagnosis
   const { data: room } = await supabase
@@ -212,6 +261,9 @@ RULES:
       productIds: [],  // vision mode has no products, just the prompt
       placementMap: undefined,
       designDirection: visionPrompt,  // the full prompt is the "design"
+      imageSize: imageOptions.imageSize,
+      aspectRatio: imageOptions.aspectRatio,
+      grounded: imageOptions.imageSearchGrounding,
     });
     const cachedVision = findCachedMockup(visionCacheKey);
     if (cachedVision) {
@@ -228,7 +280,7 @@ RULES:
       });
     }
 
-    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls);
+    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions);
 
     if (!imageResult.success || !imageResult.data) {
       await completeAgentRun(supabase, agentRun.id, {
@@ -282,6 +334,9 @@ RULES:
     placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
     designDirection: (ddJson?.style_notes as string) || (ddJson?.direction as string) || "",
     iterationNotes: iteration_notes || undefined,
+    imageSize: imageOptions.imageSize,
+    aspectRatio: imageOptions.aspectRatio,
+    grounded: imageOptions.imageSearchGrounding,
   });
   const cached = findCachedMockup(cacheKey);
   if (cached) {
@@ -376,8 +431,25 @@ RULES:
     return NextResponse.json({ error: promptResult.error }, { status: 500 });
   }
 
+  // Seed grounding refs with product titles + retailers so Image Search
+  // Grounding pulls real product photos during rendering. Caller-provided
+  // refs (if any) take precedence.
+  const stdImageOptions: MockupImageOptions = {
+    ...imageOptions,
+    groundingReferences:
+      imageOptions.groundingReferences && imageOptions.groundingReferences.length > 0
+        ? imageOptions.groundingReferences
+        : products
+            .map((p: { title?: string; retailer?: string }) => {
+              const parts = [p.title, p.retailer].filter(Boolean);
+              return parts.join(" — ");
+            })
+            .filter((s: string) => s.length > 0)
+            .slice(0, 8),
+  };
+
   // Generate image — pass room photos for visual reference
-  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls);
+  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions);
 
   if (!imageResult.success || !imageResult.data) {
     await supabase

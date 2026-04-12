@@ -153,6 +153,53 @@ export const SCALE_RELATIONS_CONFIG = {
   sideTableHeight: { minHeightRatio: 0.85, maxHeightRatio: 1.1, description: "Side table height should be 85-110% of sofa arm height" },
 } as const;
 
+// ─── Image Generation (Nano Banana 2 / Gemini 3.1 Flash Image Preview) ──
+
+/**
+ * Config for Gemini 3.1 Flash Image Preview ("Nano Banana 2").
+ *
+ * - Default output resolution is 1K; 2K/4K give higher fidelity at higher
+ *   cost and latency, and 0.5K is useful for thumbnail previews.
+ * - Aspect ratios: the standard square/landscape/portrait set plus the
+ *   wide/tall Nano Banana 2 additions (1:4, 4:1, 1:8, 8:1) which are
+ *   handy for banners and full-wall elevation views.
+ * - `imageSearchGrounding`: opt-in real-time Google Search grounding for
+ *   the image model. When enabled, the generator can consult web text +
+ *   image results (e.g. current product photos, architectural references)
+ *   before rendering.
+ */
+export const IMAGE_GENERATION_CONFIG = {
+  defaultImageSize: "1K",
+  defaultAspectRatio: "16:9",
+  defaultThumbnailSize: "0.5K",
+
+  allowedImageSizes: ["0.5K", "1K", "2K", "4K"] as const,
+  allowedAspectRatios: [
+    "1:1", "3:4", "4:3", "9:16", "16:9", "2:3", "3:2",
+    "1:4", "4:1", "1:8", "8:1",
+  ] as const,
+
+  /** Default grounding behavior for mockup/vision renders. */
+  imageSearchGroundingDefault: true,
+} as const;
+
+// ─── Media Resolution Policy ──────────────────────────────────
+
+/**
+ * Centralized per-agent media resolution policy. `ultra_high` is the
+ * 4K tier and is used wherever the agent must reason about subtle visual
+ * detail (fabric texture, material grain, lighting quality, spatial
+ * relationships, scale). Ultra-high uses more tokens — only downgrade to
+ * `high` for calls that don't need to see the room architecture.
+ */
+export const MEDIA_RESOLUTION = {
+  diagnosis: "ultra_high",
+  validation: "ultra_high",
+  fitScoring: "ultra_high",
+  quickScore: "ultra_high",
+  productExtraction: "high",
+} as const;
+
 // ─── Room Furnishing Tiers ────────────────────────────────────
 
 /**

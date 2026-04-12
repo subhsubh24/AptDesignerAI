@@ -390,7 +390,7 @@ YOUR GOAL IS 9.5+/10 ON EVERY SUB-DIMENSION OF EVERY ITEM. Be extremely precise 
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
-          mediaResolution: "high",
+          mediaResolution: "ultra_high",
         });
 
         if (response.truncated) {
@@ -712,7 +712,7 @@ Return JSON:
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
-          mediaResolution: "high",
+          mediaResolution: "ultra_high",
         });
 
         if (response.truncated) {
@@ -970,7 +970,7 @@ Return JSON:
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel: "high" },
           responseMimeType: "application/json",
-          mediaResolution: "high",
+          mediaResolution: "ultra_high",
         });
 
         const raw = extractJsonObject(response.content);
