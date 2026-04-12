@@ -286,6 +286,8 @@ export default function DashboardPage() {
               bedrooms, bathrooms,
               apartment_sqft: apartmentSqft ? parseInt(apartmentSqft, 10) || undefined : undefined,
               building_place_id: buildingPlaceId || undefined,
+              latitude: locationCoords?.lat,
+              longitude: locationCoords?.lng,
             }),
           });
           if (res.ok) {

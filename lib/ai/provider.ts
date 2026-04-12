@@ -43,10 +43,23 @@ export interface AIResponse {
   };
 }
 
+export interface GoogleMapsToolConfig {
+  /** Render the interactive Maps widget in UI responses. Off by default. */
+  enableWidget?: boolean;
+  /**
+   * Structured location context. When provided, Maps grounding resolves to
+   * this exact coordinate pair instead of trying to parse location hints from
+   * the prompt text — dramatically improves confidence for address lookups.
+   */
+  latLng?: { latitude: number; longitude: number };
+  /** Optional Google Maps place_id. Passed through retrievalConfig. */
+  placeId?: string;
+}
+
 export type GeminiTool =
   | { googleSearch: Record<string, never> }
   | { urlContext: Record<string, never> }
-  | { googleMaps: Record<string, never> }
+  | { googleMaps: Record<string, never> | GoogleMapsToolConfig }
   | { functionDeclarations: FunctionDeclaration[] };
 
 export interface FunctionDeclaration {

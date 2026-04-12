@@ -272,6 +272,30 @@ harmony_score ≈ min(sub_scores) × 0.4 + mean(sub_scores) × 0.6. ONE bad dim 
 ### FOR ANY item where ANY sub_score < 9.5
 Provide revised_search_title, revised_specs, revised_placement that would bring ALL sub_scores to 9.5+, AND a root_cause naming the specific failing dimension and issue (e.g. "material_fit: oak legs clash with walnut — 3 wood species").
 
+### ANCHOR REVISIONS TO CONCRETE TARGETS (CRITICAL — avoid vague revisions that oscillate)
+Vague revisions ("larger rug", "compact sofa") cause the pipeline to loop without converging. Every revision MUST specify concrete numbers:
+
+**Rugs (area_rug / runner / accent_rug)** — the #1 oscillator. Pick an EXACT standard size from this table based on room dimensions + seating footprint, and include it in BOTH revised_search_title AND revised_specs:
+  - Small bedrooms / reading nooks → **5x7** or **5x8**
+  - Mid bedrooms / small seating areas → **6x9**
+  - Standard living rooms / under a 72"–84" sofa → **8x10**
+  - Large living rooms / L-shaped sectional / open floor plans → **9x12**
+  - Great rooms / sectional + chairs group → **10x14** or **12x15**
+  - Hallways → **2.5x8** or **2.5x10** runner
+  - If spatial_fit failed: name the PREVIOUS size and the NEW size (e.g. "upgrade from 5x7 to 8x10 so the front legs of the sofa sit on the rug").
+
+**Sofas / sectionals** — revised_specs MUST include exact width in inches (e.g. "84" sofa", "112" right-facing sectional with 36" chaise depth"). Never say "smaller sofa".
+
+**Dining tables** — revised_specs MUST include length × width + seat count (e.g. "60"×36" rectangular — seats 6").
+
+**Beds** — revised_specs MUST include mattress size (Twin/Full/Queen/King/Cal King) AND frame dimensions if headboard is oversized.
+
+**Lighting (pendant / chandelier)** — revised_specs MUST include diameter + hang-height (e.g. "22" diameter, 32"–36" above table top").
+
+**Coffee tables / side tables** — revised_specs MUST include L×W×H in inches and the clearance target from the adjacent sofa (e.g. "48"×28"×17" — sits 14" off the sofa front").
+
+If you can't determine the concrete target from the photos + spatial layout, say so in root_cause ("need floor plan dimensions to pick rug size") rather than returning a vague revision.
+
 ### drop
 true if harmony_score ≤ 3 OR the user explicitly excluded the category / asked to keep a conflicting item.
 
@@ -718,6 +742,26 @@ true if ANY sub_score < 9.5 AND fixable.
 
 ## Revisions (REQUIRED when needs_more_work = true)
 revised_search_title, revised_specs, revised_placement, root_cause (name failing dim + issue)
+
+### ANCHOR REVISIONS TO CONCRETE TARGETS (CRITICAL — prevents oscillation across rounds)
+Vague revisions ("larger rug", "smaller sofa") cause the same item to keep failing in subsequent rounds. Every revision MUST cite concrete numbers:
+
+**Rugs (area_rug / runner)** — #1 oscillator. Pick EXACT standard size and put it in BOTH revised_search_title AND revised_specs:
+  - Small bedroom / reading nook → **5x7** or **5x8**
+  - Mid bedroom / small seating → **6x9**
+  - Standard living room / 72–84" sofa → **8x10**
+  - Large living room / L-sectional → **9x12**
+  - Great room / sectional + chairs → **10x14** or **12x15**
+  - Hallway runner → **2.5x8** or **2.5x10**
+  - If spatial_fit previously failed, name BOTH the old and new size: "upgrade 5x7 → 8x10 so front legs of sofa sit on rug".
+
+**Sofas / sectionals** — revised_specs MUST include width in inches (e.g. "84" sofa", "112" RAF sectional with 36" chaise").
+**Dining tables** — revised_specs MUST include L×W + seat count (e.g. "60"×36" — seats 6").
+**Beds** — revised_specs MUST include mattress size (Twin/Full/Queen/King/Cal King).
+**Pendants / chandeliers** — revised_specs MUST include diameter + hang-height (e.g. "22" dia, 32"–36" above table").
+**Coffee / side tables** — revised_specs MUST include L×W×H + clearance from adjacent sofa (e.g. "48"×28"×17", 14" off sofa front").
+
+If the concrete target is undeterminable from photos + spatial layout, say so in root_cause ("need floor plan dims to pick rug size") instead of returning a vague revision.
 
 ## rationale (REQUIRED for every item)
 7 steps: COLOR → SPATIAL → MATERIAL → STYLE → CROSS-ROOM → FUNCTIONAL → OVERALL.

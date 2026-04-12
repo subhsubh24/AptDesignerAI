@@ -457,6 +457,7 @@ Return ONLY a valid JSON object — no text before or after:
           }
         }
       }
+      const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
       const validated = SearchProductsResponseSchema.parse(jsonObj);
       const candidates = validated.products.map((r) => ({
         title: r.title,
@@ -464,8 +465,9 @@ Return ONLY a valid JSON object — no text before or after:
         snippet: r.snippet.slice(0, 500),
         source: r.source,
       }));
-      return { success: true, data: candidates };
+      return { success: true, data: candidates, tokensUsed };
     } catch {
+      const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
       // Fallback: use grounding metadata sources
       if (response.groundingMetadata?.sources) {
         const candidates = response.groundingMetadata.sources
@@ -479,9 +481,9 @@ Return ONLY a valid JSON object — no text before or after:
             }
             return { title: s.title, url: s.uri, snippet: "", source };
           });
-        return { success: true, data: candidates };
+        return { success: true, data: candidates, tokensUsed };
       }
-      return { success: true, data: [] };
+      return { success: true, data: [], tokensUsed };
     }
   } catch {
     return { success: false, error: "Search failed" };
@@ -588,6 +590,7 @@ Return JSON:
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
         });
 
+        const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
         const raw = extractJsonObject(response.content);
         const validated = QuickScreenResponseSchema.parse(raw);
         const passed: SearchCandidate[] = [];
@@ -599,17 +602,19 @@ Return JSON:
             }
           }
         }
-        return passed;
+        return { passed, tokensUsed };
       } catch (err) {
         log.warn(`Quick-screen batch ${batchIdx} failed, returning empty`, { phase: "quick_screen", error: err instanceof Error ? err.message : String(err) });
-        return [];
+        return { passed: [], tokensUsed: 0 };
       }
     })
   );
 
-  for (const passed of batchResults) {
+  let totalTokens = 0;
+  for (const { passed, tokensUsed } of batchResults) {
     allPassed.push(...passed);
+    totalTokens += tokensUsed;
   }
 
-  return { success: true, data: allPassed };
+  return { success: true, data: allPassed, tokensUsed: totalTokens };
 }

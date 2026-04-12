@@ -481,6 +481,7 @@ Return JSON:
       qsContent.push({ type: "text", text: prompt });
 
       let lastQsError: string | undefined;
+      let batchTokens = 0;
       try {
         const entries = await withRetry(
           async () => {
@@ -498,6 +499,7 @@ Return JSON:
               mediaResolution: "ultra_high",
             });
 
+            batchTokens += response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
             const raw = extractJsonObject(response.content);
             const validated = QuickScoreResponseSchema.parse(raw);
             const result: QuickScoreEntry[] = [];
@@ -539,25 +541,30 @@ Return JSON:
             },
           }
         );
-        return entries;
+        return { entries, tokensUsed: batchTokens };
       } catch (qsErr) {
         const errMsg = qsErr instanceof Error ? qsErr.message : "Quick score failed";
         log.warn("Quick score failed for batch, applying conservative defaults", { category, error: errMsg });
-        return batch.map((p) => ({
-          productId: p.id,
-          quickScore: 3,
-          styleFit: 3,
-          scaleFit: 3,
-          valueFit: 3,
-          confidence: 1,
-        }));
+        return {
+          entries: batch.map((p) => ({
+            productId: p.id,
+            quickScore: 3,
+            styleFit: 3,
+            scaleFit: 3,
+            valueFit: 3,
+            confidence: 1,
+          })),
+          tokensUsed: batchTokens,
+        };
       }
     })
   );
 
-  for (const entries of batchResults) {
+  let totalTokens = 0;
+  for (const { entries, tokensUsed } of batchResults) {
     allScores.push(...entries);
+    totalTokens += tokensUsed;
   }
 
-  return { success: true, data: allScores };
+  return { success: true, data: allScores, tokensUsed: totalTokens };
 }

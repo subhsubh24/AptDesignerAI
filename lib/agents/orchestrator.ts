@@ -237,6 +237,11 @@ export async function runAgenticSearch(
       return { success: false, error: briefResult.error || "Failed to generate search brief" };
     }
     const brief: SearchBrief = briefResult.data;
+    if (briefResult.tokensUsed) {
+      tokenBudget.add(briefResult.tokensUsed);
+      stats.tokensUsed += briefResult.tokensUsed;
+      stats.tokensPerPhase.search_brief += briefResult.tokensUsed;
+    }
     reportStep({ step: "Generating intensive search brief", status: "completed", data: brief });
 
     // ═══════════════════════════════════════════════════════════
@@ -279,6 +284,11 @@ export async function runAgenticSearch(
         tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
         const result = await searchProducts(task.query, 10, task.tier, task.category);
         const candidates = result.success ? (result.data || []) : [];
+        if (result.tokensUsed) {
+          tokenBudget.add(result.tokensUsed);
+          stats.tokensUsed += result.tokensUsed;
+          stats.tokensPerPhase.search += result.tokensUsed;
+        }
         for (const c of candidates) {
           tracer.trace({ phase: "search", action: "found", url: c.url, category: task.category, tier: task.tier });
         }
@@ -350,6 +360,11 @@ export async function runAgenticSearch(
         screenPromises.push(
           (async () => {
             const screenResult = await quickScreenCandidates(candidates, category, tier, requirements, ctx.designDirection);
+            if (screenResult.tokensUsed) {
+              tokenBudget.add(screenResult.tokensUsed);
+              stats.tokensUsed += screenResult.tokensUsed;
+              stats.tokensPerPhase.screen += screenResult.tokensUsed;
+            }
             if (screenResult.success && screenResult.data) {
               screenedByCategory[category][tier] = screenResult.data;
               stats.totalAfterScreen += screenResult.data.length;
@@ -564,6 +579,11 @@ export async function runAgenticSearch(
         quickScorePromises.push(
           (async () => {
             const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection, ctx.placementMap?.[category], ctx.floorPlan, ctx.diagnosis as Record<string, unknown> | undefined, ctx.priorities, ctx.keepItems);
+            if (result.tokensUsed) {
+              tokenBudget.add(result.tokensUsed);
+              stats.tokensUsed += result.tokensUsed;
+              stats.tokensPerPhase.quick_score += result.tokensUsed;
+            }
             if (result.success && result.data) {
               for (const entry of result.data) {
                 quickScoresByProduct.set(entry.productId, entry.quickScore);
@@ -780,6 +800,12 @@ export async function runAgenticSearch(
         whatShouldGo: ctx.whatShouldGo,
       }
     );
+
+    if (validationResult.tokensUsed) {
+      tokenBudget.add(validationResult.tokensUsed);
+      stats.tokensUsed += validationResult.tokensUsed;
+      stats.tokensPerPhase.validation += validationResult.tokensUsed;
+    }
 
     let validationData: { isValid: boolean; confidence: number; issues: string[] } | undefined;
     if (validationResult.success && validationResult.data) {

@@ -190,16 +190,51 @@ async function convertMessages(
 
 /**
  * Convert our tool definitions to Gemini format.
+ *
+ * Returns both the `tools` array AND an optional `toolConfig`. Structured
+ * location context for Maps grounding (latLng / placeId) is passed via
+ * `toolConfig.retrievalConfig` — NOT inside the googleMaps tool entry — so we
+ * split those fields out here. The googleMaps tool entry keeps `enableWidget`
+ * only (the field the API accepts inline).
  */
-function convertTools(tools?: GeminiTool[]): Record<string, unknown>[] | undefined {
-  if (!tools || tools.length === 0) return undefined;
+function convertTools(tools?: GeminiTool[]): {
+  tools: Record<string, unknown>[] | undefined;
+  toolConfig: Record<string, unknown> | undefined;
+} {
+  if (!tools || tools.length === 0) return { tools: undefined, toolConfig: undefined };
   // Gemini SDK expects each Tool object to hold multiple tool types as properties,
   // not separate objects per tool. Merge all tool entries into a single object.
   const merged: Record<string, unknown> = {};
+  let retrievalConfig: Record<string, unknown> | undefined;
+
   for (const tool of tools) {
-    Object.assign(merged, tool);
+    const entry = tool as Record<string, unknown>;
+    // Special-case googleMaps: its config may carry latLng / placeId which
+    // actually belong in toolConfig.retrievalConfig, not inside the tool.
+    if ("googleMaps" in entry) {
+      const mapsCfg = entry.googleMaps as Record<string, unknown> | undefined;
+      const toolLevel: Record<string, unknown> = {};
+      if (mapsCfg && typeof mapsCfg === "object") {
+        if (mapsCfg.enableWidget) {
+          // API expects the widget mode enum string, not a boolean.
+          toolLevel.enableWidget = "WIDGET_CONFIG_INLINE";
+        }
+        const latLng = mapsCfg.latLng as { latitude: number; longitude: number } | undefined;
+        const placeId = mapsCfg.placeId as string | undefined;
+        if (latLng || placeId) {
+          retrievalConfig = retrievalConfig || {};
+          if (latLng) retrievalConfig.latLng = latLng;
+          if (placeId) retrievalConfig.placeId = placeId;
+        }
+      }
+      merged.googleMaps = toolLevel;
+      continue;
+    }
+    Object.assign(merged, entry);
   }
-  return [merged];
+
+  const toolConfig = retrievalConfig ? { retrievalConfig } : undefined;
+  return { tools: [merged], toolConfig };
 }
 
 export const geminiProvider: AIProvider = {
@@ -284,7 +319,9 @@ export const geminiProvider: AIProvider = {
     }
 
     if (tools) {
-      config.tools = convertTools(tools);
+      const converted = convertTools(tools);
+      if (converted.tools) config.tools = converted.tools;
+      if (converted.toolConfig) config.toolConfig = converted.toolConfig;
     }
 
     if (responseMimeType) {

@@ -1058,10 +1058,15 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       };
 
       // ── Phase 3: If final assessment says more work needed, do targeted rounds ──
-      // Cap the post-final budget at 1 round. The final assessment historically
-      // requested 2+ rounds even when items were converged, cascading token cost
-      // without measurable quality gain.
-      const POST_FINAL_ROUND_CAP = 1;
+      // Cap the post-final budget based on confidence:
+      //   - confidence >= 9.5 → cap at 1 round (converged; one polish pass max)
+      //   - confidence <  9.5 → cap at 2 rounds (meaningful work remains, give
+      //     the pipeline another swing before locking the bundle in)
+      // The final assessment historically requested 2+ rounds even when items
+      // were converged, which cascaded token cost without measurable quality
+      // gain — hence the hard cap. But when confidence is still low, stopping
+      // at 1 left fixable issues on the table.
+      const POST_FINAL_ROUND_CAP = final.confidence < 9.5 ? 2 : 1;
       const effectiveRoundBudget = Math.min(final.round_budget, POST_FINAL_ROUND_CAP);
       if (final.needs_more_rounds && effectiveRoundBudget > 0) {
         const itemsNeedingWork = final.item_scores.filter((s) => s.needs_more_work);

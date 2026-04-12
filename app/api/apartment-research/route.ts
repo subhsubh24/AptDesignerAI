@@ -436,7 +436,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id } = await request.json();
+  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id, latitude, longitude } = await request.json();
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
@@ -787,8 +787,42 @@ ${floorPlanSchema}`;
     // Results are merged into research.location_context — purely additive.
     if (building_name || building_place_id) {
       try {
-        const locationQuery = building_place_id
-          ? `Google Maps place_id: ${building_place_id}`
+        // Prefer structured location context (latLng + placeId) via toolConfig.
+        // If we only have free-text location, fall back to embedding it in the
+        // prompt — Maps grounding will still parse it, just with lower
+        // confidence than structured retrievalConfig.
+        let resolvedLat: number | undefined = typeof latitude === "number" ? latitude : undefined;
+        let resolvedLng: number | undefined = typeof longitude === "number" ? longitude : undefined;
+
+        // If the caller didn't pass coords but provided a project_id, pull
+        // them from the projects table (populated at onboarding by the
+        // location autocomplete).
+        if ((resolvedLat === undefined || resolvedLng === undefined) && project_id) {
+          const { data: proj } = await supabase
+            .from("projects")
+            .select("latitude, longitude, building_place_id")
+            .eq("id", project_id)
+            .maybeSingle();
+          if (proj) {
+            if (resolvedLat === undefined && typeof proj.latitude === "number") resolvedLat = proj.latitude;
+            if (resolvedLng === undefined && typeof proj.longitude === "number") resolvedLng = proj.longitude;
+          }
+        }
+
+        const mapsConfig: { latLng?: { latitude: number; longitude: number }; placeId?: string } = {};
+        if (typeof resolvedLat === "number" && typeof resolvedLng === "number") {
+          mapsConfig.latLng = { latitude: resolvedLat, longitude: resolvedLng };
+        }
+        if (building_place_id) {
+          mapsConfig.placeId = building_place_id;
+        }
+
+        // Only fall back to text-embedded location if we couldn't resolve
+        // structured context — avoids duplicating what retrievalConfig already
+        // tells the model.
+        const hasStructuredContext = !!(mapsConfig.latLng || mapsConfig.placeId);
+        const textLocation = hasStructuredContext
+          ? (building_name || "this building")
           : [building_name, neighborhood, city, state].filter(Boolean).join(", ");
 
         const mapsResponse = await geminiProvider.chat({
@@ -796,7 +830,7 @@ ${floorPlanSchema}`;
           system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Never invent — return null for anything Maps doesn't reveal.",
           messages: [{
             role: "user",
-            content: `Using Google Maps, look up: ${locationQuery}.
+            content: `Using Google Maps, look up ${textLocation}${hasStructuredContext ? " (structured location context is attached via retrievalConfig)" : ""}.
 
 Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby places). Return JSON:
 {
@@ -814,7 +848,9 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           temperature: 0.2,
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
-          tools: [{ googleMaps: {} }],
+          // latLng / placeId are routed into toolConfig.retrievalConfig by
+          // lib/ai/gemini.ts → convertTools(), not embedded in this tool entry.
+          tools: [{ googleMaps: mapsConfig }],
         });
 
         const mapsRaw = mapsResponse.content.trim();
