@@ -284,6 +284,21 @@ export const DiagnosisResponseSchema = z.object({
   action_list: z.array(ActionItemSchema).default([]),
 });
 
+// Split-pass sub-schemas (runRoomDiagnosis runs two sequential calls).
+// Call A produces analysis; Call B consumes it to produce the plan.
+
+/** Call A: diagnosis + design direction (vision-heavy analysis). */
+export const DiagnosisAnalysisResponseSchema = z.object({
+  diagnosis: DiagnosisDataSchema,
+  design_direction: DesignDirectionSchema,
+});
+
+/** Call B: missing categories + action list (text-reasoning plan). */
+export const DiagnosisPlanResponseSchema = z.object({
+  missing_categories: z.array(z.string()).default([]),
+  action_list: z.array(ActionItemSchema).default([]),
+});
+
 // ─── Search Brief ─────────────────────────────────────────────
 
 export const QueryWithAngleSchema = z.object({

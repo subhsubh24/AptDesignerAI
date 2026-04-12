@@ -1,11 +1,21 @@
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 
-export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string, otherRoomsContext?: string): string {
-  // Parse user context into structured constraints
+interface DiagnosisContextParts {
+  allKeepItems: string[];
+  userNotes: string;
+  keepItemsWarning: string;
+  parsedSections: string;
+  crossRoomSection: string;
+}
+
+function buildDiagnosisContextParts(
+  keepItems: string[],
+  userContext?: string,
+  otherRoomsContext?: string,
+): DiagnosisContextParts {
   const parsed = userContext ? parseUserContext(userContext) : null;
   const parsedSections = parsed ? formatParsedContextForPrompt(parsed) : "";
 
-  // Merge keep items from explicit list + parsed context
   const allKeepItems = [
     ...keepItems,
     ...(parsed?.additionalKeepItems || []),
@@ -20,6 +30,20 @@ export function getDiagnosisPrompt(roomType: string, keepItems: string[], replac
 ${allKeepItems.map((item) => `- ${item}`).join("\n")}
 These items are NON-NEGOTIABLE. The client explicitly chose to keep them. Your job is to design AROUND these pieces and make them work within the design direction. Include them in "what_is_working" and explain how the design will complement them. NEVER put these in "what_is_not_working" or suggest they should be replaced. NEVER recommend a replacement item in the same category as a kept item (e.g., if they're keeping a floor lamp, do NOT recommend a new floor lamp).`
     : "";
+
+  const crossRoomSection = otherRoomsContext
+    ? `
+## CROSS-ROOM COHERENCE
+${otherRoomsContext}
+IMPORTANT: Your design direction for this room should be compatible with the other rooms. The apartment should feel like one cohesive home — not identical rooms, but harmonious palettes, complementary materials, and a consistent aesthetic thread. If another room uses walnut and brass, this room should either echo those materials or use something that complements them (not clashes).
+`
+    : "";
+
+  return { allKeepItems, userNotes, keepItemsWarning, parsedSections, crossRoomSection };
+}
+
+export function getDiagnosisPrompt(roomType: string, keepItems: string[], replaceItems: string[], priorities: string[], userContext?: string, otherRoomsContext?: string): string {
+  const { allKeepItems, userNotes, keepItemsWarning, parsedSections } = buildDiagnosisContextParts(keepItems, userContext, otherRoomsContext);
 
   return `Analyze the room photos provided and produce a comprehensive room diagnosis.
 
@@ -175,4 +199,158 @@ Return a JSON object with this exact structure:
 - ⚠️ Did I note any culturally significant or personal items (statues, figurines, art) visible in the photos?
 
 Be specific and opinionated. Reference actual items visible in the photos. This is not a generic analysis — it is tailored to this specific apartment and space.`;
+}
+
+/**
+ * Split-pass Call A: analyze the room from photos.
+ * Produces diagnosis + design_direction only. The plan (missing_categories +
+ * action_list) comes from a second call that consumes this output as text.
+ *
+ * This separation lets the model spend its full token budget on observation
+ * and problem identification rather than trading that off against
+ * plan synthesis within a single response.
+ */
+export function getDiagnosisAnalysisPrompt(
+  roomType: string,
+  keepItems: string[],
+  replaceItems: string[],
+  priorities: string[],
+  userContext?: string,
+  otherRoomsContext?: string,
+): string {
+  const { allKeepItems, userNotes, keepItemsWarning, parsedSections, crossRoomSection } =
+    buildDiagnosisContextParts(keepItems, userContext, otherRoomsContext);
+
+  return `Analyze the room photos provided and produce a comprehensive diagnosis plus design direction.
+
+This is PASS 1 of 2. Your ONLY job here is observation + problem identification + design direction. A separate pass will synthesize the action plan — do NOT produce missing_categories or action_list in this response.
+
+## ROOM CONTEXT
+- Room type: ${roomType}
+- Items to keep: ${allKeepItems.length > 0 ? allKeepItems.join(", ") : "none specified"}
+- Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
+- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
+${parsedSections ? `\n${parsedSections}\n` : ""}${crossRoomSection}
+## STEP-BY-STEP ANALYSIS PROCESS
+
+### Step 1: OBSERVE (spend the most time here)
+Look at EVERY photo carefully. For each photo, note:
+- Floor: material + color (e.g., "medium-tone oak engineered hardwood")
+- Walls: exact color (e.g., "warm off-white, close to Benjamin Moore Swiss Coffee")
+- Windows: count, size, light direction, treatments
+- Ceiling: height estimate, features (molding, beams, recessed lights)
+- Every piece of furniture: name, material, color, condition, approximate size
+- Lighting: existing fixtures, dark corners, natural light
+- Personal items: culturally significant or personal items (art, statues, collections)
+
+### Step 2: ASSESS what's working — explain WHY each kept/working item works
+### Step 3: IDENTIFY what's NOT working — be specific about WHAT and WHY
+### Step 4: CALL OUT SPATIAL GAPS — empty corners, dead zones, unused walls
+### Step 5: THINK ABOUT LIFESTYLE — how does someone actually LIVE here?${priorities.length > 0 ? ` The client cares about: ${priorities.join(", ")}. Weight heavily.` : ""}
+### Step 6: DESIGN DIRECTION based on finishes + lifestyle
+- Specific color palette (6-10 named colors like "warm ivory", "walnut brown")
+- Specific materials (5-8 like "solid walnut", "linen", "brushed brass")
+- Style direction (3-4 sentences) MUST reference the client's specific lifestyle, personality, building finishes, and how design serves their daily life
+
+## ARRAY SIZE REQUIREMENTS
+- what_is_working: **5-8 items**. Every room has things working — find them all.
+- what_is_not_working: **5-8 issues**. Be thorough.
+- biggest_improvement_opportunities: **5-7 changes** ranked by impact.
+- missing_furniture_categories: **ALL missing categories** (8-15 items across essential/standard/finishing tiers). (This is part of DIAGNOSIS. The top-level \`missing_categories\` + \`action_list\` come from pass 2.)
+- color_issues / texture_material_issues / scale_proportion_issues / layout_issues / spatial_gaps / lighting_issues: **3-5 observations each**
+- clutter_editing_issues: can be 0 if room is clean
+
+## SPECIFICITY REQUIREMENT
+Every item in every array MUST reference a specific visible object. GOOD: "Small round glass coffee table is drastically undersized for the L-shaped sectional — should be at least 48 inches". BAD: "Coffee table is too small".
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "diagnosis": {
+    "current_vibe_summary": "3-4 sentences with dominant colors/materials/style",
+    "what_is_working": ["5-8 specific items"],
+    "what_is_not_working": ["5-8 specific issues"],
+    "biggest_improvement_opportunities": ["5-7 ranked changes"],
+    "missing_furniture_categories": ["8-15 items across all tiers"],
+    "color_issues": ["3-5 observations"],
+    "texture_material_issues": ["3-5 observations"],
+    "scale_proportion_issues": ["3-5 observations"],
+    "layout_issues": ["3-5 observations"],
+    "spatial_gaps": ["3-5 observations with suggestions for each"],
+    "lighting_issues": ["3-5 observations"],
+    "clutter_editing_issues": ["specific items to remove or 0 items"]
+  },
+  "design_direction": {
+    "recommended_palette": ["6-10 specific named colors"],
+    "recommended_materials": ["5-8 specific materials"],
+    "recommended_textures": ["4-6 textures"],
+    "recommended_furniture_types": ["every needed type with specific notes"],
+    "style_notes": "3-4 sentences referencing client's identity, lifestyle, building context"
+  }
+}
+
+Do NOT include missing_categories or action_list — those come from pass 2.
+
+Be specific and opinionated. Reference actual items visible in the photos.`;
+}
+
+/**
+ * Split-pass Call B: synthesize the plan from Call A's analysis.
+ * No images — consumes the diagnosis + design_direction as text input
+ * and produces missing_categories + action_list.
+ */
+export function getDiagnosisPlanPrompt(
+  roomType: string,
+  analysisJson: string,
+  keepItems: string[],
+  replaceItems: string[],
+  priorities: string[],
+  userContext?: string,
+): string {
+  const { allKeepItems, userNotes, keepItemsWarning } = buildDiagnosisContextParts(keepItems, userContext);
+
+  return `You are synthesizing an action plan for a ${roomType} based on a prior detailed diagnosis. The diagnosis is complete — your ONLY job is to produce:
+1. A final list of missing furniture categories (shopping list keys)
+2. A ranked action_list with specific, buyable recommendations
+
+## ROOM CONTEXT
+- Room type: ${roomType}
+- Items to keep: ${allKeepItems.length > 0 ? allKeepItems.join(", ") : "none specified"}
+- Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
+- User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
+
+## PRIOR DIAGNOSIS (source of truth — do not contradict)
+${analysisJson}
+
+## YOUR TASK
+
+### missing_categories (flat array of category keys)
+Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys the shopping pipeline expects (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "art", "plants"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15). Do NOT include items the client wants to keep.
+
+### action_list (ranked, specific)
+For each missing category, write ONE action item:
+- priority: 1 = highest impact, increase as priority drops
+- action: specific, includes material/color/size guidance (reference the design_direction palette and materials)
+- category: matches an entry in missing_categories
+- reasoning: why this matters — what problem from the diagnosis it solves
+
+Rank by impact: foundational pieces first (rug, anchor seating, primary lighting), then standard (accent seating, textiles, art), then finishing (plants, objects).
+
+## ⚠️ CRITICAL CONSTRAINTS
+- NEVER recommend a new item in the same category as a kept item (e.g., if client is keeping a floor lamp, do NOT recommend a new floor lamp)
+- NEVER include kept items in missing_categories
+- Every action must trace back to a problem in \`diagnosis.what_is_not_working\` or \`diagnosis.missing_furniture_categories\`
+${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
+
+## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+{
+  "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", "plants"],
+  "action_list": [
+    {
+      "priority": 1,
+      "action": "Area rug at least 8x10, wool or wool-blend, warm neutral with subtle texture — extends beyond front legs of sofa to anchor seating area",
+      "category": "rug",
+      "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; a properly scaled rug anchors the seating zone and adds the warm texture the diagnosis flagged as missing"
+    }
+  ]
+}`;
 }
