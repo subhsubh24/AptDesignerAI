@@ -455,158 +455,179 @@ export async function POST(request: Request) {
   const unitBath = bathrooms ?? 1;
   const unitLabel = `${unitBed} bedroom ${unitBath} bathroom`;
 
-  const jsonSchema = `{
-  "building_style": "description of architectural and interior style",
-  "finishes": {
-    "flooring": "type and color",
-    "countertops": "material and color",
-    "cabinetry": "style and color",
-    "appliances": "brand/tier",
-    "fixtures": "style"
-  },
-  "features": ["list of notable features"],
-  "windows": "description of window style and size",
-  "ceiling_height": "estimated height or null if not found",
-  "layout_style": "open concept, traditional, etc.",
-  "floor_plan": {
-    "found": true or false,
-    "source": "where you found floor plan info — include the exact URL(s) you visited",
-    "unit_type_searched": "${unitLabel}",
-    "total_sqft": "square footage for the ${unitLabel} unit, or range if multiple options — DO NOT GUESS",
-    "unit_variants": [
-      {
-        "name": "unit/plan name (e.g. 'A1', 'The Loop', 'Plan B')",
-        "sqft": "square footage for this specific variant",
-        "floor_plan_image_url": "direct URL to the floor plan image if one exists, or null",
-        "room_layout": "description of how rooms connect based on the floor plan image or diagram",
-        "living_dining_combined": true/false/null,
-        "kitchen_style": "open to living, galley, U-shaped, etc.",
-        "room_dimensions": {
-          "living_room": "dimensions ONLY if explicitly stated (e.g. '15x20 ft'), otherwise null",
-          "bedroom": "dimensions ONLY if explicitly stated, otherwise null",
-          "kitchen": "dimensions ONLY if explicitly stated, otherwise null"
-        },
-        "notable_spatial_features": ["features visible in the floor plan — e.g. 'L-shaped layout', 'walk-in closet', 'balcony off living room', 'en-suite bathroom'"]
-      }
-    ],
-    "room_layout": "summary of most common layout for ${unitLabel} units, or null",
-    "living_dining_combined": true/false/null,
-    "kitchen_style": "most common kitchen style for ${unitLabel} units",
-    "room_dimensions": {
-      "living_room": "dimensions if found for any ${unitLabel} variant, otherwise null",
-      "bedroom": "dimensions if found, otherwise null",
-      "kitchen": "dimensions if found, otherwise null"
-    },
-    "notable_spatial_features": ["combined list of features across ${unitLabel} variants"]
-  },
-  "amenities": ["relevant amenities"],
-  "neighborhood_vibe": "description of neighborhood character",
-  "design_aesthetic": "the overall aesthetic the building conveys",
-  "website_url": "URL of the building website if found",
-  "confidence_notes": ["List what you could NOT find or verify"],
-  "summary": "2-3 sentence summary useful for a designer. Be explicit about what is based on the website vs what is inferred."
-}`;
-
+  // Shared honesty/ground-truth rules used by both calls.
   const honesty = `
 CRITICAL RULES:
 - ONLY include information you can actually find on the website or in search results.
-- If you cannot find floor plans, room dimensions, or square footage, set those fields to null and mark floor_plan.found as false.
-- NEVER invent or estimate room dimensions — only include them if explicitly stated on the website.
-- Use confidence_notes to list what you couldn't find. This is important for user trust.
-- If the website doesn't have certain finishes info, say "not specified" rather than guessing.`;
+- If a field isn't findable, set it to null. NEVER guess or invent values.
+- If the website doesn't specify a finish, return "not specified" rather than guessing.
+- Use confidence_notes to list what you couldn't find. This is important for user trust.`;
 
-  const floorPlanInstructions = `
-## FLOOR PLAN DEEP CRAWL — THIS IS CRITICAL
-The user has a ${unitLabel} apartment. You MUST follow this process to find floor plans:
+  // ── Prompt 1: Building-wide context (NO floor plans) ─────────────────
+  // Splitting this from the floor-plan search was a deliberate fix: doing
+  // both in one call used to crowd the output token budget — the model would
+  // happily describe 5 amenities and 3 finishes in prose, then truncate the
+  // variant list. Now each call has its full budget for one focused task.
+  const buildingContextSchema = `{
+  "building_style": "description of architectural and interior style",
+  "finishes": {
+    "flooring": "type and color, or 'not specified'",
+    "countertops": "material and color, or 'not specified'",
+    "cabinetry": "style and color, or 'not specified'",
+    "appliances": "brand/tier, or 'not specified'",
+    "fixtures": "style, or 'not specified'"
+  },
+  "features": ["notable features"],
+  "windows": "window style and size, or null",
+  "ceiling_height": "estimated height or null",
+  "layout_style": "open concept, traditional, etc.",
+  "amenities": ["relevant amenities"],
+  "neighborhood_vibe": "character of the neighborhood",
+  "design_aesthetic": "overall aesthetic the building conveys",
+  "website_url": "building's official website URL if found",
+  "confidence_notes": ["what you could NOT find or verify"],
+  "summary": "2-3 sentence summary useful for an interior designer."
+}`;
 
-1. **Find the floor plans page**: Most apartment websites have a "Floor Plans" link in the navigation, or a page at /floor-plans, /floorplans, or /apartments. Navigate to it.
-
-2. **Filter by unit type**: On the floor plans page, look for filters or tabs for "${unitBed} Bed" / "${unitBed} BR" / "${unitBed} Bedroom". Select/filter for ${unitLabel} units specifically.
-
-3. **Click through EVERY unit variant**: Buildings typically have multiple floor plan options for the same bed/bath count (e.g. "A1", "A2", "B1", or named plans like "The Loop", "The Park"). Visit EACH individual floor plan option to see:
-   - The floor plan image/diagram
-   - Square footage for that specific unit
-   - Room dimensions if listed
-   - Layout details (combined living/dining, kitchen style, etc.)
-
-4. **Extract floor plan image URLs**: If the website shows floor plan diagrams/images, capture the direct image URL. This is extremely valuable — look for <img> tags or image links on the floor plan detail pages.
-
-5. **Record every variant**: In unit_variants, create an entry for each distinct ${unitLabel} floor plan you find, with its specific details.
-
-6. **If the building website doesn't have a floor plans page**, try:
-   - Searching "${building_name || searchContext} floor plans" on Google
-   - Looking at apartment listing sites (apartments.com, zillow, etc.) for floor plan images
-   - Checking if the building has virtual tours that show the layout
-
-7. **If the website has no floor plans at all**, set floor_plan.found to false and note it in confidence_notes.`;
-
-  const prompt = building_url
+  const buildingContextPrompt = building_url
     ? `Read and analyze this apartment building's website: ${building_url}
 
 Also search online for additional details about "${searchContext}".
 
-The user lives in a **${unitLabel}** apartment in this building.
+Extract building-wide context useful for an interior designer. DO NOT describe floor plans or unit layouts — those are handled in a separate pass.
 
-Extract everything useful for an interior designer advising a resident:
-- Building style and architecture (modern, historic, industrial, etc.)
-- Standard finishes and fixtures (flooring, countertops, cabinetry, appliances)
-- Apartment features (windows, ceiling height, layout style)
-- Building amenities that affect lifestyle
-- Neighborhood vibe and character
-- Any design aesthetic the building promotes
-${floorPlanInstructions}
+Focus on:
+- Building style and architecture
+- Standard finishes and fixtures across units
+- Building-wide features (window type, ceiling height, layout style)
+- Amenities (gym, roof deck, pet policy, etc.)
+- Neighborhood character
+- Overall design aesthetic
 ${honesty}
 
 Return JSON:
-${jsonSchema}`
-    : `Search for "${searchContext}" and find the official apartment building website. Read the website and extract information useful for an interior designer advising a resident.
+${buildingContextSchema}`
+    : `Search for "${searchContext}" and find the official apartment building website. Read the site and extract building-wide context useful for an interior designer. DO NOT describe floor plans — that's a separate pass.
 
-The user lives in a **${unitLabel}** apartment in this building.
-
-Extract:
+Focus on:
 - Building style and architecture
 - Standard finishes (flooring, countertops, cabinetry)
-- Apartment features (windows, ceiling height, layout)
-- Building amenities
+- Amenities
 - Neighborhood character
 - Design aesthetic
-${floorPlanInstructions}
 ${honesty}
 
 Return JSON:
-${jsonSchema}`;
+${buildingContextSchema}`;
+
+  // ── Prompt 2: Floor plans ONLY (dedicated to variant exhaustiveness) ─
+  // This call has ONE job: return every ${unitLabel} variant on the
+  // building's floor-plans page. Sqft hint (when provided) directs the
+  // model to the user's specific unit so it doesn't stop early.
+  const floorPlanSchema = `{
+  "floor_plan": {
+    "found": true or false,
+    "source": "exact URL(s) you visited — include the floor-plans page URL",
+    "unit_type_searched": "${unitLabel}",
+    "total_sqft": "sqft for the ${unitLabel} unit, or range if multiple — null if not found",
+    "unit_variants": [
+      {
+        "name": "unit/plan name (e.g. 'A1', 'S 1.2', 'The Loop')",
+        "sqft": "square footage for this specific variant (number as string)",
+        "floor_plan_image_url": "direct URL to the floor plan image, or null",
+        "room_layout": "description of how rooms connect based on the floor plan",
+        "living_dining_combined": true/false/null,
+        "kitchen_style": "open to living, galley, U-shaped, etc.",
+        "room_dimensions": {
+          "living_room": "WxD ft if explicitly stated, else null",
+          "bedroom": "WxD ft if explicitly stated, else null",
+          "kitchen": "WxD ft if explicitly stated, else null"
+        },
+        "notable_spatial_features": ["e.g. 'walk-in closet', 'balcony', 'en-suite bath'"]
+      }
+    ]
+  }
+}`;
+
+  const sqftHint = typeof apartment_sqft === "number"
+    ? `\n\n**USER'S UNIT SQFT: ${apartment_sqft}** — The user lives in a ${apartment_sqft} sqft unit. This EXACT variant exists on the building's floor-plans page. You MUST find it. If your first search doesn't return ${apartment_sqft} sqft, keep looking — check every variant tab/option on the floor-plans page.`
+    : "";
+
+  const floorPlanPrompt = `Find EVERY ${unitLabel} floor-plan variant for this building.
+
+Building: ${building_name || searchContext}${building_url ? `\nWebsite: ${building_url}` : ""}${sqftHint}
+
+## PROCESS
+1. Navigate to the building's floor-plans page (usually /floor-plans, /floorplans, or /apartments on the main site).
+2. Filter/select the ${unitBed}-bedroom ${unitBath}-bathroom category.
+3. **Click through EVERY variant tab/card/option** — buildings typically have 4-10 variants per bed/bath count (e.g. "A1", "A2", "B1", "S 1.2", "N J1.6"). Skipping any is a failure.
+4. For each variant, capture: name, sqft, floor-plan image URL, room layout description, kitchen style, living/dining arrangement, and any labeled dimensions.
+5. If the building's own site doesn't have the full list, also check apartments.com and zillow listings for this building.
+
+## OUTPUT RULES
+- Return unit_variants as an array of **OBJECTS**, never strings. A variant like "S 1.2 (725 sf)" MUST be returned as { "name": "S 1.2", "sqft": "725", ... }.
+- Return EVERY variant you find — do not abbreviate or summarize the list.
+- If a variant has no floor-plan image URL, set that field to null. Still include the variant.
+- If you genuinely cannot find any floor plans, set found: false and explain in a top-level "note" field.
+${honesty}
+
+Return JSON (and nothing else — no prose, no markdown fences):
+${floorPlanSchema}`;
 
   try {
-    const response = await geminiProvider.chat({
+    // Pass 1: Building-wide context (finishes, amenities, style, etc.)
+    const contextResponse = await geminiProvider.chat({
       model: selectModel("apartment_research"),
-      system: `You are an expert interior designer researching an apartment building to advise a new resident on furniture and decor. Extract every detail that would help with design recommendations.
-
-PROCESS:
-1. Visit the building's website and read ALL relevant pages (amenities, gallery, floor plans, finishes).
-2. For floor plans: navigate to the floor plans page, filter for ${unitLabel}, click through EACH layout variant. Most buildings have multiple layouts per bed/bath count.
-3. Capture floor plan image URLs when available.
-4. Note all finishes: flooring material+color, countertop material, cabinetry style+color, appliance brand, fixtures finish.
-5. Return ONLY facts you found on the website or via search. Never guess finishes or features.`,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 8000,
+      system: "You are researching an apartment building's website to extract design-relevant building-wide context (finishes, style, amenities, neighborhood). You do NOT handle floor plans — that's a separate agent. Return ONLY facts you find; never guess.",
+      messages: [{ role: "user", content: buildingContextPrompt }],
+      max_tokens: 4000,
       temperature: 0.2,
-      // Note: googleMaps cannot be combined with googleSearch in the same request
       tools: [{ googleSearch: {} }, { urlContext: {} }],
-      // Note: responseMimeType is incompatible with built-in tools (googleSearch, urlContext)
     });
 
-    // Gemini 3 models support structured output + built-in tools,
-    // but keep fallback parsing for edge cases (transient empty responses, etc.)
     let research: Record<string, unknown>;
-    const raw = response.content.trim();
-    if (!raw) {
+    const contextRaw = contextResponse.content.trim();
+    if (!contextRaw) {
       throw new Error("Building research returned empty response — please try again");
     }
     try {
-      research = parseModelJSON(raw);
+      research = parseModelJSON(contextRaw);
     } catch (e) {
-      console.error("[apartment-research] Unparseable response:", raw.slice(0, 500));
-      throw new Error((e as Error).message || "Could not parse building research response");
+      console.error("[apartment-research] Unparseable context response:", contextRaw.slice(0, 500));
+      throw new Error((e as Error).message || "Could not parse building context response");
+    }
+
+    // Pass 2: Floor plans (dedicated budget — this is the part that used to
+    // get crowded out of the single-call version). Run sequentially, not in
+    // parallel, because both calls share the googleSearch tool quota.
+    try {
+      const fpResponse = await geminiProvider.chat({
+        model: selectModel("apartment_research"),
+        system: `You are a floor-plan research agent. Your ONLY job is to find every ${unitLabel} floor-plan variant for the given building and return them as structured JSON. Exhaustiveness matters more than brevity — if you find 8 variants, return all 8. Skipping variants is a failure. Return ONLY facts from the website; never invent dimensions or room layouts.`,
+        messages: [{ role: "user", content: floorPlanPrompt }],
+        max_tokens: 6000,
+        temperature: 0.1,
+        tools: [{ googleSearch: {} }, { urlContext: {} }],
+      });
+
+      const fpRaw = fpResponse.content.trim();
+      if (fpRaw) {
+        try {
+          const fpData = parseModelJSON(fpRaw);
+          if (fpData.floor_plan) {
+            research.floor_plan = fpData.floor_plan;
+            const fpObj = fpData.floor_plan as Record<string, unknown>;
+            const variants = (fpObj.unit_variants as unknown[] | undefined) ?? [];
+            console.log(`[apartment-research] Floor-plan pass captured ${variants.length} variant(s)`);
+          }
+        } catch (e) {
+          console.warn("[apartment-research] Floor-plan response unparseable:", (e as Error).message);
+        }
+      } else {
+        console.warn("[apartment-research] Floor-plan pass returned empty response");
+      }
+    } catch (e) {
+      console.warn("[apartment-research] Floor-plan pass failed:", (e as Error).message);
     }
 
     // Coerce common malformed variant shapes BEFORE Zod validation.
@@ -653,120 +674,6 @@ PROCESS:
       const finishes = (research.finishes as Record<string, unknown> | undefined) ?? {};
       const finishFields = Object.entries(finishes).filter(([, v]) => v && v !== "not specified").map(([k]) => k);
       console.log(`[apartment-research] Primary pass captured: ${variants.length} variant(s), ${withImages} with image URLs; finishes filled: [${finishFields.join(", ") || "none"}]`);
-    }
-
-    // (b) Retry/fallback for sparse data — if floor plan is empty, finishes
-    // are missing, OR the user reported a sqft that doesn't appear in any
-    // variant we found, do a targeted second pass. The sqft check is critical:
-    // buildings often list 6-10 variants per bed/bath count, and the primary
-    // search may only extract the first 2-3. If the user's 725 sqft unit isn't
-    // in the list, the matcher will silently settle for "closest" (e.g. 705),
-    // which is wrong.
-    const fp = research.floor_plan as Record<string, unknown> | undefined;
-    const existingVariants = (fp?.unit_variants as Array<Record<string, unknown>> | undefined) ?? [];
-    const hasFloorPlan = fp?.found === true && existingVariants.length > 0;
-    const hasFinishes = research.finishes && Object.values(research.finishes as Record<string, unknown>).some(v => v && v !== "not specified");
-    const userSqftNum = typeof apartment_sqft === "number" ? apartment_sqft : null;
-    // "Missing user's unit" = user gave us a sqft but no variant is within ±5 of it.
-    // ±5 handles minor rounding (725 vs 724) without being permissive enough to
-    // accept genuinely different units (705 vs 725).
-    const missingUserUnit =
-      userSqftNum !== null &&
-      existingVariants.length > 0 &&
-      !existingVariants.some((v) => {
-        const s = parseSqft(v.sqft);
-        return s !== null && Math.abs(s - userSqftNum) <= 5;
-      });
-
-    if (!hasFloorPlan || !hasFinishes || missingUserUnit) {
-      const reasons: string[] = [];
-      if (!hasFloorPlan) reasons.push("floor_plan missing");
-      if (!hasFinishes) reasons.push("finishes missing");
-      if (missingUserUnit) reasons.push(`user's ${userSqftNum} sqft unit not in captured variants [${existingVariants.map(v => parseSqft(v.sqft)).filter(Boolean).join(", ")}]`);
-      console.log(`[apartment-research] Sparse data detected — ${reasons.join("; ")}. Running targeted second pass.`);
-
-      const gaps: string[] = [];
-      if (!hasFloorPlan) gaps.push(`floor plans for a ${unitLabel} unit`);
-      if (missingUserUnit) gaps.push(`the specific ${unitLabel} floor plan that is ${userSqftNum} sqft (the user's actual unit — we found other variants but not this one)`);
-      if (!hasFinishes) gaps.push("standard finishes (flooring, countertops, cabinetry)");
-
-      // When we're missing the user's specific unit, include the partial list
-      // we already have so the model can avoid duplicating effort and focus
-      // on finding what's missing.
-      const knownVariantsHint = missingUserUnit && existingVariants.length > 0
-        ? `\n\nWe already found these variants for this bed/bath count — DO NOT just re-return these; find the missing ${userSqftNum} sqft one:\n${existingVariants.map(v => `- ${String(v.name ?? "unnamed")}${v.sqft ? ` (${v.sqft} sqft)` : ""}`).join("\n")}`
-        : "";
-
-      try {
-        const fallbackResponse = await geminiProvider.chat({
-          model: selectModel("apartment_research"),
-          system: "You are a real estate researcher. Search specifically for the missing information about this apartment building. Return ONLY the fields you find — do NOT guess. When the user specifies a sqft, the building's floor-plans page almost certainly has it — keep clicking through variants until you find it.",
-          messages: [{ role: "user", content: `Search for "${searchContext}" specifically to find: ${gaps.join(" and ")}.${knownVariantsHint}\n\nTry these sources:\n- The building's official floor-plans page${building_url ? ` (${building_url}/floor-plans or similar)` : ""}\n- apartments.com/${building_name?.toLowerCase().replace(/\s+/g, "-")}\n- zillow.com search for "${searchContext}"\n\nReturn JSON with ONLY the fields you find (unit_variants must be an array of OBJECTS, not strings):\n{\n  ${(!hasFloorPlan || missingUserUnit) ? '"floor_plan": { "found": true/false, "total_sqft": number_or_null, "unit_variants": [{ "name": "...", "sqft": "...", "floor_plan_image_url": "...", "room_layout": "...", "kitchen_style": "...", "room_dimensions": {...} }], "room_dimensions": {...} },' : ''}\n  ${!hasFinishes ? '"finishes": { "flooring": "...", "countertops": "...", "cabinetry": "..." }' : ''}\n}` }],
-          max_tokens: 4000,
-          temperature: 0.2,
-          tools: [{ googleSearch: {} }, { urlContext: {} }],
-        });
-
-        const fallbackRaw = fallbackResponse.content.trim();
-        if (fallbackRaw) {
-          try {
-            // Use the shared parser so markdown-fenced or truncated responses
-            // (e.g. "```json\n{...") are handled the same way as the primary pass.
-            const fallbackData = parseModelJSON(fallbackRaw);
-
-            // Coerce string variants in fallback data too (same bug can recur).
-            const fbFp = fallbackData.floor_plan as Record<string, unknown> | undefined;
-            const fbRawVariants = fbFp?.unit_variants;
-            if (Array.isArray(fbRawVariants)) {
-              fbFp!.unit_variants = fbRawVariants.map((v) => {
-                if (typeof v === "string") {
-                  const m = v.match(/^(.+?)\s*\(\s*([\d,]+)\s*(?:sf|sqft|ft²|sq ft)?\s*\)\s*$/i);
-                  return m ? { name: m[1].trim(), sqft: m[2].replace(/,/g, "") } : { name: v.trim(), sqft: null };
-                }
-                return v;
-              });
-            }
-
-            // Merge fallback data into research
-            if (!hasFloorPlan && fallbackData.floor_plan) {
-              // No existing floor plan — replace wholesale
-              research.floor_plan = fallbackData.floor_plan;
-              console.log("[apartment-research] Fallback filled floor_plan data");
-            } else if (missingUserUnit && fallbackData.floor_plan) {
-              // Existing variants are good — MERGE new ones in, deduped by name.
-              // This preserves any vision-extracted dims on the original variants
-              // while picking up the user's missing unit from the fallback.
-              const fbVariants = (fallbackData.floor_plan as Record<string, unknown>).unit_variants as Array<Record<string, unknown>> | undefined;
-              if (Array.isArray(fbVariants) && fbVariants.length > 0) {
-                const existing = (research.floor_plan as Record<string, unknown>).unit_variants as Array<Record<string, unknown>>;
-                const byName = new Map<string, Record<string, unknown>>();
-                for (const v of existing) {
-                  const k = String(v.name ?? "").toLowerCase().trim();
-                  if (k) byName.set(k, v);
-                }
-                let added = 0;
-                for (const v of fbVariants) {
-                  const k = String(v.name ?? "").toLowerCase().trim();
-                  if (k && !byName.has(k)) {
-                    byName.set(k, v);
-                    added++;
-                  }
-                }
-                (research.floor_plan as Record<string, unknown>).unit_variants = Array.from(byName.values());
-                console.log(`[apartment-research] Fallback merged ${added} new variant(s) (total now ${byName.size})`);
-              }
-            }
-            if (!hasFinishes && fallbackData.finishes) {
-              research.finishes = { ...(research.finishes as Record<string, unknown> || {}), ...(fallbackData.finishes as Record<string, unknown>) };
-              console.log("[apartment-research] Fallback filled finishes data");
-            }
-          } catch (e) {
-            console.warn("[apartment-research] Fallback response unparseable:", (e as Error).message);
-          }
-        }
-      } catch (e) {
-        console.warn("[apartment-research] Fallback search failed:", (e as Error).message);
-      }
     }
 
     // (a) Analyze floor plan images via Gemini vision if URLs were found
