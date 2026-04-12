@@ -55,38 +55,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No rooms found" }, { status: 400 });
   }
 
-  // Build vision content: all room photos organized by section
-  const contentBlocks: AIContentBlock[] = [
-    { type: "text", text: "Here are all the photos of the apartment, organized by room:" },
-  ];
-
-  for (const room of rooms) {
-    const images = room.room_images || [];
-    if (images.length === 0) continue;
-
-    const userNote = room.user_context
-      ? `\nUSER NOTES: "${room.user_context}" — Respect these notes (e.g. if they say to ignore something, don't include it in your assessment).`
-      : "";
-
-    contentBlocks.push({
-      type: "text",
-      text: `\n--- ${room.name} (${room.room_type}) ---${userNote}`,
-    });
-
-    for (const img of images) {
-      contentBlocks.push({
-        type: "image",
-        source: { type: "url", url: img.image_url },
-      });
-    }
-  }
-
-  // Inject building research context if available
-  if (project?.building_research) {
-    const br = project.building_research as Record<string, unknown>;
-    contentBlocks.push({
-      type: "text",
-      text: `\n--- BUILDING RESEARCH (from the building's website) ---
+  // Building research context (reused by every per-room call)
+  const buildingContextText = project?.building_research
+    ? (() => {
+        const br = project.building_research as Record<string, unknown>;
+        return `\n--- BUILDING RESEARCH (from the building's website) ---
 Building style: ${br.building_style || "unknown"}
 Finishes: ${JSON.stringify(br.finishes || {})}
 Layout style: ${br.layout_style || "unknown"}
@@ -94,66 +67,10 @@ Windows: ${br.windows || "unknown"}
 Ceiling height: ${br.ceiling_height || "unknown"}
 Design aesthetic: ${br.design_aesthetic || "unknown"}
 Summary: ${br.summary || ""}
----`,
-    });
-  }
+---`;
+      })()
+    : "";
 
-  contentBlocks.push({
-    type: "text",
-    text: `\nAnalyze this entire apartment holistically. You know everything about the owner (see your system prompt). ${project?.building_research ? "Use the building research context above to understand the apartment finishes and architectural style." : ""}
-
-PROCESS — Follow these steps:
-Step 1: Look at EVERY photo. For each, note: room type, floor material+color, wall color, existing furniture (name + material + color), lighting, windows.
-Step 2: Identify the apartment's overall aesthetic thread — what materials, colors, and style connect the rooms?
-Step 3: For each room, score its current state and determine what to keep, replace, and add.
-Step 4: Ensure recommendations across rooms are COHERENT — same palette, complementary materials.
-
-Provide a JSON response with this structure:
-{
-  "overall": "A 2-3 sentence personalized summary of the apartment's current state, what's working, and the overall vibe. ONLY describe things you can actually see in the photos. Do NOT invent or assume items that aren't visible.",
-  "rooms": {
-    "<room_type>": {
-      "summary": "1-2 sentence assessment of this specific area — only reference what you see",
-      "score": <1-10 current design score>,
-      "keep": ["Specific items/features that should STAY — reference actual things you see in the photos, e.g. 'Dark gray sectional sofa — good scale and anchors the room'"],
-      "replace": ["Specific items that should be REMOVED or REPLACED — say what and why, e.g. 'Glass coffee table — drastically undersized for the sectional, cheapens the space'"],
-      "add": ["Specific items/changes to ADD — be very descriptive so these can be used as search queries, e.g. 'Large 8x10 textured wool area rug in warm ivory or oatmeal to ground the seating area'"],
-      "priority": <1-10 how urgently this room needs attention>
-    }
-  }
-}
-
-CRITICAL RULES:
-- ONLY describe items, furniture, and features you can actually SEE in the photos. Never make up items.
-- If a room photo is unclear or you can't see certain areas, say "Note: [area] not fully visible in photos" and base recommendations only on what IS visible.
-- Be specific and opinionated about what you DO see. Reference actual items by material + color + style.
-- Your credibility depends on accuracy. One wrong detail ("I see a blue chair" when there isn't one) destroys trust.
-
-FORMAT FOR "keep" ARRAY:
-Each item must name what you see + why it works:
-✓ "Dark gray fabric L-shaped sectional — good scale, anchors the room, neutral base to build around"
-✓ "Walnut media console — matches building's warm wood tones, adequate width for the wall"
-✗ "The couch is fine" — too vague
-
-FORMAT FOR "replace" ARRAY:
-Each item must name what you see + what's wrong + what would be better:
-✓ "Small round glass coffee table — drastically undersized for the L-shaped sectional, cheapens the room. Replace with a 48-54 inch solid wood table"
-✗ "Replace the coffee table" — too vague
-
-FORMAT FOR "add" ARRAY — THIS IS CRITICAL:
-Each item MUST follow this template: "[Material] [item type] in [color/finish], [size], [purpose]"
-✓ "Large 8x10 textured wool area rug in warm ivory or oatmeal to ground the seating area and add warmth to the hard floors"
-✓ "Solid walnut round coffee table, 36-40 inch diameter with lower shelf, to anchor the seating area and provide surface space"
-✓ "Set of 3-4 linen throw pillows in warm tones (cream, terracotta, sage), 18-20 inches, to add texture and color to the sectional"
-✓ "Modern brass arc floor lamp with linen shade, 72 inches tall, positioned behind the sectional for reading and evening ambience"
-✗ "Add some pillows" — REJECTED, too vague
-✗ "Area rug" — REJECTED, no material, no color, no size
-✗ "Lighting" — REJECTED, what type? What material? What size? Where?
-
-Include at LEAST 6-10 items in the "add" array for each room. A well-designed room needs many elements working together — don't stop at the obvious pieces. Include soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases).`,
-  });
-
-  // Create agent run for tracking
   const firstRoom = rooms[0];
   const agentRun = await createAgentRun(supabase, {
     room_id: firstRoom.id,
@@ -163,20 +80,158 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
 
   try {
     const profile = buildDesignProfile(project);
-    const response = await geminiProvider.chat({
-      model: selectModel("apartment_analysis"),
-      system: getSystemPrompt(profile),
-      messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 8000,
+    const model = selectModel("apartment_analysis");
+    const system = getSystemPrompt(profile);
+
+    /**
+     * Per-room analysis — one focused call per room with just that room's
+     * photos. Previously all N rooms shared one 8K call, which only gave
+     * ~1-1.5K tokens per room of attention. Running in parallel with
+     * Promise.all so total latency ≈ max(per-room) + synthesis.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- rooms is from Supabase untyped
+    const analyzeRoom = async (room: any): Promise<{
+      room_type: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+      analysis: Record<string, any> | null;
+      tokensUsed: number;
+    }> => {
+      const images = room.room_images || [];
+      if (images.length === 0) return { room_type: room.room_type, analysis: null, tokensUsed: 0 };
+
+      const userNote = room.user_context
+        ? `\nUSER NOTES: "${room.user_context}" — Respect these notes (e.g. if they say to ignore something, don't include it).`
+        : "";
+
+      const roomContent: AIContentBlock[] = [
+        { type: "text", text: `Here are photos of the ${room.name} (${room.room_type}):${userNote}` },
+        ...images.map((img: { image_url: string }) => ({
+          type: "image" as const,
+          source: { type: "url" as const, url: img.image_url },
+        })),
+      ];
+
+      if (buildingContextText) {
+        roomContent.push({ type: "text", text: buildingContextText });
+      }
+
+      roomContent.push({
+        type: "text",
+        text: `Analyze this ${room.room_type} in detail. ${buildingContextText ? "Use the building research context to understand the apartment's finishes and architectural style." : ""}
+
+PROCESS:
+Step 1: Look at EVERY photo. Note floor material+color, wall color, existing furniture (name + material + color), lighting, windows.
+Step 2: Identify what's working and what isn't.
+Step 3: Score the current state and decide what to keep, replace, and add.
+
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
+{
+  "summary": "1-2 sentence assessment of this room — only reference what you see",
+  "score": 1-10 current design score,
+  "keep": ["Specific items that should STAY — named with material+color+why it works"],
+  "replace": ["Specific items to REMOVE or REPLACE — what, why, what would be better"],
+  "add": ["Specific items to ADD following: [Material] [item type] in [color/finish], [size], [purpose]"],
+  "priority": 1-10 how urgently this room needs attention
+}
+
+CRITICAL RULES:
+- ONLY describe items you can SEE in the photos. Never invent.
+- If a room area isn't visible, say so — don't guess.
+- Credibility depends on accuracy.
+
+FORMAT RULES:
+- keep: "Dark gray fabric L-shaped sectional — good scale, anchors the room" ✓ | "The couch is fine" ✗
+- replace: "Glass coffee table — drastically undersized for the sectional. Replace with a 48-54 inch solid wood table" ✓
+- add: "Large 8x10 textured wool area rug in warm ivory, to ground the seating area" ✓ | "Area rug" ✗
+
+Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases).`,
+      });
+
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content: roomContent }],
+        max_tokens: 4000,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+      const parsed = extractJsonObject<Record<string, any>>(response.content);
+      return {
+        room_type: room.room_type,
+        analysis: parsed,
+        tokensUsed: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+      };
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase rows are untyped
+    const roomResults = await Promise.all(rooms.map((r: any) => analyzeRoom(r)));
+
+    console.log(
+      `[analyze-apartment] Per-room pass complete: ${roomResults.filter((r) => r.analysis).length}/${rooms.length} rooms analyzed`,
+    );
+
+    // Build rooms map (normalized + original keys for downstream lookup)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    const analysisRooms: Record<string, any> = {};
+    for (const res of roomResults) {
+      if (res.analysis) analysisRooms[res.room_type] = res.analysis;
+    }
+
+    /**
+     * Apartment synthesis — one small call that consumes the per-room
+     * summaries (as text, not images) and produces the holistic "overall"
+     * narrative identifying the apartment's aesthetic thread and coherence
+     * checks across rooms.
+     */
+    const synthInput = rooms
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase rows are untyped
+      .map((r: any) => {
+        const a = analysisRooms[r.room_type];
+        if (!a) return `## ${r.name} (${r.room_type})\n(no analysis)`;
+        return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${(a.keep || []).join("; ")}\nReplace: ${(a.replace || []).join("; ")}\nAdd: ${(a.add || []).join("; ")}`;
+      })
+      .join("\n\n");
+
+    const synthPrompt = `You have detailed per-room analyses of an apartment (below). Your only job is to synthesize a short overall narrative capturing:
+1. The apartment's current state and overall vibe
+2. The aesthetic thread (or lack thereof) across rooms — shared materials, palette, style
+3. Any coherence issues (conflicting palettes, material jumps, zones that don't talk to each other)
+
+${buildingContextText}
+
+## PER-ROOM ANALYSES
+${synthInput}
+
+## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
+{
+  "overall": "2-3 sentence personalized summary of the apartment — current state, what's working, aesthetic thread. Only reference things mentioned in the per-room analyses; do NOT invent."
+}`;
+
+    const synthResponse = await geminiProvider.chat({
+      model,
+      system,
+      messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
+      max_tokens: 2000,
       temperature: 0.3,
       responseMimeType: "application/json",
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    const synthParsed = extractJsonObject<Record<string, any>>(synthResponse.content);
+    const synthTokens = (synthResponse.usage?.input_tokens || 0) + (synthResponse.usage?.output_tokens || 0);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response is unstructured JSON
-    const analysis = extractJsonObject<Record<string, any>>(response.content);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response shape
+    const analysis: Record<string, any> = {
+      overall: synthParsed.overall || "",
+      rooms: analysisRooms,
+    };
+
+    console.log(
+      `[analyze-apartment] Synthesis pass complete. Total tokens: ${roomResults.reduce((s, r) => s + r.tokensUsed, 0) + synthTokens}`,
+    );
 
     // Save diagnosis for each room — normalize keys to handle case/format mismatches
-    const analysisRooms = analysis.rooms || {};
     const normalizedRooms: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(analysisRooms)) {
       normalizedRooms[key.toLowerCase().replace(/[\s-]+/g, "_")] = value;
@@ -193,9 +248,11 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
         room_id: room.id,
         diagnosis_json: roomAnalysis,
         design_direction_json: { overall: analysis.overall },
-        missing_categories: roomAnalysis.add || roomAnalysis.needs || [],
-        action_list: roomAnalysis.replace || roomAnalysis.weaknesses || [],
-        model_used: selectModel("apartment_analysis"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
+        model_used: model,
       });
 
       await supabase
@@ -204,16 +261,16 @@ Include at LEAST 6-10 items in the "add" array for each room. A well-designed ro
         .eq("id", room.id);
     }
 
-    // Save apartment analysis to project for downstream use by area analysis
     await supabase
       .from("projects")
       .update({ apartment_analysis: analysis })
       .eq("id", project_id);
 
+    const totalTokens = roomResults.reduce((s, r) => s + r.tokensUsed, 0) + synthTokens;
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
       output_json: analysis,
-      tokens_used: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+      tokens_used: totalTokens,
     });
 
     return NextResponse.json({ summary: analysis });
