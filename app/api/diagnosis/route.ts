@@ -8,6 +8,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
+import { withTrace } from "@/lib/observability/tracing";
 import type { AgentContext } from "@/lib/agents/types";
 import type { DiagnosisData } from "@/lib/types/database";
 
@@ -29,6 +30,18 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { room_id } = body;
+
+  // Wrap the rest of the handler so every agent/logger call inherits a
+  // shared trace id. OTel export is opt-in via OTEL_EXPORTER_OTLP_ENDPOINT.
+  return withTrace(
+    "diagnosis.POST",
+    () => handleDiagnosisPost(supabase, user.id, room_id),
+    { userId: user.id, route: "diagnosis" }
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unknown) {
   if (!room_id || typeof room_id !== "string") {
     return NextResponse.json({ error: "room_id required" }, { status: 400 });
   }
@@ -66,6 +79,14 @@ export async function POST(request: Request) {
   // Sanitize user context before it enters the AI pipeline
   const rawUserContext = room.user_context || undefined;
   const sanitized = rawUserContext ? sanitizeUserContext(rawUserContext) : null;
+  if (sanitized?.injectionDetected || sanitized?.piiCategories.length) {
+    log.warn("User context flagged by pre-LLM guardrails", {
+      room_id,
+      injectionDetected: sanitized.injectionDetected,
+      detectedPatterns: sanitized.detectedPatterns,
+      piiCategories: sanitized.piiCategories,
+    });
+  }
 
   // Build context and run diagnosis
   const ctx: AgentContext = {

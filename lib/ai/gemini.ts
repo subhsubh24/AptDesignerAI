@@ -4,6 +4,7 @@ import path from "path";
 import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
+import { getOrCreateSystemCache } from "./system-cache";
 import type {
   AIProvider,
   AIMessage,
@@ -315,7 +316,15 @@ export const geminiProvider: AIProvider = {
     }
 
     if (system) {
-      config.systemInstruction = system;
+      // Prefer explicit Gemini context caching when enabled and the prompt
+      // is large enough for Gemini to accept. On any failure path we fall
+      // back to passing systemInstruction inline — identical behavior.
+      const cacheName = await getOrCreateSystemCache(model, system);
+      if (cacheName) {
+        config.cachedContent = cacheName;
+      } else {
+        config.systemInstruction = system;
+      }
     }
 
     if (tools) {

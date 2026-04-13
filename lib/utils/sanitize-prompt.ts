@@ -14,6 +14,44 @@
 const MAX_USER_CONTEXT_LENGTH = 2000;
 
 /**
+ * PII patterns with their redaction placeholders.
+ *
+ * Kept intentionally conservative — we'd rather miss a rare format than
+ * redact a legitimate numeric dimension ("84x36") as if it were a phone
+ * number. Each pattern is paired with a placeholder so downstream prompts
+ * still read naturally ("contact me at [EMAIL]" vs. the raw address).
+ */
+const PII_PATTERNS: { pattern: RegExp; placeholder: string; label: string }[] = [
+  // Emails — the most common incidental leak
+  {
+    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    placeholder: "[EMAIL]",
+    label: "email",
+  },
+  // US Social Security Numbers (xxx-xx-xxxx). Strict format only to avoid
+  // collapsing any 9-digit number the user might type (e.g., a zip + ext).
+  {
+    pattern: /\b\d{3}-\d{2}-\d{4}\b/g,
+    placeholder: "[SSN]",
+    label: "ssn",
+  },
+  // Credit card numbers (13-19 digits with optional separators). Loose but
+  // gated on digit count to avoid eating dimension strings.
+  {
+    pattern: /\b(?:\d[ -]?){13,19}\b/g,
+    placeholder: "[CARD]",
+    label: "credit_card",
+  },
+  // Phone numbers — US-style (xxx) xxx-xxxx, xxx-xxx-xxxx, +1 xxx xxx xxxx.
+  // Intentionally requires separators so "72x120" ≠ phone.
+  {
+    pattern: /(?:\+?\d{1,2}[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g,
+    placeholder: "[PHONE]",
+    label: "phone",
+  },
+];
+
+/**
  * Patterns that commonly appear in prompt injection attempts.
  * We don't block the input — we wrap it in clear delimiters so the model
  * treats it as quoted user text rather than instructions.
@@ -50,20 +88,59 @@ export function detectInjectionPatterns(text: string): string[] {
 }
 
 /**
+ * Redact PII from free-form user input before it flows into an LLM prompt.
+ *
+ * Returns the redacted text and a list of categories that matched. We run
+ * every pattern and replace matches in place with a neutral placeholder
+ * so downstream prompts still read naturally.
+ */
+export function redactPII(text: string): {
+  redacted: string;
+  categories: string[];
+} {
+  if (!text) return { redacted: "", categories: [] };
+
+  let out = text;
+  const found = new Set<string>();
+
+  for (const { pattern, placeholder, label } of PII_PATTERNS) {
+    pattern.lastIndex = 0;
+    if (pattern.test(out)) {
+      found.add(label);
+      pattern.lastIndex = 0;
+      out = out.replace(pattern, placeholder);
+    }
+  }
+
+  return { redacted: out, categories: [...found] };
+}
+
+/**
  * Sanitize user context for safe prompt embedding.
  *
  * Does NOT block the content — instead wraps it clearly so the model
  * understands it's quoted user text. This preserves legitimate user
  * instructions like "ignore the yoga mat" while preventing injection.
+ *
+ * Also redacts obvious PII (emails, phone numbers, SSNs, credit card
+ * numbers) so it never reaches the provider. Design-time apartment
+ * context should never contain these, so redaction is pure upside.
  */
 export function sanitizeUserContext(raw: string): {
   sanitized: string;
   wasModified: boolean;
   injectionDetected: boolean;
   detectedPatterns: string[];
+  piiCategories: string[];
 } {
   if (!raw || raw.trim().length === 0) {
-    return { sanitized: "", wasModified: false, injectionDetected: false, detectedPatterns: [] };
+    return {
+      sanitized: "",
+      wasModified: false,
+      injectionDetected: false,
+      detectedPatterns: [],
+      piiCategories: [],
+    };
   }
 
   let text = raw.trim();
@@ -79,9 +156,17 @@ export function sanitizeUserContext(raw: string): {
   const detectedPatterns = detectInjectionPatterns(text);
   const injectionDetected = detectedPatterns.length > 0;
 
+  // Redact PII before the text reaches any downstream prompt.
+  const { redacted, categories: piiCategories } = redactPII(text);
+  if (piiCategories.length > 0) {
+    text = redacted;
+    wasModified = true;
+  }
+
   // Strip markdown heading markers that could interfere with prompt structure
+  const beforeHeadingStrip = text;
   text = text.replace(/^#{1,6}\s/gm, "");
-  if (text !== raw.trim().substring(0, text.length)) {
+  if (text !== beforeHeadingStrip) {
     wasModified = true;
   }
 
@@ -90,5 +175,6 @@ export function sanitizeUserContext(raw: string): {
     wasModified,
     injectionDetected,
     detectedPatterns,
+    piiCategories,
   };
 }

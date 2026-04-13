@@ -10,6 +10,7 @@ import { extractFromUrl } from "./product-extractor";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
+import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
 import { createLogger } from "@/lib/logging/logger";
@@ -202,6 +203,7 @@ export async function runAgenticSearch(
       search_brief: 0,
       search: 0,
       screen: 0,
+      rerank: 0,
       extract: 0,
       quick_score: 0,
       deep_score: 0,
@@ -396,6 +398,64 @@ export async function runAgenticSearch(
       status: "completed",
       data: { screened: stats.totalAfterScreen },
     });
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 3b: Rerank screened candidates (cheap, title+snippet only)
+    //
+    // Opt-in via ENABLE_RERANK=1. When on, trims each (category, tier)
+    // bucket to the top-K most relevant URLs before the expensive extract
+    // phase, saving ~50–70% of extract tokens on large runs.
+    // Fails open — any error falls back to unreranked candidates.
+    // ═══════════════════════════════════════════════════════════
+    if (process.env.ENABLE_RERANK === "1") {
+      reportStep({ step: "Reranking candidates", status: "running" });
+      const rerankTopK = Number(process.env.RERANK_TOP_K || "10");
+      const rerankPromises: Promise<void>[] = [];
+
+      for (const [category, tierResults] of Object.entries(screenedByCategory)) {
+        const catBrief = brief.categories.find((c) => c.category === category);
+        const requirements = catBrief?.key_requirements || [];
+
+        for (const tier of PRICE_TIERS) {
+          const candidates = tierResults[tier];
+          if (candidates.length <= rerankTopK) continue;
+
+          rerankPromises.push(
+            (async () => {
+              const result = await rerankCandidates({
+                category,
+                tier,
+                requirements,
+                candidates,
+                topK: rerankTopK,
+              });
+              if (result.tokensUsed) {
+                tokenBudget.add(result.tokensUsed);
+                stats.tokensUsed += result.tokensUsed;
+                stats.tokensPerPhase.rerank += result.tokensUsed;
+              }
+              screenedByCategory[category][tier] = result.kept;
+              for (const dropped of result.dropped) {
+                tracer.traceFilter("rerank", "", dropped.url, "below rerank top-K");
+              }
+            })()
+          );
+        }
+      }
+
+      await Promise.all(rerankPromises);
+
+      // Recompute downstream stats so progress UI reflects the trim.
+      const afterRerank = Object.values(screenedByCategory).reduce(
+        (sum, tiers) => sum + Object.values(tiers).reduce((s, c) => s + c.length, 0),
+        0
+      );
+      reportStep({
+        step: "Reranking candidates",
+        status: "completed",
+        data: { afterRerank },
+      });
+    }
 
     // ═══════════════════════════════════════════════════════════
     // PHASE 4: Extract all screened URLs with URL Context

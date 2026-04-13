@@ -4,7 +4,13 @@
  * Emits JSON log lines with consistent fields for observability.
  * In production, pipe stdout to a log aggregator (Datadog, Axiom, etc.).
  * Locally, logs are human-readable JSON to the console.
+ *
+ * When a request is wrapped in `withTrace` (see lib/observability/tracing.ts),
+ * every log line automatically includes `traceId` and `spanId` so entries
+ * can be correlated across agents, LLM calls, and pipeline phases.
  */
+
+import { getCurrentTrace } from "@/lib/observability/tracing";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -47,10 +53,19 @@ function getMinLevel(): number {
 function emit(level: LogLevel, message: string, ctx?: LogContext): void {
   if (LOG_LEVELS[level] < getMinLevel()) return;
 
+  // Attach trace/span IDs when the call site runs inside a `withTrace`
+  // boundary. Outside a trace, getCurrentTrace() returns undefined and we
+  // emit the log untagged — existing call sites keep working unchanged.
+  const trace = getCurrentTrace();
+  const traceFields = trace
+    ? { traceId: trace.traceId, spanId: trace.spanId }
+    : undefined;
+
   const entry = {
     timestamp: new Date().toISOString(),
     level,
     message,
+    ...traceFields,
     ...ctx,
   };
 

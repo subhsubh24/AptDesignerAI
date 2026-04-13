@@ -9,6 +9,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
+import { semanticLookup, semanticStore } from "@/lib/ai/semantic-cache";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -202,18 +203,42 @@ ${JSON.stringify({
   "confidence": 0-10
 }`;
 
-    const interpretResponse = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
-      max_tokens: 2500,
-      temperature: 0.3,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "medium" },
-    });
+    // ─── Semantic cache lookup for Pass A (interpretation) ───────
+    // Users iterate on the same room with tiny phrasing changes (e.g.,
+    // "make it cozier" → "add more cozy") — we can skip the interpretation
+    // call when a near-match already exists for this room. Off by default;
+    // enable with ENABLE_SEMANTIC_CACHE=1. The cache is scoped per-room so
+    // nothing leaks across users.
+    const cacheNamespace = `refine-interpret:${room_id}`;
+    const cached = await semanticLookup<{
+      interpretation: Record<string, unknown>;
+      tokens: number;
+    }>(cacheNamespace, user_feedback);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-    const interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
-    const interpretTokens = (interpretResponse.usage?.input_tokens || 0) + (interpretResponse.usage?.output_tokens || 0);
+    let interpretation: Record<string, any>;
+    let interpretTokens: number;
+
+    if (cached) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cached shape matches LLM shape
+      interpretation = cached.value.interpretation as Record<string, any>;
+      interpretTokens = 0;
+    } else {
+      const interpretResponse = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
+        max_tokens: 2500,
+        temperature: 0.3,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "medium" },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+      interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
+      interpretTokens = (interpretResponse.usage?.input_tokens || 0) + (interpretResponse.usage?.output_tokens || 0);
+      // Fire-and-forget store so we don't block the hot path on an embed call.
+      void semanticStore(cacheNamespace, user_feedback, { interpretation, tokens: interpretTokens });
+    }
 
     console.log(`[area-analysis/refine] Interpretation pass complete. Confidence: ${interpretation.confidence}/10, changes: ${interpretation.changes_requested?.length || 0}`);
 

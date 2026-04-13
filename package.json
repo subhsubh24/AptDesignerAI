@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "eval": "RUN_EVALS=1 vitest run evals/__tests__",
     "check:determinism": "tsx scripts/check-determinism.ts"
   },
   "dependencies": {
