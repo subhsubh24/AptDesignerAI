@@ -861,6 +861,8 @@ export async function runAgenticSearch(
         userContext: ctx.userContext,
         replaceItems: ctx.replaceItems,
         whatShouldGo: ctx.whatShouldGo,
+        identifiedContext: ctx.identifiedContext,
+        diagnosis: ctx.diagnosis,
       }
     );
 

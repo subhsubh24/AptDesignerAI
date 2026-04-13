@@ -18,6 +18,7 @@ import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/pars
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores } from "@/lib/scoring/harmony-composite";
 
@@ -35,6 +36,12 @@ interface HarmonySharedContextInput {
     floorPlan?: Record<string, unknown>;
     userContext?: string;
     otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
+    /** Pre-formatted block describing verified existing furniture (from product-identifier pipeline). Ground-truth for scale/material/style checks. */
+    identifiedContext?: string;
+    /** Room diagnosis — what's working, what's not, spatial gaps. Keeps validation grounded in the same problem statement other agents saw. */
+    diagnosis?: DiagnosisData;
+    /** Structured design direction (palette/materials/style). Preferred over the loose string in the analysis block. */
+    designDirection?: DesignDirection;
   };
 }
 
@@ -44,6 +51,9 @@ function buildHarmonyContextBlocks({ context }: HarmonySharedContextInput): {
   otherRoomsCtx: string;
   floorPlanCtx: string;
   userCtx: string;
+  identifiedCtx: string;
+  diagnosisCtx: string;
+  directionCtx: string;
 } {
   const buildingCtx = context.buildingResearch
     ? `\nBuilding: ${JSON.stringify({
@@ -89,7 +99,41 @@ Spatial features: ${Array.isArray(context.floorPlan.notable_spatial_features) ? 
     userCtx += `\n\n⚠️ CRITICAL: If the user says they DON'T NEED something, any recommendation in that category MUST be flagged with drop=true and harmony_score=0. If they say to KEEP an item, any recommendation that replaces it MUST be flagged with drop=true.`;
   }
 
-  return { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx };
+  const identifiedCtx = context.identifiedContext
+    ? `\n\n${context.identifiedContext}\nIMPORTANT for validation: Treat these as GROUND-TRUTH verified pieces already in the room. New items must harmonize with their materials, colors, scale (within ~20% of canonical dimensions), and style. Flag any recommendation that would REPLACE an identified piece (same category) unless explicitly in the user's replace list.`
+    : "";
+
+  const diagnosisCtx = context.diagnosis
+    ? (() => {
+        const lines: string[] = [];
+        if (context.diagnosis!.what_is_working?.length) {
+          lines.push(`What's working: ${context.diagnosis!.what_is_working.join("; ")}`);
+        }
+        if (context.diagnosis!.what_is_not_working?.length) {
+          lines.push(`What's NOT working: ${context.diagnosis!.what_is_not_working.join("; ")}`);
+        }
+        const spatialGaps = (context.diagnosis as DiagnosisData & { spatial_gaps?: string[] }).spatial_gaps;
+        if (spatialGaps?.length) {
+          lines.push(`Dead zones / empty spaces: ${spatialGaps.join("; ")}`);
+        }
+        return lines.length
+          ? `\n\n## DIAGNOSIS (grounded problem statement from the diagnostician)\n${lines.join("\n")}\nThe product set must solve the "NOT working" problems AND activate any dead zones.`
+          : "";
+      })()
+    : "";
+
+  const directionCtx = context.designDirection
+    ? (() => {
+        const dd = context.designDirection!;
+        const lines: string[] = [];
+        if (dd.recommended_palette?.length) lines.push(`Target palette: ${dd.recommended_palette.join(", ")}`);
+        if (dd.recommended_materials?.length) lines.push(`Target materials: ${dd.recommended_materials.join(", ")}`);
+        if (dd.style_notes) lines.push(`Style direction: ${dd.style_notes}`);
+        return lines.length ? `\n\n## DESIGN DIRECTION (structured)\n${lines.join("\n")}` : "";
+      })()
+    : "";
+
+  return { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx, identifiedCtx, diagnosisCtx, directionCtx };
 }
 
 const log = createLogger("validation-agent");
@@ -191,6 +235,9 @@ export async function validateRoomHarmony(
     userContext?: string;
     otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
     mathScoresText?: string;
+    identifiedContext?: string;
+    diagnosis?: DiagnosisData;
+    designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -202,7 +249,7 @@ export async function validateRoomHarmony(
   const designDirection = (analysis.design_direction as string) || "";
   const spatialLayout = (analysis.spatial_layout as string) || "";
 
-  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx } =
+  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx, identifiedCtx, diagnosisCtx, directionCtx } =
     buildHarmonyContextBlocks({ context });
 
   // Shared image content — both passes see the room photos.
@@ -212,7 +259,7 @@ export async function validateRoomHarmony(
   }
 
   const sharedHeader = `## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userCtx}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userCtx}${identifiedCtx}${diagnosisCtx}${directionCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}
@@ -641,6 +688,9 @@ export async function performFinalAssessment(
     revisionHistory?: Record<string, Array<{ round: number; score: number; specs?: string; searchTitle?: string; rootCause?: string }>>;
     stabilizedItems?: string[];
     roundsCompleted: number;
+    identifiedContext?: string;
+    diagnosis?: DiagnosisData;
+    designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
   const model = selectModel("validation");
@@ -652,7 +702,7 @@ export async function performFinalAssessment(
   const designDirection = (analysis.design_direction as string) || "";
   const spatialLayout = (analysis.spatial_layout as string) || "";
 
-  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx } =
+  const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, identifiedCtx, diagnosisCtx, directionCtx } =
     buildHarmonyContextBlocks({ context });
   const userNotesShort = context.userContext ? `\n\n## USER NOTES\n"${context.userContext}"` : "";
 
@@ -683,7 +733,7 @@ This analysis went through ${context.roundsCompleted} iterative rounds. Here's w
   }
 
   const sharedHeader = `## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userNotesShort}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userNotesShort}${identifiedCtx}${diagnosisCtx}${directionCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}
@@ -1163,6 +1213,8 @@ export async function validateProductSet(
     userContext?: string;
     replaceItems?: string[];
     whatShouldGo?: string[];
+    identifiedContext?: string;
+    diagnosis?: DiagnosisData;
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
@@ -1228,7 +1280,15 @@ ${setMathSection}
 - Room type: ${roomContext.roomType}
 - Design direction: ${roomContext.designDirection}
 - Existing items to keep: ${roomContext.existingItems.length > 0 ? roomContext.existingItems.join(", ") : "none specified"}${roomContext.replaceItems?.length ? `\n- Items being replaced/removed: ${roomContext.replaceItems.join(", ")}` : ""}${roomContext.whatShouldGo?.length ? `\n- From diagnosis — items that should go: ${roomContext.whatShouldGo.join("; ")}` : ""}
-${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${roomContext.userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${roomContext.userContext}"\nIMPORTANT: Factor these notes into validation. If the user mentions constraints or preferences not visible in photos, consider them when checking product fit.` : ""}
+${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${roomContext.userContext ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${roomContext.userContext}"\nIMPORTANT: Factor these notes into validation. If the user mentions constraints or preferences not visible in photos, consider them when checking product fit.` : ""}${roomContext.identifiedContext ? `\n\n${roomContext.identifiedContext}\nIMPORTANT: These are GROUND-TRUTH verified pieces already in the room. Products in the validation set must:\n- Harmonize with their materials, colors, and style\n- Respect their canonical dimensions for scale math (within ~20%)\n- NOT propose a replacement for any identified piece (same category) unless that piece is in replaceItems\nFlag any violation in product_flags with specific callouts in clashes_with.` : ""}${roomContext.diagnosis ? (() => {
+  const d = roomContext.diagnosis!;
+  const lines: string[] = [];
+  if (d.what_is_working?.length) lines.push(`Working: ${d.what_is_working.join("; ")}`);
+  if (d.what_is_not_working?.length) lines.push(`Not working: ${d.what_is_not_working.join("; ")}`);
+  const gaps = (d as DiagnosisData & { spatial_gaps?: string[] }).spatial_gaps;
+  if (gaps?.length) lines.push(`Dead zones: ${gaps.join("; ")}`);
+  return lines.length ? `\n\n## DIAGNOSIS (problem statement this set must solve)\n${lines.join("\n")}\nThe set must actually solve the "Not working" items and activate dead zones. Penalize sets that leave these unaddressed.` : "";
+})() : ""}
 
 ## PRODUCTS TO VALIDATE
 ${/* eslint-disable-next-line @typescript-eslint/no-unused-vars */

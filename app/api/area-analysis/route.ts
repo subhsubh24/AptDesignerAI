@@ -629,6 +629,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       floorPlan,
       userContext: room.user_context || undefined,
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+      identifiedContext: identifiedPiecesBlock || undefined,
     };
 
     // Target + round budget tuned after observing the AI converges at 8.5-9.2
