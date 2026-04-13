@@ -26,6 +26,7 @@ import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import { z } from "zod";
 import type { SearchCandidate } from "./shopping-researcher";
+import type { AIContentBlock } from "@/lib/ai/provider";
 
 const log = createLogger("reranker");
 
@@ -59,6 +60,11 @@ export interface RerankParams {
   topK?: number;
   /** Minimum score to keep even if under topK. Defaults to 0.25. */
   minScore?: number;
+  /**
+   * Room photos to attach as visual grounding so the reranker never
+   * forgets the physical room it is scoring against. Up to 3 are used.
+   */
+  roomImageUrls?: string[];
 }
 
 /**
@@ -74,6 +80,7 @@ export async function rerankCandidates({
   candidates,
   topK = 10,
   minScore = 0.25,
+  roomImageUrls,
 }: RerankParams): Promise<RerankResult> {
   if (candidates.length === 0) {
     return { kept: [], dropped: [], tokensUsed: 0 };
@@ -108,13 +115,30 @@ ${candidateBlock}
 Return JSON: { "scores": [{ "url": "...", "score": 0.0–1.0, "reason": "short" }, ...] }
 Be harsh — use the full 0–1 range. 0.9+ only for clear wins. Most items should be 0.3–0.7.`;
 
+  // Attach up to 3 room photos so the reranker scores candidates with the
+  // physical room in view (never forget what we're furnishing).
+  let content: string | AIContentBlock[] = prompt;
+  if (roomImageUrls && roomImageUrls.length > 0) {
+    const blocks: AIContentBlock[] = [
+      {
+        type: "text",
+        text: "REFERENCE PHOTOS OF THE ACTUAL ROOM being furnished (match each candidate's apparent style, scale, and palette to these):",
+      },
+    ];
+    for (const url of roomImageUrls.slice(0, 3)) {
+      blocks.push({ type: "image", source: { type: "url", url } });
+    }
+    blocks.push({ type: "text", text: prompt });
+    content = blocks;
+  }
+
   try {
     const response = await withRetry(
       () =>
         geminiProvider.chat({
           model,
           system: "You are a concise product-listing relevance scorer. Output strict JSON only.",
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content }],
           max_tokens: 4000,
           seed: DETERMINISTIC_SEED,
           responseSchema: RERANK_GEMINI_SCHEMA,

@@ -15,8 +15,17 @@ export async function POST(request: Request) {
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!url && !image_url) return NextResponse.json({ error: "url or image_url required" }, { status: 400 });
 
-  // Fetch room → project for design context
-  const { data: room } = await supabase.from("rooms").select("project_id").eq("id", room_id).single();
+  // Fetch room → project for design context. Pull room photos so the
+  // extractor always has the target room as visual context (never forgets
+  // what we're furnishing).
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("project_id, room_images(*)")
+    .eq("id", room_id)
+    .single();
+  const roomImageUrls: string[] = (
+    (room?.room_images as Array<{ image_url: string }> | undefined) || []
+  ).map((img) => img.image_url);
   const { data: project } = room?.project_id
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
     : { data: null };
@@ -31,9 +40,9 @@ export async function POST(request: Request) {
 
   let result;
   if (url) {
-    result = await extractFromUrl(url, designProfile);
+    result = await extractFromUrl(url, designProfile, roomImageUrls);
   } else {
-    result = await extractFromImage(image_url, designProfile);
+    result = await extractFromImage(image_url, designProfile, roomImageUrls);
   }
 
   if (!result.success || !result.data) {

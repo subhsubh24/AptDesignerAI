@@ -301,7 +301,11 @@ function parseAndValidateExtraction(raw: string): ExtractedProduct {
  *  2. If that 400s, retry with urlContext once (transient errors are common)
  *  3. If still failing, fall back to plain text prompt without urlContext
  */
-export async function extractFromUrl(url: string, designProfile?: DynamicDesignProfile): Promise<AgentResult<ExtractedProduct>> {
+export async function extractFromUrl(
+  url: string,
+  designProfile?: DynamicDesignProfile,
+  roomImageUrls?: string[],
+): Promise<AgentResult<ExtractedProduct>> {
   // Check cache first
   const cached = getCachedExtraction(url);
   if (cached) {
@@ -314,12 +318,32 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
 
   const userContent = `${extractionPrompt}\n\nExtract product information from this URL: ${url}\n\nVisit the page, read all the content, examine all product images carefully, and check for available color/material variants.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
+  // Build message content. When room photos are available, include them as
+  // visual grounding so fields like visual_style_tags are judged against
+  // the actual room — not a generic ideal. Extracted product facts (title,
+  // price, dimensions) remain URL-derived, so the URL-keyed cache is still
+  // valid.
+  const buildContent = (text: string): string | AIContentBlock[] => {
+    if (!roomImageUrls || roomImageUrls.length === 0) return text;
+    const blocks: AIContentBlock[] = [
+      {
+        type: "text",
+        text: "REFERENCE PHOTOS OF THE ACTUAL ROOM the product is being considered for (use these to inform visual_style_tags and any style-judgment fields):",
+      },
+    ];
+    for (const u of roomImageUrls.slice(0, 3)) {
+      blocks.push({ type: "image", source: { type: "url", url: u } });
+    }
+    blocks.push({ type: "text", text });
+    return blocks;
+  };
+
   // Attempt 1: with urlContext tool
   try {
     const response = await geminiProvider.chat({
       model,
       system,
-      messages: [{ role: "user", content: userContent }],
+      messages: [{ role: "user", content: buildContent(userContent) }],
       max_tokens: 3000,
       seed: DETERMINISTIC_SEED,
       tools: [{ urlContext: {} }],
@@ -344,7 +368,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content: userContent }],
+        messages: [{ role: "user", content: buildContent(userContent) }],
         max_tokens: 3000,
         seed: DETERMINISTIC_SEED,
         tools: [{ urlContext: {} }],
@@ -372,7 +396,7 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
         const response = await geminiProvider.chat({
           model,
           system,
-          messages: [{ role: "user", content: fallbackContent }],
+          messages: [{ role: "user", content: buildContent(fallbackContent) }],
           max_tokens: 3000,
           seed: DETERMINISTIC_SEED,
         });
@@ -402,21 +426,37 @@ export async function extractFromUrl(url: string, designProfile?: DynamicDesignP
 /**
  * Extract product info from an image using Gemini vision.
  */
-export async function extractFromImage(imageUrl: string, designProfile?: DynamicDesignProfile): Promise<AgentResult<ExtractedProduct>> {
+export async function extractFromImage(
+  imageUrl: string,
+  designProfile?: DynamicDesignProfile,
+  roomImageUrls?: string[],
+): Promise<AgentResult<ExtractedProduct>> {
   const model = selectModel("extraction");
   const system = getSystemPrompt(designProfile);
   const extractionPrompt = getExtractionPrompt();
 
-  const content: AIContentBlock[] = [
-    {
-      type: "image",
-      source: { type: "url", url: imageUrl },
-    },
+  const content: AIContentBlock[] = [];
+
+  // Attach room photos first (if any) so style-judgment fields like
+  // visual_style_tags can reference the actual room context.
+  if (roomImageUrls && roomImageUrls.length > 0) {
+    content.push({
+      type: "text",
+      text: "REFERENCE PHOTOS OF THE ACTUAL ROOM the product is being considered for:",
+    });
+    for (const u of roomImageUrls.slice(0, 3)) {
+      content.push({ type: "image", source: { type: "url", url: u } });
+    }
+    content.push({ type: "text", text: "PRODUCT IMAGE to extract from:" });
+  }
+
+  content.push(
+    { type: "image", source: { type: "url", url: imageUrl } },
     {
       type: "text",
-      text: `${extractionPrompt}\n\nAnalyze the product shown in this image. Extract all available information from visual cues — describe what you see in detail (color, material, style, texture, proportions).`,
+      text: `${extractionPrompt}\n\nAnalyze the product shown in the product image above. Extract all available information from visual cues — describe what you see in detail (color, material, style, texture, proportions).`,
     },
-  ];
+  );
 
   try {
     const response = await geminiProvider.chat({

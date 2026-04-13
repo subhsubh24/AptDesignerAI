@@ -93,6 +93,7 @@ export async function generateMockupPrompt(
   designDirection?: string,
   buildingResearch?: Record<string, unknown>,
   mockupContext?: MockupContext,
+  roomImageUrls?: string[],
 ): Promise<AgentResult<MockupPromptResult>> {
   const model = selectModel("mockup_prompt");
   const system = getSystemPrompt();
@@ -113,11 +114,29 @@ export async function generateMockupPrompt(
 
   const prompt = getMockupPrompt(roomType, diagnosisSummary, productDescriptions, existingItems, designDirection, buildingResearch, mockupContext);
 
+  // Attach room photos so the prompt-writer describes THIS room (walls,
+  // floor, windows, light) rather than a generic version — the downstream
+  // image generator will see the same photos and must render the same room.
+  let content: string | AIContentBlock[] = prompt;
+  if (roomImageUrls && roomImageUrls.length > 0) {
+    const blocks: AIContentBlock[] = [
+      {
+        type: "text",
+        text: "REFERENCE PHOTOS OF THE ACTUAL ROOM — the prompt you write will be fed to an image generator that MUST render this exact room. Describe the wall color, floor, windows, trim, ceiling, and light direction precisely from these photos so the generator matches them:",
+      },
+    ];
+    for (const url of roomImageUrls.slice(0, 4)) {
+      blocks.push({ type: "image", source: { type: "url", url } });
+    }
+    blocks.push({ type: "text", text: prompt });
+    content = blocks;
+  }
+
   try {
     const response = await geminiProvider.chat({
       model,
       system,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content }],
       max_tokens: 2000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",

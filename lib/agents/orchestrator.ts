@@ -232,7 +232,7 @@ export async function runAgenticSearch(
       ctx.keepItems, ctx.replaceItems, ctx.spatialLayout, ctx.roomSummary,
       ctx.userContext, ctx.diagnosis as Record<string, unknown> | undefined,
       ctx.lightingConditions, ctx.windowDoorPositions, ctx.outletPositions,
-      ctx.identifiedContext
+      ctx.identifiedContext, ctx.imageUrls
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
@@ -285,7 +285,7 @@ export async function runAgenticSearch(
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
         tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
-        const result = await searchProducts(task.query, 10, task.tier, task.category);
+        const result = await searchProducts(task.query, 10, task.tier, task.category, ctx.imageUrls);
         const candidates = result.success ? (result.data || []) : [];
         if (result.tokensUsed) {
           tokenBudget.add(result.tokensUsed);
@@ -362,7 +362,7 @@ export async function runAgenticSearch(
 
         screenPromises.push(
           (async () => {
-            const screenResult = await quickScreenCandidates(candidates, category, tier, requirements, ctx.designDirection);
+            const screenResult = await quickScreenCandidates(candidates, category, tier, requirements, ctx.designDirection, ctx.imageUrls);
             if (screenResult.tokensUsed) {
               tokenBudget.add(screenResult.tokensUsed);
               stats.tokensUsed += screenResult.tokensUsed;
@@ -428,6 +428,7 @@ export async function runAgenticSearch(
                 requirements,
                 candidates,
                 topK: rerankTopK,
+                roomImageUrls: ctx.imageUrls,
               });
               if (result.tokensUsed) {
                 tokenBudget.add(result.tokensUsed);
@@ -482,7 +483,7 @@ export async function runAgenticSearch(
           extractPromises.push(
             extractLimit(async () => {
               try {
-                const extractResult = await extractFromUrl(candidate.url, ctx.designProfile);
+                const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
                 if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; stats.tokensPerPhase.extract += extractResult.tokensUsed; }
                 if (!extractResult.success || !extractResult.data) {
                   tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
@@ -1061,7 +1062,7 @@ export async function runAgenticSearch(
         backfillSearchLimit(async () => {
           const styleHint = ctx.designDirection?.style_notes || "modern apartment";
           const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price 2025`;
-          const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category);
+          const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 
           const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));
@@ -1070,7 +1071,7 @@ export async function runAgenticSearch(
           // Extract top 5 backfill candidates
           for (const candidate of deduped.slice(0, 5)) {
             try {
-              const extractResult = await extractFromUrl(candidate.url, ctx.designProfile);
+              const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
               if (!extractResult.success || !extractResult.data) continue;
               if (!extractResult.data.title && !extractResult.data.price) continue;
 

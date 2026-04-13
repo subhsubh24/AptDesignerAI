@@ -417,7 +417,7 @@ RULES:
     iterationNotes: iteration_notes || undefined,
   };
 
-  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, stdExistingItems, designDir, buildingResearch, mockupCtx);
+  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, stdExistingItems, designDir, buildingResearch, mockupCtx, roomImageUrls);
 
   if (!promptResult.success || !promptResult.data) {
     await supabase

@@ -12,6 +12,36 @@ import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DesignDirection } from "@/lib/types/database";
+import type { AIContentBlock } from "@/lib/ai/provider";
+
+/**
+ * Max number of room photos to attach to researcher/reranker/extractor calls.
+ * These are auxiliary text-heavy agents where the images are context
+ * reminders ("never forget the room"); we keep the count modest so payloads
+ * stay small. The real image-heavy scoring happens in fit-scorer / bundle-
+ * optimizer / validation-agent, which already pass up to 2–4 images.
+ */
+const ROOM_IMAGES_CONTEXT_LIMIT = 3;
+
+/**
+ * Helper: prepend the room photos (+ a short text preamble) to a text
+ * prompt so every LLM call carries the physical room as grounding context.
+ * Returns a content-block array suitable for `messages[].content`.
+ */
+function withRoomImages(prompt: string, roomImageUrls?: string[]): AIContentBlock[] | string {
+  if (!roomImageUrls || roomImageUrls.length === 0) return prompt;
+  const content: AIContentBlock[] = [
+    {
+      type: "text",
+      text: "REFERENCE PHOTOS OF THE ACTUAL ROOM (ground every decision in these — they are the source of truth for style, scale, lighting, and what already exists):",
+    },
+  ];
+  for (const url of roomImageUrls.slice(0, ROOM_IMAGES_CONTEXT_LIMIT)) {
+    content.push({ type: "image", source: { type: "url", url } });
+  }
+  content.push({ type: "text", text: prompt });
+  return content;
+}
 
 const log = createLogger("shopping-researcher");
 
@@ -292,7 +322,8 @@ export async function generateSearchBrief(
   lightingConditions?: string,
   windowDoorPositions?: string,
   outletPositions?: string,
-  identifiedContext?: string
+  identifiedContext?: string,
+  roomImageUrls?: string[]
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
   const system = getSystemPrompt(designProfile);
@@ -312,7 +343,7 @@ export async function generateSearchBrief(
         const response = await geminiProvider.chat({
           model,
           system,
-          messages: [{ role: "user", content: prompt + retryHint }],
+          messages: [{ role: "user", content: withRoomImages(prompt + retryHint, roomImageUrls) }],
           max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
@@ -371,7 +402,8 @@ export async function searchProducts(
   query: string,
   maxResults: number = 10,
   tier?: PriceTier,
-  category?: string
+  category?: string,
+  roomImageUrls?: string[]
 ): Promise<AgentResult<SearchCandidate[]>> {
   const domains = tier
     ? TIER_DOMAINS[tier]
@@ -416,7 +448,7 @@ Return ONLY a valid JSON object — no text before or after:
       response = await geminiProvider.chat({
         model: selectModel("search"),
         system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        messages: [{ role: "user", content: searchPrompt }],
+        messages: [{ role: "user", content: withRoomImages(searchPrompt, roomImageUrls) }],
         max_tokens: 2000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
@@ -432,7 +464,7 @@ Return ONLY a valid JSON object — no text before or after:
       response = await geminiProvider.chat({
         model: selectModel("search"),
         system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        messages: [{ role: "user", content: searchPrompt }],
+        messages: [{ role: "user", content: withRoomImages(searchPrompt, roomImageUrls) }],
         max_tokens: 2000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
@@ -527,7 +559,8 @@ export async function quickScreenCandidates(
   category: string,
   tier: PriceTier,
   requirements: string[],
-  designDirection?: DesignDirection
+  designDirection?: DesignDirection,
+  roomImageUrls?: string[]
 ): Promise<AgentResult<SearchCandidate[]>> {
   if (candidates.length === 0) {
     return { success: true, data: [] };
@@ -585,7 +618,7 @@ Return JSON:
         const response = await geminiProvider.chat({
           model: selectModel("quick_screen"),
           system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category. Return ONLY the JSON ratings array.",
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: withRoomImages(prompt, roomImageUrls) }],
           max_tokens: 2000,
           seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
