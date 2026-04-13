@@ -224,6 +224,12 @@ export interface DiagnosisData {
   spatial_gaps: string[];
   lighting_issues: string[];
   clutter_editing_issues: string[];
+  /**
+   * Populated by the furniture product identification pipeline when
+   * IDENTIFY_PRODUCTS=1 is set. Absence = feature off or pre-feature row;
+   * downstream readers MUST treat it as optional.
+   */
+  identified_products?: IdentifiedProduct[];
 }
 
 export interface DesignDirection {
@@ -267,4 +273,93 @@ export interface RoomVibe {
   style_keywords: string[];
   color_story: string;
   mood: string;
+}
+
+// ─── Identified Products (inline in room_diagnoses.diagnosis_json) ────
+
+/**
+ * Bounding box in normalized coordinates (0..1) relative to source image.
+ */
+export interface IdentifiedProductBoundingBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface IdentifiedProductDimensions {
+  width_in?: number;
+  depth_in?: number;
+  height_in?: number;
+}
+
+export interface IdentifiedProductPriceRange {
+  min: number;
+  max: number;
+  currency: string;
+}
+
+export interface IdentifiedProductRetrievalPrior {
+  brand: string;
+  model: string;
+  similarity: number;
+}
+
+/**
+ * Enriched identified product — exact brand/model recognized from room photos,
+ * verified via grounded web search, and enriched with canonical product data
+ * (dimensions, materials, colors, price). Stored inline in
+ * `room_diagnoses.diagnosis_json.identified_products[]`.
+ *
+ * Downstream callers MUST read with:
+ *   (diagnosis.identified_products ?? [])
+ *     .filter(p => p.verified && p.user_confirmed !== false)
+ * so absence is equivalent to the pre-feature behavior.
+ */
+export interface IdentifiedProduct {
+  brand: string;
+  model: string;
+  variant?: string | null;
+  category: string;
+  /** 0..1 post-verification confidence. */
+  confidence: number;
+  /** Passed grounded match check (match_score >= 0.75). */
+  verified: boolean;
+  /** null = not yet asked. Set by user confirmation endpoint. */
+  user_confirmed?: boolean | null;
+  canonical_url?: string | null;
+  source_urls?: string[];
+  dimensions?: IdentifiedProductDimensions | null;
+  materials?: string[];
+  colors?: string[];
+  price_range?: IdentifiedProductPriceRange | null;
+  image_url?: string | null;
+  evidence?: string;
+  distinguishing_features?: string[];
+  retrieval_priors?: IdentifiedProductRetrievalPrior[];
+  /** "model" = produced by identifier; "user" = produced by Different-Model correction. */
+  correction_source?: "model" | "user";
+  /** True once the confirmed crop's embedding has been written back to the index. */
+  embedding_written_back?: boolean;
+  bounding_box?: IdentifiedProductBoundingBox | null;
+  /** URL of the room photo the crop came from — used for self-learning write-back. */
+  source_image_url?: string | null;
+}
+
+/**
+ * Row stored in the in-memory / pgvector `product_image_embeddings` table.
+ * Populated by scripts/seed-product-embeddings.ts and by the self-learning
+ * loop after user confirmations.
+ */
+export interface ProductImageEmbedding {
+  id: string;
+  brand: string;
+  model: string;
+  variant: string | null;
+  image_url: string;
+  /** 1408-dim for Gemini multimodalembedding@001 (other models may differ). */
+  embedding: number[];
+  /** "catalog" seed, "user_confirmed" self-learning write-back, etc. */
+  source: string;
+  created_at: string;
 }

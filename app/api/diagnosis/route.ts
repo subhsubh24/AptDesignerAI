@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
 import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
+import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
+import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext } from "@/lib/agents/types";
+import type { DiagnosisData } from "@/lib/types/database";
+
+const log = createLogger("diagnosis-route");
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -95,12 +100,43 @@ export async function POST(request: Request) {
   // Use the patched version (violations auto-corrected)
   const diagnosisData = validation.patched;
 
+  // ─── Product identification (best-effort, inline on diagnosis_json) ──
+  // Off by default; opt in with IDENTIFY_PRODUCTS=1. Failures here never
+  // block diagnosis saving — we just omit the field.
+  let identifiedProductsTokens = 0;
+  let diagnosisJsonToSave: DiagnosisData = diagnosisData.diagnosis;
+  if (process.env.IDENTIFY_PRODUCTS === "1") {
+    try {
+      const identResult = await runIdentifiedProductsPipeline({
+        supabase,
+        imageUrls,
+      });
+      if (identResult.success && identResult.data) {
+        diagnosisJsonToSave = {
+          ...diagnosisData.diagnosis,
+          identified_products: identResult.data.identified_products,
+        };
+        identifiedProductsTokens = identResult.tokensUsed ?? 0;
+      } else {
+        log.warn("identified-products pipeline returned no data", {
+          room_id,
+          error: identResult.error,
+        });
+      }
+    } catch (err) {
+      log.warn("identified-products pipeline threw — continuing without it", {
+        room_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Save diagnosis
   const { data: diagnosis, error: saveError } = await supabase
     .from("room_diagnoses")
     .insert({
       room_id,
-      diagnosis_json: diagnosisData.diagnosis,
+      diagnosis_json: diagnosisJsonToSave,
       design_direction_json: diagnosisData.design_direction,
       missing_categories: diagnosisData.missing_categories,
       action_list: diagnosisData.action_list,
@@ -129,7 +165,7 @@ export async function POST(request: Request) {
         wasModified: validation.wasModified,
       },
     },
-    tokens_used: result.tokensUsed,
+    tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens,
   });
 
   return NextResponse.json({

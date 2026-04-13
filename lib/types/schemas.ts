@@ -445,3 +445,115 @@ export const SearchProductEntrySchema = z.object({
 export const SearchProductsResponseSchema = z.object({
   products: z.array(SearchProductEntrySchema).default([]),
 });
+
+// ─── Identified Products (furniture brand/model recognition) ──
+
+/**
+ * Bounding box in normalized coordinates (0..1) relative to the source image.
+ * Origin at top-left. Used by the furniture cropper and retained on the
+ * identified-product entry so the frontend can render crops for confirmation.
+ */
+export const BoundingBoxSchema = z.object({
+  x: z.coerce.number().min(0).max(1),
+  y: z.coerce.number().min(0).max(1),
+  w: z.coerce.number().min(0).max(1),
+  h: z.coerce.number().min(0).max(1),
+});
+
+/** Furniture cropper output — one item per detected piece per room photo. */
+export const FurnitureCropsResponseSchema = z.object({
+  crops: z.array(z.object({
+    label: z.string().default(""),  // rough category label from vision ("sofa", "chair")
+    box: BoundingBoxSchema,
+  })).default([]),
+});
+
+/** Retrieval prior from pgvector/in-memory ANN search. */
+export const RetrievalPriorSchema = z.object({
+  brand: z.string(),
+  model: z.string(),
+  similarity: z.coerce.number().min(0).max(1),
+});
+
+/**
+ * Raw identifier output. Empty `candidates` array is the correct answer
+ * in most rooms — the identifier is instructed to omit anything uncertain.
+ */
+export const IdentifiedProductCandidateSchema = z.object({
+  brand: z.string().min(1),
+  model: z.string().min(1),
+  variant: z.string().nullable().optional(),
+  category: z.string().default("unknown"),
+  confidence: z.coerce.number().min(0).max(1),
+  evidence: z.string().default(""),
+  distinguishing_features: z.array(z.string()).default([]),
+  bounding_box: BoundingBoxSchema.nullable().optional(),
+});
+
+export const IdentifierResponseSchema = z.object({
+  candidates: z.array(IdentifiedProductCandidateSchema).default([]),
+});
+
+/** Verifier output — post grounded match check. */
+export const IdentifiedProductVerifiedSchema = IdentifiedProductCandidateSchema.extend({
+  verified: z.boolean(),
+  match_score: z.coerce.number().min(0).max(1),
+  mismatch_notes: z.array(z.string()).default([]),
+  canonical_url: z.string().nullable().optional(),
+  source_urls: z.array(z.string()).default([]),
+});
+
+export const VerifierResponseSchema = z.object({
+  verified: z.boolean(),
+  match_score: z.coerce.number().min(0).max(1),
+  canonical_url: z.string().nullable().optional(),
+  mismatch_notes: z.array(z.string()).default([]),
+  source_urls: z.array(z.string()).default([]),
+});
+
+/**
+ * Final enriched entry stored inline in room_diagnoses.diagnosis_json.
+ * `user_confirmed` starts as null (not asked); the frontend confirmation pill
+ * patches it to true/false via the confirm endpoint.
+ */
+export const IdentifiedProductDimensionsSchema = z.object({
+  width_in: z.coerce.number().optional(),
+  depth_in: z.coerce.number().optional(),
+  height_in: z.coerce.number().optional(),
+}).nullable().optional();
+
+export const IdentifiedProductPriceRangeSchema = z.object({
+  min: z.coerce.number(),
+  max: z.coerce.number(),
+  currency: z.string().default("USD"),
+}).nullable().optional();
+
+export const IdentifiedProductEnrichedSchema = z.object({
+  brand: z.string(),
+  model: z.string(),
+  variant: z.string().nullable().optional(),
+  category: z.string().default("unknown"),
+  confidence: z.coerce.number().min(0).max(1),
+  verified: z.boolean(),
+  user_confirmed: z.boolean().nullable().optional(),
+  canonical_url: z.string().nullable().optional(),
+  source_urls: z.array(z.string()).default([]),
+  dimensions: IdentifiedProductDimensionsSchema,
+  materials: z.array(z.string()).default([]),
+  colors: z.array(z.string()).default([]),
+  price_range: IdentifiedProductPriceRangeSchema,
+  image_url: z.string().nullable().optional(),
+  evidence: z.string().default(""),
+  distinguishing_features: z.array(z.string()).default([]),
+  retrieval_priors: z.array(RetrievalPriorSchema).default([]),
+  correction_source: z.enum(["model", "user"]).default("model"),
+  embedding_written_back: z.boolean().default(false),
+  bounding_box: BoundingBoxSchema.nullable().optional(),
+  source_image_url: z.string().nullable().optional(),
+});
+
+export type IdentifiedProductCandidate = z.infer<typeof IdentifiedProductCandidateSchema>;
+export type IdentifiedProductVerified = z.infer<typeof IdentifiedProductVerifiedSchema>;
+export type IdentifiedProductEnriched = z.infer<typeof IdentifiedProductEnrichedSchema>;
+export type RetrievalPrior = z.infer<typeof RetrievalPriorSchema>;
+export type BoundingBox = z.infer<typeof BoundingBoxSchema>;

@@ -30,6 +30,10 @@ const tables: Record<string, Row[]> = {
   bundle_evaluations: [],
   mockup_jobs: [],
   search_sessions: [],
+  // Vector index for the furniture product identification feature.
+  // Seeded from catalog images + extended by the self-learning loop when
+  // a user confirms an identified product. Rows: ProductImageEmbedding.
+  product_image_embeddings: [],
 };
 
 // Fake user for auth bypass
