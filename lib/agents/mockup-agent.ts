@@ -83,6 +83,104 @@ export interface MockupContext {
 }
 
 /**
+ * Inputs for {@link buildMockupContext}. Lets callers pass the raw diagnosis
+ * rows + project + room record without having to hand-extract every field
+ * the MockupContext needs.
+ */
+export interface BuildMockupContextInput {
+  roomType: string;
+  /** `room_diagnoses.diagnosis_json` row — any shape; the helper defensively
+   * extracts known fields with fallbacks for legacy key names. */
+  diagnosisJson?: Record<string, unknown> | null;
+  /** `room_diagnoses.design_direction_json` row — palette/materials/textures/
+   * style_notes live here in the current schema. */
+  designDirectionJson?: Record<string, unknown> | null;
+  /** `projects.building_research` — architectural grounding (finishes, windows). */
+  buildingResearch?: Record<string, unknown>;
+  priorities?: string[];
+  userContext?: string;
+  iterationNotes?: string;
+}
+
+/**
+ * Assemble a {@link MockupContext} from the raw diagnosis/design-direction
+ * rows + building research + room metadata. Centralizes all the defensive
+ * key-name fallbacks (e.g. `what_works` vs `what_is_working`, `style_notes`
+ * vs `direction`) so individual callers — API routes, future orchestrator
+ * wiring, batch jobs — don't each re-implement the same extraction.
+ *
+ * Returns a fully populated MockupContext; every optional field is only set
+ * when the source data actually contains a usable value, so downstream prompt
+ * builders stay byte-identical to their pre-feature shape when context is sparse.
+ */
+export function buildMockupContext(input: BuildMockupContextInput): MockupContext {
+  const djson = input.diagnosisJson ?? undefined;
+  const ddJson = input.designDirectionJson ?? undefined;
+
+  const diagnosisSummary =
+    (djson?.current_vibe_summary as string) ||
+    (djson?.summary as string) ||
+    `Modern ${input.roomType} room`;
+
+  const designDirection =
+    (ddJson?.style_notes as string) ||
+    (ddJson?.direction as string) ||
+    (djson?.design_direction as string) ||
+    undefined;
+
+  const existingItems: string[] =
+    (djson?.what_works as string[]) ||
+    (djson?.what_is_working as string[]) ||
+    [];
+
+  const palette =
+    (ddJson?.recommended_palette as string[]) ||
+    (djson?.recommended_palette as string[]) ||
+    [];
+  const materials =
+    (ddJson?.recommended_materials as string[]) ||
+    (djson?.recommended_materials as string[]) ||
+    [];
+  const textures =
+    (ddJson?.recommended_textures as string[]) ||
+    (djson?.recommended_textures as string[]) ||
+    [];
+
+  const spatialLayout = (djson?.spatial_layout as string) || undefined;
+  const lightingConditions = (djson?.lighting_conditions as string) || undefined;
+  const windowDoorPositions = (djson?.window_door_positions as string) || undefined;
+
+  // Build placement map from what_it_needs (category → placement description).
+  const placementMap: Record<string, string> = {};
+  const whatItNeeds = djson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
+  if (whatItNeeds) {
+    for (const item of whatItNeeds) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
+
+  return {
+    roomType: input.roomType,
+    diagnosisSummary,
+    existingItems: existingItems.length > 0 ? existingItems : undefined,
+    designDirection,
+    buildingResearch: input.buildingResearch,
+    palette: palette.length > 0 ? palette : undefined,
+    materials: materials.length > 0 ? materials : undefined,
+    textures: textures.length > 0 ? textures : undefined,
+    spatialLayout,
+    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+    lightingConditions,
+    windowDoorPositions,
+    priorities: input.priorities && input.priorities.length > 0 ? input.priorities : undefined,
+    userContext: input.userContext || undefined,
+    iterationNotes: input.iterationNotes || undefined,
+  };
+}
+
+/**
  * Generate an image generation prompt from room context + selected products.
  */
 export async function generateMockupPrompt(

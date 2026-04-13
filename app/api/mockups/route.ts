@@ -3,8 +3,8 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
-import { generateMockupPrompt, generateMockupImage } from "@/lib/agents/mockup-agent";
-import type { MockupContext, MockupImageOptions } from "@/lib/agents/mockup-agent";
+import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
+import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -381,43 +381,30 @@ RULES:
     input_json: { bundle_id, product_count: products.length },
   });
 
-  // Generate mockup prompt — extract diagnosis fields with fallbacks
-  const diagnosisSummary = (djson?.current_vibe_summary as string)
-    || (djson?.summary as string)
-    || "Modern apartment room";
-
-  // Extract existing items to keep from diagnosis
-  const stdExistingItems: string[] =
-    (djson?.what_works as string[])
-    || (djson?.what_is_working as string[])
-    || [];
-
-  // Extract design direction
-  const designDir = (ddJson?.style_notes as string)
-    || (ddJson?.direction as string)
-    || (djson?.design_direction as string)
-    || "";
-
-  // Build full mockup context with all available data
-  const mockupCtx: MockupContext = {
+  // Assemble full mockup context from the raw diagnosis rows. The helper
+  // centralizes the key-name fallbacks (current_vibe_summary vs summary,
+  // what_works vs what_is_working, style_notes vs direction, etc.) so this
+  // route stays in sync with any schema drift without re-implementing them.
+  const mockupCtx = buildMockupContext({
     roomType: room.room_type,
-    diagnosisSummary,
-    existingItems: stdExistingItems,
-    designDirection: designDir,
+    diagnosisJson: djson,
+    designDirectionJson: ddJson,
     buildingResearch,
-    palette,
-    materials,
-    textures,
-    spatialLayout,
-    placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
-    lightingConditions,
-    windowDoorPositions,
-    priorities: room.priorities || undefined,
-    userContext: room.user_context || undefined,
-    iterationNotes: iteration_notes || undefined,
-  };
+    priorities: room.priorities,
+    userContext: room.user_context,
+    iterationNotes: iteration_notes,
+  });
 
-  const promptResult = await generateMockupPrompt(room.room_type, diagnosisSummary, products, stdExistingItems, designDir, buildingResearch, mockupCtx, roomImageUrls);
+  const promptResult = await generateMockupPrompt(
+    room.room_type,
+    mockupCtx.diagnosisSummary,
+    products,
+    mockupCtx.existingItems,
+    mockupCtx.designDirection,
+    buildingResearch,
+    mockupCtx,
+    roomImageUrls,
+  );
 
   if (!promptResult.success || !promptResult.data) {
     await supabase
