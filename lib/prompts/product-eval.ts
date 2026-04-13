@@ -101,9 +101,14 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
   });
 
   if (otherRoomsContext) {
+    // Priority 2 — cross-room coherence is a core fit-scoring signal (a sofa
+    // that clashes with adjacent-room palettes fails apartment_fit_note). We
+    // previously had this at 4, which meant it was the first section to get
+    // truncated on long contexts even though it's as load-bearing as the
+    // design direction or diagnosis.
     sections.push({
       key: "other_rooms",
-      priority: 4,
+      priority: 2,
       content: `## OTHER ROOMS IN APARTMENT (for cross-room coherence)\n${otherRoomsContext}`,
     });
   }
