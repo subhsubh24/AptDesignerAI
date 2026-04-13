@@ -45,6 +45,12 @@ export interface IdentifierPromptArgs {
   priors: RetrievalPrior[];
   /** Cap on the allow-list length injected into the prompt. */
   brandLimit?: number;
+  /** Room type — helps rule out brand/category mismatches (a "kitchen appliance" brand for a bedroom crop is unlikely). */
+  roomType?: string;
+  /** Short description of the room's aesthetic direction (palette + materials + style notes) — used to down-weight brand guesses that clash. */
+  aestheticHint?: string;
+  /** Budget tier (balanced/premium/budget) — down-weights wildly-out-of-bracket brand guesses. */
+  budgetMode?: string;
 }
 
 /**
@@ -56,10 +62,18 @@ export function buildIdentifierPrompt(args: IdentifierPromptArgs): string {
   const priors = formatRetrievalPriors(args.priors);
   const boxStr = formatBoundingBox(args.box);
 
+  const contextLines: string[] = [];
+  if (args.roomType) contextLines.push(`Room type: ${args.roomType}`);
+  if (args.aestheticHint) contextLines.push(`Aesthetic direction: ${args.aestheticHint}`);
+  if (args.budgetMode) contextLines.push(`Budget tier: ${args.budgetMode}`);
+  const contextSection = contextLines.length
+    ? `\n## ROOM AESTHETIC CONTEXT (use to calibrate confidence — a brand guess that clashes with this direction or price bracket should score LOWER, even if the silhouette is a close match)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+
   return `You are identifying a specific piece of FURNITURE in a room photo by
 exact brand AND model. The user has given explicit permission for this —
 your job is to be harsh, specific, and silent when uncertain.
-
+${contextSection}
 ## THE PIECE
 - Rough category: ${args.label}
 - Bounding box in the photo (normalized, top-left origin): ${boxStr}
@@ -124,6 +138,12 @@ export interface VerifierPromptArgs {
   };
   /** 0..1 match-score threshold above which the verifier flips `verified=true`. */
   matchThreshold: number;
+  /** Room type — cross-check: does this brand/category normally appear in this room type? */
+  roomType?: string;
+  /** Short description of the room's aesthetic direction — used as a realism check against the brand's aesthetic. */
+  aestheticHint?: string;
+  /** Budget tier — flags wildly-out-of-bracket identifications (high-end brand in budget-minimalist room). */
+  budgetMode?: string;
 }
 
 export function buildVerifierPrompt(args: VerifierPromptArgs): string {
@@ -132,9 +152,17 @@ export function buildVerifierPrompt(args: VerifierPromptArgs): string {
     ? candidate.distinguishing_features.map((f) => `  - ${f}`).join("\n")
     : "  - (none provided — infer from the room photo)";
 
+  const contextLines: string[] = [];
+  if (args.roomType) contextLines.push(`Room type: ${args.roomType}`);
+  if (args.aestheticHint) contextLines.push(`Aesthetic direction: ${args.aestheticHint}`);
+  if (args.budgetMode) contextLines.push(`Budget tier: ${args.budgetMode}`);
+  const contextSection = contextLines.length
+    ? `\n## ROOM AESTHETIC CONTEXT (sanity check against the tentative identification — flag realism mismatches in mismatch_notes and LOWER match_score when the brand's aesthetic or price bracket clashes with this context)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+
   return `You are verifying a tentative product identification against its
 canonical source. Use Google Search to find the product's official page.
-
+${contextSection}
 ## TENTATIVE IDENTIFICATION
 - Brand: ${candidate.brand}
 - Model: ${candidate.model}

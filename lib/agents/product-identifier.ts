@@ -48,6 +48,12 @@ export interface IdentifyInput {
   label: string;
   /** Retrieval hits for this crop, ordered by similarity desc. May be empty. */
   priors: RetrievalPrior[];
+  /** Room type — helps rule out implausible brand matches. */
+  roomType?: string;
+  /** Compact aesthetic hint from design direction (palette + materials + style notes). */
+  aestheticHint?: string;
+  /** Budget tier — so identifier can lower confidence on out-of-bracket brands. */
+  budgetMode?: string;
 }
 
 export interface IdentifyResult {
@@ -72,6 +78,9 @@ export async function runProductIdentifier(
     label: input.label,
     box: input.box,
     priors: input.priors,
+    roomType: input.roomType,
+    aestheticHint: input.aestheticHint,
+    budgetMode: input.budgetMode,
   });
 
   try {

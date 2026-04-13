@@ -68,6 +68,12 @@ export interface VerifyInput {
   sourceImageUrl: string;
   /** Full set of priors, copied through onto the enriched result. */
   priors: RetrievalPrior[];
+  /** Room type — sanity check against the candidate brand's typical usage. */
+  roomType?: string;
+  /** Compact aesthetic hint from design direction — flag realism mismatches. */
+  aestheticHint?: string;
+  /** Budget tier — flags out-of-bracket identifications. */
+  budgetMode?: string;
 }
 
 export interface VerifyResult {
@@ -89,7 +95,13 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
   const system = getSystemPrompt();
 
   const { candidate } = input;
-  const prompt = buildVerifierPrompt({ candidate, matchThreshold: MATCH_THRESHOLD });
+  const prompt = buildVerifierPrompt({
+    candidate,
+    matchThreshold: MATCH_THRESHOLD,
+    roomType: input.roomType,
+    aestheticHint: input.aestheticHint,
+    budgetMode: input.budgetMode,
+  });
 
   let content = "";
   let tokensUsed = 0;

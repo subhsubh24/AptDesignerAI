@@ -38,6 +38,12 @@ export interface IdentifiedProductsPipelineInput {
   dropUnverified?: boolean;
   /** Hard ceiling on verifier calls (cost control). Default: 8. */
   maxVerifyCalls?: number;
+  /** Room type — forwarded to cropper/identifier/verifier for context grounding. */
+  roomType?: string;
+  /** Compact aesthetic hint (palette + materials + style_notes) so identifier/verifier can calibrate brand guesses to the room's direction. */
+  aestheticHint?: string;
+  /** Budget tier — so identifier/verifier can flag out-of-bracket brand matches. */
+  budgetMode?: string;
 }
 
 export interface IdentifiedProductsPipelineResult {
@@ -112,6 +118,9 @@ export async function runIdentifiedProductsPipeline(
       box: crop.box,
       label: crop.label,
       priors,
+      roomType: input.roomType,
+      aestheticHint: input.aestheticHint,
+      budgetMode: input.budgetMode,
     });
     totalTokens += idOut.tokensUsed;
 
@@ -138,6 +147,9 @@ export async function runIdentifiedProductsPipeline(
       roomImageUrl: crop.source_image_url,
       sourceImageUrl: crop.source_image_url,
       priors,
+      roomType: input.roomType,
+      aestheticHint: input.aestheticHint,
+      budgetMode: input.budgetMode,
     });
     verifyCallsMade++;
     totalTokens += verifyOut.tokensUsed;

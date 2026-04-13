@@ -128,9 +128,26 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
   let diagnosisJsonToSave: DiagnosisData = diagnosisData.diagnosis;
   if (process.env.IDENTIFY_PRODUCTS === "1") {
     try {
+      // Compact aesthetic hint from the just-produced design direction so the
+      // identifier/verifier can calibrate brand guesses to the room's actual
+      // style + palette + materials rather than running context-free.
+      const dd = diagnosisData.design_direction as {
+        recommended_palette?: string[];
+        recommended_materials?: string[];
+        style_notes?: string;
+      } | undefined;
+      const hintParts: string[] = [];
+      if (dd?.style_notes) hintParts.push(dd.style_notes);
+      if (dd?.recommended_palette?.length) hintParts.push(`palette: ${dd.recommended_palette.slice(0, 6).join(", ")}`);
+      if (dd?.recommended_materials?.length) hintParts.push(`materials: ${dd.recommended_materials.slice(0, 6).join(", ")}`);
+      const aestheticHint = hintParts.length ? hintParts.join(" | ") : undefined;
+
       const identResult = await runIdentifiedProductsPipeline({
         supabase,
         imageUrls,
+        roomType: ctx.roomType,
+        aestheticHint,
+        budgetMode: ctx.budgetMode,
       });
       if (identResult.success && identResult.data) {
         diagnosisJsonToSave = {
