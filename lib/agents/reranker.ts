@@ -27,6 +27,7 @@ import { createLogger } from "@/lib/logging/logger";
 import { z } from "zod";
 import type { SearchCandidate } from "./shopping-researcher";
 import type { AIContentBlock } from "@/lib/ai/provider";
+import type { DesignDirection, DiagnosisData } from "@/lib/types/database";
 
 const log = createLogger("reranker");
 
@@ -65,6 +66,18 @@ export interface RerankParams {
    * forgets the physical room it is scoring against. Up to 3 are used.
    */
   roomImageUrls?: string[];
+  /**
+   * Target palette/materials/style so reranker can filter by aesthetic
+   * fit, not just category fit. Without this, candidates that clash with
+   * the room's direction still pass through and waste extraction tokens.
+   */
+  designDirection?: DesignDirection;
+  /** Room diagnosis — scoring should penalize candidates that repeat existing problems. */
+  diagnosis?: DiagnosisData;
+  /** Client priorities — lifestyle/durability signals. */
+  priorities?: string[];
+  /** Budget tier (balanced/premium/budget) — nudges toward realistic price bracket. */
+  budgetMode?: string;
 }
 
 /**
@@ -81,6 +94,10 @@ export async function rerankCandidates({
   topK = 10,
   minScore = 0.25,
   roomImageUrls,
+  designDirection,
+  diagnosis,
+  priorities,
+  budgetMode,
 }: RerankParams): Promise<RerankResult> {
   if (candidates.length === 0) {
     return { kept: [], dropped: [], tokensUsed: 0 };
@@ -104,16 +121,50 @@ export async function rerankCandidates({
     )
     .join("\n\n");
 
-  const prompt = `You are scoring search results for a ${tier}-tier ${category} purchase. Score each candidate 0.0–1.0 on how well the URL+title+snippet match the requirements below, WITHOUT fetching the page. Judge on: category fit, apparent style match, retailer credibility, and evident size class.
+  const directionLines: string[] = [];
+  if (designDirection?.recommended_palette?.length) {
+    directionLines.push(`Target palette: ${designDirection.recommended_palette.join(", ")}`);
+  }
+  if (designDirection?.recommended_materials?.length) {
+    directionLines.push(`Target materials: ${designDirection.recommended_materials.join(", ")}`);
+  }
+  if (designDirection?.style_notes) {
+    directionLines.push(`Style direction: ${designDirection.style_notes}`);
+  }
+  const directionBlock = directionLines.length
+    ? `\n\nDESIGN DIRECTION (candidates that clash with this must score LOW — penalize style/palette mismatches even if category is right):\n${directionLines.map((l) => `  - ${l}`).join("\n")}`
+    : "";
+
+  const problemLines: string[] = [];
+  if (diagnosis?.what_is_not_working?.length) {
+    problemLines.push(`Problems this purchase must NOT repeat: ${diagnosis.what_is_not_working.join("; ")}`);
+  }
+  const spatialGaps = (diagnosis as DiagnosisData & { spatial_gaps?: string[] } | undefined)?.spatial_gaps;
+  if (spatialGaps?.length) {
+    problemLines.push(`Dead zones this category should help activate: ${spatialGaps.join("; ")}`);
+  }
+  const problemBlock = problemLines.length
+    ? `\n\nROOM DIAGNOSIS (penalize candidates that would repeat these problems):\n${problemLines.map((l) => `  - ${l}`).join("\n")}`
+    : "";
+
+  const prioritiesBlock = priorities?.length
+    ? `\n\nCLIENT PRIORITIES: ${priorities.join(", ")}`
+    : "";
+
+  const budgetBlock = budgetMode
+    ? `\n\nBUDGET MODE: ${budgetMode} — candidates priced wildly outside this tier's realistic bracket should score lower.`
+    : "";
+
+  const prompt = `You are scoring search results for a ${tier}-tier ${category} purchase. Score each candidate 0.0–1.0 on how well the URL+title+snippet match the requirements below, WITHOUT fetching the page. Judge on: category fit, aesthetic fit with the design direction, retailer credibility, and evident size class.
 
 Requirements:
-${reqList}
+${reqList}${directionBlock}${problemBlock}${prioritiesBlock}${budgetBlock}
 
 Candidates:
 ${candidateBlock}
 
 Return JSON: { "scores": [{ "url": "...", "score": 0.0–1.0, "reason": "short" }, ...] }
-Be harsh — use the full 0–1 range. 0.9+ only for clear wins. Most items should be 0.3–0.7.`;
+Be harsh — use the full 0–1 range. 0.9+ only for clear wins (category fit AND aesthetic fit). A candidate that nails the category but clashes with the design direction should score 0.2–0.4. Most items should be 0.3–0.7.`;
 
   // Attach up to 3 room photos so the reranker scores candidates with the
   // physical room in view (never forget what we're furnishing).

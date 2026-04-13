@@ -429,6 +429,10 @@ export async function runAgenticSearch(
                 candidates,
                 topK: rerankTopK,
                 roomImageUrls: ctx.imageUrls,
+                designDirection: ctx.designDirection,
+                diagnosis: ctx.diagnosis,
+                priorities: ctx.priorities,
+                budgetMode: ctx.budgetMode,
               });
               if (result.tokensUsed) {
                 tokenBudget.add(result.tokensUsed);
