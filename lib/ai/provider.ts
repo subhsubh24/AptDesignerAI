@@ -52,7 +52,13 @@ export interface GoogleMapsToolConfig {
    * the prompt text — dramatically improves confidence for address lookups.
    */
   latLng?: { latitude: number; longitude: number };
-  /** Optional Google Maps place_id. Passed through retrievalConfig. */
+  /**
+   * @deprecated `placeId` is NOT a valid input for Gemini Maps-grounding
+   * `retrievalConfig` — only `latLng` is. Sending it returns HTTP 400.
+   * The field is kept for backwards source compatibility but is silently
+   * dropped by `convertTools()`. Embed the placeId in the prompt text if
+   * you need the model to see it.
+   */
   placeId?: string;
 }
 

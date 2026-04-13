@@ -246,11 +246,16 @@ function convertTools(tools?: GeminiTool[]): {
           toolLevel.enableWidget = "WIDGET_CONFIG_INLINE";
         }
         const latLng = mapsCfg.latLng as { latitude: number; longitude: number } | undefined;
-        const placeId = mapsCfg.placeId as string | undefined;
-        if (latLng || placeId) {
+        // NOTE: `placeId` is NOT a valid field inside `retrievalConfig` — the
+        // current Gemini Maps-grounding schema only accepts `latLng` (and
+        // optionally `languageCode`). Sending `placeId` yields HTTP 400:
+        //   Unknown name "placeId" at 'tool_config.retrieval_config'.
+        // PlaceId appears only in grounding *metadata* (responses), not as an
+        // input. Callers that know the placeId should embed it in the prompt
+        // text and rely on latLng for structured localization.
+        if (latLng) {
           retrievalConfig = retrievalConfig || {};
-          if (latLng) retrievalConfig.latLng = latLng;
-          if (placeId) retrievalConfig.placeId = placeId;
+          retrievalConfig.latLng = latLng;
         }
       }
       merged.googleMaps = toolLevel;

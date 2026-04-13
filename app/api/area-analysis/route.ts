@@ -445,10 +445,47 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
     const furnishingRaw = extractJsonObject<any>(passBResponse.content);
+    // Gemini occasionally collapses the `{ "what_it_needs": [...] }` wrapper
+    // and emits either (a) the bare items array, (b) a single item object with
+    // keys like `category / search_title / description / priority / specs /
+    // placement`, or (c) the wrapped shape we actually asked for. Normalize
+    // all three into the expected `{ what_it_needs: [...] }` shape so the
+    // downstream validator doesn't fail on a minor format drift.
+    const ITEM_KEYS = new Set([
+      "category",
+      "search_title",
+      "description",
+      "priority",
+      "specs",
+      "placement",
+    ]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
-    const furnishing: Record<string, any> = Array.isArray(furnishingRaw) && furnishingRaw.length > 0
-      ? furnishingRaw[0]
-      : furnishingRaw;
+    const looksLikeItem = (v: any): boolean =>
+      !!v &&
+      typeof v === "object" &&
+      !Array.isArray(v) &&
+      !("what_it_needs" in v) &&
+      Object.keys(v).some((k) => ITEM_KEYS.has(k));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
+    let furnishing: Record<string, any>;
+    if (Array.isArray(furnishingRaw)) {
+      // Case (a): top-level array. Treat it as the items list directly if the
+      // entries look like item objects; otherwise fall back to the first entry.
+      if (furnishingRaw.length > 0 && furnishingRaw.every(looksLikeItem)) {
+        furnishing = { what_it_needs: furnishingRaw };
+      } else {
+        furnishing = furnishingRaw[0] ?? {};
+      }
+    } else if (looksLikeItem(furnishingRaw)) {
+      // Case (b): a single item object — wrap it into a one-element list.
+      furnishing = { what_it_needs: [furnishingRaw] };
+      console.warn(
+        `[area-analysis] Pass B returned a single item instead of a wrapper — coercing to what_it_needs[1]`,
+      );
+    } else {
+      // Case (c): already the expected shape (or something else we'll fail on).
+      furnishing = furnishingRaw ?? {};
+    }
     const passBTokens = (passBResponse.usage?.input_tokens || 0) + (passBResponse.usage?.output_tokens || 0);
 
     console.log(`[area-analysis] Pass B (furnishing) complete — ${furnishing.what_it_needs?.length || 0} items`);

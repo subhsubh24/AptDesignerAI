@@ -809,28 +809,34 @@ ${floorPlanSchema}`;
           }
         }
 
-        const mapsConfig: { latLng?: { latitude: number; longitude: number }; placeId?: string } = {};
+        // NOTE: Gemini's Maps-grounding `retrievalConfig` only accepts `latLng`
+        // (and optionally `languageCode`). `placeId` is NOT a valid input —
+        // sending it produces HTTP 400 ("Unknown name \"placeId\" at
+        // 'tool_config.retrieval_config'"). We therefore only pass latLng
+        // structurally; the placeId (if any) is embedded into the prompt text
+        // so the model can still use it for disambiguation.
+        const mapsConfig: { latLng?: { latitude: number; longitude: number } } = {};
         if (typeof resolvedLat === "number" && typeof resolvedLng === "number") {
           mapsConfig.latLng = { latitude: resolvedLat, longitude: resolvedLng };
-        }
-        if (building_place_id) {
-          mapsConfig.placeId = building_place_id;
         }
 
         // Only fall back to text-embedded location if we couldn't resolve
         // structured context — avoids duplicating what retrievalConfig already
         // tells the model.
-        const hasStructuredContext = !!(mapsConfig.latLng || mapsConfig.placeId);
+        const hasStructuredContext = !!mapsConfig.latLng || !!building_place_id;
         const textLocation = hasStructuredContext
           ? (building_name || "this building")
           : [building_name, neighborhood, city, state].filter(Boolean).join(", ");
+        const placeIdHint = building_place_id
+          ? ` (Google Maps place_id: ${building_place_id})`
+          : "";
 
         const mapsResponse = await geminiProvider.chat({
           model: selectModel("apartment_research"),
           system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Never invent — return null for anything Maps doesn't reveal.",
           messages: [{
             role: "user",
-            content: `Using Google Maps, look up ${textLocation}${hasStructuredContext ? " (structured location context is attached via retrievalConfig)" : ""}.
+            content: `Using Google Maps, look up ${textLocation}${placeIdHint}${mapsConfig.latLng ? " (structured lat/lng is attached via retrievalConfig)" : ""}.
 
 Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby places). Return JSON:
 {
@@ -848,8 +854,10 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           temperature: 0.2,
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
-          // latLng / placeId are routed into toolConfig.retrievalConfig by
-          // lib/ai/gemini.ts → convertTools(), not embedded in this tool entry.
+          // latLng is routed into toolConfig.retrievalConfig by
+          // lib/ai/gemini.ts → convertTools(). (placeId is NOT a valid input
+          // field — it is only returned as grounding metadata, so we embed it
+          // into the prompt above instead of the config.)
           tools: [{ googleMaps: mapsConfig }],
         });
 
