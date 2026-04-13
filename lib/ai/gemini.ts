@@ -27,6 +27,31 @@ const log = createLogger("gemini");
 
 let client: GoogleGenAI | null = null;
 
+/**
+ * Identify pure network / socket-level errors from the underlying fetch.
+ * These are safe to retry transparently at the transport layer because no
+ * request body was accepted by the server. Rate-limit (429) and 5xx
+ * responses are intentionally excluded — those are handled by
+ * agent-level `withRetry` to avoid compounding retry budgets.
+ */
+function isTransportError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  if (msg.includes("fetch failed")) return true;
+  const cause = (err as { cause?: { code?: string } }).cause;
+  const code = cause?.code;
+  if (!code) return false;
+  return (
+    code === "UND_ERR_CONNECT_TIMEOUT" ||
+    code === "UND_ERR_SOCKET" ||
+    code === "ECONNRESET" ||
+    code === "ECONNREFUSED" ||
+    code === "ETIMEDOUT" ||
+    code === "EAI_AGAIN" ||
+    code === "ENETUNREACH"
+  );
+}
+
 function getClient(): GoogleGenAI {
   if (!client) {
     client = new GoogleGenAI({
@@ -372,23 +397,46 @@ export const geminiProvider: AIProvider = {
       config.imageConfig = ic;
     }
 
+    // Transport-level retry: the underlying fetch can fail with
+    // UND_ERR_CONNECT_TIMEOUT when an IPv6 route is broken, or ECONNRESET /
+    // socket errors on transient flakes. These are distinct from rate-limit
+    // and 5xx responses (which agent-level withRetry already handles). We
+    // retry only *connection* errors here with short backoff so every caller
+    // — including routes that don't wrap with withRetry — survives brief
+    // network hiccups without compounding rate-limit retry budgets.
     let response;
-    try {
-      response = await ai.models.generateContent({
-        model,
-        contents,
-        config,
-      });
-    } catch (err) {
-      const e = err as Record<string, unknown>;
-      log.error("API error", {
-        model,
-        errorName: e.name as string,
-        status: e.status as number,
-        error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
-        details: e.details || e.errorDetails,
-      });
-      throw err;
+    const maxTransportAttempts = 3;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents,
+          config,
+        });
+        break;
+      } catch (err) {
+        const e = err as Record<string, unknown>;
+        const canRetry =
+          attempt < maxTransportAttempts && isTransportError(err);
+        if (!canRetry) {
+          log.error("API error", {
+            model,
+            errorName: e.name as string,
+            status: e.status as number,
+            error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
+            details: e.details || e.errorDetails,
+          });
+          throw err;
+        }
+        const delay = 500 * Math.pow(2, attempt - 1); // 500ms, 1000ms
+        log.warn("Transport error, retrying", {
+          model,
+          attempt,
+          delay,
+          error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
 
     // Extract text content
