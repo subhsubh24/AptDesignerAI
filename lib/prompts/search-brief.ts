@@ -1,6 +1,50 @@
 import type { DesignDirection } from "@/lib/types/database";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 export type PriceTier = "budget" | "balanced" | "high_end";
+
+/**
+ * Render explicit building finishes + floor plan into the brief prompt. The
+ * system prompt already carries these, but queries were coming out generic
+ * when the system prompt fell back to defaults. Foregrounding the specific
+ * finishes/sqft/dimensions here lets the model anchor size constraints and
+ * material queries to the real apartment.
+ */
+function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
+  if (!profile) return "";
+  const p = profile as unknown as Record<string, unknown>;
+  const building = p.building_research as Record<string, unknown> | undefined;
+  const apartment = p.apartment_analysis as Record<string, unknown> | undefined;
+  const floorPlan = p.floor_plan as Record<string, unknown> | undefined;
+  const lines: string[] = [];
+
+  if (building) {
+    const style = building.building_style || building.style;
+    const finishes = building.finishes;
+    const aesthetic = building.design_aesthetic;
+    const pieces: string[] = [];
+    if (style) pieces.push(`style: ${typeof style === "string" ? style : JSON.stringify(style)}`);
+    if (finishes) pieces.push(`finishes: ${typeof finishes === "string" ? finishes : JSON.stringify(finishes)}`);
+    if (aesthetic) pieces.push(`aesthetic: ${typeof aesthetic === "string" ? aesthetic : JSON.stringify(aesthetic)}`);
+    if (pieces.length) lines.push(`Building — ${pieces.join("; ")}`);
+  }
+  if (apartment && typeof apartment.overall === "string" && apartment.overall) {
+    lines.push(`Apartment — ${apartment.overall}`);
+  }
+  if (floorPlan) {
+    const sqft = floorPlan.total_sqft;
+    const dims = floorPlan.room_dimensions;
+    const layout = floorPlan.room_layout;
+    const pieces: string[] = [];
+    if (sqft) pieces.push(`sqft: ${sqft}`);
+    if (dims) pieces.push(`room dimensions: ${typeof dims === "string" ? dims : JSON.stringify(dims)}`);
+    if (layout) pieces.push(`layout: ${typeof layout === "string" ? layout : JSON.stringify(layout)}`);
+    if (pieces.length) lines.push(`Floor plan — ${pieces.join("; ")}`);
+  }
+
+  if (!lines.length) return "";
+  return `\n\n## BUILDING & APARTMENT GROUNDING (anchor size constraints and material queries to these specifics — don't default to generic assumptions)\n${lines.map((l) => `- ${l}`).join("\n")}`;
+}
 
 
 const TIER_RETAILERS: Record<PriceTier, string[]> = {
@@ -86,7 +130,8 @@ export function getSearchBriefPrompt(
   lightingConditions?: string,
   windowDoorPositions?: string,
   outletPositions?: string,
-  identifiedContext?: string
+  identifiedContext?: string,
+  designProfile?: DynamicDesignProfile
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -200,7 +245,7 @@ export function getSearchBriefPrompt(
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}
+- Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:
