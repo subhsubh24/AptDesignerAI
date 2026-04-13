@@ -45,6 +45,7 @@ export interface BundleContext {
   userContext?: string;
   replaceItems?: string[];
   whatShouldGo?: string[];
+  identifiedContext?: string;
 }
 
 /**
@@ -79,6 +80,7 @@ export async function evaluateBundle(
     userContext: bundleCtx.userContext,
     replaceItems: bundleCtx.replaceItems,
     whatShouldGo: bundleCtx.whatShouldGo,
+    identifiedContext: bundleCtx.identifiedContext,
   };
 
   // Build bundle product description (shared across all three calls)

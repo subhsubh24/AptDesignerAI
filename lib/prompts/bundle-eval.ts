@@ -16,6 +16,7 @@ export interface BundleEvalContextArgs {
   userContext?: string;
   replaceItems?: string[];
   whatShouldGo?: string[];
+  identifiedContext?: string;
 }
 
 /**
@@ -26,7 +27,7 @@ function buildBundleContext(args: BundleEvalContextArgs): string {
   const {
     roomType, priorities, diagnosis, designDirection, spatialLayout, placementMap, floorPlan,
     lightingConditions, windowDoorPositions, outletPositions,
-    existingItems, userContext, replaceItems, whatShouldGo,
+    existingItems, userContext, replaceItems, whatShouldGo, identifiedContext,
   } = args;
 
   const existingContext = diagnosis?.what_is_working?.length
@@ -95,6 +96,14 @@ function buildBundleContext(args: BundleEvalContextArgs): string {
 
   if (existingItems?.length) {
     sections.push({ key: "existing_items_list", priority: 2, content: `## EXISTING ITEMS TO COORDINATE WITH\n${existingItems.map((item) => `- ${item}`).join("\n")}\nThe bundle must harmonize with these pieces in style, scale, and materials.` });
+  }
+
+  if (identifiedContext) {
+    sections.push({
+      key: "identified_products",
+      priority: 2,
+      content: `${identifiedContext}\nIMPORTANT for bundle evaluation: Treat these as GROUND-TRUTH EXISTING FIXTURES in the room. The bundle must:\n- Harmonize with their materials, colors, and style\n- Respect their canonical dimensions for scale math (within ~20%)\n- NOT include a REPLACEMENT for any identified piece (same category) unless that piece is explicitly listed in replace_items\nPenalize pairwise compatibility, scale_balance, palette_harmony, and style_consistency when bundle items conflict with these verified pieces.`,
+    });
   }
 
   if (replaceItems?.length) {

@@ -948,6 +948,7 @@ export async function runAgenticSearch(
       userContext: ctx.userContext,
       replaceItems: ctx.replaceItems,
       whatShouldGo: ctx.whatShouldGo,
+      identifiedContext: ctx.identifiedContext,
     };
 
     const bundlePromises = PRICE_TIERS.map(async (tier) => {
