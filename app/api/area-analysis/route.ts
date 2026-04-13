@@ -13,6 +13,8 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
+import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
+import type { IdentifiedProduct } from "@/lib/types/database";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -283,6 +285,26 @@ These photos show the REST of the apartment. Study them to understand:
     });
   }
 
+  // ── IDENTIFIED PRODUCTS (from the furniture-recognition pipeline) ──
+  // Pulled from the most-recent diagnosis for this room. Only verified &
+  // non-rejected entries make it into the prompt — the block is empty
+  // (byte-for-byte inert) when the feature is off or no rows exist.
+  let identifiedProducts: IdentifiedProduct[] = [];
+  try {
+    const { data: latestDiag } = await supabase
+      .from("room_diagnoses")
+      .select("diagnosis_json")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const dj = latestDiag?.diagnosis_json as { identified_products?: IdentifiedProduct[] } | undefined;
+    identifiedProducts = dj?.identified_products ?? [];
+  } catch {
+    // best-effort — identified_products missing is non-fatal
+  }
+  const identifiedPiecesBlock = buildIdentifiedPiecesBlock(identifiedProducts);
+
   // ── SHARED CONTEXT (goes into both Pass A and Pass B) ──
   // Pass A prompt — UNDERSTAND the room. No what_it_needs here; that's Pass B.
   const passAPrompt = `\nStudy the ${room.name} photos carefully. This is PASS 1 of 2. Your job is to UNDERSTAND the room — diagnose it, determine design direction, and capture spatial/environmental context. A separate pass will produce the shopping list (what_it_needs) — do NOT produce recommendations here.
@@ -308,7 +330,7 @@ Step 4: Capture spatial & environmental context (layout, lighting, windows/doors
   "outlet_positions": "best-guess outlet locations from photos + typical layouts — note spots where lamps/media would need extension cords"
 }
 
-Be extremely specific. Name exact colors, materials, dimensions. Do NOT include what_it_needs or any shopping recommendations.`;
+Be extremely specific. Name exact colors, materials, dimensions. Do NOT include what_it_needs or any shopping recommendations.${identifiedPiecesBlock ? `\n\n${identifiedPiecesBlock}` : ""}`;
 
   const agentRun = await createAgentRun(supabase, {
     room_id,
@@ -367,7 +389,7 @@ Do NOT re-diagnose the room. Do NOT produce what_works / what_should_go / design
 
 ## PASS 1 DESIGN BRIEF (SOURCE OF TRUTH — do not contradict)
 ${JSON.stringify(understanding, null, 2)}
-${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}${budgetBlock}${userContextNote}${parsedContextBlock ? `\n\n${parsedContextBlock}` : ""}
+${keepItemsBlock}${replaceItemsBlock}${prioritiesBlock}${budgetBlock}${userContextNote}${parsedContextBlock ? `\n\n${parsedContextBlock}` : ""}${identifiedPiecesBlock ? `\n\n${identifiedPiecesBlock}\n\nDo NOT re-recommend any of the identified pieces above. If the room's existing anchor (e.g. a confirmed KIVIK sectional) already covers a Tier-1 category, SKIP that category and move the budget toward complementary pieces. Scale any new pieces against the CANONICAL dimensions listed so proportions match.` : ""}
 
 ## YOUR TASK
 Produce a tiered, complete \`what_it_needs\` list:

@@ -57,6 +57,12 @@ export interface ScoringContext {
   userContext?: string;
   /** Items being replaced or removed */
   replaceItems?: string[];
+  /**
+   * Pre-formatted "EXISTING IDENTIFIED PIECES" block from the furniture
+   * identification pipeline. Empty/undefined when the feature is off — the
+   * prompt stays byte-for-byte equivalent to the pre-feature shape.
+   */
+  identifiedContext?: string;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -113,6 +119,7 @@ export async function scoreProduct(
     outletPositions: scoringCtx.outletPositions,
     userContext: scoringCtx.userContext,
     replaceItems: scoringCtx.replaceItems,
+    identifiedContext: scoringCtx.identifiedContext,
   };
   const aestheticPrompt = getAestheticEvalPrompt(evalCtx);
   const functionalPrompt = getFunctionalEvalPrompt(evalCtx);

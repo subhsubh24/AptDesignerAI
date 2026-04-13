@@ -5,6 +5,8 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import type { AgentContext } from "@/lib/agents/types";
+import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
+import type { IdentifiedProduct } from "@/lib/types/database";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -111,6 +113,18 @@ export async function POST(request: Request) {
   const windowDoorPositions = diagnosisJson?.window_door_positions as string | undefined;
   const outletPositions = diagnosisJson?.outlet_positions as string | undefined;
 
+  // Furniture identification — pre-formatted anti-query + scale block for the
+  // search + evaluate agents. Empty string when no usable identifications, so
+  // the downstream prompts stay byte-for-byte equivalent for pre-feature rows.
+  const identifiedProducts = (diagnosisJson?.identified_products as IdentifiedProduct[] | undefined) ?? [];
+  const identifiedContext = buildIdentifiedPiecesBlock(identifiedProducts);
+  // Category blocklist — don't re-suggest something the user already owns.
+  const identifiedCategories = new Set(
+    identifiedProducts
+      .filter((p) => p.verified && p.user_confirmed !== false)
+      .map((p) => p.category.toLowerCase()),
+  );
+
   // Build other-rooms context for cross-room coherence
   let otherRoomsContext: string | undefined;
   if (project) {
@@ -165,6 +179,7 @@ export async function POST(request: Request) {
     lightingConditions: lightingConditions || undefined,
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,
+    identifiedContext: identifiedContext || undefined,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }
@@ -172,9 +187,17 @@ export async function POST(request: Request) {
     ? categories
     : ["rug", "coffee_table", "accent_chair"];
 
-  const missingCategories: string[] = rawCategories.map(
-    (c: string | { category: string }) => typeof c === "string" ? c : c.category
-  );
+  const missingCategories: string[] = rawCategories
+    .map((c: string | { category: string }) => typeof c === "string" ? c : c.category)
+    // Drop categories already covered by verified, user-confirmed identifications —
+    // the identifiedContext tells the model WHY, this just avoids wasted queries.
+    .filter((cat: string) => !identifiedCategories.has(cat.toLowerCase()));
+
+  if (identifiedCategories.size > 0) {
+    console.log(
+      `[search] Skipping ${identifiedCategories.size} categor${identifiedCategories.size === 1 ? "y" : "ies"} covered by identified pieces: ${Array.from(identifiedCategories).join(", ")}`,
+    );
+  }
 
   // Build search hints from rich category objects (search_title, specs)
   const categoryHints: Record<string, string> = {};

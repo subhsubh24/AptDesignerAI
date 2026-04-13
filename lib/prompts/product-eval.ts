@@ -18,6 +18,12 @@ export interface EvalContextArgs {
   outletPositions?: string;
   userContext?: string;
   replaceItems?: string[];
+  /**
+   * Pre-formatted "EXISTING IDENTIFIED PIECES" block (see
+   * `buildIdentifiedPiecesBlock`). Empty/undefined keeps the prompt
+   * byte-for-byte equivalent to the pre-feature shape.
+   */
+  identifiedContext?: string;
 }
 
 /**
@@ -44,6 +50,7 @@ function buildEvalContext(args: EvalContextArgs): string {
     outletPositions,
     userContext,
     replaceItems,
+    identifiedContext,
   } = args;
 
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -138,6 +145,16 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
       key: "user_notes",
       priority: 2,
       content: `## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account when scoring. If they mention something not visible in photos, incorporate that information. If they say to ignore something, exclude it from scoring considerations.`,
+    });
+  }
+
+  if (identifiedContext) {
+    // Give identified-pieces block very high priority (1) so it never gets
+    // truncated — it's the ground truth for scale/material math.
+    sections.push({
+      key: "identified_pieces",
+      priority: 1,
+      content: `${identifiedContext}\nIMPORTANT for scoring: Treat these as EXISTING FIXTURES. The product being evaluated must be COMPATIBLE with them — matching scale (within ~20% of canonical dimensions), complementary materials, and a palette that works alongside the listed colors. Products proposing a REPLACEMENT for any identified piece (same category) should be scored down hard unless the room's replace_items list it.`,
     });
   }
 

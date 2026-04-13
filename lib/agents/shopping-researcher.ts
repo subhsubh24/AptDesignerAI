@@ -291,11 +291,12 @@ export async function generateSearchBrief(
   diagnosis?: Record<string, unknown>,
   lightingConditions?: string,
   windowDoorPositions?: string,
-  outletPositions?: string
+  outletPositions?: string,
+  identifiedContext?: string
 ): Promise<AgentResult<SearchBrief>> {
   const model = selectModel("search_brief");
   const system = getSystemPrompt(designProfile);
-  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext, diagnosis, lightingConditions, windowDoorPositions, outletPositions);
+  const prompt = getSearchBriefPrompt(roomType, missingCategories, budgetMode, categoryHints, designDirection, priorities, keepItems, replaceItems, spatialLayout, roomSummary, userContext, diagnosis, lightingConditions, windowDoorPositions, outletPositions, identifiedContext);
 
   let lastError: string | undefined;
   let attempt = 0;

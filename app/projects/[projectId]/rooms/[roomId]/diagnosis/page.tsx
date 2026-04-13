@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight, RotateCcw, Sparkles, Search } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
+import { IdentifiedProductPill } from "@/components/rooms/identified-product-pill";
 
 interface DiagnosisStep {
   step: string;
@@ -342,6 +343,39 @@ export default function DiagnosisPage() {
                 </ul>
               </CardContent>
             </Card>
+
+            {/* Identified Furniture — confirmation pills. Rendered only when
+                the furniture identification pipeline ran (IDENTIFY_PRODUCTS=1)
+                and produced at least one verified entry the user hasn't
+                answered yet. Confirmed/rejected items show as static badges. */}
+            {d.identified_products && d.identified_products.some((p) => p.verified) && (
+              <Card className="animate-fade-in-up">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Search className="h-4 w-4 text-accent-warm" />
+                    Identified Furniture
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We spotted some specific pieces in your photos. Confirm or
+                    correct each guess — we&apos;ll use the canonical specs for
+                    scale &amp; palette when sourcing new items.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-2">
+                    {d.identified_products
+                      .filter((p) => p.verified)
+                      .map((p, i) => (
+                        <IdentifiedProductPill
+                          key={`${p.brand}-${p.model}-${i}`}
+                          product={p}
+                          roomId={roomId}
+                        />
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Issues Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-stagger-children">

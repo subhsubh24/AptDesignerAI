@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
+import type { IdentifiedProduct } from "@/lib/types/database";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -90,6 +92,12 @@ export async function POST(request: Request) {
     if (match?.placement) placement = match.placement;
   }
 
+  // Identified-pieces block (furniture identification feature). Empty string
+  // when the feature is off or no usable identifications — scoring stays
+  // byte-for-byte equivalent for pre-feature rows.
+  const identifiedProductsList = (diagnosisJson?.identified_products as IdentifiedProduct[] | undefined) ?? [];
+  const identifiedContext = buildIdentifiedPiecesBlock(identifiedProductsList);
+
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
     room_id,
@@ -115,6 +123,7 @@ export async function POST(request: Request) {
     outletPositions,
     userContext: room.user_context || undefined,
     replaceItems: room.replace_items || [],
+    identifiedContext: identifiedContext || undefined,
   });
 
   if (!result.success || !result.data) {

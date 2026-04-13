@@ -52,6 +52,16 @@ export interface AgentContext {
   lightingConditions?: string;
   windowDoorPositions?: string;
   outletPositions?: string;
+
+  /**
+   * Pre-formatted "EXISTING IDENTIFIED PIECES" block. Built by the search route
+   * from `room_diagnoses.diagnosis_json.identified_products[]` (filtered to
+   * verified & not-user-rejected). Empty/undefined when the furniture
+   * identification feature is off OR when no usable identifications exist —
+   * in which case downstream prompts stay byte-for-byte equivalent to their
+   * pre-feature shape. See `lib/prompts/product-identification.ts`.
+   */
+  identifiedContext?: string;
 }
 
 export interface AgentResult<T = unknown> {

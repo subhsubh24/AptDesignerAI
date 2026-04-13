@@ -21,6 +21,13 @@ import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
+import { buildIdentifierPrompt } from "@/lib/prompts/product-identification";
+import {
+  isAllowListedBrand,
+  MIN_CONFIDENCE_IN_LIST,
+  MIN_CONFIDENCE_OUT_OF_LIST,
+  USER_PROMPT_FLOOR,
+} from "@/lib/constants/identifiable-brands";
 import {
   IdentifierResponseSchema,
   type IdentifiedProductCandidate,
@@ -51,23 +58,6 @@ export interface IdentifyResult {
   model: string;
 }
 
-function formatPriors(priors: RetrievalPrior[]): string {
-  if (priors.length === 0) {
-    return "(no retrieval matches — rely on visual reasoning alone)";
-  }
-  return priors
-    .map(
-      (p, i) =>
-        `${i + 1}. ${p.brand} — ${p.model} (visual similarity: ${p.similarity.toFixed(2)})`,
-    )
-    .join("\n");
-}
-
-function formatBox(box: BoundingBox): string {
-  const pct = (n: number) => `${Math.round(n * 100)}%`;
-  return `x=${pct(box.x)} y=${pct(box.y)} w=${pct(box.w)} h=${pct(box.h)}`;
-}
-
 /**
  * Propose 0-3 brand/model candidates for a single crop. The verifier will
  * later grounded-check the top one.
@@ -78,42 +68,11 @@ export async function runProductIdentifier(
   const model = selectModel("scoring"); // reasoning model — visual recognition is hard
 
   const system = getSystemPrompt();
-
-  const prompt = `You are identifying a specific piece of FURNITURE in a room photo.
-
-## THE PIECE
-- Rough category: ${input.label}
-- Bounding box in the photo (normalized, top-left origin): ${formatBox(input.box)}
-
-## RETRIEVAL HINTS (visual nearest-neighbors from our product catalog)
-${formatPriors(input.priors)}
-
-These hints may be WRONG. The catalog only covers some brands. Treat them
-as "here's what LOOKS similar" — not as ground truth.
-
-## YOUR TASK
-Return 0 to 3 \`candidates\`, ordered by confidence descending. For each:
-  - \`brand\`: manufacturer (e.g. "West Elm", "Article", "Herman Miller")
-  - \`model\`: product name (e.g. "Haven Sectional", "Ceni Sofa", "Eames Lounge")
-  - \`variant\`: size/color variant if obvious, else null
-  - \`category\`: one of ${"sofa|chair|table|bed|storage|lighting|rug|art|other".replace(/\|/g, " | ")}
-  - \`confidence\`: 0..1 — be strict, see rules below
-  - \`evidence\`: 1 sentence naming the specific visual cues (arm shape, leg
-    profile, cushion construction, shade geometry, etc.) that drove the guess
-  - \`distinguishing_features\`: 2-4 short phrases the verifier can grounded-check
-  - \`bounding_box\`: echo \`${formatBox(input.box)}\` as { x, y, w, h } in [0,1]
-
-## CONFIDENCE RULES — BE STRICT
-- 0.85-1.0: you are nearly certain — distinctive silhouette, visible branding,
-  or a perfect retrieval match.
-- 0.65-0.85: strong visual match but brand is not visually distinctive.
-- 0.40-0.65: plausible but could be a lookalike from another brand.
-- Below 0.40: DO NOT emit — drop the candidate.
-
-If nothing reaches 0.40, return \`"candidates": []\`. Empty is the CORRECT
-answer for generic, custom, vintage, or low-visibility pieces.
-
-Return ONLY JSON.`;
+  const prompt = buildIdentifierPrompt({
+    label: input.label,
+    box: input.box,
+    priors: input.priors,
+  });
 
   try {
     const response = await geminiProvider.chat({
@@ -142,9 +101,27 @@ Return ONLY JSON.`;
     const raw = extractJsonObject(response.content);
     const parsed = IdentifierResponseSchema.parse(raw);
 
-    // Drop anything below 0.4 defensively — the prompt asks for this but
-    // models sometimes leak borderline guesses through.
-    const candidates = parsed.candidates.filter((c) => c.confidence >= 0.4);
+    // Enforce the tiered confidence floors defensively — the prompt asks for
+    // these but models sometimes leak borderline guesses through.
+    // In-list brands clear MIN_CONFIDENCE_IN_LIST (0.70), out-of-list brands
+    // clear MIN_CONFIDENCE_OUT_OF_LIST (0.85). We still keep the absolute
+    // floor at USER_PROMPT_FLOOR (0.40) for medium-confidence candidates the
+    // frontend will route through the confirmation pill.
+    const candidates = parsed.candidates.filter((c) => {
+      if (c.confidence < USER_PROMPT_FLOOR) return false;
+      const inList = isAllowListedBrand(c.brand);
+      // Soft enforcement: above-pill-floor candidates with sub-verification
+      // confidence still flow through. The verifier decides final trust.
+      // The ceiling check is only a guardrail against wildly-out-of-list
+      // guesses at very low confidence — drop brand-new brands under 0.50.
+      if (!inList && c.confidence < MIN_CONFIDENCE_OUT_OF_LIST - 0.35) {
+        return false;
+      }
+      // In-list candidates below MIN_CONFIDENCE_IN_LIST still pass — they
+      // become medium-confidence entries the UI will ask the user about.
+      void MIN_CONFIDENCE_IN_LIST;
+      return true;
+    });
 
     log.info("identifier pass complete", {
       label: input.label,

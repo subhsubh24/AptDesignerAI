@@ -15,6 +15,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
+import { buildVerifierPrompt } from "@/lib/prompts/product-identification";
 import {
   IdentifiedProductEnrichedSchema,
   type IdentifiedProductCandidate,
@@ -88,48 +89,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
   const system = getSystemPrompt();
 
   const { candidate } = input;
-  const hintedDistinguishers = candidate.distinguishing_features.length > 0
-    ? candidate.distinguishing_features.map((f) => `  - ${f}`).join("\n")
-    : "  - (none provided — infer from the room photo)";
-
-  const prompt = `You are verifying a tentative product identification against
-its canonical source. Use Google Search to find the product's official page.
-
-## TENTATIVE IDENTIFICATION
-- Brand: ${candidate.brand}
-- Model: ${candidate.model}
-- Variant: ${candidate.variant ?? "(none)"}
-- Category: ${candidate.category}
-- Identifier confidence: ${candidate.confidence.toFixed(2)}
-- Evidence cited: ${candidate.evidence || "(none)"}
-- Distinguishing features the identifier used:
-${hintedDistinguishers}
-
-## YOUR JOB
-1. Search for "${candidate.brand} ${candidate.model}" (add variant if any).
-   Prefer the brand's own site; fall back to major retailers that carry it.
-2. Compare the canonical product photo to the room photo. Look at the
-   distinguishing features above plus silhouette, proportions, leg/arm
-   profile, and upholstery structure.
-3. Decide:
-   - \`match_score\`: 0..1 — how well the room piece matches the canonical product
-   - \`verified\`: true iff match_score >= ${MATCH_THRESHOLD}
-   - \`mismatch_notes\`: specific deltas you can see (e.g., "legs are black in
-     room photo but brand only ships in walnut")
-4. Enrich with canonical data from the product page:
-   - \`canonical_url\`: the product page URL (brand's site preferred)
-   - \`source_urls\`: up to 3 pages you used
-   - \`dimensions\`: { width_in, depth_in, height_in } in inches, OR null
-   - \`materials\`: array of primary materials (e.g., ["walnut", "linen"])
-   - \`colors\`: array of visible/available colorways
-   - \`price_range\`: { min, max, currency } — current MSRP range, OR null
-   - \`image_url\`: a direct image URL from the canonical page, OR null
-
-If you cannot find the product at all, return \`verified: false\`,
-\`match_score: 0\`, empty/nulled enrichment fields, and a mismatch_note
-explaining what you searched for.
-
-Return ONLY JSON.`;
+  const prompt = buildVerifierPrompt({ candidate, matchThreshold: MATCH_THRESHOLD });
 
   let content = "";
   let tokensUsed = 0;

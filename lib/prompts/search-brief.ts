@@ -85,7 +85,8 @@ export function getSearchBriefPrompt(
   diagnosis?: Record<string, unknown>,
   lightingConditions?: string,
   windowDoorPositions?: string,
-  outletPositions?: string
+  outletPositions?: string,
+  identifiedContext?: string
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -181,6 +182,13 @@ export function getSearchBriefPrompt(
     ? `\n\n## USER NOTES ABOUT THIS ROOM\n"${userContext}"\nIMPORTANT: Take these notes into account. If they say to ignore something, exclude it from search considerations. If they describe something not visible in photos, incorporate that information.`
     : "";
 
+  // Identified pieces (furniture identification feature). Empty string when the
+  // feature is off / no usable identifications — keeps the prompt byte-for-byte
+  // equivalent to the pre-feature shape for pre-feature rows.
+  const identifiedSection = identifiedContext
+    ? `\n\n${identifiedContext}\nANTI-QUERY: do NOT generate search queries for a REPLACEMENT of any identified piece above. Your queries must target complementary items ONLY. Use the canonical dimensions as scale guardrails — e.g. if a 110" KIVIK sectional is identified, the rug query should specify "at least 9x12" and the coffee table query should specify "48-60 inch length to match a 110" sectional".`
+    : "";
+
   return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
 
 ## PROCESS — Think through this step by step:
@@ -192,7 +200,7 @@ export function getSearchBriefPrompt(
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}
+- Categories to search: ${missingCategories.join(", ")}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}
 
 ## INSTRUCTIONS
 For each category, generate search queries for THREE price tiers:

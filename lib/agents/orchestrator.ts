@@ -229,7 +229,8 @@ export async function runAgenticSearch(
       ctx.designProfile, ctx.designDirection, ctx.priorities,
       ctx.keepItems, ctx.replaceItems, ctx.spatialLayout, ctx.roomSummary,
       ctx.userContext, ctx.diagnosis as Record<string, unknown> | undefined,
-      ctx.lightingConditions, ctx.windowDoorPositions, ctx.outletPositions
+      ctx.lightingConditions, ctx.windowDoorPositions, ctx.outletPositions,
+      ctx.identifiedContext
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
@@ -665,6 +666,7 @@ export async function runAgenticSearch(
                 outletPositions: ctx.outletPositions,
                 userContext: ctx.userContext,
                 replaceItems: ctx.replaceItems,
+                identifiedContext: ctx.identifiedContext,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -1060,6 +1062,7 @@ export async function runAgenticSearch(
                 outletPositions: ctx.outletPositions,
                 userContext: ctx.userContext,
                 replaceItems: ctx.replaceItems,
+                identifiedContext: ctx.identifiedContext,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
