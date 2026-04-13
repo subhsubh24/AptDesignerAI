@@ -71,7 +71,7 @@ export async function runIdentifiedProductsPipeline(
   let totalTokens = 0;
 
   // ─── 1. Crop ────────────────────────────────────────────────
-  const cropperOut = await runFurnitureCropper(input.imageUrls);
+  const cropperOut = await runFurnitureCropper(input.imageUrls, input.roomType);
   totalTokens += cropperOut.tokensUsed;
 
   if (cropperOut.crops.length === 0) {
