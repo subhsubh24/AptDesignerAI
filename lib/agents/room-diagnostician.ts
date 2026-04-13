@@ -47,6 +47,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
     ctx.priorities,
     ctx.userContext,
     ctx.otherRoomsContext,
+    profile,
   );
 
   const analysisContent: AIContentBlock[] = [];

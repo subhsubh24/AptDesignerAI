@@ -1,4 +1,5 @@
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 interface DiagnosisContextParts {
   allKeepItems: string[];
@@ -6,6 +7,53 @@ interface DiagnosisContextParts {
   keepItemsWarning: string;
   parsedSections: string;
   crossRoomSection: string;
+}
+
+/**
+ * Render explicit building + apartment + floor-plan grounding into the
+ * diagnosis prompt. The system prompt already carries this, but falls back
+ * to generic defaults when profile data is sparse — foregrounding it here
+ * ensures the diagnostician actually references the specific finishes and
+ * dimensions when they are available.
+ */
+function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
+  if (!profile) return "";
+  const lines: string[] = [];
+  // DynamicDesignProfile is loosely typed — probe for the well-known fields.
+  const p = profile as unknown as Record<string, unknown>;
+  const building = p.building_research as Record<string, unknown> | undefined;
+  const apartment = p.apartment_analysis as Record<string, unknown> | undefined;
+  const floorPlan = p.floor_plan as Record<string, unknown> | undefined;
+
+  if (building) {
+    const style = building.building_style || building.style;
+    const finishes = building.finishes;
+    const aesthetic = building.design_aesthetic;
+    const pieces: string[] = [];
+    if (style) pieces.push(`style: ${typeof style === "string" ? style : JSON.stringify(style)}`);
+    if (finishes) pieces.push(`finishes: ${typeof finishes === "string" ? finishes : JSON.stringify(finishes)}`);
+    if (aesthetic) pieces.push(`aesthetic: ${typeof aesthetic === "string" ? aesthetic : JSON.stringify(aesthetic)}`);
+    if (pieces.length) lines.push(`Building — ${pieces.join("; ")}`);
+  }
+
+  if (apartment) {
+    const overall = apartment.overall;
+    if (typeof overall === "string" && overall) lines.push(`Apartment — ${overall}`);
+  }
+
+  if (floorPlan) {
+    const sqft = floorPlan.total_sqft;
+    const dims = floorPlan.room_dimensions;
+    const layout = floorPlan.room_layout;
+    const pieces: string[] = [];
+    if (sqft) pieces.push(`sqft: ${sqft}`);
+    if (dims) pieces.push(`room dimensions: ${typeof dims === "string" ? dims : JSON.stringify(dims)}`);
+    if (layout) pieces.push(`layout: ${typeof layout === "string" ? layout : JSON.stringify(layout)}`);
+    if (pieces.length) lines.push(`Floor plan — ${pieces.join("; ")}`);
+  }
+
+  if (!lines.length) return "";
+  return `\n## BUILDING & APARTMENT GROUNDING (reference these specifically in your analysis)\n${lines.map((l) => `- ${l}`).join("\n")}\nYour design direction MUST reference these actual finishes/dimensions — do not default to generic assumptions.\n`;
 }
 
 function buildDiagnosisContextParts(
@@ -217,9 +265,11 @@ export function getDiagnosisAnalysisPrompt(
   priorities: string[],
   userContext?: string,
   otherRoomsContext?: string,
+  profile?: DynamicDesignProfile,
 ): string {
   const { allKeepItems, userNotes, keepItemsWarning, parsedSections, crossRoomSection } =
     buildDiagnosisContextParts(keepItems, userContext, otherRoomsContext);
+  const profileSection = buildDesignProfileSection(profile);
 
   return `Analyze the room photos provided and produce a comprehensive diagnosis plus design direction.
 
@@ -230,7 +280,7 @@ This is PASS 1 of 2. Your ONLY job here is observation + problem identification 
 - Items to keep: ${allKeepItems.length > 0 ? allKeepItems.join(", ") : "none specified"}
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
-${parsedSections ? `\n${parsedSections}\n` : ""}${crossRoomSection}
+${parsedSections ? `\n${parsedSections}\n` : ""}${crossRoomSection}${profileSection}
 ## STEP-BY-STEP ANALYSIS PROCESS
 
 ### Step 1: OBSERVE (spend the most time here)
