@@ -22,6 +22,34 @@ import {
   formatDirectionDistanceForPrompt,
   type DirectionDistance,
 } from "./direction-distance";
+import {
+  computeErgonomics,
+  formatErgonomicsForPrompt,
+  getErgonomicsIssuesForItem,
+  type ErgonomicsResult,
+} from "./ergonomics";
+import {
+  computeAccessConstraints,
+  formatAccessConstraintsForPrompt,
+  getAccessIssuesForItem,
+  type AccessConstraintResult,
+} from "./access-constraints";
+import {
+  computeOutletReach,
+  formatOutletReachForPrompt,
+  getOutletReachIssuesForItem,
+  type OutletReachResult,
+} from "./outlet-reach";
+import {
+  computeBudgetAllocation,
+  formatBudgetAllocationForPrompt,
+  type BudgetAllocationResult,
+} from "./budget-allocation";
+import {
+  computeCodeCompliance,
+  formatCodeComplianceForPrompt,
+  type CodeComplianceResult,
+} from "./code-compliance";
 import type { DesignDirection } from "@/lib/types/database";
 
 export interface MathHarmonyItemScore {
@@ -56,6 +84,16 @@ export interface MathHarmonyResult {
     mean_compatibility: number;
     per_room: Array<{ name?: string; distance: DirectionDistance }>;
   };
+  /** Ergonomics & viewing-distance rules */
+  ergonomics?: ErgonomicsResult;
+  /** Delivery / access constraints (door, elevator, stairwell) */
+  access_constraints?: AccessConstraintResult;
+  /** Outlet-reach check for powered items */
+  outlet_reach?: OutletReachResult;
+  /** Budget allocation share per category */
+  budget_allocation?: BudgetAllocationResult;
+  /** Static "code-lite" compliance (IRC egress, natural light, ADA, NEC) */
+  code_compliance?: CodeComplianceResult;
   itemScores: MathHarmonyItemScore[];
 }
 
@@ -64,13 +102,18 @@ export interface MathHarmonyResult {
 // violations but don't dominate the score, since they overlap the existing
 // spatial + proportion dimensions.
 const WEIGHTS = {
-  spatial: 0.25,
-  color: 0.18,
-  material: 0.18,
-  proportion: 0.13,
-  specificity: 0.13,
-  spatial_graph: 0.08,
+  spatial: 0.22,
+  color: 0.16,
+  material: 0.16,
+  proportion: 0.12,
+  specificity: 0.11,
+  spatial_graph: 0.07,
   pairwise: 0.05,
+  ergonomics: 0.04,
+  outlet_reach: 0.03,
+  budget_allocation: 0.02,
+  access_constraints: 0.01,
+  code_compliance: 0.01,
 };
 
 // (f) Category-specific required fields for meaningful specificity scoring
@@ -272,6 +315,10 @@ export function computeHarmonyScores(
     buildingResearch?: Record<string, unknown>;
     /** This room's structured design direction — used for cross-room distance metrics */
     designDirection?: DesignDirection | null;
+    /** Priced recommendations for budget-allocation check (optional) */
+    bundle?: Array<{ category: string; price?: number }>;
+    /** Whether the unit is marked accessible (gates ADA checks) */
+    accessibleUnit?: boolean;
   }
 ): MathHarmonyResult {
   // (l) Extract apartment-wide palette anchors from building finishes
@@ -311,6 +358,24 @@ export function computeHarmonyScores(
   const proportion = computeProportionScores(analysis, context);
   const spatialGraph = computeSpatialGraph(analysis, { roomType: context.roomType });
   const pairwise = computePairwiseProportions(analysis);
+
+  // Additional deterministic validators (adjacent gaps).
+  // Each is non-fatal: returns a neutral score with warnings when context is
+  // insufficient, so missing data never tanks the overall.
+  const ergonomics = computeErgonomics(analysis, { roomType: context.roomType });
+  const access = computeAccessConstraints(analysis, {
+    buildingResearch: context.buildingResearch,
+  });
+  const outletReach = computeOutletReach(analysis);
+  const budgetAlloc = computeBudgetAllocation(analysis, {
+    roomType: context.roomType,
+    bundle: context.bundle,
+  });
+  const codeCompliance = computeCodeCompliance(analysis, {
+    roomType: context.roomType,
+    floorPlan: context.floorPlan,
+    accessibleUnit: context.accessibleUnit,
+  });
 
   // Cross-apartment direction coherence — only compute when we have sibling
   // design directions available (validation-agent provides them).
@@ -354,6 +419,15 @@ export function computeHarmonyScores(
     for (const msg of getPairwiseIssuesForItem(pairwise, item.category)) {
       violations.push(msg);
     }
+    for (const msg of getErgonomicsIssuesForItem(ergonomics, item.category)) {
+      violations.push(msg);
+    }
+    for (const msg of getAccessIssuesForItem(access, item.category)) {
+      violations.push(`⚠ DELIVERY: ${msg}`);
+    }
+    for (const msg of getOutletReachIssuesForItem(outletReach, item.category)) {
+      violations.push(msg);
+    }
 
     const specificity = computeSpecificityScore(item);
 
@@ -379,7 +453,12 @@ export function computeHarmonyScores(
         ((proportion.rug_coverage + proportion.height_relationships + proportion.visual_balance) / 3) +
       WEIGHTS.specificity * specificity +
       WEIGHTS.spatial_graph * spatialGraph.overall +
-      WEIGHTS.pairwise * pairwise.score;
+      WEIGHTS.pairwise * pairwise.score +
+      WEIGHTS.ergonomics * ergonomics.score +
+      WEIGHTS.outlet_reach * outletReach.score +
+      WEIGHTS.budget_allocation * budgetAlloc.score +
+      WEIGHTS.access_constraints * access.score +
+      WEIGHTS.code_compliance * codeCompliance.score;
 
     // Penalty for violations
     const violationPenalty = Math.min(violations.length * 0.05, 0.25);
@@ -408,6 +487,11 @@ export function computeHarmonyScores(
     spatial_graph: spatialGraph,
     pairwise_proportions: pairwise,
     cross_room_directions: crossRoomDirections,
+    ergonomics,
+    access_constraints: access,
+    outlet_reach: outletReach,
+    budget_allocation: budgetAlloc,
+    code_compliance: codeCompliance,
     itemScores,
   };
 }
@@ -489,6 +573,28 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
     for (const entry of result.cross_room_directions.per_room) {
       lines.push(formatDirectionDistanceForPrompt(entry.distance, entry.name));
     }
+    lines.push("");
+  }
+
+  // Additional deterministic validators (adjacent gaps)
+  if (result.ergonomics) {
+    lines.push(formatErgonomicsForPrompt(result.ergonomics));
+    lines.push("");
+  }
+  if (result.access_constraints) {
+    lines.push(formatAccessConstraintsForPrompt(result.access_constraints));
+    lines.push("");
+  }
+  if (result.outlet_reach) {
+    lines.push(formatOutletReachForPrompt(result.outlet_reach));
+    lines.push("");
+  }
+  if (result.budget_allocation) {
+    lines.push(formatBudgetAllocationForPrompt(result.budget_allocation));
+    lines.push("");
+  }
+  if (result.code_compliance) {
+    lines.push(formatCodeComplianceForPrompt(result.code_compliance));
     lines.push("");
   }
 
