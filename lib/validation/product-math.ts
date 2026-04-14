@@ -8,6 +8,7 @@
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL } from "./lookups";
 import { deltaE2000, hslToLab } from "./color-math";
 import { parseDimensions } from "./spatial-math";
+import { scoreLifestyleFit, type LifestyleFlags } from "./durability-map";
 
 export interface ProductMathScores {
   scale_fit: number;     // 0-1: product dimensions vs room/placement constraints
@@ -15,8 +16,17 @@ export interface ProductMathScores {
   material_fit: number;  // 0-1: product materials vs recommended materials + conflict detection
   value_fit: number;     // 0-1: price positioning within tier
   proportion_fit: number; // 0-1: height relationships, rug sizing, etc.
+  /** 0-1: product durability vs resolved lifestyle flags (pets/kids/traffic). 1 = neutral when no flags set. */
+  lifestyle_fit: number;
   overall: number;       // 0-1: weighted combination
   issues: string[];      // specific mathematical findings
+  /** Per-axis durability sub-scores for prompt transparency. */
+  lifestyle_axes?: {
+    pet_friendly: number;
+    kid_friendly: number;
+    high_traffic: number;
+    easy_clean: number;
+  };
 }
 
 interface ProductData {
@@ -48,6 +58,8 @@ interface ProductMathContext {
   /** Materials already used in the room (from other products or existing items) */
   roomWoodSpecies?: string[];
   roomMetalFinishes?: string[];
+  /** Resolved lifestyle flags (pets/kids/traffic/WFH) — used for durability scoring. */
+  lifestyle?: LifestyleFlags;
 }
 
 // HSL → Lab conversion imported from color-math.ts (single source of truth)
@@ -422,11 +434,12 @@ function evaluateHeight(
 // --- Weights ---
 
 const PRODUCT_MATH_WEIGHTS = {
-  scale_fit: 0.25,
-  palette_fit: 0.22,
-  material_fit: 0.22,
-  value_fit: 0.13,
-  proportion_fit: 0.18,
+  scale_fit: 0.24,
+  palette_fit: 0.20,
+  material_fit: 0.20,
+  value_fit: 0.12,
+  proportion_fit: 0.16,
+  lifestyle_fit: 0.08,
 };
 
 // --- Main export ---
@@ -441,12 +454,27 @@ export function computeProductMathScores(
   const value = computeValueFit(product, ctx);
   const proportion = computeProportionFit(product, ctx);
 
+  // Lifestyle fit only scores if there are actual flags (pets/kids/traffic).
+  // Otherwise returns a neutral 1.0 so it doesn't drag the overall score.
+  const lifestyleFlags = ctx.lifestyle;
+  const anyFlag =
+    !!lifestyleFlags &&
+    (lifestyleFlags.has_pets || lifestyleFlags.has_kids || lifestyleFlags.high_traffic);
+  const lifestyle = anyFlag
+    ? scoreLifestyleFit(
+        { category: product.category, materials: product.materials, colors: product.colors },
+        lifestyleFlags!,
+      )
+    : null;
+  const lifestyleScore = lifestyle ? lifestyle.score : 1.0;
+
   const allIssues = [
     ...scale.issues,
     ...palette.issues,
     ...material.issues,
     ...value.issues,
     ...proportion.issues,
+    ...(lifestyle?.issues ?? []),
   ];
 
   const overall =
@@ -454,7 +482,8 @@ export function computeProductMathScores(
     PRODUCT_MATH_WEIGHTS.palette_fit * palette.score +
     PRODUCT_MATH_WEIGHTS.material_fit * material.score +
     PRODUCT_MATH_WEIGHTS.value_fit * value.score +
-    PRODUCT_MATH_WEIGHTS.proportion_fit * proportion.score;
+    PRODUCT_MATH_WEIGHTS.proportion_fit * proportion.score +
+    PRODUCT_MATH_WEIGHTS.lifestyle_fit * lifestyleScore;
 
   return {
     scale_fit: round2(scale.score),
@@ -462,8 +491,17 @@ export function computeProductMathScores(
     material_fit: round2(material.score),
     value_fit: round2(value.score),
     proportion_fit: round2(proportion.score),
+    lifestyle_fit: round2(lifestyleScore),
     overall: round2(overall),
     issues: allIssues,
+    lifestyle_axes: lifestyle
+      ? {
+          pet_friendly: lifestyle.axes.pet_friendly,
+          kid_friendly: lifestyle.axes.kid_friendly,
+          high_traffic: lifestyle.axes.high_traffic,
+          easy_clean: lifestyle.axes.easy_clean,
+        }
+      : undefined,
   };
 }
 
@@ -480,6 +518,11 @@ export function formatProductMathForPrompt(scores: ProductMathScores): string {
   lines.push(`- Material fit: ${scores.material_fit.toFixed(2)}/1.0`);
   lines.push(`- Value fit: ${scores.value_fit.toFixed(2)}/1.0`);
   lines.push(`- Proportion fit: ${scores.proportion_fit.toFixed(2)}/1.0`);
+  if (scores.lifestyle_axes) {
+    lines.push(
+      `- Lifestyle fit: ${scores.lifestyle_fit.toFixed(2)}/1.0 (pet=${scores.lifestyle_axes.pet_friendly.toFixed(2)} kid=${scores.lifestyle_axes.kid_friendly.toFixed(2)} traffic=${scores.lifestyle_axes.high_traffic.toFixed(2)} clean=${scores.lifestyle_axes.easy_clean.toFixed(2)})`,
+    );
+  }
 
   if (scores.issues.length > 0) {
     lines.push("");

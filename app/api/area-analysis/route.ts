@@ -14,7 +14,7 @@ import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/pars
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
-import type { IdentifiedProduct } from "@/lib/types/database";
+import type { DesignDirection, IdentifiedProduct } from "@/lib/types/database";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -616,8 +616,32 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
         palette: (dd?.recommended_palette as string[]) || (dj?.recommended_palette as string[]) || undefined,
         materials: (dd?.recommended_materials as string[]) || (dj?.recommended_materials as string[]) || undefined,
         keyItems: (dj?.what_works as string[])?.slice(0, 5) || undefined,
+        // Structured direction (full DesignDirection) — used by harmony-math for
+        // palette Delta-E, material Euclidean, and style Jaccard cross-room metrics.
+        directionStructured: dd
+          ? ({
+              recommended_palette: (dd.recommended_palette as string[]) ?? [],
+              recommended_materials: (dd.recommended_materials as string[]) ?? [],
+              recommended_textures: (dd.recommended_textures as string[]) ?? [],
+              recommended_furniture_types: (dd.recommended_furniture_types as string[]) ?? [],
+              style_notes: (dd.style_notes as string) ?? ((dj?.design_direction as string) ?? ""),
+            } as DesignDirection)
+          : null,
       };
     });
+
+    // Build the current room's structured direction from the analysis object —
+    // used for cross-apartment coherence computations against sibling rooms.
+    const currentRoomDirection: DesignDirection | null =
+      analysis.design_direction || analysis.recommended_palette || analysis.recommended_materials
+        ? {
+            recommended_palette: (analysis.recommended_palette as string[]) ?? [],
+            recommended_materials: (analysis.recommended_materials as string[]) ?? [],
+            recommended_textures: (analysis.recommended_textures as string[]) ?? [],
+            recommended_furniture_types: ((analysis.what_it_needs as Array<{ category: string }> | undefined) ?? []).map((n) => n.category),
+            style_notes: (analysis.design_direction as string) ?? "",
+          }
+        : null;
 
     const harmonyCtx = {
       roomType: room.room_type,
@@ -662,6 +686,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
         floorPlan,
         otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
         buildingResearch: br,
+        designDirection: currentRoomDirection,
       };
       latestMathResult = computeHarmonyScores(analysis, mathCtx);
       const mathScoresText = formatMathScoresForPrompt(latestMathResult);
@@ -1027,6 +1052,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       floorPlan,
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
       buildingResearch: br,
+      designDirection: currentRoomDirection,
     };
     latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
     const finalMathText = formatMathScoresForPrompt(latestMathResult);

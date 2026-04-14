@@ -5,6 +5,24 @@ import { computeColorHarmony, type ColorHarmonyResult } from "./color-math";
 import { computeSpatialConstraints, type SpatialConstraintResult } from "./spatial-math";
 import { computeMaterialBalance, type MaterialBalanceResult } from "./material-math";
 import { computeProportionScores, type ProportionResult } from "./proportion-math";
+import {
+  computeSpatialGraph,
+  getSpatialGraphIssuesForItem,
+  formatSpatialGraphForPrompt,
+  type SpatialGraphResult,
+} from "./spatial-graph";
+import {
+  computePairwiseProportions,
+  getPairwiseIssuesForItem,
+  formatPairwiseProportionsForPrompt,
+  type PairwiseResult,
+} from "./pairwise-proportions";
+import {
+  computeApartmentCoherence,
+  formatDirectionDistanceForPrompt,
+  type DirectionDistance,
+} from "./direction-distance";
+import type { DesignDirection } from "@/lib/types/database";
 
 export interface MathHarmonyItemScore {
   category: string;
@@ -29,16 +47,30 @@ export interface MathHarmonyResult {
   material: MaterialBalanceResult;
   proportion: ProportionResult;
   lighting: LightingAdequacyResult;
+  /** Topological spatial reasoning — traffic flow, dead zones, sight-lines, adjacency */
+  spatial_graph: SpatialGraphResult;
+  /** Pairwise furniture-dimension anchoring (coffee table vs sofa, etc.) */
+  pairwise_proportions: PairwiseResult;
+  /** Cross-apartment direction coherence (present only when sibling directions are supplied) */
+  cross_room_directions?: {
+    mean_compatibility: number;
+    per_room: Array<{ name?: string; distance: DirectionDistance }>;
+  };
   itemScores: MathHarmonyItemScore[];
 }
 
-// Weights: spatial heaviest (hard physical constraints)
+// Weights: spatial heaviest (hard physical constraints).
+// spatial_graph + pairwise are small additive contributions — they surface
+// violations but don't dominate the score, since they overlap the existing
+// spatial + proportion dimensions.
 const WEIGHTS = {
-  spatial: 0.30,
-  color: 0.20,
-  material: 0.20,
-  proportion: 0.15,
-  specificity: 0.15,
+  spatial: 0.25,
+  color: 0.18,
+  material: 0.18,
+  proportion: 0.13,
+  specificity: 0.13,
+  spatial_graph: 0.08,
+  pairwise: 0.05,
 };
 
 // (f) Category-specific required fields for meaningful specificity scoring
@@ -228,9 +260,18 @@ export function computeHarmonyScores(
   context: {
     roomType?: string;
     floorPlan?: Record<string, unknown>;
-    otherRooms?: Array<{ palette?: string[]; materials?: string[] }>;
+    otherRooms?: Array<{
+      palette?: string[];
+      materials?: string[];
+      name?: string;
+      /** Structured DesignDirection for cross-room distance metrics. Optional —
+       *  other callers pass a string narrative for prompt formatting instead. */
+      directionStructured?: DesignDirection | null;
+    }>;
     // (l) Building research for apartment-wide palette anchors
     buildingResearch?: Record<string, unknown>;
+    /** This room's structured design direction — used for cross-room distance metrics */
+    designDirection?: DesignDirection | null;
   }
 ): MathHarmonyResult {
   // (l) Extract apartment-wide palette anchors from building finishes
@@ -268,6 +309,17 @@ export function computeHarmonyScores(
     otherRooms: context.otherRooms,
   });
   const proportion = computeProportionScores(analysis, context);
+  const spatialGraph = computeSpatialGraph(analysis, { roomType: context.roomType });
+  const pairwise = computePairwiseProportions(analysis);
+
+  // Cross-apartment direction coherence — only compute when we have sibling
+  // design directions available (validation-agent provides them).
+  const siblingDirections = (context.otherRooms || [])
+    .map((r) => ({ name: r.name, direction: r.directionStructured }))
+    .filter((r): r is { name: string | undefined; direction: DesignDirection } => !!r.direction);
+  const crossRoomDirections = siblingDirections.length > 0
+    ? computeApartmentCoherence(context.designDirection ?? null, siblingDirections)
+    : undefined;
 
   const whatItNeeds =
     (analysis.what_it_needs as Array<{
@@ -296,6 +348,12 @@ export function computeHarmonyScores(
         violations.push(i.issue);
       }
     }
+    for (const msg of getSpatialGraphIssuesForItem(spatialGraph, item.category)) {
+      violations.push(msg);
+    }
+    for (const msg of getPairwiseIssuesForItem(pairwise, item.category)) {
+      violations.push(msg);
+    }
 
     const specificity = computeSpecificityScore(item);
 
@@ -319,7 +377,9 @@ export function computeHarmonyScores(
       WEIGHTS.material * materialScore +
       WEIGHTS.proportion *
         ((proportion.rug_coverage + proportion.height_relationships + proportion.visual_balance) / 3) +
-      WEIGHTS.specificity * specificity;
+      WEIGHTS.specificity * specificity +
+      WEIGHTS.spatial_graph * spatialGraph.overall +
+      WEIGHTS.pairwise * pairwise.score;
 
     // Penalty for violations
     const violationPenalty = Math.min(violations.length * 0.05, 0.25);
@@ -345,6 +405,9 @@ export function computeHarmonyScores(
     material,
     proportion,
     lighting,
+    spatial_graph: spatialGraph,
+    pairwise_proportions: pairwise,
+    cross_room_directions: crossRoomDirections,
     itemScores,
   };
 }
@@ -411,6 +474,23 @@ export function formatMathScoresForPrompt(result: MathHarmonyResult): string {
     lines.push(`- ISSUE: ${issue}`);
   }
   lines.push("");
+
+  // Spatial graph (traffic flow, dead zones, sight-lines, adjacency)
+  lines.push(formatSpatialGraphForPrompt(result.spatial_graph));
+  lines.push("");
+
+  // Pairwise proportion rules (coffee table vs sofa, rug vs sofa, etc.)
+  lines.push(formatPairwiseProportionsForPrompt(result.pairwise_proportions));
+  lines.push("");
+
+  // Cross-apartment direction coherence
+  if (result.cross_room_directions && result.cross_room_directions.per_room.length > 0) {
+    lines.push(`### Cross-apartment direction coherence: ${result.cross_room_directions.mean_compatibility.toFixed(2)}/1.0`);
+    for (const entry of result.cross_room_directions.per_room) {
+      lines.push(formatDirectionDistanceForPrompt(entry.distance, entry.name));
+    }
+    lines.push("");
+  }
 
   // Per-item scores with per-dimension evidence
   lines.push("### Per-item math scores and dimension evidence:");

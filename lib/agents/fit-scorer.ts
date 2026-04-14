@@ -24,6 +24,7 @@ import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeProductMathScores, formatProductMathForPrompt, type ProductMathScores } from "@/lib/validation/product-math";
+import { resolveLifestyleFlags } from "@/lib/validation/durability-map";
 
 const log = createLogger("fit-scorer");
 
@@ -158,6 +159,7 @@ export async function scoreProduct(
   }
 
   // Compute deterministic math scores before LLM evaluation
+  const lifestyleFlags = resolveLifestyleFlags(scoringCtx.designProfile?.lifestyle);
   const mathScores: ProductMathScores = computeProductMathScores(
     {
       title: product.title || undefined,
@@ -175,6 +177,7 @@ export async function scoreProduct(
       recommendedMaterials: scoringCtx.designDirection?.recommended_materials,
       floorPlan: scoringCtx.floorPlan,
       placement: scoringCtx.placement,
+      lifestyle: lifestyleFlags,
     }
   );
   const mathSection = formatProductMathForPrompt(mathScores);
