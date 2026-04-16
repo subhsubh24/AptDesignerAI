@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
+import type { ExtractedFloorPlan } from "@/lib/types/database";
 
 export default function RoomSetupPage() {
   const params = useParams();
@@ -33,6 +35,7 @@ export default function RoomSetupPage() {
   const [replaceItems, setReplaceItems] = useState("");
   const [priorities, setPriorities] = useState("");
   const [saving, setSaving] = useState(false);
+  const [floorPlan, setFloorPlan] = useState<ExtractedFloorPlan | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -139,6 +142,28 @@ export default function RoomSetupPage() {
             imageType="apartment_context"
             onUploadComplete={handleImageUploaded}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Floor Plan</CardTitle>
+          <CardDescription>
+            Upload your apartment floor plan so the AI knows exact room dimensions,
+            window placement, and traffic flow. This significantly improves furniture
+            sizing and layout advice for all rooms.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FloorPlanUploadZone
+            projectId={projectId}
+            onExtracted={setFloorPlan}
+          />
+          {!floorPlan && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Optional — without a floor plan, sizing is estimated from photos.
+            </p>
+          )}
         </CardContent>
       </Card>
 

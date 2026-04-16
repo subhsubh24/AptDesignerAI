@@ -211,8 +211,30 @@ export default function FocusPage() {
           const project = await projRes.json();
           const br = project?.building_research;
           if (br?.floor_plan_image_url || br?.extracted_floor_plan) {
-            // Uploaded floor plan (new path) — spatial data is extracted via vision model
-            setFloorPlan(br.extracted_floor_plan ?? null);
+            // Uploaded floor plan (new path) — normalize ExtractedFloorPlan to display shape
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const efp = br.extracted_floor_plan as any;
+            if (efp) {
+              // Build room_dimensions map from rooms array
+              const roomDimensions: Record<string, string> = {};
+              if (Array.isArray(efp.rooms)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const r of efp.rooms as any[]) {
+                  if (r.room_type && (r.dimensions_text || r.sqft)) {
+                    roomDimensions[r.room_type] = r.dimensions_text ?? `${r.sqft} sqft`;
+                  }
+                }
+              }
+              // Build notable_spatial_features from overall_notes + per-room traffic_notes
+              const spatialFeatures: string[] = [];
+              if (efp.building_orientation) spatialFeatures.push(efp.building_orientation);
+              if (efp.overall_notes) spatialFeatures.push(efp.overall_notes);
+              setFloorPlan({
+                total_sqft: efp.total_sqft ? String(efp.total_sqft) : undefined,
+                room_dimensions: roomDimensions,
+                notable_spatial_features: spatialFeatures.length ? spatialFeatures : undefined,
+              });
+            }
             setFloorPlanFound(true);
           } else if (br?.floor_plan) {
             const fp = br.floor_plan;
@@ -644,7 +666,15 @@ export default function FocusPage() {
                     )}
                   </>
                 ) : (
-                  <span>No floor plan — sizing estimated from photos. Upload a floor plan for significantly better recommendations.</span>
+                  <span>No floor plan — sizing estimated from photos.{" "}
+                    <Link
+                      href={`/projects/${projectId}/rooms/${roomId}/setup`}
+                      className="underline font-medium hover:opacity-80"
+                    >
+                      Upload a floor plan
+                    </Link>{" "}
+                    in Room Setup for significantly better recommendations.
+                  </span>
                 )}
               </div>
             </div>
