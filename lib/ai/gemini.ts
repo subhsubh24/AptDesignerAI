@@ -155,9 +155,13 @@ async function convertMessages(
   let totalImages = 0;
   let failedImages = 0;
 
-  const imagePartExtras: Record<string, unknown> = partMediaResolutionLevel
-    ? { mediaResolution: { level: partMediaResolutionLevel } }
-    : {};
+  // MEDIA_RESOLUTION_ULTRA_HIGH requires rasterized images (JPEG, PNG, WebP,
+  // etc.). Applying it to PDFs or other non-image types causes
+  // INVALID_ARGUMENT (400). Helper returns extras only for rasterized types.
+  const mediaResExtras = (mime: string): Record<string, unknown> =>
+    partMediaResolutionLevel && mime.startsWith("image/")
+      ? { mediaResolution: { level: partMediaResolutionLevel } }
+      : {};
 
   for (const msg of messages) {
     const parts: Record<string, unknown>[] = [];
@@ -169,28 +173,25 @@ async function convertMessages(
         if ((block.type === "image" || block.type === "file") && block.source) {
           totalImages++;
           if (block.source.type === "file_uri" && block.source.uri) {
-            // Files API path — reference an already-uploaded asset by URI.
-            // No base64 round-trip; Gemini fetches the bytes server-side.
-            // NOTE: mediaResolution on fileData parts is accepted but only
-            // meaningful for image/video — harmless for PDFs.
+            const mime = block.source.media_type || "image/jpeg";
             parts.push({
-              ...imagePartExtras,
+              ...mediaResExtras(mime),
               fileData: {
-                mimeType: block.source.media_type || "image/jpeg",
+                mimeType: mime,
                 fileUri: block.source.uri,
               },
             });
           } else if (block.source.type === "base64" && block.source.data) {
+            const mime = block.source.media_type || "image/jpeg";
             parts.push({
-              ...imagePartExtras,
+              ...mediaResExtras(mime),
               inlineData: {
-                mimeType: block.source.media_type || "image/jpeg",
+                mimeType: mime,
                 data: block.source.data,
               },
             });
           } else if (block.source.type === "url" && block.source.url) {
             const imgUrl = block.source.url;
-            // Skip obviously invalid URLs (but allow /uploads/ local paths)
             if (!imgUrl.startsWith("http://") && !imgUrl.startsWith("https://") && !imgUrl.startsWith("/uploads/")) {
               failedImages++;
               continue;
@@ -198,7 +199,7 @@ async function convertMessages(
             try {
               const { data, mimeType } = await fetchImageAsBase64(imgUrl);
               parts.push({
-                ...imagePartExtras,
+                ...mediaResExtras(mimeType),
                 inlineData: { mimeType, data },
               });
             } catch (err) {
@@ -453,13 +454,26 @@ export const geminiProvider: AIProvider = {
         const canRetry =
           attempt < maxTransportAttempts && isTransportError(err);
         if (!canRetry) {
+          const status = e.status as number;
           log.error("API error", {
             model,
             errorName: e.name as string,
-            status: e.status as number,
+            status,
             error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
             details: e.details || e.errorDetails,
           });
+          if (status === 400) {
+            const imagePartCount = contents.reduce((n, c) => n + c.parts.filter((p: Record<string, unknown>) => p.inlineData || p.fileData).length, 0);
+            log.error("400 diagnostic", {
+              configKeys: Object.keys(config),
+              hasResponseSchema: !!config.responseSchema,
+              hasThinkingConfig: !!config.thinkingConfig,
+              hasSeed: "seed" in config,
+              hasCachedContent: !!config.cachedContent,
+              imagePartCount,
+              hasPartMediaRes: contents.some((c) => c.parts.some((p: Record<string, unknown>) => p.mediaResolution)),
+            });
+          }
           throw err;
         }
         const delay = 500 * Math.pow(2, attempt - 1); // 500ms, 1000ms
