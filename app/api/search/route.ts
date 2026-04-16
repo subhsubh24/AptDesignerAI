@@ -263,10 +263,11 @@ export async function POST(request: Request) {
   const verification = await verifyTopSearchCandidates(
     result.data.candidatesByCategory,
     result.data.evaluations,
+    session?.id,
   );
   if (verification.attempted > 0) {
     console.log(
-      `[search] Product verification: ${verification.succeeded}/${verification.attempted} succeeded`,
+      `[search] Product verification: ${verification.succeeded}/${verification.attempted} succeeded (${verification.cacheHits} from cache)`,
     );
   }
 

@@ -280,6 +280,7 @@ export async function POST(request: Request) {
         const verification = await verifyTopSearchCandidates(
           result.data.candidatesByCategory,
           result.data.evaluations,
+          session?.id,
         );
         send("step", {
           step: "Verifying top products",
@@ -287,6 +288,7 @@ export async function POST(request: Request) {
           data: {
             attempted: verification.attempted,
             succeeded: verification.succeeded,
+            cache_hits: verification.cacheHits,
           },
         });
 

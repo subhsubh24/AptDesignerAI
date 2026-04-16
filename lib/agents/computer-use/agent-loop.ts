@@ -279,6 +279,27 @@ export async function runComputerUseAgent<T = unknown>(
       const urlBefore = await driver.currentUrl();
 
       for (const action of actions) {
+        // Check Gemini's built-in safety_decision embedded in args. Unattended
+        // agents must not proceed on require_confirmation — the spec says human
+        // confirmation is mandatory and cannot be bypassed programmatically.
+        const safetyDecision = action.args?.safety_decision as
+          | { decision?: string; explanation?: string }
+          | undefined;
+        if (safetyDecision?.decision === "require_confirmation") {
+          log.warn("Gemini safety gate triggered — aborting unattended run", {
+            action: action.name,
+            explanation: safetyDecision.explanation ?? "(no explanation)",
+          });
+          actionResults.push({
+            name: action.name,
+            ok: false,
+            blocked: true,
+            blockedReason: `Gemini safety: ${safetyDecision.explanation ?? "require_confirmation"}`,
+          });
+          aborted = true;
+          break;
+        }
+
         const verdict = evaluateAction(action, urlBefore, policy);
         if (!verdict.allow) {
           log.warn("Action blocked by safety policy", {
@@ -302,22 +323,57 @@ export async function runComputerUseAgent<T = unknown>(
       }
 
       if (aborted) {
+        // Send a function_response back to the model explaining the block
+        // before we close the loop — this lets the model emit a clean
+        // final text rather than stalling on an unanswered function call.
+        try {
+          const blockedResult = actionResults.find((r) => r.blocked);
+          const shot = await driver.screenshot();
+          const currentUrl = await driver.currentUrl();
+          const abortResponses: ContentPart[] = actions
+            .slice(0, actionResults.length)
+            .map((action, idx) => {
+              const r = actionResults[idx];
+              return {
+                functionResponse: {
+                  name: action.name,
+                  response: {
+                    url: currentUrl,
+                    error: r.blocked
+                      ? `Action blocked: ${r.blockedReason ?? "safety policy"}`
+                      : r.ok
+                        ? "ok"
+                        : r.error ?? "action failed",
+                  },
+                  parts: [{ inlineData: { mimeType: "image/png", data: shot.toString("base64") } }],
+                },
+              };
+            });
+          if (abortResponses.length) contents.push({ role: "user", parts: abortResponses });
+          errorMsg = blockedResult?.blockedReason;
+        } catch {
+          // best-effort — don't let abort cleanup crash the run
+        }
+
         status = "safety_blocked";
         steps.push({
           turnNumber: turn,
           thoughts,
           actions,
           actionResults,
-          urlAfter: await driver.currentUrl(),
+          urlAfter: await driver.currentUrl().catch(() => urlBefore),
           durationMs: Date.now() - turnStart,
         });
         config.onStep?.(steps[steps.length - 1]);
-        errorMsg = actionResults.find((r) => r.blocked)?.blockedReason;
         break;
       }
 
-      // Short settle delay so the screenshot captures post-action state.
-      await driver.wait(700);
+      // Settle wait: use a short fixed delay so the screenshot captures
+      // post-action state. Navigation actions get a longer wait since the
+      // new page may still be loading.
+      const navigationActions = new Set(["navigate", "go_back", "go_forward", "click_at", "key_combination"]);
+      const didNavigate = actions.some((a) => navigationActions.has(a.name));
+      await driver.wait(didNavigate ? 1200 : 600);
 
       // ── Send function_responses with new screenshot ──────────────
       const shot = await driver.screenshot();
@@ -331,7 +387,7 @@ export async function runComputerUseAgent<T = unknown>(
               url: currentUrl,
               ...(result.ok ? {} : { error: result.error ?? "action failed" }),
             },
-            // Inline the screenshot so the model sees the new state.
+            // Inline screenshot lets the model see the new page state.
             parts: [
               {
                 inlineData: {
