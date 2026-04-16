@@ -389,7 +389,6 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
     const understanding: Record<string, any> = Array.isArray(understandingRaw) && understandingRaw.length > 0
       ? understandingRaw[0]
       : understandingRaw;
-    const passATokens = (passAResponse.usage?.input_tokens || 0) + (passAResponse.usage?.output_tokens || 0);
 
     console.log(`[area-analysis] Pass A (understanding) complete — ${understanding.what_works?.length || 0} keeps, palette: ${(understanding.recommended_palette || []).length}, materials: ${(understanding.recommended_materials || []).length}`);
 
@@ -505,8 +504,6 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       // Case (c): already the expected shape (or something else we'll fail on).
       furnishing = furnishingRaw ?? {};
     }
-    const passBTokens = (passBResponse.usage?.input_tokens || 0) + (passBResponse.usage?.output_tokens || 0);
-
     console.log(`[area-analysis] Pass B (furnishing) complete — ${furnishing.what_it_needs?.length || 0} items`);
 
     // Merge Pass A + Pass B into the legacy analysis shape
@@ -523,8 +520,6 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
         output_tokens: (passAResponse.usage?.output_tokens || 0) + (passBResponse.usage?.output_tokens || 0),
       },
     } as { usage: { input_tokens: number; output_tokens: number } };
-
-    void passATokens; void passBTokens;
 
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
       throw new Error(`AI Pass B missing required field "what_it_needs". Got keys: ${Object.keys(furnishing).join(", ")}.`);
@@ -681,9 +676,9 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     // for soft categories (plants, art, rugs) within ~2 rounds. Chasing 9.5
     // across 10 rounds burned ~420k tokens/run with no quality gain — items
     // stabilized at the same "best" score they hit in round 2.
-    const MAX_HARMONY_ROUNDS = 4;
+    const MAX_HARMONY_ROUNDS = 2;
     /** Target: items at or above this score are "locked in" and skip revision. */
-    const TARGET_SCORE = 9.0;
+    const TARGET_SCORE = 8.5;
     let validation = null;
     let latestMathResult: MathHarmonyResult | null = null;
 
@@ -1164,22 +1159,12 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
         final_assessment: true,
       };
 
-      // ── Phase 3: If final assessment says more work needed, do targeted rounds ──
-      // Cap the post-final budget based on confidence:
-      //   - confidence >= 9.5 → cap at 1 round (converged; one polish pass max)
-      //   - confidence <  9.5 → cap at 2 rounds (meaningful work remains, give
-      //     the pipeline another swing before locking the bundle in)
-      // The final assessment historically requested 2+ rounds even when items
-      // were converged, which cascaded token cost without measurable quality
-      // gain — hence the hard cap. But when confidence is still low, stopping
-      // at 1 left fixable issues on the table.
-      const POST_FINAL_ROUND_CAP = final.confidence < 9.5 ? 2 : 1;
-      const effectiveRoundBudget = Math.min(final.round_budget, POST_FINAL_ROUND_CAP);
-      if (final.needs_more_rounds && effectiveRoundBudget > 0) {
-        const itemsNeedingWork = final.item_scores.filter((s) => s.needs_more_work);
-        console.log(`[area-analysis] Final assessment requests ${final.round_budget} more rounds (capped to ${effectiveRoundBudget}) for ${itemsNeedingWork.length} items: ${itemsNeedingWork.map((s) => s.category).join(", ")}`);
-
-        // Apply the final assessment's revisions first
+      // Apply the final assessment's revisions — no additional loop needed.
+      // Items converge by round 1-2; running further rounds after the final
+      // assessment historically added cost without measurable quality gain.
+      const itemsNeedingWork = final.item_scores.filter((s) => s.needs_more_work);
+      if (itemsNeedingWork.length > 0) {
+        console.log(`[area-analysis] Final assessment: applying revisions for ${itemsNeedingWork.length} items: ${itemsNeedingWork.map((s) => s.category).join(", ")}`);
         const needs = analysis.what_it_needs as Array<Record<string, unknown>>;
         for (const item of needs) {
           const finalItem = itemsNeedingWork.find((s) => s.category === item.category);
@@ -1187,124 +1172,6 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
             if (finalItem.revised_search_title) item.search_title = finalItem.revised_search_title;
             if (finalItem.revised_specs) item.specs = finalItem.revised_specs;
             if (finalItem.revised_placement) item.placement = finalItem.revised_placement;
-          }
-        }
-
-        // Lock all items that DON'T need more work — only iterate on flagged ones
-        const postFinalStabilized = new Set(stabilizedItems);
-        for (const s of final.item_scores) {
-          if (!s.needs_more_work) postFinalStabilized.add(s.category);
-        }
-
-        for (let extraRound = 1; extraRound <= effectiveRoundBudget; extraRound++) {
-          const postRound = totalRoundsCompleted + extraRound;
-          console.log(`[area-analysis] Post-final round ${extraRound}/${effectiveRoundBudget} (total round ${postRound})`);
-
-          latestMathResult = computeHarmonyScores(analysis, finalMathCtx);
-          const mathText = formatMathScoresForPrompt(latestMathResult);
-
-          const harmonyResult = await validateRoomHarmony(analysis, { ...harmonyCtx, mathScoresText: mathText });
-
-          if (!harmonyResult.success || !harmonyResult.data) {
-            console.warn(`[area-analysis] Post-final round ${extraRound} failed — using current state`);
-            break;
-          }
-
-          const harmony = harmonyResult.data;
-          if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) break;
-
-          // Apply per-dimension composite scoring (same as main loop)
-          for (const s of harmony.item_scores) {
-            const postMathCaps: MathDimensionCaps = {};
-            if (latestMathResult) {
-              // Use per-item color fit if available (same logic as main loop)
-              const postPerItemFit = latestMathResult.color.per_item_color_fit?.get(s.category);
-              if (postPerItemFit !== undefined) {
-                postMathCaps.color_fit = postPerItemFit * 0.7 + latestMathResult.color.palette_harmony * 0.3;
-              } else {
-                postMathCaps.color_fit = latestMathResult.color.palette_harmony;
-              }
-              postMathCaps.spatial_fit = latestMathResult.spatial.per_item_spatial?.get(s.category)
-                ?? (latestMathResult.spatial.room_coverage_ratio + latestMathResult.spatial.clearance_score) / 2;
-              // Material: evidence-only — no cap
-              postMathCaps.cross_room_fit = latestMathResult.color.cross_room_coherence;
-            }
-            const compositeResult = computeFinalHarmonyScore(s.sub_scores, postMathCaps, s.category, harmony.pairwise_conflicts || []);
-            if (compositeResult.harmony_score < s.harmony_score) {
-              const divergence = s.harmony_score - compositeResult.harmony_score;
-              if (divergence > 3.0) {
-                const floored = Math.round((compositeResult.harmony_score + 1.0) * 10) / 10;
-                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" wild divergence: AI=${s.harmony_score} vs composite=${compositeResult.harmony_score} → floored to ${floored}`);
-                s.harmony_score = floored;
-              } else {
-                const blended = Math.round((s.harmony_score * 0.7 + compositeResult.harmony_score * 0.3) * 10) / 10;
-                console.log(`[area-analysis] Post-final round ${extraRound}: "${s.category}" composite ${compositeResult.harmony_score} < AI ${s.harmony_score} — blended to ${blended}`);
-                s.harmony_score = blended;
-              }
-            }
-          }
-
-          // Only revise items that the final assessment flagged
-          let revisedCount = 0;
-          const revisedNeeds: Array<Record<string, unknown>> = [];
-
-          for (const item of analysis.what_it_needs as Array<Record<string, unknown>>) {
-            const score = harmony.item_scores.find((s) => s.category === item.category);
-            if (!score || postFinalStabilized.has(item.category as string)) {
-              revisedNeeds.push(item);
-              continue;
-            }
-            if (score.harmony_score >= TARGET_SCORE) {
-              console.log(`[area-analysis] Post-final round ${extraRound}: "${item.category}" now ${score.harmony_score}/10 (≥ ${TARGET_SCORE}) — stabilized`);
-              postFinalStabilized.add(item.category as string);
-              revisedNeeds.push(item);
-              continue;
-            }
-            if (score.revised_search_title || score.revised_specs || score.revised_placement) {
-              console.log(`[area-analysis] Post-final round ${extraRound}: revising "${item.category}" — ${score.harmony_score}/10 | ${score.root_cause || score.reason}`);
-              revisedNeeds.push({
-                ...item,
-                search_title: score.revised_search_title || item.search_title,
-                specs: score.revised_specs || item.specs,
-                placement: score.revised_placement || item.placement,
-              });
-              revisedCount++;
-            } else {
-              revisedNeeds.push(item);
-            }
-          }
-
-          analysis.what_it_needs = revisedNeeds;
-
-          // Update validation with latest scores
-          validation = {
-            ...validation,
-            item_scores: harmony.item_scores.map((s) => ({
-              category: s.category,
-              harmony_score: s.harmony_score,
-              keeps_well_with: s.keeps_well_with || [],
-              clashes_with: s.clashes_with || [],
-              revised_search_title: s.revised_search_title,
-              revised_specs: s.revised_specs,
-              revised_placement: s.revised_placement,
-              drop: s.drop,
-              root_cause: s.root_cause,
-              reason: s.reason,
-              rationale: s.rationale,
-            })),
-            rounds_completed: postRound,
-            math_scores: {
-              overall: latestMathResult.overall,
-              color: { ...latestMathResult.color, per_item_color_fit: Object.fromEntries(latestMathResult.color.per_item_color_fit) },
-              spatial: { ...latestMathResult.spatial, per_item_spatial: Object.fromEntries(latestMathResult.spatial.per_item_spatial) },
-              material: latestMathResult.material,
-              proportion: latestMathResult.proportion,
-            },
-          };
-
-          if (revisedCount === 0) {
-            console.log(`[area-analysis] Post-final round ${extraRound}: no more revisions needed — done`);
-            break;
           }
         }
       }

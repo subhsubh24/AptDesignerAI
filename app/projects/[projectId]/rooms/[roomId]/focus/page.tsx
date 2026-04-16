@@ -210,7 +210,11 @@ export default function FocusPage() {
         if (projRes.ok) {
           const project = await projRes.json();
           const br = project?.building_research;
-          if (br?.floor_plan) {
+          if (br?.floor_plan_image_url || br?.extracted_floor_plan) {
+            // Uploaded floor plan (new path) — spatial data is extracted via vision model
+            setFloorPlan(br.extracted_floor_plan ?? null);
+            setFloorPlanFound(true);
+          } else if (br?.floor_plan) {
             const fp = br.floor_plan;
             const wasFound = fp.found === true;
             const hasRealData = wasFound && (fp.total_sqft || fp.room_dimensions || fp.notable_spatial_features?.length);
@@ -640,7 +644,7 @@ export default function FocusPage() {
                     )}
                   </>
                 ) : (
-                  <span>No floor plan found — furniture sizing based on photos only</span>
+                  <span>No floor plan — sizing estimated from photos. Upload a floor plan for significantly better recommendations.</span>
                 )}
               </div>
             </div>
