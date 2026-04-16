@@ -9,6 +9,7 @@
 
 import type { ActionItem, DesignDirection } from "@/lib/types/database";
 import { formatSaturationForPrompt, type SaturationProfile } from "@/lib/validation/saturation-math";
+import type { ExpansionBudget, SiblingRoomSummary } from "@/lib/agents/greedy-decorator";
 
 export interface ExpansionPromptContext {
   roomType: string;
@@ -18,6 +19,10 @@ export interface ExpansionPromptContext {
   saturation: SaturationProfile;
   /** Optional rejection reason from the last guardrail block (used for retry prompts) */
   lastRejectionReason?: string;
+  /** Optional budget context — keeps expansion from running away from the cap. */
+  budget?: ExpansionBudget | null;
+  /** Optional sibling room summaries — keeps palette / materials coherent across rooms. */
+  siblingRooms?: SiblingRoomSummary[] | null;
 }
 
 function formatDirectionSummary(direction: DesignDirection | null | undefined): string {
@@ -47,6 +52,53 @@ function formatItemList(items: ActionItem[]): string {
     .join("\n");
 }
 
+function formatBudgetSection(budget: ExpansionBudget | null | undefined): string | null {
+  if (!budget) return null;
+  const { totalDollars, mode, committedDollars } = budget;
+  if (totalDollars == null && !mode && committedDollars == null) return null;
+
+  const parts: string[] = ["## Budget Context"];
+  if (totalDollars != null) {
+    parts.push(`- Total room budget: $${totalDollars.toLocaleString()}`);
+  }
+  if (mode) {
+    parts.push(`- Budget tier: ${mode}`);
+  }
+  if (committedDollars != null && totalDollars != null) {
+    const remaining = Math.max(0, totalDollars - committedDollars);
+    const pctUsed = Math.round((committedDollars / totalDollars) * 100);
+    parts.push(
+      `- Estimated committed so far: ~$${committedDollars.toLocaleString()} (${pctUsed}% of budget)`,
+      `- Approximate headroom: ~$${remaining.toLocaleString()}`,
+    );
+  } else if (committedDollars != null) {
+    parts.push(`- Estimated committed so far: ~$${committedDollars.toLocaleString()}`);
+  }
+  parts.push(
+    "",
+    "Prefer finishing items whose typical cost fits the remaining headroom. Candles, books, small plants, and decorative objects are cheap and budget-friendly. Large rugs, statement art, and anchor furniture are expensive — avoid suggesting another one if the headroom is tight.",
+  );
+  return parts.join("\n");
+}
+
+function formatSiblingRoomsSection(siblings: SiblingRoomSummary[] | null | undefined): string | null {
+  if (!siblings?.length) return null;
+  const parts: string[] = ["## Other Rooms in This Apartment"];
+  for (const sib of siblings) {
+    const lines: string[] = [`### ${sib.roomType}`];
+    if (sib.styleNotes) lines.push(`  Style: ${sib.styleNotes}`);
+    if (sib.palette?.length) lines.push(`  Palette: ${sib.palette.slice(0, 6).join(", ")}`);
+    if (sib.materials?.length) lines.push(`  Materials: ${sib.materials.slice(0, 5).join(", ")}`);
+    if (sib.topCategories?.length) lines.push(`  Already has: ${sib.topCategories.slice(0, 6).join(", ")}`);
+    parts.push(lines.join("\n"));
+  }
+  parts.push(
+    "",
+    "Keep the apartment reading as ONE home: reuse anchor materials and let 2-3 accent colors carry across rooms. You don't need to duplicate — just avoid introducing an unrelated palette or a clashing material family.",
+  );
+  return parts.join("\n");
+}
+
 export const EXPANSION_SYSTEM_PROMPT = `You are a senior interior designer finishing the decoration of a room. The foundational and standard furniture has already been selected. Your role is to layer in finishing touches — the carefully chosen items that make a room feel complete, personal, and alive.
 
 You think holistically: you visualize the room as it will look and feel, not just enumerate categories. You understand the difference between "layered and lush" and "cluttered and overwhelming."
@@ -56,7 +108,7 @@ Your discipline: you stop when adding more would hurt, not help. Not every room 
 When you suggest an item, you are specific and actionable — concrete enough to search for (e.g., "2–3 pillar candles in varying heights, unscented, cream or ivory wax, grouped on a small tray on the coffee table").`;
 
 export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
-  const { roomType, sqft, designDirection, currentItems, saturation } = ctx;
+  const { roomType, sqft, designDirection, currentItems, saturation, budget, siblingRooms } = ctx;
   const sqftStr = sqft ? `~${sqft} sqft` : "unknown size";
 
   const lines: string[] = [];
@@ -66,6 +118,18 @@ export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
   lines.push(`Design Direction:`);
   lines.push(formatDirectionSummary(designDirection));
   lines.push("");
+
+  const budgetSection = formatBudgetSection(budget);
+  if (budgetSection) {
+    lines.push(budgetSection);
+    lines.push("");
+  }
+
+  const siblingSection = formatSiblingRoomsSection(siblingRooms);
+  if (siblingSection) {
+    lines.push(siblingSection);
+    lines.push("");
+  }
 
   lines.push(`## Items Decided So Far (${currentItems.length} total)`);
   lines.push(formatItemList(currentItems));

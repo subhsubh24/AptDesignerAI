@@ -5,6 +5,7 @@ import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
+import { selfConsistent, seedForSample } from "@/lib/agents/self-consistency";
 import { computeHarmonyScores, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps } from "@/lib/scoring/harmony-composite";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -372,26 +373,126 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
       ...contentBlocks,
       { type: "text", text: passAPrompt },
     ];
-    const passAResponse = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content: passAContent }],
-      max_tokens: 6000,
-      temperature: 0.3,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "high" },
-    });
-    if (passAResponse.truncated) {
-      throw new Error("AI response was truncated during Pass A (understanding). Try with fewer photos.");
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-    const understandingRaw = extractJsonObject<any>(passAResponse.content);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response
-    const understanding: Record<string, any> = Array.isArray(understandingRaw) && understandingRaw.length > 0
-      ? understandingRaw[0]
-      : understandingRaw;
 
-    console.log(`[area-analysis] Pass A (understanding) complete — ${understanding.what_works?.length || 0} keeps, palette: ${(understanding.recommended_palette || []).length}, materials: ${(understanding.recommended_materials || []).length}`);
+    // Self-consistency: sample N Pass A analyses in parallel (different seeds),
+    // then use a judge LLM to pick the most coherent one. Pass A's output
+    // (palette, materials, spatial_layout) is consumed unchanged by Pass B and
+    // every downstream step, so variance here propagates to the entire room.
+    // Default N=3, configurable via SELF_CONSISTENCY_N. See
+    // lib/agents/self-consistency.ts for details.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+    type PassASample = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: Record<string, any>;
+      tokens: { input: number; output: number };
+    };
+
+    const generatePassASample = async (seed: number): Promise<PassASample | null> => {
+      try {
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: passAContent }],
+          max_tokens: 6000,
+          seed,
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" },
+        });
+        if (response.truncated) {
+          console.warn("[area-analysis] Pass A sample truncated — discarding");
+          return null;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        const raw = extractJsonObject<any>(response.content);
+        const obj: Record<string, unknown> = Array.isArray(raw) && raw.length > 0 ? raw[0] : raw;
+        if (!obj || typeof obj !== "object") return null;
+        // Minimum viability: need at least a palette and materials to drive Pass B
+        if (!Array.isArray((obj as Record<string, unknown>).recommended_palette) ||
+            !Array.isArray((obj as Record<string, unknown>).recommended_materials)) {
+          return null;
+        }
+        return {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: obj as Record<string, any>,
+          tokens: {
+            input: response.usage?.input_tokens ?? 0,
+            output: response.usage?.output_tokens ?? 0,
+          },
+        };
+      } catch (err) {
+        console.warn(`[area-analysis] Pass A sample (seed ${seed}) failed:`, err);
+        return null;
+      }
+    };
+
+    const judgePassA = async (candidates: PassASample[]): Promise<number> => {
+      const summaries = candidates.map((s, i) => {
+        const c = s.data;
+        const palette = Array.isArray(c.recommended_palette) ? c.recommended_palette : [];
+        const materials = Array.isArray(c.recommended_materials) ? c.recommended_materials : [];
+        const textures = Array.isArray(c.recommended_textures) ? c.recommended_textures : [];
+        const whatWorks = Array.isArray(c.what_works) ? c.what_works : [];
+        const whatGo = Array.isArray(c.what_should_go) ? c.what_should_go : [];
+        return [
+          `=== CANDIDATE ${i} ===`,
+          `Summary: ${typeof c.summary === "string" ? c.summary : ""}`,
+          `Design direction: ${typeof c.design_direction === "string" ? c.design_direction : ""}`,
+          `What works (${whatWorks.length}): ${whatWorks.slice(0, 4).join("; ")}`,
+          `What should go (${whatGo.length}): ${whatGo.slice(0, 4).join("; ")}`,
+          `Palette (${palette.length}): ${palette.join(", ")}`,
+          `Materials (${materials.length}): ${materials.join(", ")}`,
+          `Textures: ${textures.join(", ")}`,
+          `Spatial layout: ${typeof c.spatial_layout === "string" ? (c.spatial_layout as string).slice(0, 200) : ""}`,
+        ].join("\n");
+      }).join("\n\n");
+
+      const judgePrompt = `You are a senior design critic comparing ${candidates.length} candidate analyses of the same room. Pick the ONE best candidate to drive the shopping list.
+
+Evaluation criteria (in order):
+1. **Palette–material–style coherence** — colors, materials, textures, and design_direction must describe ONE consistent aesthetic. A candidate that says "mid-century" with walnut + brass + boucle beats one that mixes walnut + chrome + lacquer.
+2. **Concreteness** — specific colors ("warm walnut brown", "sage green") beat vague ones ("neutrals"). Specific materials ("boucle", "solid oak") beat categories ("fabric", "wood").
+3. **Spatial honesty** — spatial_layout should reference actual geometry (windows, doors, traffic paths), not platitudes about "conversation zones".
+4. **Diagnostic specificity** — what_should_go should name items + reasons, not generic complaints.
+
+${summaries}
+
+Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}>, "reason": "<one sentence>"}`;
+
+      try {
+        const resp = await geminiProvider.chat({
+          model,
+          system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
+          messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
+          max_tokens: 400,
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        const parsed = extractJsonObject<any>(resp.content);
+        const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
+        console.log(`[area-analysis] Pass A judge chose candidate ${idx} of ${candidates.length}: ${parsed?.reason ?? "(no reason)"}`);
+        return idx;
+      } catch (err) {
+        console.warn("[area-analysis] Pass A judge failed — defaulting to sample 0:", err);
+        return 0;
+      }
+    };
+
+    const selection = await selfConsistent<PassASample>({
+      generate: generatePassASample,
+      judge: judgePassA,
+      label: "area-analysis.passA",
+    });
+    const understanding = selection.chosen.data;
+    // Sum tokens across every surviving sample — the generation cost is N×,
+    // not 1×, and we want usage accounting to reflect that.
+    const passATokens = selection.candidates.reduce(
+      (acc, s) => ({ input: acc.input + s.tokens.input, output: acc.output + s.tokens.output }),
+      { input: 0, output: 0 },
+    );
+    // Suppress unused-import warning; seedForSample is reserved for future
+    // callers that want per-sample seed inspection.
+    void seedForSample;
+
+    console.log(`[area-analysis] Pass A (understanding) complete — ${(understanding.what_works as unknown[] | undefined)?.length || 0} keeps, palette: ${((understanding.recommended_palette as unknown[] | undefined) || []).length}, materials: ${((understanding.recommended_materials as unknown[] | undefined) || []).length}, selected sample ${selection.judgeIndex} of ${selection.candidates.length}`);
 
     /**
      * Pass B — FURNISH the room.
@@ -455,7 +556,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
       max_tokens: 12000,
-      temperature: 0.3,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
       thinkingConfig: { thinkingLevel: "high" },
     });
@@ -541,8 +642,8 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     // Synthesize a response-compatible object for downstream code that reads `response.usage`.
     const response = {
       usage: {
-        input_tokens: (passAResponse.usage?.input_tokens || 0) + (passBResponse.usage?.input_tokens || 0),
-        output_tokens: (passAResponse.usage?.output_tokens || 0) + (passBResponse.usage?.output_tokens || 0),
+        input_tokens: passATokens.input + (passBResponse.usage?.input_tokens || 0),
+        output_tokens: passATokens.output + (passBResponse.usage?.output_tokens || 0),
       },
     } as { usage: { input_tokens: number; output_tokens: number } };
 

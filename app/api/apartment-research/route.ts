@@ -263,7 +263,7 @@ async function disambiguateWithVision(
       system: "You are an architectural vision assistant. Match user-provided apartment photos to floor-plan diagrams by comparing visible features. Never guess — if the photos don't show enough to decide, return matched_variant_name: null.",
       messages: [{ role: "user", content: blocks }],
       max_tokens: 800,
-      temperature: 0.1,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
     });
 
     const raw = res.content.trim();
@@ -581,7 +581,7 @@ ${floorPlanSchema}`;
       system: "You are researching an apartment building's website to extract design-relevant building-wide context (finishes, style, amenities, neighborhood). You do NOT handle floor plans — that's a separate agent. Return ONLY facts you find; never guess.",
       messages: [{ role: "user", content: buildingContextPrompt }],
       max_tokens: 4000,
-      temperature: 0.2,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
       tools: [{ googleSearch: {} }, { urlContext: {} }],
     });
 
@@ -606,7 +606,7 @@ ${floorPlanSchema}`;
         system: `You are a floor-plan research agent. Your ONLY job is to find every ${unitLabel} floor-plan variant for the given building and return them as structured JSON. Exhaustiveness matters more than brevity — if you find 8 variants, return all 8. Skipping variants is a failure. Return ONLY facts from the website; never invent dimensions or room layouts.`,
         messages: [{ role: "user", content: floorPlanPrompt }],
         max_tokens: 6000,
-        temperature: 0.1,
+        // No temperature override — Gemini 3 is optimized for its default (1.0).
         tools: [{ googleSearch: {} }, { urlContext: {} }],
       });
 
@@ -701,7 +701,7 @@ ${floorPlanSchema}`;
             system: "You are analyzing floor plan images. Extract spatial information that would help an interior designer plan furniture placement.",
             messages: [{ role: "user", content: visionBlocks }],
             max_tokens: 3000,
-            temperature: 0.1,
+            // No temperature override — Gemini 3 is optimized for its default (1.0).
           });
 
           const visionRaw = visionResponse.content.trim();
@@ -851,7 +851,7 @@ Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby 
 If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           }],
           max_tokens: 1500,
-          temperature: 0.2,
+          // No temperature override — Gemini 3 is optimized for its default (1.0).
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
           // latLng is routed into toolConfig.retrievalConfig by

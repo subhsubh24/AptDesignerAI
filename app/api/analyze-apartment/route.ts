@@ -152,7 +152,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         system,
         messages: [{ role: "user", content: roomContent }],
         max_tokens: 4000,
-        temperature: 0.3,
+        // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
       });
 
@@ -214,7 +214,7 @@ ${synthInput}
       system,
       messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
       max_tokens: 2000,
-      temperature: 0.3,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape

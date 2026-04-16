@@ -464,7 +464,7 @@ export async function extractFromImage(
       system,
       messages: [{ role: "user", content }],
       max_tokens: 2000,
-      temperature: 0.1,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
       mediaResolution: "high",
     });

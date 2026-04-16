@@ -189,4 +189,76 @@ describe("runDiagnosisExpansion", () => {
     expect(result.decision_log[0].verdict).toBe("ADD");
     expect(result.decision_log[2].verdict).toBe("STOP");
   });
+
+  it("passes budget context into the LLM prompt", async () => {
+    mockChat.mockResolvedValueOnce({ content: llmResponse("STOP") });
+
+    await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 250 },
+      budget: { totalDollars: 5000, mode: "balanced", committedDollars: 1500 },
+    });
+
+    const call = mockChat.mock.calls[0][0];
+    const messages = call.messages as Array<{ content: Array<{ type: string; text?: string }> }>;
+    const promptText = messages[0].content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("\n");
+
+    expect(promptText).toContain("Budget Context");
+    expect(promptText).toContain("$5,000");
+    expect(promptText).toContain("balanced");
+    expect(promptText).toContain("$1,500");
+  });
+
+  it("passes sibling-room summaries into the LLM prompt", async () => {
+    mockChat.mockResolvedValueOnce({ content: llmResponse("STOP") });
+
+    await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 250 },
+      siblingRooms: [
+        {
+          roomType: "bedroom",
+          palette: ["warm walnut", "ivory", "sage green"],
+          materials: ["oak", "linen"],
+          styleNotes: "Japandi with soft wood tones",
+          topCategories: ["bed", "nightstand", "rug"],
+        },
+      ],
+    });
+
+    const call = mockChat.mock.calls[0][0];
+    const messages = call.messages as Array<{ content: Array<{ type: string; text?: string }> }>;
+    const promptText = messages[0].content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("\n");
+
+    expect(promptText).toContain("Other Rooms in This Apartment");
+    expect(promptText).toContain("bedroom");
+    expect(promptText).toContain("warm walnut");
+    expect(promptText).toContain("oak");
+    expect(promptText).toContain("Japandi");
+  });
+
+  it("omits budget + sibling sections when neither is provided", async () => {
+    mockChat.mockResolvedValueOnce({ content: llmResponse("STOP") });
+
+    await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 250 },
+    });
+
+    const call = mockChat.mock.calls[0][0];
+    const messages = call.messages as Array<{ content: Array<{ type: string; text?: string }> }>;
+    const promptText = messages[0].content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("\n");
+
+    expect(promptText).not.toContain("Budget Context");
+    expect(promptText).not.toContain("Other Rooms in This Apartment");
+  });
 });

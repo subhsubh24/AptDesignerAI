@@ -31,6 +31,33 @@ const log = createLogger("greedy-decorator");
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Per-room budget the expansion should respect. */
+export interface ExpansionBudget {
+  /** Total dollars available for this room, if known. */
+  totalDollars?: number | null;
+  /** Budget tier name (e.g. "budget" | "balanced" | "best_possible"). */
+  mode?: string | null;
+  /**
+   * Approximate dollars already "committed" by the existing action_list.
+   * Callers can pass a rough estimate (e.g. mid-point of each item's tier);
+   * the LLM uses it as guidance, not a hard constraint.
+   */
+  committedDollars?: number | null;
+}
+
+/** Summary of a sibling room used to keep expansion cross-room coherent. */
+export interface SiblingRoomSummary {
+  roomType: string;
+  /** 3-8 materials the sibling room already leans on. */
+  materials?: string[];
+  /** 3-8 accent colors / palette entries the sibling room commits to. */
+  palette?: string[];
+  /** Top categories the sibling already has (to avoid redundant textures). */
+  topCategories?: string[];
+  /** Free-form style notes from the sibling's design direction. */
+  styleNotes?: string;
+}
+
 export interface ExpansionContext {
   currentItems: ActionItem[];
   room: { type: string; sqft?: number };
@@ -39,6 +66,10 @@ export interface ExpansionContext {
   roomPhotos?: string[];
   /** Maximum number of expansion iterations (default 20) */
   maxIterations?: number;
+  /** Budget context — shown to the LLM so it avoids recommending items that blow the cap. */
+  budget?: ExpansionBudget | null;
+  /** Sibling rooms in the same apartment — used to keep material / palette coherent across rooms. */
+  siblingRooms?: SiblingRoomSummary[] | null;
 }
 
 export type StopReason =
@@ -136,6 +167,8 @@ export async function runDiagnosisExpansion(
       designDirection: ctx.designDirection,
       currentItems: items,
       saturation: profile,
+      budget: ctx.budget,
+      siblingRooms: ctx.siblingRooms,
     };
 
     const promptText = buildExpansionPrompt(promptCtx);

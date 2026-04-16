@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
-import { runDiagnosisExpansion } from "@/lib/agents/greedy-decorator";
+import {
+  runDiagnosisExpansion,
+  type ExpansionBudget,
+  type SiblingRoomSummary,
+} from "@/lib/agents/greedy-decorator";
 import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -11,7 +15,12 @@ import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
 import { withTrace } from "@/lib/observability/tracing";
 import type { AgentContext } from "@/lib/agents/types";
-import type { DiagnosisData } from "@/lib/types/database";
+import type {
+  ActionItem,
+  BudgetMode,
+  DesignDirection,
+  DiagnosisData,
+} from "@/lib/types/database";
 
 const log = createLogger("diagnosis-route");
 
@@ -186,6 +195,13 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
 
   if (expandedActionList.length > 0) {
     try {
+      // Best-effort: fetch sibling-room diagnoses in the same project so the
+      // expansion can maintain cross-room palette / material coherence.
+      const siblingRooms = await fetchSiblingRoomSummaries(supabase, room.project_id, room_id);
+
+      // Best-effort: fetch this room's budget dollars for budget-aware expansion.
+      const budget = await buildExpansionBudgetContext(supabase, room_id, room.budget_mode, expandedActionList);
+
       const expansion = await runDiagnosisExpansion({
         currentItems: expandedActionList,
         room: {
@@ -195,6 +211,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         },
         designDirection: diagnosisData.design_direction ?? undefined,
         roomPhotos: ctx.imageUrls,
+        budget,
+        siblingRooms,
       });
       expandedActionList = expansion.expanded_items;
       expansionLog = expansion.decision_log;
@@ -204,6 +222,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         expanded: expansion.expanded_items.length,
         added: expansion.added_count,
         stopReason: expansion.stop_reason,
+        siblingRoomCount: siblingRooms?.length ?? 0,
+        budgetProvided: budget?.totalDollars != null,
       });
     } catch (err) {
       log.warn("Greedy expansion failed — using baseline action_list", {
@@ -257,4 +277,172 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       ? { issueCount: validation.issues.length, issues: validation.issues }
       : undefined,
   }, { status: 201 });
+}
+
+// ─── Helpers for budget + cross-room expansion context ───────────────────────
+
+/**
+ * Rough per-item cost estimates by category tier. Used only to compute a
+ * "committed dollars" estimate passed as soft guidance to the greedy expansion
+ * LLM. Not authoritative — real costs land via the product search pipeline.
+ */
+const CATEGORY_COST_ESTIMATES: Record<string, number> = {
+  // Large anchors
+  sofa: 1500,
+  sectional: 2200,
+  bed: 1200,
+  dining_table: 900,
+  area_rug: 600,
+  accent_chair: 500,
+  lounge_chair: 500,
+  credenza: 800,
+  dresser: 700,
+  bookshelf: 500,
+  coffee_table: 400,
+  nightstand: 300,
+  side_table: 250,
+  desk: 400,
+  // Mid-tier
+  statement_mirror: 300,
+  floor_lamp: 200,
+  table_lamp: 150,
+  pendant_light: 250,
+  curtains: 200,
+  wall_art_large: 350,
+  sculpture: 250,
+  // Finishing (cheap)
+  wall_art: 120,
+  frames: 60,
+  throw_pillow: 60,
+  throw_blanket: 80,
+  tall_plant: 120,
+  plants: 60,
+  greenery: 60,
+  candles: 35,
+  books: 25,
+  books_styled: 30,
+  baskets: 70,
+  tray: 40,
+  vase: 50,
+  decorative_objects: 45,
+  decorative_bowls: 50,
+  poufs: 150,
+};
+
+const BUDGET_MODE_TO_DEFAULT_DOLLARS: Record<BudgetMode, number> = {
+  budget: 2500,
+  balanced: 6000,
+  best_possible: 12000,
+};
+
+/**
+ * Compute a best-effort "committed dollars" estimate from the current items.
+ * Used only to steer the LLM away from stacking more expensive anchors when
+ * the budget is already tight — not a hard constraint.
+ */
+function estimateCommittedDollars(items: ActionItem[]): number {
+  let total = 0;
+  for (const item of items) {
+    const base = CATEGORY_COST_ESTIMATES[item.category] ?? 150; // catch-all mid-finishing
+    const qty = item.quantity ?? 1;
+    total += base * qty;
+  }
+  return Math.round(total);
+}
+
+/**
+ * Resolve the room's budget dollars (either the explicit value on the room,
+ * or a reasonable default from the budget tier) plus a committed-dollars
+ * estimate computed from the current action_list.
+ */
+async function buildExpansionBudgetContext(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  roomId: string,
+  budgetMode: BudgetMode | null | undefined,
+  currentItems: ActionItem[],
+): Promise<ExpansionBudget | null> {
+  try {
+    const { data: room } = await supabase
+      .from("rooms")
+      .select("budget_dollars, budget_mode")
+      .eq("id", roomId)
+      .single();
+
+    const dollars =
+      (room?.budget_dollars as number | null | undefined) ??
+      (budgetMode ? BUDGET_MODE_TO_DEFAULT_DOLLARS[budgetMode] : null);
+
+    const committed = estimateCommittedDollars(currentItems);
+
+    return {
+      totalDollars: dollars ?? null,
+      mode: (room?.budget_mode as string | null | undefined) ?? budgetMode ?? null,
+      committedDollars: committed,
+    };
+  } catch (err) {
+    log.warn("buildExpansionBudgetContext: lookup failed", {
+      roomId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * Build summaries of sibling rooms in the same project so the greedy expansion
+ * can keep palette / materials coherent across the apartment.
+ */
+async function fetchSiblingRoomSummaries(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  projectId: string,
+  currentRoomId: string,
+): Promise<SiblingRoomSummary[] | null> {
+  try {
+    const { data: siblingRooms } = await supabase
+      .from("rooms")
+      .select("id, room_type, room_diagnoses(design_direction_json, action_list, created_at)")
+      .eq("project_id", projectId)
+      .neq("id", currentRoomId)
+      .limit(6);
+
+    if (!siblingRooms?.length) return null;
+
+    const summaries: SiblingRoomSummary[] = [];
+    for (const sr of siblingRooms) {
+      const diagnoses = (sr.room_diagnoses ?? []) as Array<{
+        design_direction_json: DesignDirection | null;
+        action_list: ActionItem[] | null;
+        created_at: string;
+      }>;
+      if (!diagnoses.length) continue;
+
+      // Pick the latest diagnosis for this sibling room
+      const latest = diagnoses
+        .slice()
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+      const dd = latest.design_direction_json;
+      const items = latest.action_list ?? [];
+
+      const topCategories = [...new Set(items.map((i) => i.category))].slice(0, 8);
+
+      summaries.push({
+        roomType: sr.room_type as string,
+        palette: dd?.recommended_palette ?? undefined,
+        materials: dd?.recommended_materials ?? undefined,
+        styleNotes: dd?.style_notes ?? undefined,
+        topCategories,
+      });
+    }
+
+    return summaries.length ? summaries : null;
+  } catch (err) {
+    log.warn("fetchSiblingRoomSummaries: lookup failed", {
+      projectId,
+      currentRoomId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }

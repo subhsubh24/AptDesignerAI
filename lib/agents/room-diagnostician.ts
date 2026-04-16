@@ -10,6 +10,7 @@ import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
+import { selfConsistent } from "./self-consistency";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
@@ -72,46 +73,132 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
   let analysisModel = model;
   let analysis: { diagnosis: DiagnosisData; design_direction: DesignDirection };
 
+  // ─── Self-consistency: sample N candidate analyses in parallel, then pick
+  // the most coherent one via a separate judge call. This is the single
+  // highest-variance commitment point in the pipeline — palette / materials /
+  // style_notes chosen here are consumed unchanged by Pass B (plan) and every
+  // downstream product search. Reduces Pass A variance at the cost of N×
+  // the Pass A call count (default N=3, configurable via SELF_CONSISTENCY_N).
   {
-    let lastError: string | undefined;
-    let parsed: { diagnosis: DiagnosisData; design_direction: DesignDirection } | undefined;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const retryContent = attempt > 0 && lastError
-          ? [...analysisContent, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON with the exact structure specified.` }]
-          : analysisContent;
+    type Sample = {
+      parsed: { diagnosis: DiagnosisData; design_direction: DesignDirection };
+      tokens: number;
+      model: string;
+    };
 
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: retryContent }],
-          max_tokens: 6000,
-          seed: DETERMINISTIC_SEED,
-          responseSchema: DIAGNOSIS_ANALYSIS_GEMINI_SCHEMA,
-          mediaResolution: "ultra_high",
-        });
+    const generateSample = async (seed: number, sampleIndex: number): Promise<Sample | null> => {
+      let lastError: string | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const retryContent = attempt > 0 && lastError
+            ? [...analysisContent, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON with the exact structure specified.` }]
+            : analysisContent;
 
-        const raw = extractJsonObject(response.content);
-        const validated = DiagnosisAnalysisResponseSchema.parse(raw);
-        parsed = {
-          diagnosis: validated.diagnosis as DiagnosisData,
-          design_direction: validated.design_direction as DesignDirection,
-        };
-        analysisTokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-        analysisModel = response.model;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : "Diagnosis analysis failed";
-        if (attempt === 0) {
-          log.warn("Diagnosis analysis attempt 1 failed", { error: lastError });
-          await new Promise((r) => setTimeout(r, 1500));
-          continue;
+          const response = await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: retryContent }],
+            max_tokens: 6000,
+            seed,
+            responseSchema: DIAGNOSIS_ANALYSIS_GEMINI_SCHEMA,
+            mediaResolution: "ultra_high",
+          });
+
+          const raw = extractJsonObject(response.content);
+          const validated = DiagnosisAnalysisResponseSchema.parse(raw);
+          return {
+            parsed: {
+              diagnosis: validated.diagnosis as DiagnosisData,
+              design_direction: validated.design_direction as DesignDirection,
+            },
+            tokens: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+            model: response.model,
+          };
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : "Diagnosis analysis failed";
+          if (attempt === 0) {
+            log.warn("Diagnosis analysis attempt 1 failed", { sampleIndex, error: lastError });
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
         }
-        return { success: false, error: lastError };
       }
+      return null;
+    };
+
+    // Judge: pick the most coherent candidate. Uses a different prompt framing
+    // than the generator to mitigate self-confirmation bias — it never re-
+    // evaluates the room; it only compares the candidate analyses against each
+    // other on coherence / concreteness / actionability.
+    const judgeAnalyses = async (candidates: Sample[]): Promise<number> => {
+      const judgeModel = selectModel("diagnosis");
+      const summaries = candidates.map((c, i) => {
+        const d = c.parsed.diagnosis;
+        const dd = c.parsed.design_direction;
+        return [
+          `=== CANDIDATE ${i} ===`,
+          `Vibe summary: ${d.current_vibe_summary ?? ""}`,
+          `What works (${d.what_is_working?.length ?? 0}): ${(d.what_is_working ?? []).slice(0, 4).join("; ")}`,
+          `What doesn't work (${d.what_is_not_working?.length ?? 0}): ${(d.what_is_not_working ?? []).slice(0, 4).join("; ")}`,
+          `Missing categories (${d.missing_furniture_categories?.length ?? 0}): ${(d.missing_furniture_categories ?? []).slice(0, 8).join(", ")}`,
+          `Style notes: ${dd.style_notes ?? ""}`,
+          `Palette (${dd.recommended_palette?.length ?? 0}): ${(dd.recommended_palette ?? []).join(", ")}`,
+          `Materials (${dd.recommended_materials?.length ?? 0}): ${(dd.recommended_materials ?? []).join(", ")}`,
+          `Textures: ${(dd.recommended_textures ?? []).join(", ")}`,
+        ].join("\n");
+      }).join("\n\n");
+
+      const judgePrompt = `You are a senior design critic comparing ${candidates.length} candidate analyses of the same room. Pick the ONE most useful candidate for driving a shopping list.
+
+Evaluation criteria (in order):
+1. **Palette–material–style coherence** — do the recommended colors, materials, textures, and style_notes describe a single consistent direction? A candidate that says "mid-century modern" with brass + walnut beats one that says "mid-century" with chrome + lacquer.
+2. **Concreteness** — specific colors ("warm walnut brown", "sage green") beat vague colors ("neutral tones"). Specific materials ("boucle", "solid oak") beat categories ("fabric", "wood").
+3. **Diagnostic honesty** — the "what doesn't work" list should name specific items, not platitudes. A candidate that says "sofa scale is off — it's swallowing the 12ft wall" beats "room feels crowded".
+4. **Missing-category completeness** — does it name enough categories (8+) across essential/standard/finishing tiers to support a full shopping list?
+
+${summaries}
+
+Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}>, "reason": "<one sentence>"}`;
+
+      try {
+        const resp = await geminiProvider.chat({
+          model: judgeModel,
+          system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
+          messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
+          max_tokens: 400,
+        });
+        const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };
+        const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
+        log.info("Diagnosis Pass A judge chose candidate", {
+          chosen: idx,
+          reason: parsed?.reason,
+          candidates: candidates.length,
+        });
+        return idx;
+      } catch (err) {
+        log.warn("Diagnosis Pass A judge call failed — defaulting to sample 0", { error: String(err) });
+        return 0;
+      }
+    };
+
+    try {
+      const selection = await selfConsistent<Sample>({
+        generate: generateSample,
+        judge: judgeAnalyses,
+        label: "diagnosis.passA",
+      });
+      analysis = selection.chosen.parsed;
+      // Sum tokens across every surviving sample (generation cost is N×, not 1×)
+      analysisTokens = selection.candidates.reduce((sum, c) => sum + c.tokens, 0);
+      analysisModel = selection.chosen.model;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Diagnosis analysis failed after retries";
+      return { success: false, error: msg };
     }
-    if (!parsed) return { success: false, error: "Diagnosis analysis failed after retries" };
-    analysis = parsed;
+
+    // Preserve the original seeded-by-DETERMINISTIC_SEED behavior as a fallback
+    // reference for any downstream code inspecting this constant.
+    void DETERMINISTIC_SEED;
   }
 
   log.info("Diagnosis analysis pass complete", {

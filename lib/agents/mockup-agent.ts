@@ -423,7 +423,7 @@ Generate images in a photorealistic, editorial interior photography style — wa
       model: selectModel("image_generation"),
       system: imageSystemPrompt,
       messages: [{ role: "user", content }],
-      temperature: 0.4,
+      // No temperature override — Gemini 3 is optimized for its default (1.0).
       seed: DETERMINISTIC_SEED,
       responseModalities: ["Text", "Image"],
       imageConfig: { imageSize, aspectRatio },
