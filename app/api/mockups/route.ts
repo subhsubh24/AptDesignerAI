@@ -5,6 +5,7 @@ import path from "path";
 import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
+import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -175,6 +176,15 @@ export async function POST(request: Request) {
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Run a single batched vision call to produce per-photo orientation
+  // captions ("Photo 1 — taken from doorway facing window wall; light from
+  // left"). These are interleaved with the image blocks during generation so
+  // the image model doesn't mirror/flip the room. Non-fatal: on failure the
+  // analyzer returns [] and generation proceeds without the anchor.
+  const photoOrientations = roomImageUrls.length > 0
+    ? await analyzePhotoOrientations(roomImageUrls, room.room_type)
+    : [];
+
   // Extract diagnosis context that's useful for both modes
   const djson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
   const ddJson = diagnosis?.design_direction_json as Record<string, unknown> | undefined;
@@ -280,7 +290,7 @@ RULES:
       });
     }
 
-    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions);
+    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions, photoOrientations);
 
     if (!imageResult.success || !imageResult.data) {
       await completeAgentRun(supabase, agentRun.id, {
@@ -404,6 +414,7 @@ RULES:
     buildingResearch,
     mockupCtx,
     roomImageUrls,
+    photoOrientations,
   );
 
   if (!promptResult.success || !promptResult.data) {
@@ -436,7 +447,7 @@ RULES:
   };
 
   // Generate image — pass room photos for visual reference
-  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions);
+  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions, photoOrientations);
 
   if (!imageResult.success || !imageResult.data) {
     await supabase
@@ -544,6 +555,16 @@ function buildArchitecturalContext(
   if (br.ceiling_height) lines.push(`Ceiling height: ${br.ceiling_height}`);
   if (br.layout_style) lines.push(`Layout: ${br.layout_style}`);
   if (br.building_style) lines.push(`Building style: ${br.building_style}`);
+
+  // Cardinal orientation — researched upstream in apartment-research but
+  // never previously surfaced to the image generator. Without this, the
+  // model can't reconcile the light direction it sees in photos with the
+  // actual building orientation, leading to mirror-flipped mockups.
+  const loc = br.location_context as Record<string, unknown> | undefined;
+  if (loc) {
+    if (loc.primary_orientation) lines.push(`Apartment orientation: ${loc.primary_orientation}-facing`);
+    if (loc.likely_light_direction) lines.push(`Dominant daylight: ${loc.likely_light_direction}`);
+  }
 
   const fp = br.floor_plan as Record<string, unknown> | undefined;
   if (fp) {

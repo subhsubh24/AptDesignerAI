@@ -6,6 +6,8 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
+import { formatOrientationSummary } from "./photo-orientation-analyzer";
+import type { PhotoOrientation } from "./photo-orientation-analyzer";
 import type { AgentResult } from "./types";
 import type {
   AIContentBlock,
@@ -192,6 +194,7 @@ export async function generateMockupPrompt(
   buildingResearch?: Record<string, unknown>,
   mockupContext?: MockupContext,
   roomImageUrls?: string[],
+  photoOrientations?: PhotoOrientation[],
 ): Promise<AgentResult<MockupPromptResult>> {
   const model = selectModel("mockup_prompt");
   const system = getSystemPrompt();
@@ -215,6 +218,11 @@ export async function generateMockupPrompt(
   // Attach room photos so the prompt-writer describes THIS room (walls,
   // floor, windows, light) rather than a generic version — the downstream
   // image generator will see the same photos and must render the same room.
+  //
+  // When photoOrientations are supplied, interleave each caption with its
+  // matching image block so the prompt-writer knows *which wall is which*
+  // and can say things like "the window wall is on the right". Without this
+  // anchor the model sees photos in isolation and can flip the layout.
   let content: string | AIContentBlock[] = prompt;
   if (roomImageUrls && roomImageUrls.length > 0) {
     const blocks: AIContentBlock[] = [
@@ -223,9 +231,32 @@ export async function generateMockupPrompt(
         text: "REFERENCE PHOTOS OF THE ACTUAL ROOM — the prompt you write will be fed to an image generator that MUST render this exact room. Describe the wall color, floor, windows, trim, ceiling, and light direction precisely from these photos so the generator matches them:",
       },
     ];
-    for (const url of roomImageUrls.slice(0, 4)) {
-      blocks.push({ type: "image", source: { type: "url", url } });
+
+    const usedUrls = roomImageUrls.slice(0, 4);
+    const captionByIndex = new Map<number, PhotoOrientation>();
+    if (photoOrientations) {
+      for (const o of photoOrientations) captionByIndex.set(o.index, o);
     }
+
+    usedUrls.forEach((url, i) => {
+      const orient = captionByIndex.get(i + 1);
+      if (orient) {
+        const features = orient.visible_features.length > 0
+          ? ` Features: ${orient.visible_features.join("; ")}.`
+          : "";
+        blocks.push({
+          type: "text",
+          text: `Photo ${i + 1} — ${orient.camera_position}, facing ${orient.facing}. Light ${orient.light_direction}.${features}`,
+        });
+      } else {
+        blocks.push({ type: "text", text: `Photo ${i + 1}:` });
+      }
+      blocks.push({ type: "image", source: { type: "url", url } });
+    });
+
+    const summary = formatOrientationSummary(photoOrientations ?? []);
+    if (summary) blocks.push({ type: "text", text: summary });
+
     blocks.push({ type: "text", text: prompt });
     content = blocks;
   }
@@ -271,6 +302,7 @@ export async function generateMockupImage(
   prompt: string,
   roomImageUrls?: string[],
   options: MockupImageOptions = {},
+  photoOrientations?: PhotoOrientation[],
 ): Promise<AgentResult<MockupGenerationResult>> {
   const imageSize = options.imageSize ?? (IMAGE_GENERATION_CONFIG.defaultImageSize as ImageSize);
   const aspectRatio = options.aspectRatio ?? (IMAGE_GENERATION_CONFIG.defaultAspectRatio as ImageAspectRatio);
@@ -291,14 +323,41 @@ These are real photos of the apartment. Your generated image MUST match:
 - Same window positions, sizes, shapes, and trim
 - Same built-in features (closets, shelves, outlets, molding)
 - Same natural light direction and quality
-The room architecture must be IDENTICAL. Only change the furniture and decor.`,
+The room architecture must be IDENTICAL. Only change the furniture and decor.
+
+DO NOT flip, mirror, or rotate the room. Each photo below is tagged with the
+photographer's viewpoint. Use those tags to place windows, doors, and features
+on the CORRECT walls — not mirrored versions of them.`,
       });
-      for (const url of roomImageUrls) {
-        content.push({
-          type: "image",
-          source: { type: "url", url },
-        });
+
+      // Interleave each orientation caption with its image block so the model
+      // associates the text ("facing the window wall; light from the left")
+      // with the specific photo it describes. Without this anchor, seeing 3–4
+      // photos from different angles, the model often picks the wrong
+      // canonical viewpoint and flips the layout left-to-right.
+      const captionByIndex = new Map<number, PhotoOrientation>();
+      if (photoOrientations) {
+        for (const o of photoOrientations) captionByIndex.set(o.index, o);
       }
+
+      roomImageUrls.forEach((url, i) => {
+        const orient = captionByIndex.get(i + 1);
+        if (orient) {
+          const features = orient.visible_features.length > 0
+            ? ` Visible: ${orient.visible_features.join("; ")}.`
+            : "";
+          content.push({
+            type: "text",
+            text: `Photo ${i + 1} — ${orient.camera_position}, facing ${orient.facing}. Daylight ${orient.light_direction}.${features}`,
+          });
+        } else {
+          content.push({ type: "text", text: `Photo ${i + 1}:` });
+        }
+        content.push({ type: "image", source: { type: "url", url } });
+      });
+
+      const summary = formatOrientationSummary(photoOrientations ?? []);
+      if (summary) content.push({ type: "text", text: summary });
     }
 
     // When grounded, nudge the image model toward specific real-world
