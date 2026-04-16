@@ -13,6 +13,13 @@ export const MODELS = {
   text: "gemini-3.1-flash-lite-preview",
   /** Image generation model (Nano Banana 2). */
   image: "gemini-3.1-flash-image-preview",
+  /**
+   * Computer Use (browser-control agent). Preview-only — supports a subset
+   * of models distinct from the regular text model. The env override
+   * COMPUTER_USE_MODEL lets ops swap to gemini-3-flash-preview if Google
+   * moves the feature there.
+   */
+  computerUse: "gemini-2.5-computer-use-preview-10-2025",
 } as const;
 
 export type TaskType =
@@ -29,10 +36,14 @@ export type TaskType =
   | "image_generation"
   | "search"
   | "quick_score"
-  | "quick_screen";
+  | "quick_screen"
+  | "computer_use";
 
 /** Route a task to the right model. Text tasks all share one model. */
 export function selectModel(task: TaskType): string {
   if (task === "image_generation") return MODELS.image;
+  if (task === "computer_use") {
+    return process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
+  }
   return MODELS.text;
 }

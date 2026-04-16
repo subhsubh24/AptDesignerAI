@@ -678,6 +678,79 @@ ${floorPlanSchema}`;
       console.log(`[apartment-research] Primary pass captured: ${variants.length} variant(s), ${withImages} with image URLs; finishes filled: [${finishFields.join(", ") || "none"}]`);
     }
 
+    // ─── Computer Use fallback (opt-in) ─────────────────────────
+    // When the text-only research pass came back thin — no variants, or
+    // variants without image URLs (a sign urlContext couldn't render
+    // JS-gated tabs) — fall back to a Browserbase-powered Computer Use
+    // agent that actually clicks through the floor-plans page. Skipped
+    // when the user uploaded their own floor plan (their upload is
+    // ground truth — we don't need to match building variants).
+    if (process.env.ENABLE_COMPUTER_USE === "1" && building_url) {
+      const fp = research.floor_plan as Record<string, unknown> | undefined;
+      const variants = (fp?.unit_variants as Array<Record<string, unknown>> | undefined) ?? [];
+      const withImages = variants.filter((v) => v?.floor_plan_image_url).length;
+      const lowConfidence =
+        variants.length === 0 ||
+        fp?.found === false ||
+        (variants.length > 0 && withImages === 0);
+
+      // Check if user already uploaded a floor plan — skip fallback if so.
+      let hasUploadedFp = false;
+      if (project_id) {
+        try {
+          const { data: existingProj } = await supabase
+            .from("projects")
+            .select("building_research")
+            .eq("id", project_id)
+            .maybeSingle();
+          const existingBr = (existingProj?.building_research as Record<string, unknown>) || {};
+          if (existingBr.floor_plan_image_url) hasUploadedFp = true;
+        } catch {
+          // Non-fatal — let the fallback run anyway.
+        }
+      }
+
+      if (lowConfidence && !hasUploadedFp) {
+        console.log("[apartment-research] Low-confidence floor-plan pass — triggering Computer Use fallback");
+        try {
+          const { runFloorPlanNavigator } = await import("@/lib/agents/computer-use/floor-plan-navigator");
+          const nav = await runFloorPlanNavigator({
+            buildingUrl: building_url,
+            bedrooms: unitBed,
+            bathrooms: unitBath,
+            targetSqft: typeof apartment_sqft === "number" ? apartment_sqft : null,
+          });
+          if (nav.variants.length > 0) {
+            const existingNames = new Set(
+              variants.map((v) => String(v.name ?? "").toLowerCase().trim()).filter(Boolean),
+            );
+            const newVariants = nav.variants.filter(
+              (v) => !existingNames.has(v.name.toLowerCase().trim()),
+            );
+            research.floor_plan = {
+              ...(fp ?? {}),
+              unit_variants: [...variants, ...newVariants],
+              computer_use_sourced: {
+                source_url: nav.source_url,
+                status: nav.agent_status,
+                added: newVariants.length,
+                turns: nav.turns,
+              },
+            };
+            console.log(
+              `[apartment-research] Computer Use added ${newVariants.length} variant(s) (agent status: ${nav.agent_status}, turns: ${nav.turns})`,
+            );
+          } else {
+            console.log(
+              `[apartment-research] Computer Use fallback returned no variants (status: ${nav.agent_status})`,
+            );
+          }
+        } catch (e) {
+          console.warn("[apartment-research] Computer Use fallback failed:", (e as Error).message);
+        }
+      }
+    }
+
     // (a) Analyze floor plan images via Gemini vision if URLs were found
     const floorPlanData = research.floor_plan as Record<string, unknown> | undefined;
     const variants = floorPlanData?.unit_variants as Array<Record<string, unknown>> | undefined;

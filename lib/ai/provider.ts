@@ -80,10 +80,32 @@ export interface GoogleMapsToolConfig {
   placeId?: string;
 }
 
+/**
+ * Computer Use tool — enables the browser-control agent (see
+ * lib/agents/computer-use/). Only the preview Computer Use models
+ * (gemini-2.5-computer-use-preview-* and gemini-3-flash-preview) support
+ * this tool; calling it with the regular text model will 400.
+ */
+export interface ComputerUseToolConfig {
+  /**
+   * Execution environment. We only target a remote browser (Browserbase)
+   * so this is always ENVIRONMENT_BROWSER. Kept as a field for future
+   * Android / desktop expansion.
+   */
+  environment?: "ENVIRONMENT_BROWSER";
+  /**
+   * Disable specific predefined functions the agent shouldn't emit. Useful
+   * for locking the agent out of destructive actions (e.g., drag_and_drop
+   * in a product-verifier flow where we only need clicks + reads).
+   */
+  excludedPredefinedFunctions?: string[];
+}
+
 export type GeminiTool =
   | { googleSearch: Record<string, never> }
   | { urlContext: Record<string, never> }
   | { googleMaps: Record<string, never> | GoogleMapsToolConfig }
+  | { computerUse: ComputerUseToolConfig }
   | { functionDeclarations: FunctionDeclaration[] };
 
 export interface FunctionDeclaration {
