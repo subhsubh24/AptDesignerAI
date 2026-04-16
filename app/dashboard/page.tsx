@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage } from "lucide-react";
+import { Loader2, Camera, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
@@ -346,7 +346,6 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-2">
-              <Sparkles className="h-3 w-3" />
               Let&apos;s design your apartment
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
@@ -744,8 +743,8 @@ export default function DashboardPage() {
             onClick={handleAnalyze}
             disabled={totalImages === 0 || analyzing}
           >
-            <Sparkles className="h-5 w-5" />
             Design my apartment · {totalImages} {totalImages === 1 ? "photo" : "photos"}
+            <ArrowRight className="h-5 w-5" />
           </Button>
         </div>
       </div>
@@ -760,11 +759,11 @@ export default function DashboardPage() {
 
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center animate-fade-in-up">
-        {/* Animated logo-ish halo */}
+        {/* Animated loading indicator */}
         <div className="relative inline-flex h-20 w-20 items-center justify-center mx-auto">
           <div className="absolute inset-0 rounded-full bg-accent-warm/15 animate-ping" />
           <div className="relative h-20 w-20 rounded-full bg-gradient-warm-button flex items-center justify-center shadow-warm-md">
-            <Sparkles className="h-9 w-9 text-white" />
+            <Loader2 className="h-9 w-9 text-white animate-spin" />
           </div>
         </div>
 
@@ -931,7 +930,6 @@ export default function DashboardPage() {
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
                     <>
-                      <Sparkles className="h-5 w-5" />
                       Design this room
                       <ArrowRight className="h-4 w-4 ml-1" />
                     </>

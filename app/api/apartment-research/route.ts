@@ -262,7 +262,7 @@ async function disambiguateWithVision(
       model: selectModel("apartment_research"),
       system: "You are an architectural vision assistant. Match user-provided apartment photos to floor-plan diagrams by comparing visible features. Never guess — if the photos don't show enough to decide, return matched_variant_name: null.",
       messages: [{ role: "user", content: blocks }],
-      max_tokens: 800,
+      max_tokens: 2000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
     });
 
@@ -850,7 +850,7 @@ Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby 
 
 If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
           }],
-          max_tokens: 1500,
+          max_tokens: 3000,
           // No temperature override — Gemini 3 is optimized for its default (1.0).
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.

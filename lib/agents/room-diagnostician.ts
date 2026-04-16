@@ -167,7 +167,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model: judgeModel,
           system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 400,
+          max_tokens: 2000,
         });
         const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };
         const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;

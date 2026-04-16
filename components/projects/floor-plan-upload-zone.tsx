@@ -172,11 +172,18 @@ export function FloorPlanUploadZone({
 
         {imageUrl && (
           <div className="mt-2">
-            <img
-              src={imageUrl}
-              alt="Floor plan"
-              className="max-h-40 w-full rounded-md object-contain bg-white border"
-            />
+            {imageUrl.toLowerCase().endsWith(".pdf") ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-background border text-xs text-muted-foreground">
+                <FileImage className="h-4 w-4 shrink-0 text-accent-warm" />
+                <span className="truncate font-medium">Floor plan · PDF</span>
+              </div>
+            ) : (
+              <img
+                src={imageUrl}
+                alt="Floor plan"
+                className="max-h-40 w-full rounded-md object-contain bg-white border"
+              />
+            )}
           </div>
         )}
 

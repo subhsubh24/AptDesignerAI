@@ -393,7 +393,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           model,
           system,
           messages: [{ role: "user", content: passAContent }],
-          max_tokens: 6000,
+          max_tokens: 8192,
           seed,
           responseMimeType: "application/json",
         });
@@ -462,7 +462,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model,
           system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 400,
+          max_tokens: 2000,
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
         const parsed = extractJsonObject<any>(resp.content);

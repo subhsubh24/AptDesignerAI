@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 
 export default function LoginPage() {
@@ -111,13 +111,13 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-accent-warm/20 via-secondary to-accent" />
         <div className="absolute inset-0 texture-noise" />
         <div className="relative flex flex-col items-center justify-center p-12 text-center">
-          <Sparkles className="h-12 w-12 text-accent-warm/60 mb-6" />
+          <Home className="h-12 w-12 text-accent-warm/60 mb-6" />
           <h2 className="text-headline text-foreground mb-4">
             Your apartment,{" "}
             <span className="text-gradient-warm">but better.</span>
           </h2>
           <p className="text-muted-foreground max-w-sm leading-relaxed mb-8">
-            AI-powered furniture recommendations scored for your exact space.
+            Expert furniture recommendations scored for your exact space.
             Every piece validated for style, scale, and fit.
           </p>
 

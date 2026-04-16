@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Camera, ShoppingBag, Palette, Shield, ArrowRight, Star, Sparkles, CheckCircle2, Zap } from "lucide-react";
+import { Camera, ShoppingBag, Palette, Shield, ArrowRight, Star, CheckCircle2, Zap } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
@@ -22,8 +22,7 @@ export default function LandingPage() {
             <div className="animate-fade-in-up max-w-xl">
               {/* Pill badge */}
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-8">
-                <Sparkles className="h-3.5 w-3.5" />
-                AI-powered interior design
+                Personalized interior design
               </div>
 
               <h1 className="text-display mb-6">
@@ -264,8 +263,8 @@ export default function LandingPage() {
                 <div className="aspect-[4/3] bg-gradient-to-br from-accent-warm/10 via-secondary to-accent relative">
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center space-y-2">
-                      <Sparkles className="h-8 w-8 text-accent-warm/40 mx-auto" />
-                      <p className="text-sm text-accent-warm/60 font-medium">AI-designed concept</p>
+                      <Palette className="h-8 w-8 text-accent-warm/40 mx-auto" />
+                      <p className="text-sm text-accent-warm/60 font-medium">Designed for you</p>
                     </div>
                   </div>
                   <div className="absolute top-4 left-4">

@@ -158,7 +158,7 @@ Emit one entry per photo, in order. Index must match the photo number you were s
       model,
       system: ANALYZER_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
-      max_tokens: 1500,
+      max_tokens: 4000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });

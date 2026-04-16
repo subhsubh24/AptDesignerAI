@@ -278,7 +278,7 @@ export async function generateMockupPrompt(
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 2000,
+      max_tokens: 6000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
