@@ -1,5 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisAnalysisPrompt, getDiagnosisPlanPrompt } from "@/lib/prompts/diagnosis";
 import {
@@ -53,19 +54,20 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
 
   const analysisContent: AIContentBlock[] = [];
 
-  // Floor plan image first (authoritative spatial ground truth) — when present
-  // the model should read dimensions, wall features, and orientation from this
-  // rather than inferring them from room photos.
+  // Pre-resolve reused visual assets through the Files API cache. Pass 1 runs
+  // N parallel self-consistency samples, so the same floor plan + photos hit
+  // Gemini N× — uploading once eliminates N-1 rounds of fetch + base64. Any
+  // upload failure falls back to URL blocks (the old behavior) transparently.
   if (ctx.floorPlanImageUrl) {
     analysisContent.push({
       type: "text",
       text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features (windows/doors/built-ins), and building orientation. Use this as the ground truth for all spatial facts. Do not infer or contradict any dimension readable from this plan.",
     });
-    analysisContent.push({ type: "image", source: { type: "url", url: ctx.floorPlanImageUrl } });
+    analysisContent.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
   }
 
   for (const url of ctx.imageUrls) {
-    analysisContent.push({ type: "image", source: { type: "url", url } });
+    analysisContent.push(await resolveImageBlock(url, { preferFilesApi: true }));
   }
   analysisContent.push({ type: "text", text: analysisPrompt });
 

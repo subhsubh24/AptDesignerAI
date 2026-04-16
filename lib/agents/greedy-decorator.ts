@@ -12,6 +12,8 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import type { AIContentBlock } from "@/lib/ai/provider";
 import { createLogger } from "@/lib/logging/logger";
 import {
   initializeSaturation,
@@ -199,6 +201,21 @@ export async function runDiagnosisExpansion(
   let consecutiveRejections = 0;
   let stopReason: StopReason | null = null;
 
+  // ─── Resolve reused visual assets ONCE through the Files API cache ──────────
+  // The expansion loop and critique pass may fire 10-20+ Gemini calls for a
+  // single room, each sending the same floor plan + photos. Uploading once
+  // here kills the per-iteration fetch + base64 encoding overhead. Any
+  // upload failure degrades gracefully back to URL blocks (the old path).
+  const visualBlocks: AIContentBlock[] = [];
+  if (ctx.floorPlanImageUrl) {
+    visualBlocks.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
+  }
+  if (ctx.roomPhotos?.length) {
+    for (const url of ctx.roomPhotos) {
+      visualBlocks.push(await resolveImageBlock(url, { preferFilesApi: true }));
+    }
+  }
+
   for (let i = 0; i < maxIterations; i++) {
     // Build prompt
     const promptCtx: ExpansionPromptContext = {
@@ -215,21 +232,11 @@ export async function runDiagnosisExpansion(
 
     const promptText = buildExpansionPrompt(promptCtx);
 
-    // Floor plan image first (authoritative layout ground truth), then room
-    // photos for visual grounding, then the text prompt. Gemini handles this
-    // ordering well — reference artifacts before instructions.
-    const visualBlocks: Array<{ type: "image"; source: { type: "url"; url: string } }> = [];
-    if (ctx.floorPlanImageUrl) {
-      visualBlocks.push({ type: "image", source: { type: "url", url: ctx.floorPlanImageUrl } });
-    }
-    if (ctx.roomPhotos?.length) {
-      for (const url of ctx.roomPhotos) {
-        visualBlocks.push({ type: "image", source: { type: "url", url } });
-      }
-    }
-    const content = visualBlocks.length > 0
-      ? [...visualBlocks, { type: "text" as const, text: promptText }]
-      : [{ type: "text" as const, text: promptText }];
+    // Floor plan first (authoritative layout), then room photos, then prompt.
+    // `visualBlocks` was resolved before the loop — reused across iterations.
+    const content: AIContentBlock[] = visualBlocks.length > 0
+      ? [...visualBlocks, { type: "text", text: promptText }]
+      : [{ type: "text", text: promptText }];
 
     let parsed: LLMExpansionResponse | null = null;
 
@@ -289,15 +296,11 @@ export async function runDiagnosisExpansion(
       // One retry with rejection context
       const retryCtx: ExpansionPromptContext = { ...promptCtx, lastRejectionReason: rejection };
       const retryPromptText = buildRetryPrompt(retryCtx);
-      const retryContent = ctx.roomPhotos?.length
-        ? [
-            ...ctx.roomPhotos.map(url => ({
-              type: "image" as const,
-              source: { type: "url" as const, url },
-            })),
-            { type: "text" as const, text: retryPromptText },
-          ]
-        : [{ type: "text" as const, text: retryPromptText }];
+      // Reuse the pre-resolved visual blocks — same floor plan + photos the
+      // loop has been using. The retry is a sibling call, not a new turn.
+      const retryContent: AIContentBlock[] = visualBlocks.length > 0
+        ? [...visualBlocks, { type: "text", text: retryPromptText }]
+        : [{ type: "text", text: retryPromptText }];
 
       let retryParsed: LLMExpansionResponse | null = null;
       try {
@@ -400,6 +403,7 @@ export async function runDiagnosisExpansion(
         profile,
         ctx,
         model,
+        visualBlocks,
       });
       items = critiqueOutcome.items;
       profile = critiqueOutcome.profile;
@@ -466,8 +470,10 @@ async function runCritiquePass(args: {
   profile: SaturationProfile;
   ctx: ExpansionContext;
   model: string;
+  /** Pre-resolved floor-plan + photo blocks shared with the expansion loop. */
+  visualBlocks: AIContentBlock[];
 }): Promise<CritiqueOutcome> {
-  const { originalCount, ctx, model } = args;
+  const { originalCount, ctx, model, visualBlocks } = args;
   let items = args.items;
   let profile = args.profile;
   const decisions: DecoratorDecision[] = [];
@@ -486,15 +492,11 @@ async function runCritiquePass(args: {
     expansionItemIndices: expansionIndices,
   });
 
-  const content = ctx.roomPhotos?.length
-    ? [
-        ...ctx.roomPhotos.map((url) => ({
-          type: "image" as const,
-          source: { type: "url" as const, url },
-        })),
-        { type: "text" as const, text: critiquePrompt },
-      ]
-    : [{ type: "text" as const, text: critiquePrompt }];
+  // Reuse the floor-plan + photo blocks the expansion loop used — same
+  // assets, same Files API cache hit, no extra uploads.
+  const content: AIContentBlock[] = visualBlocks.length > 0
+    ? [...visualBlocks, { type: "text", text: critiquePrompt }]
+    : [{ type: "text", text: critiquePrompt }];
 
   let response: { content: string };
   try {

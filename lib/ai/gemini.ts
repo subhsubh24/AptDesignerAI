@@ -161,9 +161,21 @@ async function convertMessages(
       parts.push({ text: msg.content });
     } else {
       for (const block of msg.content) {
-        if (block.type === "image" && block.source) {
+        if ((block.type === "image" || block.type === "file") && block.source) {
           totalImages++;
-          if (block.source.type === "base64" && block.source.data) {
+          if (block.source.type === "file_uri" && block.source.uri) {
+            // Files API path — reference an already-uploaded asset by URI.
+            // No base64 round-trip; Gemini fetches the bytes server-side.
+            // NOTE: mediaResolution on fileData parts is accepted but only
+            // meaningful for image/video — harmless for PDFs.
+            parts.push({
+              ...imagePartExtras,
+              fileData: {
+                mimeType: block.source.media_type || "image/jpeg",
+                fileUri: block.source.uri,
+              },
+            });
+          } else if (block.source.type === "base64" && block.source.data) {
             parts.push({
               ...imagePartExtras,
               inlineData: {

@@ -10,13 +10,20 @@ export interface AIMessage {
 }
 
 export interface AIContentBlock {
-  type: "text" | "image";
+  type: "text" | "image" | "file";
   text?: string;
   source?: {
-    type: "base64" | "url";
+    type: "base64" | "url" | "file_uri";
     media_type?: string;
     data?: string;
     url?: string;
+    /**
+     * Gemini Files API resource URI (e.g. "https://generativelanguage.googleapis.com/v1beta/files/abc").
+     * Used when an asset is uploaded once and referenced across many calls
+     * (see lib/ai/files-cache.ts). The provider emits a `file_data` part
+     * instead of base64-inlining the bytes.
+     */
+    uri?: string;
   };
 }
 
