@@ -299,11 +299,19 @@ export interface ActionItem {
 /** One step in the greedy expansion decision log */
 export interface DecoratorDecision {
   iteration: number;
-  verdict: "ADD" | "STOP" | "GUARDRAIL_REJECTED";
+  verdict:
+    | "ADD"
+    | "STOP"
+    | "GUARDRAIL_REJECTED"
+    | "CRITIQUE_ADD"
+    | "CRITIQUE_SWAP"
+    | "CRITIQUE_REMOVE";
   item?: Partial<ActionItem>;
   reasoning: string;
   density_feel: string;
   saturation_pct: number;
+  /** For SWAP/REMOVE critique ops: the targeted item's index in the list at time of decision. */
+  target_index?: number;
 }
 
 export interface ProductDimensions {

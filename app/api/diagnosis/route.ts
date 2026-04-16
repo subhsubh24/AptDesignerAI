@@ -6,10 +6,12 @@ import {
   type ExpansionBudget,
   type SiblingRoomSummary,
 } from "@/lib/agents/greedy-decorator";
+import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
 import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
@@ -85,6 +87,26 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     .single();
 
   const profile = buildDesignProfile(project);
+
+  // Infer user preferences from sibling rooms — closes the "nothing learns"
+  // gap by turning existing keep/replace/action_list data into prompt context.
+  // Best-effort: if the lookup fails, diagnosis runs without preference signals.
+  const inferredPreferences = await inferUserPreferences(
+    supabase,
+    room.project_id,
+    room_id,
+  );
+  if (profile && inferredPreferences) {
+    profile.inferredPreferences = inferredPreferences;
+  }
+  if (inferredPreferences) {
+    log.info("User preference signals inferred", {
+      room_id,
+      sourceRoomCount: inferredPreferences.source_room_count,
+      densityPreference: inferredPreferences.density_preference,
+      budgetPressure: inferredPreferences.budget_pressure,
+    });
+  }
 
   // Sanitize user context before it enters the AI pipeline
   const rawUserContext = room.user_context || undefined;
@@ -202,6 +224,15 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       // Best-effort: fetch this room's budget dollars for budget-aware expansion.
       const budget = await buildExpansionBudgetContext(supabase, room_id, room.budget_mode, expandedActionList);
 
+      // Derive adaptive cap context from inferred preferences + this room's
+      // priorities + the Pass A style notes. Tightens/loosens the saturation
+      // ceilings so they respond to real signals rather than hard-coded heuristics.
+      const adaptiveCaps = buildAdaptiveCapContext({
+        preferences: inferredPreferences,
+        priorities: ctx.priorities,
+        designDirection: diagnosisData.design_direction ?? null,
+      });
+
       const expansion = await runDiagnosisExpansion({
         currentItems: expandedActionList,
         room: {
@@ -213,6 +244,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         roomPhotos: ctx.imageUrls,
         budget,
         siblingRooms,
+        adaptiveCaps,
+        preferences: inferredPreferences,
       });
       expandedActionList = expansion.expanded_items;
       expansionLog = expansion.decision_log;
@@ -224,6 +257,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         stopReason: expansion.stop_reason,
         siblingRoomCount: siblingRooms?.length ?? 0,
         budgetProvided: budget?.totalDollars != null,
+        critiqueRefinements: expansion.critique_refinements ?? 0,
+        adaptiveCapsUsed: adaptiveCaps != null,
       });
     } catch (err) {
       log.warn("Greedy expansion failed — using baseline action_list", {
@@ -445,4 +480,29 @@ async function fetchSiblingRoomSummaries(
     });
     return null;
   }
+}
+
+/**
+ * Build an AdaptiveCapContext from the inferred preferences + this room's
+ * priorities + design direction style notes. Returns null when no signals
+ * are present — saturation-math falls back to pure direction-modifier caps.
+ */
+function buildAdaptiveCapContext(args: {
+  preferences: PreferenceSignals | null;
+  priorities: string[] | undefined;
+  designDirection: DesignDirection | null;
+}): AdaptiveCapContext | null {
+  const { preferences, priorities, designDirection } = args;
+  const hasPrefs = preferences && preferences.source_room_count > 0;
+  const hasPriorities = Array.isArray(priorities) && priorities.length > 0;
+  const hasStyleNotes = !!designDirection?.style_notes;
+
+  if (!hasPrefs && !hasPriorities && !hasStyleNotes) return null;
+
+  return {
+    userDensityPreference: preferences?.density_preference ?? "unknown",
+    priorities: priorities ?? [],
+    styleNotes: designDirection?.style_notes,
+    userPreferredCategories: preferences?.recurring_categories ?? [],
+  };
 }

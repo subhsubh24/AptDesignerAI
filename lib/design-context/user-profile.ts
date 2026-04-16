@@ -1,4 +1,6 @@
 import type { ExtractedFloorPlan } from "@/lib/types/database";
+import type { PreferenceSignals } from "./infer-preferences";
+import { formatPreferencesForPrompt } from "./infer-preferences";
 
 /**
  * Dynamic design profile generation.
@@ -42,6 +44,12 @@ export interface DynamicDesignProfile {
   floorPlanImageUrl?: string;
   /** Structured spatial data extracted from the floor plan image */
   extractedFloorPlan?: ExtractedFloorPlan;
+  /**
+   * Preferences inferred from the user's prior rooms in this apartment.
+   * Soft guidance — the LLM weighs it against the current room's specifics.
+   * See lib/design-context/infer-preferences.ts.
+   */
+  inferredPreferences?: PreferenceSignals;
 }
 
 /**
@@ -188,6 +196,12 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
     sections.push(`## APARTMENT LAYOUT
 - Bedrooms: ${profile.bedrooms || 1}
 - Bathrooms: ${profile.bathrooms || 1}`);
+  }
+
+  // Inferred user preferences from prior rooms
+  if (profile.inferredPreferences) {
+    const prefBlock = formatPreferencesForPrompt(profile.inferredPreferences);
+    if (prefBlock) sections.push(prefBlock);
   }
 
   // Lifestyle context

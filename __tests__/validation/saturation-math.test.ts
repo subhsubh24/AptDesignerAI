@@ -4,6 +4,7 @@ import {
   updateSaturation,
   wouldExceedHardCap,
   computeDirectionModifier,
+  computeAdaptiveMultiplier,
   formatSaturationForPrompt,
 } from "@/lib/validation/saturation-math";
 import type { ActionItem } from "@/lib/types/database";
@@ -165,5 +166,86 @@ describe("formatSaturationForPrompt", () => {
     const output = formatSaturationForPrompt(profile);
     // With no items, should report all categories open
     expect(output).toContain("Available headroom");
+  });
+});
+
+describe("computeAdaptiveMultiplier", () => {
+  it("returns 1.0 when no adaptive context is given", () => {
+    expect(computeAdaptiveMultiplier(undefined)).toBeCloseTo(1.0);
+  });
+
+  it("tightens caps when the current room is cluttered", () => {
+    expect(computeAdaptiveMultiplier({ currentRoomDensity: "cluttered" })).toBeLessThan(1.0);
+  });
+
+  it("loosens caps when the current room is sparse", () => {
+    expect(computeAdaptiveMultiplier({ currentRoomDensity: "sparse" })).toBeGreaterThan(1.0);
+  });
+
+  it("tightens for minimalist user preference", () => {
+    expect(computeAdaptiveMultiplier({ userDensityPreference: "minimalist" })).toBeLessThan(1.0);
+  });
+
+  it("loosens for maximalist user preference", () => {
+    expect(computeAdaptiveMultiplier({ userDensityPreference: "maximalist" })).toBeGreaterThan(1.0);
+  });
+
+  it("recognizes priority keywords like 'minimalist' and 'layered'", () => {
+    expect(computeAdaptiveMultiplier({ priorities: ["minimalist look"] })).toBeLessThan(1.0);
+    expect(computeAdaptiveMultiplier({ priorities: ["layered decor"] })).toBeGreaterThan(1.0);
+  });
+
+  it("clamps the multiplier to 0.5..1.6", () => {
+    const tight = computeAdaptiveMultiplier({
+      currentRoomDensity: "cluttered",
+      userDensityPreference: "minimalist",
+      priorities: ["minimalist"],
+      styleNotes: "pared-down",
+    });
+    expect(tight).toBeGreaterThanOrEqual(0.5);
+    const loose = computeAdaptiveMultiplier({
+      currentRoomDensity: "sparse",
+      userDensityPreference: "maximalist",
+      priorities: ["maximalist", "layered"],
+      styleNotes: "abundant and collected",
+    });
+    expect(loose).toBeLessThanOrEqual(1.6);
+  });
+});
+
+describe("initializeSaturation with adaptive context", () => {
+  it("tightens hard_cap when user is minimalist and room is cluttered", () => {
+    const baseProfile = initializeSaturation([], { sqft: 250 }, "modern");
+    const tightProfile = initializeSaturation([], { sqft: 250 }, "modern", {
+      currentRoomDensity: "cluttered",
+      userDensityPreference: "minimalist",
+    });
+    expect(tightProfile.total_items.hard_cap).toBeLessThan(baseProfile.total_items.hard_cap);
+  });
+
+  it("loosens hard_cap when user is maximalist and room is sparse", () => {
+    const baseProfile = initializeSaturation([], { sqft: 250 }, "modern");
+    const looseProfile = initializeSaturation([], { sqft: 250 }, "modern", {
+      currentRoomDensity: "sparse",
+      userDensityPreference: "maximalist",
+    });
+    expect(looseProfile.total_items.hard_cap).toBeGreaterThan(baseProfile.total_items.hard_cap);
+  });
+
+  it("bumps per-category hard_cap for userPreferredCategories", () => {
+    const baseProfile = initializeSaturation(
+      [makeItem("plants", "")],
+      { sqft: 250 },
+      "modern",
+    );
+    const boostedProfile = initializeSaturation(
+      [makeItem("plants", "")],
+      { sqft: 250 },
+      "modern",
+      { userPreferredCategories: ["plants"] },
+    );
+    expect(boostedProfile.per_category.plants.hard_cap).toBeGreaterThan(
+      baseProfile.per_category.plants.hard_cap,
+    );
   });
 });

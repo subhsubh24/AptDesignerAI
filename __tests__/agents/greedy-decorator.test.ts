@@ -261,4 +261,170 @@ describe("runDiagnosisExpansion", () => {
     expect(promptText).not.toContain("Budget Context");
     expect(promptText).not.toContain("Other Rooms in This Apartment");
   });
+
+  it("runs critique pass after >=2 items are added (and records refinements)", async () => {
+    // Expansion: ADD candles → ADD books → STOP
+    // Critique: ADD "tray" to complete the styling batch
+    mockChat
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "candles") })
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "books") })
+      .mockResolvedValueOnce({ content: llmResponse("STOP") })
+      // Critique call
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          overall_note: "Good, but the candles could sit on something.",
+          refinements: [
+            {
+              op: "ADD",
+              item: {
+                category: "tray",
+                action: "1 marble tray to ground the candles",
+                priority: 5,
+                reasoning: "Groups the candles into a styled vignette",
+              },
+              reason: "Completes the styling batch",
+            },
+          ],
+        }),
+      });
+
+    const result = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa"), makeItem("area_rug")],
+      room: { type: "living_room", sqft: 280 },
+    });
+
+    expect(result.critique_refinements).toBe(1);
+    expect(result.expanded_items.map((i) => i.category)).toContain("tray");
+    expect(result.decision_log.some((d) => d.verdict === "CRITIQUE_ADD")).toBe(true);
+  });
+
+  it("skips critique pass when fewer than 2 items were added", async () => {
+    // Only 1 expansion item before STOP — critique should be skipped
+    mockChat
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "candles") })
+      .mockResolvedValueOnce({ content: llmResponse("STOP") });
+
+    const result = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa"), makeItem("area_rug")],
+      room: { type: "living_room", sqft: 280 },
+    });
+
+    expect(result.critique_refinements ?? 0).toBe(0);
+    // Expect only the 2 initial calls (ADD + STOP); no 3rd critique call
+    expect(mockChat).toHaveBeenCalledTimes(2);
+  });
+
+  it("critique pass can be disabled via runCritique: false", async () => {
+    mockChat
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "candles") })
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "books") })
+      .mockResolvedValueOnce({ content: llmResponse("STOP") });
+
+    const result = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 280 },
+      runCritique: false,
+    });
+
+    expect(result.critique_refinements ?? 0).toBe(0);
+    expect(mockChat).toHaveBeenCalledTimes(3);
+  });
+
+  it("critique REMOVE skips when target is an original (non-expansion) item", async () => {
+    // Expansion: ADD candles → ADD books → STOP
+    // Critique attempts REMOVE at index 0 (the sofa — an ORIGINAL). Should skip.
+    mockChat
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "candles") })
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "books") })
+      .mockResolvedValueOnce({ content: llmResponse("STOP") })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          overall_note: "test",
+          refinements: [
+            { op: "REMOVE", index: 0, reason: "try to remove original" },
+          ],
+        }),
+      });
+
+    const result = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 280 },
+    });
+
+    expect(result.critique_refinements).toBe(0);
+    // Sofa (original) is still present
+    expect(result.expanded_items[0].category).toBe("sofa");
+  });
+
+  it("critique SWAP replaces an expansion item in place", async () => {
+    // Expansion: ADD candles → ADD books → STOP
+    // Critique: SWAP index of books (index 3, after sofa, rug, candles)
+    mockChat
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "candles") })
+      .mockResolvedValueOnce({ content: llmResponse("ADD", "books") })
+      .mockResolvedValueOnce({ content: llmResponse("STOP") })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          overall_note: "books drift from the palette",
+          refinements: [
+            {
+              op: "SWAP",
+              index: 3,
+              item: {
+                category: "decorative_objects",
+                action: "Small brass objects that tie into the hardware",
+                priority: 5,
+                reasoning: "Better palette cohesion",
+              },
+              reason: "Matches the established palette",
+            },
+          ],
+        }),
+      });
+
+    const result = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa"), makeItem("area_rug")],
+      room: { type: "living_room", sqft: 280 },
+    });
+
+    expect(result.critique_refinements).toBe(1);
+    expect(result.expanded_items.map((i) => i.category)).toContain("decorative_objects");
+    expect(result.expanded_items.map((i) => i.category)).not.toContain("books");
+  });
+
+  it("passes adaptive cap context into initializeSaturation (loosens/tightens)", async () => {
+    mockChat
+      .mockResolvedValue({ content: llmResponse("ADD", "candles") });
+
+    // Tight caps from adaptive context
+    const tight = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 250 },
+      adaptiveCaps: {
+        currentRoomDensity: "cluttered",
+        userDensityPreference: "minimalist",
+      },
+      maxIterations: 3,
+      runCritique: false,
+    });
+
+    mockChat.mockClear();
+    mockChat.mockResolvedValue({ content: llmResponse("ADD", "candles") });
+
+    const loose = await runDiagnosisExpansion({
+      currentItems: [makeItem("sofa")],
+      room: { type: "living_room", sqft: 250 },
+      adaptiveCaps: {
+        currentRoomDensity: "sparse",
+        userDensityPreference: "maximalist",
+      },
+      maxIterations: 3,
+      runCritique: false,
+    });
+
+    // Tight profile reaches higher saturation_pct for the same item count
+    const tightLast = tight.decision_log.at(-1)?.saturation_pct ?? 0;
+    const looseLast = loose.decision_log.at(-1)?.saturation_pct ?? 0;
+    expect(tightLast).toBeGreaterThan(looseLast);
+  });
 });

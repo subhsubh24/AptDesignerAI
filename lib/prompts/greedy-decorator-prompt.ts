@@ -10,6 +10,7 @@
 import type { ActionItem, DesignDirection } from "@/lib/types/database";
 import { formatSaturationForPrompt, type SaturationProfile } from "@/lib/validation/saturation-math";
 import type { ExpansionBudget, SiblingRoomSummary } from "@/lib/agents/greedy-decorator";
+import { formatPreferencesForPrompt, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 
 export interface ExpansionPromptContext {
   roomType: string;
@@ -23,6 +24,8 @@ export interface ExpansionPromptContext {
   budget?: ExpansionBudget | null;
   /** Optional sibling room summaries — keeps palette / materials coherent across rooms. */
   siblingRooms?: SiblingRoomSummary[] | null;
+  /** Optional user preference signals inferred from sibling rooms. */
+  preferences?: PreferenceSignals | null;
 }
 
 function formatDirectionSummary(direction: DesignDirection | null | undefined): string {
@@ -108,7 +111,7 @@ Your discipline: you stop when adding more would hurt, not help. Not every room 
 When you suggest an item, you are specific and actionable — concrete enough to search for (e.g., "2–3 pillar candles in varying heights, unscented, cream or ivory wax, grouped on a small tray on the coffee table").`;
 
 export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
-  const { roomType, sqft, designDirection, currentItems, saturation, budget, siblingRooms } = ctx;
+  const { roomType, sqft, designDirection, currentItems, saturation, budget, siblingRooms, preferences } = ctx;
   const sqftStr = sqft ? `~${sqft} sqft` : "unknown size";
 
   const lines: string[] = [];
@@ -118,6 +121,12 @@ export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
   lines.push(`Design Direction:`);
   lines.push(formatDirectionSummary(designDirection));
   lines.push("");
+
+  const prefSection = formatPreferencesForPrompt(preferences);
+  if (prefSection) {
+    lines.push(prefSection);
+    lines.push("");
+  }
 
   const budgetSection = formatBudgetSection(budget);
   if (budgetSection) {

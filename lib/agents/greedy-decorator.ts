@@ -25,6 +25,12 @@ import {
   buildRetryPrompt,
   type ExpansionPromptContext,
 } from "@/lib/prompts/greedy-decorator-prompt";
+import {
+  CRITIQUE_SYSTEM_PROMPT,
+  MAX_REFINEMENTS,
+  buildCritiquePrompt,
+} from "@/lib/prompts/greedy-decorator-critique-prompt";
+import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
 import type { ActionItem, DesignDirection } from "@/lib/types/database";
 
 const log = createLogger("greedy-decorator");
@@ -70,6 +76,24 @@ export interface ExpansionContext {
   budget?: ExpansionBudget | null;
   /** Sibling rooms in the same apartment — used to keep material / palette coherent across rooms. */
   siblingRooms?: SiblingRoomSummary[] | null;
+  /**
+   * Preference signals inferred from sibling rooms (keep/replace patterns,
+   * recurring materials + palette, density tendency). Soft prompt context.
+   */
+  preferences?: import("@/lib/design-context/infer-preferences").PreferenceSignals | null;
+  /**
+   * Adaptive saturation cap signals (e.g. Pass A density observation, inferred
+   * user density preference). When provided, tightens or loosens caps before
+   * the loop starts. See lib/validation/saturation-math.ts.
+   */
+  adaptiveCaps?: AdaptiveCapContext | null;
+  /**
+   * Run a final holistic critique pass after the greedy loop to catch
+   * combinatorial wins (styling batches, swaps, consolidations) that
+   * one-item-at-a-time can't see. Defaults to true when at least 2 items
+   * were added by expansion.
+   */
+  runCritique?: boolean;
 }
 
 export type StopReason =
@@ -81,12 +105,14 @@ export type StopReason =
 
 export interface DecoratorDecision {
   iteration: number;
-  verdict: "ADD" | "STOP" | "GUARDRAIL_REJECTED";
+  verdict: "ADD" | "STOP" | "GUARDRAIL_REJECTED" | "CRITIQUE_ADD" | "CRITIQUE_SWAP" | "CRITIQUE_REMOVE";
   item?: Partial<ActionItem & { variant?: string; quantity?: number }>;
   reasoning: string;
   density_feel: string;
   /** Ratio of current total_items to hard_cap at the time of decision */
   saturation_pct: number;
+  /** For SWAP/REMOVE: the index (in items array) that was targeted. */
+  target_index?: number;
 }
 
 export interface ExpansionResult {
@@ -94,6 +120,10 @@ export interface ExpansionResult {
   added_count: number;
   stop_reason: StopReason;
   decision_log: DecoratorDecision[];
+  /** Number of refinements applied during the critique pass (0 if skipped). */
+  critique_refinements?: number;
+  /** The LLM's overall read of the final list (empty if critique skipped). */
+  critique_note?: string;
 }
 
 // ─── JSON response schema ─────────────────────────────────────────────────────
@@ -154,10 +184,12 @@ export async function runDiagnosisExpansion(
     items,
     ctx.room,
     ctx.designDirection,
+    ctx.adaptiveCaps ?? undefined,
   );
 
   const decisions: DecoratorDecision[] = [];
   let consecutiveRejections = 0;
+  let stopReason: StopReason | null = null;
 
   for (let i = 0; i < maxIterations; i++) {
     // Build prompt
@@ -169,6 +201,7 @@ export async function runDiagnosisExpansion(
       saturation: profile,
       budget: ctx.budget,
       siblingRooms: ctx.siblingRooms,
+      preferences: ctx.preferences,
     };
 
     const promptText = buildExpansionPrompt(promptCtx);
@@ -221,12 +254,8 @@ export async function runDiagnosisExpansion(
         totalItems: items.length,
         densityFeel: parsed.density_feel,
       });
-      return {
-        expanded_items: items,
-        added_count: items.length - originalCount,
-        stop_reason: parsed.density_feel === "cluttered" ? "llm_cluttered" : "llm_stop",
-        decision_log: decisions,
-      };
+      stopReason = parsed.density_feel === "cluttered" ? "llm_cluttered" : "llm_stop";
+      break;
     }
 
     if (!parsed.item?.category) {
@@ -289,12 +318,8 @@ export async function runDiagnosisExpansion(
         consecutiveRejections++;
         log.debug("Greedy expansion: guardrail rejection", { iteration: i, rejection });
         if (consecutiveRejections >= 3) {
-          return {
-            expanded_items: items,
-            added_count: items.length - originalCount,
-            stop_reason: "consecutive_rejections",
-            decision_log: decisions,
-          };
+          stopReason = "consecutive_rejections";
+          break;
         }
         continue;
       }
@@ -329,22 +354,249 @@ export async function runDiagnosisExpansion(
     });
   }
 
-  // Reached maxIterations or all caps hit
-  const stopReason: StopReason =
-    profile.total_items.current >= profile.total_items.hard_cap
-      ? "hard_cap_exhausted"
-      : "max_iterations";
+  // Fall-through: reached maxIterations or all caps hit
+  if (stopReason === null) {
+    stopReason =
+      profile.total_items.current >= profile.total_items.hard_cap
+        ? "hard_cap_exhausted"
+        : "max_iterations";
+  }
 
-  log.info("Greedy expansion complete", {
+  log.info("Greedy expansion loop complete", {
     added: items.length - originalCount,
     total: items.length,
     stopReason,
   });
+
+  // ─── Optional critique pass ──────────────────────────────────────────────
+  // Runs once after the greedy loop to catch combinatorial wins (styling
+  // batches, swaps, consolidations) that single-item-at-a-time can't see.
+  // Skipped automatically when fewer than 2 items were added — there's not
+  // enough material for a critique to help.
+  let critiqueRefinements = 0;
+  let critiqueNote = "";
+  const addedCount = items.length - originalCount;
+  const shouldRunCritique = (ctx.runCritique ?? true) && addedCount >= 2;
+
+  if (shouldRunCritique) {
+    try {
+      const critiqueOutcome = await runCritiquePass({
+        items,
+        originalCount,
+        profile,
+        ctx,
+        model,
+      });
+      items = critiqueOutcome.items;
+      profile = critiqueOutcome.profile;
+      for (const d of critiqueOutcome.decisions) decisions.push(d);
+      critiqueRefinements = critiqueOutcome.refinementsApplied;
+      critiqueNote = critiqueOutcome.overallNote;
+    } catch (err) {
+      log.warn("Critique pass failed — returning greedy result unchanged", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   return {
     expanded_items: items,
     added_count: items.length - originalCount,
     stop_reason: stopReason,
     decision_log: decisions,
+    critique_refinements: critiqueRefinements,
+    critique_note: critiqueNote,
   };
+}
+
+// ─── Critique pass ───────────────────────────────────────────────────────────
+
+interface LLMCritiqueResponse {
+  overall_note?: string;
+  refinements?: Array<{
+    op?: string;
+    index?: number;
+    item?: {
+      category?: string;
+      action?: string;
+      variant?: string | null;
+      quantity?: number | null;
+      priority?: number;
+      reasoning?: string;
+    };
+    reason?: string;
+  }>;
+}
+
+function parseCritiqueResponse(raw: string): LLMCritiqueResponse | null {
+  try {
+    const obj = extractJsonObject(raw) as LLMCritiqueResponse;
+    if (!obj || typeof obj !== "object") return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
+interface CritiqueOutcome {
+  items: Array<ActionItem & { variant?: string; quantity?: number; source?: string }>;
+  profile: SaturationProfile;
+  decisions: DecoratorDecision[];
+  refinementsApplied: number;
+  overallNote: string;
+}
+
+async function runCritiquePass(args: {
+  items: Array<ActionItem & { variant?: string; quantity?: number; source?: string }>;
+  originalCount: number;
+  profile: SaturationProfile;
+  ctx: ExpansionContext;
+  model: string;
+}): Promise<CritiqueOutcome> {
+  const { originalCount, ctx, model } = args;
+  let items = args.items;
+  let profile = args.profile;
+  const decisions: DecoratorDecision[] = [];
+
+  // Items added by expansion = indices >= originalCount in the current list
+  const expansionIndices = items
+    .map((_, i) => i)
+    .filter((i) => i >= originalCount);
+
+  const critiquePrompt = buildCritiquePrompt({
+    roomType: ctx.room.type,
+    sqft: ctx.room.sqft,
+    designDirection: ctx.designDirection,
+    items,
+    saturation: profile,
+    expansionItemIndices: expansionIndices,
+  });
+
+  const content = ctx.roomPhotos?.length
+    ? [
+        ...ctx.roomPhotos.map((url) => ({
+          type: "image" as const,
+          source: { type: "url" as const, url },
+        })),
+        { type: "text" as const, text: critiquePrompt },
+      ]
+    : [{ type: "text" as const, text: critiquePrompt }];
+
+  let response: { content: string };
+  try {
+    response = await geminiProvider.chat({
+      model,
+      system: CRITIQUE_SYSTEM_PROMPT,
+      messages: [{ role: "user", content }],
+      max_tokens: 2000,
+    });
+  } catch (err) {
+    log.warn("Critique LLM call failed", { error: String(err) });
+    return { items, profile, decisions, refinementsApplied: 0, overallNote: "" };
+  }
+
+  const parsed = parseCritiqueResponse(response.content);
+  if (!parsed) {
+    log.warn("Critique: unparseable LLM response");
+    return { items, profile, decisions, refinementsApplied: 0, overallNote: "" };
+  }
+
+  const overallNote = (parsed.overall_note ?? "").slice(0, 400);
+  const refs = Array.isArray(parsed.refinements) ? parsed.refinements.slice(0, MAX_REFINEMENTS) : [];
+
+  let applied = 0;
+  for (const ref of refs) {
+    const op = (ref.op ?? "").toUpperCase();
+
+    // REMOVE or SWAP target an existing item — only expansion items may be touched
+    const targetIdx = typeof ref.index === "number" ? ref.index : -1;
+    const isExpansionIndex = targetIdx >= originalCount && targetIdx < items.length;
+
+    if (op === "REMOVE") {
+      if (!isExpansionIndex) {
+        log.debug("Critique: REMOVE skipped — target is not an expansion item", { targetIdx });
+        continue;
+      }
+      const removed = items[targetIdx];
+      items = [...items.slice(0, targetIdx), ...items.slice(targetIdx + 1)];
+      // Rebuild the profile from scratch — cleaner than tracking per-item deltas.
+      profile = initializeSaturation(items, ctx.room, ctx.designDirection, ctx.adaptiveCaps ?? undefined);
+      decisions.push({
+        iteration: -1,
+        verdict: "CRITIQUE_REMOVE",
+        item: removed,
+        reasoning: ref.reason ?? "Removed as overlapping or off-style",
+        density_feel: "refined",
+        saturation_pct: profile.total_items.current / profile.total_items.hard_cap,
+        target_index: targetIdx,
+      });
+      applied += 1;
+      continue;
+    }
+
+    if (op === "SWAP") {
+      if (!isExpansionIndex || !ref.item?.category) {
+        log.debug("Critique: SWAP skipped — invalid target or missing item", { targetIdx });
+        continue;
+      }
+      const newItem = {
+        ...buildActionItem(ref.item),
+        source: "expansion" as const,
+      };
+      // Check guardrails against a profile where the current item at targetIdx is removed
+      const withoutTarget = [...items.slice(0, targetIdx), ...items.slice(targetIdx + 1)];
+      const probeProfile = initializeSaturation(withoutTarget, ctx.room, ctx.designDirection, ctx.adaptiveCaps ?? undefined);
+      const rejection = wouldExceedHardCap(probeProfile, { category: newItem.category, action: newItem.action });
+      if (rejection) {
+        log.debug("Critique: SWAP blocked by guardrail", { rejection });
+        continue;
+      }
+      items = [...withoutTarget, newItem];
+      profile = initializeSaturation(items, ctx.room, ctx.designDirection, ctx.adaptiveCaps ?? undefined);
+      decisions.push({
+        iteration: -1,
+        verdict: "CRITIQUE_SWAP",
+        item: newItem,
+        reasoning: ref.reason ?? "Swapped for better cohesion",
+        density_feel: "refined",
+        saturation_pct: profile.total_items.current / profile.total_items.hard_cap,
+        target_index: targetIdx,
+      });
+      applied += 1;
+      continue;
+    }
+
+    if (op === "ADD") {
+      if (!ref.item?.category) continue;
+      const newItem = {
+        ...buildActionItem(ref.item),
+        source: "expansion" as const,
+      };
+      const rejection = wouldExceedHardCap(profile, { category: newItem.category, action: newItem.action });
+      if (rejection) {
+        log.debug("Critique: ADD blocked by guardrail", { rejection });
+        continue;
+      }
+      items = [...items, newItem];
+      profile = updateSaturation(profile, newItem);
+      decisions.push({
+        iteration: -1,
+        verdict: "CRITIQUE_ADD",
+        item: newItem,
+        reasoning: ref.reason ?? "Added to complete a styling batch",
+        density_feel: "refined",
+        saturation_pct: profile.total_items.current / profile.total_items.hard_cap,
+      });
+      applied += 1;
+      continue;
+    }
+  }
+
+  log.info("Critique pass complete", {
+    refinementsApplied: applied,
+    proposed: refs.length,
+    finalCount: items.length,
+  });
+
+  return { items, profile, decisions, refinementsApplied: applied, overallNote };
 }

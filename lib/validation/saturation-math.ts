@@ -168,15 +168,115 @@ function isTextureItem(category: string, action?: string): boolean {
   return false;
 }
 
+// ─── Adaptive cap derivation ─────────────────────────────────────────────────
+//
+// Hard-coded caps are heuristic. These functions let callers adjust the
+// modifier and per-category ceilings from real signals — Pass A's density
+// observation, user preferences inferred from sibling rooms, and explicit
+// user priorities. The goal is to keep the guardrail honest without
+// over-fitting to any single input.
+
+/** Signals that can tighten or loosen the saturation caps for a room. */
+export interface AdaptiveCapContext {
+  /**
+   * Pass A's read of the room as-is. "busy" or "cluttered" photos mean the
+   * room already holds many objects — we should tighten to avoid doubling
+   * the clutter. "sparse" rooms can absorb more additions.
+   */
+  currentRoomDensity?: "sparse" | "balanced" | "busy" | "cluttered";
+  /**
+   * User's inferred intensity leaning across prior rooms in this apartment
+   * (from `infer-preferences`). Independent of design direction — a user
+   * may have chosen a "modern" style but consistently over- or under-decorated.
+   */
+  userDensityPreference?: "minimalist" | "balanced" | "maximalist" | "unknown";
+  /** User-stated priority list ("minimalist", "storage", etc.). */
+  priorities?: string[];
+  /** Free-form intensity hints extracted from design direction style_notes. */
+  styleNotes?: string;
+  /** Categories the user consistently cares about (from sibling rooms). */
+  userPreferredCategories?: string[];
+}
+
+/** Net multiplier to apply on top of the direction modifier. Clamped to 0.5..1.6. */
+export function computeAdaptiveMultiplier(ctx: AdaptiveCapContext | undefined): number {
+  if (!ctx) return 1.0;
+  let mult = 1.0;
+
+  // Current room density: if photos already look busy, scale back.
+  switch (ctx.currentRoomDensity) {
+    case "sparse": mult *= 1.15; break;
+    case "busy": mult *= 0.85; break;
+    case "cluttered": mult *= 0.7; break;
+    // "balanced" and undefined — no change
+  }
+
+  // User's historical density tendency — secondary signal.
+  switch (ctx.userDensityPreference) {
+    case "minimalist": mult *= 0.85; break;
+    case "maximalist": mult *= 1.15; break;
+    // "balanced" / "unknown" — no change
+  }
+
+  // Explicit user priorities.
+  const priorityText = (ctx.priorities ?? []).join(" ").toLowerCase();
+  const styleText = (ctx.styleNotes ?? "").toLowerCase();
+  const combined = `${priorityText} ${styleText}`;
+  if (/\bminimal(ist)?\b|\bdeclutter\b|\bpared[- ]?down\b/.test(combined)) mult *= 0.9;
+  if (/\bmaximal(ist)?\b|\blayered\b|\babundant\b|\bcollect(ed)?\b/.test(combined)) mult *= 1.1;
+
+  return Math.max(0.5, Math.min(1.6, mult));
+}
+
+/**
+ * Bump per-category hard caps for categories the user repeatedly uses in prior
+ * rooms. Soft signal: we nudge by +1 (cap still respects absolute max).
+ */
+function applyPreferredCategoryBoost(
+  perCat: Record<string, SaturationDimension>,
+  preferredCategories: string[] | undefined,
+  sqft: number,
+  modifier: number,
+): Record<string, SaturationDimension> {
+  if (!preferredCategories?.length) return perCat;
+  const out = { ...perCat };
+  for (const rawCat of preferredCategories) {
+    const cat = normalizeCat(rawCat);
+    const base = CATEGORY_CAP_BASES[cat] ?? DEFAULT_CATEGORY_CAP;
+    const absoluteMax = base[1];
+    const existing = out[cat];
+    if (existing) {
+      const bumped = Math.min(existing.hard_cap + 1, Math.round(absoluteMax * modifier));
+      out[cat] = {
+        ...existing,
+        hard_cap: bumped,
+        soft_cap: Math.max(1, Math.round(bumped * 0.7)),
+      };
+    } else {
+      const baseCap = computeCategoryHardCap(cat, sqft, modifier);
+      const bumped = Math.min(baseCap + 1, Math.round(absoluteMax * modifier));
+      out[cat] = {
+        current: 0,
+        soft_cap: Math.max(1, Math.round(bumped * 0.7)),
+        hard_cap: bumped,
+      };
+    }
+  }
+  return out;
+}
+
 // ─── Initialization ───────────────────────────────────────────────────────────
 
 export function initializeSaturation(
   items: ActionItem[],
   room: { type?: string; sqft?: number },
   direction: DesignDirection | string | null | undefined,
+  adaptive?: AdaptiveCapContext,
 ): SaturationProfile {
   const sqft = room.sqft ?? 250; // default assumption: 250 sqft if unknown
-  const modifier = computeDirectionModifier(direction);
+  const directionModifier = computeDirectionModifier(direction);
+  const adaptiveMult = computeAdaptiveMultiplier(adaptive);
+  const modifier = Math.max(0.4, Math.min(1.8, directionModifier * adaptiveMult));
 
   // Global dimension caps
   const totalHardCap = Math.round(Math.min(Math.floor(sqft / 10) + 5, 40) * modifier);
@@ -189,18 +289,26 @@ export function initializeSaturation(
   const textureHardCap = Math.round(Math.min(Math.floor(sqft / 50), 8) * modifier);
 
   // Seed per-category from existing items
-  const perCat: Record<string, SaturationDimension> = {};
+  const seededPerCat: Record<string, SaturationDimension> = {};
   for (const item of items) {
     const cat = normalizeCat(item.category);
-    if (!perCat[cat]) {
-      perCat[cat] = {
+    if (!seededPerCat[cat]) {
+      seededPerCat[cat] = {
         current: 0,
         soft_cap: Math.max(1, Math.round(computeCategoryHardCap(cat, sqft, modifier) * 0.7)),
         hard_cap: computeCategoryHardCap(cat, sqft, modifier),
       };
     }
-    perCat[cat].current += 1;
+    seededPerCat[cat].current += 1;
   }
+
+  // Adaptive: bump caps for categories the user consistently cares about
+  const perCat = applyPreferredCategoryBoost(
+    seededPerCat,
+    adaptive?.userPreferredCategories,
+    sqft,
+    modifier,
+  );
 
   // Seed global dimensions from existing items
   let totalCurrent = items.length;
