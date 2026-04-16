@@ -44,6 +44,8 @@ export interface IdentifiedProductsPipelineInput {
   aestheticHint?: string;
   /** Budget tier — so identifier/verifier can flag out-of-bracket brand matches. */
   budgetMode?: string;
+  /** Room dimensions from the uploaded floor plan — catches scale mismatches during identification. */
+  roomDimensions?: string;
 }
 
 export interface IdentifiedProductsPipelineResult {
@@ -121,6 +123,7 @@ export async function runIdentifiedProductsPipeline(
       roomType: input.roomType,
       aestheticHint: input.aestheticHint,
       budgetMode: input.budgetMode,
+      roomDimensions: input.roomDimensions,
     });
     totalTokens += idOut.tokensUsed;
 
@@ -150,6 +153,7 @@ export async function runIdentifiedProductsPipeline(
       roomType: input.roomType,
       aestheticHint: input.aestheticHint,
       budgetMode: input.budgetMode,
+      roomDimensions: input.roomDimensions,
     });
     verifyCallsMade++;
     totalTokens += verifyOut.tokensUsed;

@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  MODELS,
-  selectModel,
-  selectThinkingLevel,
-  selectModelConfig,
-} from "@/lib/ai/models";
+import { MODELS, selectModel } from "@/lib/ai/models";
 
 describe("MODELS", () => {
   it("exposes text and image tiers", () => {
@@ -15,6 +10,10 @@ describe("MODELS", () => {
   it("uses gemini model identifiers", () => {
     expect(MODELS.text).toMatch(/^gemini-/);
     expect(MODELS.image).toMatch(/^gemini-/);
+  });
+
+  it("text tier is flash-lite (cheap tier)", () => {
+    expect(MODELS.text).toBe("gemini-3.1-flash-lite-preview");
   });
 
   it("uses distinct models for text vs image", () => {
@@ -60,51 +59,5 @@ describe("selectModel", () => {
       expect(result, `selectModel("${task}") should return a non-empty string`).toBeTruthy();
       expect(typeof result).toBe("string");
     }
-  });
-});
-
-describe("selectThinkingLevel", () => {
-  const highThinkingTasks = [
-    "diagnosis",
-    "apartment_analysis",
-    "area_analysis",
-    "scoring",
-    "bundle",
-    "validation",
-  ] as const;
-
-  for (const task of highThinkingTasks) {
-    it(`uses "high" thinking for ${task}`, () => {
-      expect(selectThinkingLevel(task)).toBe("high");
-    });
-  }
-
-  const lowThinkingTasks = [
-    "extraction",
-    "search_brief",
-    "search",
-    "quick_score",
-    "quick_screen",
-    "mockup_prompt",
-    "apartment_research",
-  ] as const;
-
-  for (const task of lowThinkingTasks) {
-    it(`uses "low" thinking for ${task}`, () => {
-      expect(selectThinkingLevel(task)).toBe("low");
-    });
-  }
-});
-
-describe("selectModelConfig", () => {
-  it("pairs model with thinkingConfig", () => {
-    const cfg = selectModelConfig("diagnosis");
-    expect(cfg.model).toBe(MODELS.text);
-    expect(cfg.thinkingConfig.thinkingLevel).toBe("high");
-  });
-
-  it("returns image model for image_generation", () => {
-    const cfg = selectModelConfig("image_generation");
-    expect(cfg.model).toBe(MODELS.image);
   });
 });

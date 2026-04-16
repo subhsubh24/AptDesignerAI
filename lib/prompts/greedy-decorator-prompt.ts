@@ -7,7 +7,7 @@
 //   - A list of available headroom categories
 // and is asked to either add ONE more item or declare the room complete.
 
-import type { ActionItem, DesignDirection } from "@/lib/types/database";
+import type { ActionItem, DesignDirection, FloorPlanRoom } from "@/lib/types/database";
 import { formatSaturationForPrompt, type SaturationProfile } from "@/lib/validation/saturation-math";
 import type { ExpansionBudget, SiblingRoomSummary } from "@/lib/agents/greedy-decorator";
 import { formatPreferencesForPrompt, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
@@ -26,6 +26,12 @@ export interface ExpansionPromptContext {
   siblingRooms?: SiblingRoomSummary[] | null;
   /** Optional user preference signals inferred from sibling rooms. */
   preferences?: PreferenceSignals | null;
+  /**
+   * Extracted room from the uploaded floor plan (if any). Gives the model
+   * exact dimensions and which walls have windows/doors/closets — so finishing
+   * items land on the right surface instead of guessed ones.
+   */
+  extractedRoom?: FloorPlanRoom | null;
 }
 
 function formatDirectionSummary(direction: DesignDirection | null | undefined): string {
@@ -84,6 +90,29 @@ function formatBudgetSection(budget: ExpansionBudget | null | undefined): string
   return parts.join("\n");
 }
 
+function formatFloorPlanSection(room: FloorPlanRoom | null | undefined): string | null {
+  if (!room) return null;
+  const lines: string[] = ["## Floor Plan Layout (authoritative — from uploaded floor plan)"];
+  if (room.dimensions_text) lines.push(`- Dimensions: ${room.dimensions_text}`);
+  if (room.shape) lines.push(`- Shape: ${room.shape}`);
+  if (room.natural_light) lines.push(`- Natural light: ${room.natural_light}`);
+
+  const wallsWithFeatures = room.walls.filter(w => w.features.length > 0);
+  if (wallsWithFeatures.length > 0) {
+    lines.push("- Walls:");
+    for (const w of wallsWithFeatures) {
+      const feats = w.features.map(f => `${f.type}${f.position_on_wall ? ` (${f.position_on_wall})` : ""}`).join(", ");
+      lines.push(`    · ${w.direction} wall: ${feats}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "Use this layout when placing finishing items: don't put art on a wall that's mostly window, don't block closets with tall plants, and consider which wall is the focal wall before stacking decor there.",
+  );
+  return lines.join("\n");
+}
+
 function formatSiblingRoomsSection(siblings: SiblingRoomSummary[] | null | undefined): string | null {
   if (!siblings?.length) return null;
   const parts: string[] = ["## Other Rooms in This Apartment"];
@@ -102,17 +131,37 @@ function formatSiblingRoomsSection(siblings: SiblingRoomSummary[] | null | undef
   return parts.join("\n");
 }
 
-export const EXPANSION_SYSTEM_PROMPT = `You are a senior interior designer finishing the decoration of a room. The foundational and standard furniture has already been selected. Your role is to layer in finishing touches — the carefully chosen items that make a room feel complete, personal, and alive.
+export const EXPANSION_SYSTEM_PROMPT = `<role>
+You are a senior interior designer finishing a room. The foundational and standard furniture has already been selected. Your job is to layer in finishing touches — the carefully chosen items that make a room feel complete, personal, and alive.
+</role>
 
-You think holistically: you visualize the room as it will look and feel, not just enumerate categories. You understand the difference between "layered and lush" and "cluttered and overwhelming."
+<reasoning_process>
+Before every decision, silently run this checklist:
 
-Your discipline: you stop when adding more would hurt, not help. Not every room needs every category. A Japandi living room should feel calm and edited. A Bohemian bedroom can embrace abundant texture and greenery. You match the decoration density to the design direction.
+1. **Logical dependencies**: Does adding this item require or block something else on the list? Are any prerequisites missing (e.g., suggesting art before a focal wall is established)?
+2. **Risk assessment**: Would adding this item push a category over its soft cap? Would it duplicate texture or color from a sibling room in a jarring way?
+3. **Abductive reasoning**: If the room still feels sparse, what's the MOST likely underlying reason — missing vertical interest, missing warm materials, missing scale variety? Don't grab the first category with headroom; pick the category whose absence is most felt.
+4. **Outcome evaluation**: After each addition, mentally walk into the room. If density_feel has tipped toward "cluttered", stop — don't chase leftover headroom.
+5. **Persistence**: If a guardrail rejects an item, diagnose why (scale, duplication, hard cap) and adapt — don't repeat the same category with a different label.
+</reasoning_process>
 
-When you suggest an item, you are specific and actionable — concrete enough to search for (e.g., "2–3 pillar candles in varying heights, unscented, cream or ivory wax, grouped on a small tray on the coffee table").`;
+<design_discipline>
+- You visualize the room, not enumerate categories.
+- You know the difference between "layered and lush" and "cluttered and overwhelming."
+- You stop when adding more would hurt, not help. Not every room needs every category.
+- Japandi living rooms feel calm and edited; Bohemian bedrooms embrace abundant texture and greenery. Match density to direction.
+- Every suggestion is specific and searchable: concrete materials, counts, placement.
+</design_discipline>
+
+<output_contract>
+Respond in JSON only. No prose, no markdown fences. Think hard before answering — your reasoning never appears in the output, only the conclusion.
+</output_contract>`;
 
 export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
-  const { roomType, sqft, designDirection, currentItems, saturation, budget, siblingRooms, preferences } = ctx;
-  const sqftStr = sqft ? `~${sqft} sqft` : "unknown size";
+  const { roomType, sqft, designDirection, currentItems, saturation, budget, siblingRooms, preferences, extractedRoom } = ctx;
+  // Prefer floor-plan sqft over caller-supplied — it's measured, not estimated.
+  const effectiveSqft = extractedRoom?.sqft ?? sqft;
+  const sqftStr = effectiveSqft ? `~${effectiveSqft} sqft` : "unknown size";
 
   const lines: string[] = [];
 
@@ -121,6 +170,12 @@ export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
   lines.push(`Design Direction:`);
   lines.push(formatDirectionSummary(designDirection));
   lines.push("");
+
+  const floorPlanSection = formatFloorPlanSection(extractedRoom);
+  if (floorPlanSection) {
+    lines.push(floorPlanSection);
+    lines.push("");
+  }
 
   const prefSection = formatPreferencesForPrompt(preferences);
   if (prefSection) {

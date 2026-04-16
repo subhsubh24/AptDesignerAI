@@ -1,5 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
@@ -243,7 +243,7 @@ export async function validateRoomHarmony(
     designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
-  const { model, thinkingConfig } = selectModelConfig("validation");
+  const model = selectModel("validation");
   const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
@@ -404,7 +404,6 @@ For every item, walk through all 6 dims + overall in 7 steps.
         const maxTokens = wasTruncated
           ? Math.min(maxTokensBase + 16000, 64000)
           : maxTokensBase;
-        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
         const retryContent = attempt > 1 && lastError
           ? [...content, { type: "text" as const, text: wasTruncated
               ? `\n\n**IMPORTANT**: Your previous response was truncated. Be MORE CONCISE: keep rationales to 1-2 sentences, omit revised fields for items scoring above 9.0.`
@@ -417,7 +416,6 @@ For every item, walk through all 6 dims + overall in 7 steps.
           messages: [{ role: "user", content: retryContent }],
           max_tokens: maxTokens,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
@@ -578,7 +576,6 @@ ${itemScoresJson}
             : passBPrompt;
           const response = await geminiProvider.chat({
             model,
-            thinkingConfig,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
             max_tokens: 10000,
@@ -710,7 +707,7 @@ export async function performFinalAssessment(
     designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
-  const { model, thinkingConfig } = selectModelConfig("validation");
+  const model = selectModel("validation");
   const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
@@ -882,7 +879,6 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
         const maxTokens = wasTruncated
           ? Math.min(maxTokensBase + 16000, 64000)
           : maxTokensBase;
-        const thinkingLevel = wasTruncated ? "medium" as const : "high" as const;
         const retryContent = attempt > 1 && lastError
           ? [...content, { type: "text" as const, text: wasTruncated
               ? `\n\n**IMPORTANT**: Previous response was truncated. Be MORE CONCISE.`
@@ -895,7 +891,6 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           messages: [{ role: "user", content: retryContent }],
           max_tokens: maxTokens,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel },
           responseMimeType: "application/json",
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
@@ -1047,7 +1042,6 @@ ${itemScoresJson}
             : passBPrompt;
           const response = await geminiProvider.chat({
             model,
-            thinkingConfig,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
             max_tokens: 10000,
@@ -1131,7 +1125,6 @@ ${convergenceCtx}
             : passCPrompt;
           const response = await geminiProvider.chat({
             model,
-            thinkingConfig,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
             max_tokens: 1500,
@@ -1246,7 +1239,7 @@ export async function validateProductSet(
     diagnosis?: DiagnosisData;
   }
 ): Promise<AgentResult<ValidationResult>> {
-  const { model, thinkingConfig } = selectModelConfig("validation");
+  const model = selectModel("validation");
   const system = getSystemPrompt(roomContext.designProfile);
 
   // Build environmental context section
@@ -1395,7 +1388,6 @@ Return JSON:
 
         const response = await geminiProvider.chat({
           model,
-          thinkingConfig,
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 16000,

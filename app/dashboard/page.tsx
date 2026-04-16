@@ -701,16 +701,16 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* Floor plan upload section */}
+          {/* Floor plan upload section — sits between building research and room photos */}
           {projectId && (
             <div>
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
                 <FileImage className="h-4 w-4" />
-                Floor Plan
-                <span className="text-xs font-normal text-muted-foreground/60 normal-case tracking-normal ml-1">— optional but helps a lot</span>
+                Do you have a floor plan?
+                <span className="text-xs font-normal text-muted-foreground/60 normal-case tracking-normal ml-1">— would help with design</span>
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
-                Upload a floor plan image or PDF and we&apos;ll extract room dimensions automatically. Improves furniture scale recommendations significantly.
+                Drop in a floor plan image or PDF and we'll pull room dimensions, wall features, and layout — so every piece we pick fits exactly where it belongs.
               </p>
               <FloorPlanUploadZone projectId={projectId} />
             </div>

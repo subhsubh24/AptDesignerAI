@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -56,9 +57,15 @@ export async function POST(request: Request) {
   }
 
   // Building research context (reused by every per-room call)
-  const buildingContextText = project?.building_research
+  const buildingResearchObj = project?.building_research as Record<string, unknown> | undefined;
+  const extractedFloorPlan = buildingResearchObj?.extracted_floor_plan as
+    | import("@/lib/types/database").ExtractedFloorPlan
+    | undefined;
+  const floorPlanImageUrl = buildingResearchObj?.floor_plan_image_url as string | undefined;
+
+  const buildingContextText = buildingResearchObj
     ? (() => {
-        const br = project.building_research as Record<string, unknown>;
+        const br = buildingResearchObj;
         return `\n--- BUILDING RESEARCH (from the building's website) ---
 Building style: ${br.building_style || "unknown"}
 Finishes: ${JSON.stringify(br.finishes || {})}
@@ -80,7 +87,7 @@ Summary: ${br.summary || ""}
 
   try {
     const profile = buildDesignProfile(project);
-    const { model, thinkingConfig } = selectModelConfig("apartment_analysis");
+    const model = selectModel("apartment_analysis");
     const system = getSystemPrompt(profile);
 
     /**
@@ -103,16 +110,40 @@ Summary: ${br.summary || ""}
         ? `\nUSER NOTES: "${room.user_context}" — Respect these notes (e.g. if they say to ignore something, don't include it).`
         : "";
 
-      const roomContent: AIContentBlock[] = [
-        { type: "text", text: `Here are photos of the ${room.name} (${room.room_type}):${userNote}` },
-        ...images.map((img: { image_url: string }) => ({
-          type: "image" as const,
-          source: { type: "url" as const, url: img.image_url },
-        })),
-      ];
+      const roomContent: AIContentBlock[] = [];
+
+      // Floor plan image first — authoritative spatial ground truth.
+      if (floorPlanImageUrl) {
+        roomContent.push({
+          type: "text",
+          text: "--- FLOOR PLAN (authoritative layout reference for the entire apartment) ---",
+        });
+        roomContent.push({
+          type: "image",
+          source: { type: "url", url: floorPlanImageUrl },
+        });
+      }
+
+      roomContent.push({
+        type: "text",
+        text: `Here are photos of the ${room.name} (${room.room_type}):${userNote}`,
+      });
+      for (const img of images as { image_url: string }[]) {
+        roomContent.push({
+          type: "image",
+          source: { type: "url", url: img.image_url },
+        });
+      }
 
       if (buildingContextText) {
         roomContent.push({ type: "text", text: buildingContextText });
+      }
+
+      if (extractedFloorPlan) {
+        roomContent.push({
+          type: "text",
+          text: formatExtractedFloorPlanForPrompt(extractedFloorPlan, room.room_type),
+        });
       }
 
       roomContent.push({
@@ -149,7 +180,6 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
 
       const response = await geminiProvider.chat({
         model,
-        thinkingConfig,
         system,
         messages: [{ role: "user", content: roomContent }],
         max_tokens: 4000,
@@ -212,7 +242,6 @@ ${synthInput}
 
     const synthResponse = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
       max_tokens: 2000,

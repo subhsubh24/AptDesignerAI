@@ -376,9 +376,14 @@ export const geminiProvider: AIProvider = {
       }
     }
 
-    if (thinkingConfig) {
-      config.thinkingConfig = thinkingConfig;
-    }
+    // Gemini 3.1 Flash Lite defaults to "minimal" thinking — too shallow for
+    // our reasoning-heavy tasks, and "minimal" also requires thought signatures
+    // to be echoed back or the API returns 400. We force every call to "high"
+    // unless a caller has explicitly passed a different level. This keeps
+    // callsites clean (no thinkingConfig needed anywhere) while guaranteeing
+    // our cost/quality target: flash-lite at high thinking.
+    const effectiveThinkingConfig = thinkingConfig ?? { thinkingLevel: "high" };
+    config.thinkingConfig = effectiveThinkingConfig;
 
     if (responseModalities) {
       config.responseModalities = responseModalities;

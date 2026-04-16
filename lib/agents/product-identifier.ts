@@ -15,7 +15,7 @@
  */
 
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -54,6 +54,8 @@ export interface IdentifyInput {
   aestheticHint?: string;
   /** Budget tier — so identifier can lower confidence on out-of-bracket brands. */
   budgetMode?: string;
+  /** Room dimensions from the uploaded floor plan (e.g. "12 × 15 ft") — catches scale mismatches. */
+  roomDimensions?: string;
 }
 
 export interface IdentifyResult {
@@ -71,7 +73,7 @@ export interface IdentifyResult {
 export async function runProductIdentifier(
   input: IdentifyInput,
 ): Promise<IdentifyResult> {
-  const { model, thinkingConfig } = selectModelConfig("scoring"); // reasoning model — visual recognition is hard
+  const model = selectModel("scoring"); // reasoning model — visual recognition is hard
 
   const system = getSystemPrompt();
   const prompt = buildIdentifierPrompt({
@@ -81,12 +83,12 @@ export async function runProductIdentifier(
     roomType: input.roomType,
     aestheticHint: input.aestheticHint,
     budgetMode: input.budgetMode,
+    roomDimensions: input.roomDimensions,
   });
 
   try {
     const response = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system,
       messages: [
         {

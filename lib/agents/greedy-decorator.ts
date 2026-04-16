@@ -10,7 +10,7 @@
 // action_list with more entries.
 
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig, type ThinkingLevel } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import {
@@ -31,7 +31,7 @@ import {
   buildCritiquePrompt,
 } from "@/lib/prompts/greedy-decorator-critique-prompt";
 import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
-import type { ActionItem, DesignDirection } from "@/lib/types/database";
+import type { ActionItem, DesignDirection, FloorPlanRoom } from "@/lib/types/database";
 
 const log = createLogger("greedy-decorator");
 
@@ -70,6 +70,14 @@ export interface ExpansionContext {
   designDirection?: DesignDirection | null;
   /** Room photo URLs — passed to the LLM for visual context */
   roomPhotos?: string[];
+  /** Floor plan image URL — authoritative layout reference (renders above photos in prompt). */
+  floorPlanImageUrl?: string | null;
+  /**
+   * Extracted floor plan room data for this specific room. Gives the decorator
+   * exact dimensions and wall features (windows, doors, closets) so it can
+   * reason about where items physically go — not just how many items fit.
+   */
+  extractedRoom?: FloorPlanRoom | null;
   /** Maximum number of expansion iterations (default 20) */
   maxIterations?: number;
   /** Budget context — shown to the LLM so it avoids recommending items that blow the cap. */
@@ -174,7 +182,7 @@ export async function runDiagnosisExpansion(
   ctx: ExpansionContext,
 ): Promise<ExpansionResult> {
   const maxIterations = ctx.maxIterations ?? 20;
-  const { model, thinkingConfig } = selectModelConfig("diagnosis"); // same tier as Pass 2 — thoughtful reasoning
+  const model = selectModel("diagnosis"); // same tier as Pass 2 — thoughtful reasoning
 
   let items: Array<ActionItem & { variant?: string; quantity?: number; source?: string }> =
     ctx.currentItems.map(i => ({ ...i, source: "diagnosis" as const }));
@@ -202,19 +210,25 @@ export async function runDiagnosisExpansion(
       budget: ctx.budget,
       siblingRooms: ctx.siblingRooms,
       preferences: ctx.preferences,
+      extractedRoom: ctx.extractedRoom ?? null,
     };
 
     const promptText = buildExpansionPrompt(promptCtx);
 
-    // Optionally include room photos for visual grounding
-    const content = ctx.roomPhotos?.length
-      ? [
-          ...ctx.roomPhotos.map(url => ({
-            type: "image" as const,
-            source: { type: "url" as const, url },
-          })),
-          { type: "text" as const, text: promptText },
-        ]
+    // Floor plan image first (authoritative layout ground truth), then room
+    // photos for visual grounding, then the text prompt. Gemini handles this
+    // ordering well — reference artifacts before instructions.
+    const visualBlocks: Array<{ type: "image"; source: { type: "url"; url: string } }> = [];
+    if (ctx.floorPlanImageUrl) {
+      visualBlocks.push({ type: "image", source: { type: "url", url: ctx.floorPlanImageUrl } });
+    }
+    if (ctx.roomPhotos?.length) {
+      for (const url of ctx.roomPhotos) {
+        visualBlocks.push({ type: "image", source: { type: "url", url } });
+      }
+    }
+    const content = visualBlocks.length > 0
+      ? [...visualBlocks, { type: "text" as const, text: promptText }]
       : [{ type: "text" as const, text: promptText }];
 
     let parsed: LLMExpansionResponse | null = null;
@@ -223,7 +237,6 @@ export async function runDiagnosisExpansion(
     try {
       const response = await geminiProvider.chat({
         model,
-        thinkingConfig,
         system: EXPANSION_SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
         max_tokens: 1500,
@@ -290,7 +303,6 @@ export async function runDiagnosisExpansion(
       try {
         const retryResponse = await geminiProvider.chat({
           model,
-          thinkingConfig,
           system: EXPANSION_SYSTEM_PROMPT,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 1500,
@@ -388,7 +400,6 @@ export async function runDiagnosisExpansion(
         profile,
         ctx,
         model,
-        thinkingConfig,
       });
       items = critiqueOutcome.items;
       profile = critiqueOutcome.profile;
@@ -455,9 +466,8 @@ async function runCritiquePass(args: {
   profile: SaturationProfile;
   ctx: ExpansionContext;
   model: string;
-  thinkingConfig: { thinkingLevel: ThinkingLevel };
 }): Promise<CritiqueOutcome> {
-  const { originalCount, ctx, model, thinkingConfig } = args;
+  const { originalCount, ctx, model } = args;
   let items = args.items;
   let profile = args.profile;
   const decisions: DecoratorDecision[] = [];
@@ -490,7 +500,6 @@ async function runCritiquePass(args: {
   try {
     response = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system: CRITIQUE_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       max_tokens: 2000,

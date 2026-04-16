@@ -51,6 +51,12 @@ export interface IdentifierPromptArgs {
   aestheticHint?: string;
   /** Budget tier (balanced/premium/budget) — down-weights wildly-out-of-bracket brand guesses. */
   budgetMode?: string;
+  /**
+   * Room dimensions from the uploaded floor plan (e.g. "12 × 15 ft" or "~180 sqft").
+   * Helps calibrate scale: a brand that only makes 90"+ sofas is implausible in a
+   * 9×10 bedroom.
+   */
+  roomDimensions?: string;
 }
 
 /**
@@ -64,10 +70,11 @@ export function buildIdentifierPrompt(args: IdentifierPromptArgs): string {
 
   const contextLines: string[] = [];
   if (args.roomType) contextLines.push(`Room type: ${args.roomType}`);
+  if (args.roomDimensions) contextLines.push(`Room dimensions (from floor plan): ${args.roomDimensions}`);
   if (args.aestheticHint) contextLines.push(`Aesthetic direction: ${args.aestheticHint}`);
   if (args.budgetMode) contextLines.push(`Budget tier: ${args.budgetMode}`);
   const contextSection = contextLines.length
-    ? `\n## ROOM AESTHETIC CONTEXT (use to calibrate confidence — a brand guess that clashes with this direction or price bracket should score LOWER, even if the silhouette is a close match)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
+    ? `\n## ROOM AESTHETIC CONTEXT (use to calibrate confidence — a brand guess that clashes with this direction, scale, or price bracket should score LOWER, even if the silhouette is a close match)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
   return `You are identifying a specific piece of FURNITURE in a room photo by
@@ -144,6 +151,8 @@ export interface VerifierPromptArgs {
   aestheticHint?: string;
   /** Budget tier — flags wildly-out-of-bracket identifications (high-end brand in budget-minimalist room). */
   budgetMode?: string;
+  /** Room dimensions from the uploaded floor plan — catches scale mismatches (90" sofa identified for a 9×10 room). */
+  roomDimensions?: string;
 }
 
 export function buildVerifierPrompt(args: VerifierPromptArgs): string {
@@ -154,10 +163,11 @@ export function buildVerifierPrompt(args: VerifierPromptArgs): string {
 
   const contextLines: string[] = [];
   if (args.roomType) contextLines.push(`Room type: ${args.roomType}`);
+  if (args.roomDimensions) contextLines.push(`Room dimensions (from floor plan): ${args.roomDimensions}`);
   if (args.aestheticHint) contextLines.push(`Aesthetic direction: ${args.aestheticHint}`);
   if (args.budgetMode) contextLines.push(`Budget tier: ${args.budgetMode}`);
   const contextSection = contextLines.length
-    ? `\n## ROOM AESTHETIC CONTEXT (sanity check against the tentative identification — flag realism mismatches in mismatch_notes and LOWER match_score when the brand's aesthetic or price bracket clashes with this context)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
+    ? `\n## ROOM AESTHETIC CONTEXT (sanity check against the tentative identification — flag realism mismatches in mismatch_notes and LOWER match_score when the brand's aesthetic, scale, or price bracket clashes with this context)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
   return `You are verifying a tentative product identification against its

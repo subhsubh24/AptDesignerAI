@@ -1,5 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   getBundleScoringPrompt,
@@ -64,7 +64,7 @@ export async function evaluateBundle(
   products: CandidateProduct[],
   bundleCtx: BundleContext
 ): Promise<AgentResult<BundleEvaluationResult>> {
-  const { model, thinkingConfig } = selectModelConfig("bundle");
+  const model = selectModel("bundle");
   const system = getSystemPrompt(bundleCtx.designProfile);
 
   const evalCtx: BundleEvalContextArgs = {
@@ -164,7 +164,6 @@ export async function evaluateBundle(
 
         const response = await geminiProvider.chat({
           model,
-          thinkingConfig,
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: maxTokens,

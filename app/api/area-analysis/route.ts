@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel, selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
@@ -361,7 +361,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
 
   try {
     const profile = buildDesignProfile(project);
-    const { model, thinkingConfig } = selectModelConfig("area_analysis");
+    const model = selectModel("area_analysis");
     const system = getSystemPrompt(profile);
 
     /**
@@ -391,7 +391,6 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
       try {
         const response = await geminiProvider.chat({
           model,
-          thinkingConfig,
           system,
           messages: [{ role: "user", content: passAContent }],
           max_tokens: 6000,
@@ -461,7 +460,6 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       try {
         const resp = await geminiProvider.chat({
           model,
-          thinkingConfig,
           system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 400,
@@ -554,7 +552,6 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
 
     const passBResponse = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
       max_tokens: 12000,

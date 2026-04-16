@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel, selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -10,6 +10,8 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { semanticLookup, semanticStore } from "@/lib/ai/semantic-cache";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { ExtractedFloorPlan } from "@/lib/types/database";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -47,15 +49,31 @@ export async function POST(request: Request) {
   // Build content blocks
   const contentBlocks: AIContentBlock[] = [];
 
-  // Building context
+  // Building context + structured floor plan (image + extracted data)
   if (project?.building_research) {
     const br = project.building_research as Record<string, unknown>;
     const floorPlan = br.floor_plan as Record<string, unknown> | undefined;
-    const floorPlanSection = floorPlan
-      ? `\nFloor Plan: ${floorPlan.total_sqft || "unknown"} sqft | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
+    const extractedFloorPlan = br.extracted_floor_plan as ExtractedFloorPlan | undefined;
+    const floorPlanImageUrl = br.floor_plan_image_url as string | undefined;
+
+    // Prefer the structured extractor output when available — it's more
+    // detailed than the legacy building_research.floor_plan object.
+    const structuredSection = extractedFloorPlan
+      ? `\n\n${formatExtractedFloorPlanForPrompt(extractedFloorPlan, room.room_type)}`
+      : floorPlan
+        ? `\nFloor Plan: ${floorPlan.total_sqft || "unknown"} sqft | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
 Room dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}
 Spatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPlan.notable_spatial_features.join(", ") : "unknown"}`
-      : "";
+        : "";
+
+    // Floor plan image goes in FIRST so Gemini anchors its spatial reasoning
+    // to it before reading room photos.
+    if (floorPlanImageUrl) {
+      contentBlocks.push({
+        type: "image",
+        source: { type: "url", url: floorPlanImageUrl },
+      });
+    }
 
     contentBlocks.push({
       type: "text",
@@ -63,7 +81,7 @@ Spatial features: ${Array.isArray(floorPlan.notable_spatial_features) ? floorPla
 Building style: ${br.building_style || "unknown"}
 Finishes: ${JSON.stringify(br.finishes || {})}
 Layout: ${br.layout_style || "unknown"} | Windows: ${br.windows || "unknown"} | Ceiling: ${br.ceiling_height || "unknown"}
-Aesthetic: ${br.design_aesthetic || "unknown"}${floorPlanSection}
+Aesthetic: ${br.design_aesthetic || "unknown"}${structuredSection}
 ---`,
     });
   }
@@ -158,7 +176,7 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
 
   try {
     const profile = buildDesignProfile(project);
-    const { model, thinkingConfig } = selectModelConfig("area_analysis");
+    const model = selectModel("area_analysis");
     const system = getSystemPrompt(profile);
 
     /**
@@ -226,7 +244,6 @@ ${JSON.stringify({
     } else {
       const interpretResponse = await geminiProvider.chat({
         model,
-        thinkingConfig,
         system,
         messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
         max_tokens: 2500,
@@ -306,7 +323,6 @@ CRITICAL RULES:
 
     const response = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system,
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 10000,

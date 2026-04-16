@@ -15,7 +15,7 @@
 // the existing mockup cache via the design-direction hash, so cache hits skip
 // it entirely.
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModelConfig } from "@/lib/ai/models";
+import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -152,11 +152,10 @@ export async function analyzePhotoOrientations(
 Emit one entry per photo, in order. Index must match the photo number you were shown (1-based).`,
   });
 
-  const { model, thinkingConfig } = selectModelConfig("diagnosis");
+  const model = selectModel("diagnosis");
   try {
     const response = await geminiProvider.chat({
       model,
-      thinkingConfig,
       system: ANALYZER_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       max_tokens: 1500,

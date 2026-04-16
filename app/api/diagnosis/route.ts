@@ -11,6 +11,7 @@ import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
@@ -181,12 +182,15 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       if (dd?.recommended_materials?.length) hintParts.push(`materials: ${dd.recommended_materials.slice(0, 6).join(", ")}`);
       const aestheticHint = hintParts.length ? hintParts.join(" | ") : undefined;
 
+      const identRoom = getRoomFromFloorPlan(ctx.extractedFloorPlan, ctx.roomType);
       const identResult = await runIdentifiedProductsPipeline({
         supabase,
         imageUrls,
         roomType: ctx.roomType,
         aestheticHint,
         budgetMode: ctx.budgetMode,
+        roomDimensions: identRoom?.dimensions_text
+          ?? (identRoom?.sqft ? `~${identRoom.sqft} sqft` : undefined),
       });
       if (identResult.success && identResult.data) {
         diagnosisJsonToSave = {
@@ -233,15 +237,19 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         designDirection: diagnosisData.design_direction ?? null,
       });
 
+      const expansionRoom = getRoomFromFloorPlan(ctx.extractedFloorPlan, ctx.roomType);
       const expansion = await runDiagnosisExpansion({
         currentItems: expandedActionList,
         room: {
           type: ctx.roomType,
-          sqft: ctx.extractedFloorPlan?.total_sqft
+          sqft: expansionRoom?.sqft
+            ?? ctx.extractedFloorPlan?.total_sqft
             ?? (ctx.floorPlan?.total_sqft as number | undefined),
         },
         designDirection: diagnosisData.design_direction ?? undefined,
         roomPhotos: ctx.imageUrls,
+        floorPlanImageUrl: ctx.floorPlanImageUrl ?? null,
+        extractedRoom: expansionRoom ?? null,
         budget,
         siblingRooms,
         adaptiveCaps,
