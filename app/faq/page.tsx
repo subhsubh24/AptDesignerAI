@@ -44,11 +44,11 @@ const SECTIONS: Section[] = [
     items: [
       {
         q: "How accurate is the room analysis?",
-        a: "Our diagnosis is grounded in what the AI sees in your photos and — if you provide one — your floor plan. It reasons about scale, light, traffic, and finish compatibility. It&apos;s not perfect, but it&apos;s consistently better than a generic mood board because it's looking at your actual space.",
+        a: "Our diagnosis is grounded in what the AI sees in your photos and — if you provide one — your floor plan. It reasons about scale, light, traffic, and finish compatibility. It's not perfect, but it's consistently better than a generic mood board because it's looking at your actual space.",
       },
       {
         q: "Where do product recommendations come from?",
-        a: "We search across major retailers (West Elm, CB2, Crate & Barrel, Article, IKEA, Wayfair and more) and score each candidate against your room&apos;s design direction. You see why each piece was chosen — palette match, scale fit, cohesion, style alignment.",
+        a: "We search across major retailers (West Elm, CB2, Crate & Barrel, Article, IKEA, Wayfair and more) and score each candidate against your room's design direction. You see why each piece was chosen — palette match, scale fit, cohesion, style alignment.",
       },
       {
         q: "Can I override the AI's recommendations?",

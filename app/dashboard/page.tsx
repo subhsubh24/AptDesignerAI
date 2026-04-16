@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin } from "lucide-react";
+import { Loader2, Camera, Sparkles, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autocomplete";
+import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -700,6 +701,21 @@ export default function DashboardPage() {
             );
           })()}
 
+          {/* Floor plan upload section */}
+          {projectId && (
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
+                <FileImage className="h-4 w-4" />
+                Floor Plan
+                <span className="text-xs font-normal text-muted-foreground/60 normal-case tracking-normal ml-1">— optional but helps a lot</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Upload a floor plan image or PDF and we&apos;ll extract room dimensions automatically. Improves furniture scale recommendations significantly.
+              </p>
+              <FloorPlanUploadZone projectId={projectId} />
+            </div>
+          )}
+
           {/* Room photos section */}
           <div>
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -757,8 +773,8 @@ export default function DashboardPage() {
         </h2>
         <p className="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
           {analyzePhase === "building"
-            ? "We&apos;re researching the floor plans, finishes, and architectural details that make your space unique."
-            : "We&apos;re studying how your rooms feel — the light, the proportions, the details — so every recommendation fits like it was made for you."}
+            ? "We're researching the floor plans, finishes, and architectural details that make your space unique."
+            : "We're studying how your rooms feel — the light, the proportions, the details — so every recommendation fits like it was made for you."}
         </p>
 
         <div className="flex flex-col gap-2.5 mt-10 text-sm text-left max-w-sm mx-auto">
