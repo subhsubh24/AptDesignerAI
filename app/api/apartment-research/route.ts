@@ -264,7 +264,7 @@ async function disambiguateWithVision(
       model: selectModel("apartment_research"),
       system: "You are an architectural vision assistant. Match user-provided apartment photos to floor-plan diagrams by comparing visible features. Never guess — if the photos don't show enough to decide, return matched_variant_name: null.",
       messages: [{ role: "user", content: blocks }],
-      max_tokens: 2000,
+      max_tokens: 4000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
     });
 
@@ -582,7 +582,7 @@ ${floorPlanSchema}`;
       model: selectModel("apartment_research"),
       system: "You are researching an apartment building's website to extract design-relevant building-wide context (finishes, style, amenities, neighborhood). You do NOT handle floor plans — that's a separate agent. Return ONLY facts you find; never guess.",
       messages: [{ role: "user", content: buildingContextPrompt }],
-      max_tokens: 4000,
+      max_tokens: 12000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       tools: [{ googleSearch: {} }, { urlContext: {} }],
     });
@@ -607,7 +607,7 @@ ${floorPlanSchema}`;
         model: selectModel("apartment_research"),
         system: `You are a floor-plan research agent. Your ONLY job is to find every ${unitLabel} floor-plan variant for the given building and return them as structured JSON. Exhaustiveness matters more than brevity — if you find 8 variants, return all 8. Skipping variants is a failure. Return ONLY facts from the website; never invent dimensions or room layouts.`,
         messages: [{ role: "user", content: floorPlanPrompt }],
-        max_tokens: 6000,
+        max_tokens: 12000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         tools: [{ googleSearch: {} }, { urlContext: {} }],
       });
@@ -702,7 +702,7 @@ ${floorPlanSchema}`;
             model: selectModel("apartment_research"),
             system: "You are analyzing floor plan images. Extract spatial information that would help an interior designer plan furniture placement.",
             messages: [{ role: "user", content: visionBlocks }],
-            max_tokens: 3000,
+            max_tokens: 8000,
             // No temperature override — Gemini 3 is optimized for its default (1.0).
           });
 
@@ -897,7 +897,7 @@ CONFIDENCE RULES (critical — self-inconsistency breaks downstream design decis
 - "medium" if you filled orientation OR light (not both) from evidence, or if neighborhood_aesthetic_cues is rich.
 - "low" MUST be used if primary_orientation, likely_light_direction, and view_character are ALL null. A high-confidence reply with every useful field null is forbidden — that is a self-contradiction.`,
           }],
-          max_tokens: 3000,
+          max_tokens: 8000,
           // No temperature override — Gemini 3 is optimized for its default (1.0).
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
