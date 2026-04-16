@@ -59,6 +59,7 @@ const ResearchOutputSchema = z.object({
       "vision_only",
       "single_variant",
       "no_match",
+      "user_uploaded_floor_plan",
     ]),
     confidence: z.enum(["high", "medium", "low"]),
     match_notes: z.string(),
@@ -182,7 +183,8 @@ type MatchMethod =
   | "vision_disambiguated"
   | "vision_only"
   | "single_variant"
-  | "no_match";
+  | "no_match"
+  | "user_uploaded_floor_plan";
 
 interface UnitMatchResult {
   variant: Variant | null;
@@ -737,13 +739,53 @@ ${floorPlanSchema}`;
       }
     }
 
+    // If the user uploaded their own floor plan, it IS the ground truth — we
+    // don't need to match against building variants. Fetch the existing
+    // building_research (set by POST /api/projects/:id/floor-plan) so we can
+    // both skip variant matching and preserve the upload when we save below.
+    let userUploadedFloorPlan: {
+      image_url: string;
+      extracted: Record<string, unknown> | null;
+    } | null = null;
+    if (project_id) {
+      try {
+        const { data: existingProj } = await supabase
+          .from("projects")
+          .select("building_research")
+          .eq("id", project_id)
+          .maybeSingle();
+        const existingBr = (existingProj?.building_research as Record<string, unknown>) || {};
+        const uploadedUrl = existingBr.floor_plan_image_url as string | undefined;
+        const uploadedExtract = existingBr.extracted_floor_plan as Record<string, unknown> | undefined;
+        if (uploadedUrl) {
+          userUploadedFloorPlan = { image_url: uploadedUrl, extracted: uploadedExtract ?? null };
+        }
+      } catch (e) {
+        console.warn("[apartment-research] Could not check for user-uploaded floor plan:", (e as Error).message);
+      }
+    }
+
     // ─── Unit matching pass ─────────────────────────────────────
     // Identify which specific variant corresponds to the user's apartment.
     // Priority: exact sqft → vision-disambiguated (for sqft ties) → closest
     // sqft within tolerance → vision-only (when no sqft provided). Result is
     // attached to research.floor_plan.matched_unit and also denormalized to
     // project.unit_plan_name for cheap access by downstream agents.
-    {
+    //
+    // SKIPPED when the user uploaded their own floor plan — their upload is
+    // authoritative and any variant guess would just pollute downstream context.
+    if (userUploadedFloorPlan) {
+      const existingFp = (research.floor_plan as Record<string, unknown> | undefined) ?? {};
+      existingFp.matched_unit = {
+        variant: null,
+        match_method: "user_uploaded_floor_plan",
+        confidence: "high",
+        match_notes: "User uploaded their own floor plan — using that as ground truth instead of matching building variants.",
+        candidates_considered: null,
+      };
+      research.floor_plan = existingFp;
+      console.log("[apartment-research] Skipped variant matching — user uploaded own floor plan");
+    } else {
       const fp = research.floor_plan as Record<string, unknown> | undefined;
       const variants = (fp?.unit_variants as Variant[] | undefined) ?? [];
       if (variants.length > 0) {
@@ -848,7 +890,12 @@ Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby 
   "confidence": "high | medium | low"
 }
 
-If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
+If Maps doesn't reveal the answer, use null — DO NOT GUESS.
+
+CONFIDENCE RULES (critical — self-inconsistency breaks downstream design decisions):
+- "high" ONLY if you populated primary_orientation AND likely_light_direction from concrete Maps evidence (satellite view, streetview orientation, or an explicit building-facing detail).
+- "medium" if you filled orientation OR light (not both) from evidence, or if neighborhood_aesthetic_cues is rich.
+- "low" MUST be used if primary_orientation, likely_light_direction, and view_character are ALL null. A high-confidence reply with every useful field null is forbidden — that is a self-contradiction.`,
           }],
           max_tokens: 3000,
           // No temperature override — Gemini 3 is optimized for its default (1.0).
@@ -864,7 +911,32 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
         const mapsRaw = mapsResponse.content.trim();
         if (mapsRaw) {
           try {
-            const locationContext = parseModelJSON(mapsRaw);
+            const locationContext = parseModelJSON(mapsRaw) as Record<string, unknown>;
+
+            // Post-process: Maps sometimes returns confidence: "high" even when
+            // every orientation/light field came back null — that's incoherent.
+            // Downgrade confidence to match what we actually got. The model's
+            // own "confidence" rating is a self-assessment of the WHOLE reply,
+            // so if the useful fields are null, the whole reply is low-signal.
+            const orientation = locationContext.primary_orientation;
+            const light = locationContext.likely_light_direction;
+            const view = locationContext.view_character;
+            const keyFieldsMissing = !orientation && !light && !view;
+            if (keyFieldsMissing && locationContext.confidence !== "low") {
+              console.log(
+                `[apartment-research] Downgrading Maps confidence "${String(locationContext.confidence)}" → "low" (orientation, light, and view all null)`,
+              );
+              locationContext.confidence = "low";
+            } else if (!orientation && !light && locationContext.confidence === "high") {
+              // Orientation and light are the two fields that drive design
+              // decisions (natural-light planning). If both are null, "high"
+              // confidence is overstated — clamp to medium.
+              console.log(
+                "[apartment-research] Downgrading Maps confidence \"high\" → \"medium\" (orientation and light both null)",
+              );
+              locationContext.confidence = "medium";
+            }
+
             research.location_context = locationContext;
             console.log("[apartment-research] Maps enrichment merged location_context", {
               orientation: locationContext.primary_orientation,
@@ -881,15 +953,27 @@ If Maps doesn't reveal the answer, use null — DO NOT GUESS.`,
       }
     }
 
-    // Save to project if project_id provided
+    // Save to project if project_id provided.
+    // If the user already uploaded their own floor plan, preserve it —
+    // their upload is authoritative and must survive a building-research
+    // refresh. We merge the upload keys back on top of the new research.
     if (project_id) {
       const fp = research.floor_plan as Record<string, unknown> | undefined;
       const matched = fp?.matched_unit as { variant: Variant | null } | undefined;
       const matchedName = matched?.variant?.name as string | null | undefined;
+
+      const researchToSave: Record<string, unknown> = { ...research };
+      if (userUploadedFloorPlan) {
+        researchToSave.floor_plan_image_url = userUploadedFloorPlan.image_url;
+        if (userUploadedFloorPlan.extracted) {
+          researchToSave.extracted_floor_plan = userUploadedFloorPlan.extracted;
+        }
+      }
+
       await supabase
         .from("projects")
         .update({
-          building_research: research,
+          building_research: researchToSave,
           building_name: building_name || research.building_name,
           building_url: building_url || research.website_url,
           city,
