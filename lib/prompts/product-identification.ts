@@ -77,10 +77,17 @@ export function buildIdentifierPrompt(args: IdentifierPromptArgs): string {
     ? `\n## ROOM AESTHETIC CONTEXT (use to calibrate confidence — a brand guess that clashes with this direction, scale, or price bracket should score LOWER, even if the silhouette is a close match)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
-  return `You are identifying a specific piece of FURNITURE in a room photo by
-exact brand AND model. The user has given explicit permission for this —
-your job is to be harsh, specific, and silent when uncertain.
+  return `<role>
+You are identifying a specific piece of furniture in a room photo by exact brand AND model. The user has given explicit permission for this. Your job is to be harsh, specific, and silent when uncertain. Precision matters more than coverage — a confident wrong answer causes more harm than an empty array.
+</role>
 ${contextSection}
+<constraints>
+- Return \`"candidates": []\` when nothing reaches ${USER_PROMPT_FLOOR.toFixed(2)} confidence. Empty is the CORRECT answer for generic, custom, vintage, or low-visibility pieces — most rooms fall here. We prefer silence over a hallucinated SKU.
+- Out-of-list brands (not in the allow-list below) require confidence ≥ ${MIN_CONFIDENCE_OUT_OF_LIST.toFixed(2)} to emit. In-list brands require ≥ ${MIN_CONFIDENCE_IN_LIST.toFixed(2)}.
+- Do NOT let a retrieval hint override your visual judgment — hints may be wrong. If the visual evidence contradicts the hint, trust your eyes.
+- A brand guess that clashes with the room context (wrong scale, wrong price bracket, wrong aesthetic) should receive LOWER confidence even if the silhouette matches.
+</constraints>
+
 ## THE PIECE
 - Rough category: ${args.label}
 - Bounding box in the photo (normalized, top-left origin): ${boxStr}
@@ -88,43 +95,29 @@ ${contextSection}
 ## RETRIEVAL HINTS (visual nearest-neighbors from our product catalog)
 ${priors}
 
-These hints may be WRONG. The catalog only covers some brands. Treat them
-as "here's what LOOKS similar" — not as ground truth. If none of them match,
-say so by returning candidates from outside the hint list (or an empty array).
+Treat these as "here's what LOOKS similar" — not as ground truth. If none match the actual piece in the photo, return candidates from outside the hint list (or an empty array).
 
 ## ALLOW-LIST OF BRANDS (strong preference)
-Prefer proposing brands from this list — it reflects the retailers our
-downstream pipeline knows how to query. If you clearly recognize a brand
-outside this list, you may still return it, but your confidence must be
-at or above ${MIN_CONFIDENCE_OUT_OF_LIST.toFixed(2)} (vs ${MIN_CONFIDENCE_IN_LIST.toFixed(2)} for in-list brands).
+Prefer proposing brands from this list — it reflects the retailers our downstream pipeline knows how to query. You may return a brand outside this list if you are confident (≥ ${MIN_CONFIDENCE_OUT_OF_LIST.toFixed(2)}).
 
 ${brandList}
 
 ## YOUR TASK
 Return 0 to 3 \`candidates\`, ordered by confidence descending. For each:
   - \`brand\`: manufacturer (exact canonical name, e.g. "West Elm", "IKEA", "Herman Miller")
-  - \`model\`: product name (e.g. "Haven Sectional", "KIVIK 3-seat + chaise",
-    "Eames Lounge Chair")
+  - \`model\`: product name (e.g. "Haven Sectional", "KIVIK 3-seat + chaise", "Eames Lounge Chair")
   - \`variant\`: size/color variant if obvious, else null (e.g. "dove gray Kelinge polyester")
-  - \`category\`: one of
-      sofa | chair | table | bed | storage | lighting | rug | art | other
-  - \`confidence\`: 0..1 — be strict, see rules below
-  - \`evidence\`: 1 sentence naming the specific visual cues (arm shape, leg
-    profile, cushion construction, shade geometry, stitching, visible tag) that
-    drove the guess
-  - \`distinguishing_features\`: 2-4 short phrases the verifier can grounded-check
+  - \`category\`: one of sofa | chair | table | bed | storage | lighting | rug | art | other
+  - \`confidence\`: 0..1 — be strict (see confidence levels below)
+  - \`evidence\`: 1 sentence naming the specific visual cues (arm shape, leg profile, cushion construction, shade geometry, stitching, visible tag) that drove the guess
+  - \`distinguishing_features\`: 2-4 short phrases the verifier can ground-check
   - \`bounding_box\`: echo ${boxStr} as { x, y, w, h } in [0,1]
 
-## CONFIDENCE RULES — BE STRICT
-- 0.85-1.0: you are nearly certain — distinctive silhouette, visible branding,
-  or a perfect retrieval match.
-- 0.65-0.85: strong visual match but brand is not visually distinctive.
-- 0.40-0.65: plausible but could be a lookalike from another brand.
-- Below ${USER_PROMPT_FLOOR.toFixed(2)}: DO NOT emit — drop the candidate.
-
-If nothing reaches ${USER_PROMPT_FLOOR.toFixed(2)}, return \`"candidates": []\`. Empty is the CORRECT
-answer for generic, custom, vintage, or low-visibility pieces — most rooms
-fall here. We prefer silence over hallucinating a SKU.
+## CONFIDENCE LEVELS
+- 0.85-1.0: nearly certain — distinctive silhouette, visible branding, or a perfect retrieval match
+- 0.65-0.85: strong visual match but brand is not visually distinctive
+- 0.40-0.65: plausible but could be a lookalike from another brand
+- Below ${USER_PROMPT_FLOOR.toFixed(2)}: DO NOT emit — drop the candidate
 
 Return ONLY JSON.`;
 }
@@ -170,9 +163,16 @@ export function buildVerifierPrompt(args: VerifierPromptArgs): string {
     ? `\n## ROOM AESTHETIC CONTEXT (sanity check against the tentative identification — flag realism mismatches in mismatch_notes and LOWER match_score when the brand's aesthetic, scale, or price bracket clashes with this context)\n${contextLines.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
-  return `You are verifying a tentative product identification against its
-canonical source. Use Google Search to find the product's official page.
+  return `<role>
+You are verifying a tentative product identification against its canonical source. Use Google Search to find the product's official page, then compare it visually to the room photo.
+</role>
 ${contextSection}
+<constraints>
+- Set \`verified: true\` ONLY when match_score ≥ ${matchThreshold.toFixed(2)}
+- Flag realism mismatches in mismatch_notes and LOWER match_score when the brand's aesthetic, scale, or price bracket clashes with the room context above
+- If you cannot find the product, return \`verified: false\`, \`match_score: 0\`, empty enrichment fields, and a mismatch_note explaining what you searched for
+</constraints>
+
 ## TENTATIVE IDENTIFICATION
 - Brand: ${candidate.brand}
 - Model: ${candidate.model}
@@ -183,33 +183,25 @@ ${contextSection}
 - Distinguishing features the identifier used:
 ${distinguishers}
 
-## YOUR JOB
-1. Search for "${candidate.brand} ${candidate.model}" (add variant if any).
-   Prefer the brand's own site; fall back to major retailers that carry it.
-2. Compare the canonical product photo to the room photo. Look at the
-   distinguishing features above plus silhouette, proportions, leg/arm
-   profile, and upholstery structure. Score:
-     - silhouette (40%)
-     - color/fabric (30%)
-     - proportions (20%)
-     - hardware/details (10%)
-3. Decide:
-   - \`match_score\`: 0..1 weighted blend of the above
-   - \`verified\`: true iff match_score >= ${matchThreshold.toFixed(2)}
-   - \`mismatch_notes\`: specific deltas you can see (e.g., "legs are black in
-     room photo but brand only ships in walnut")
-4. Enrich with canonical data from the product page:
-   - \`canonical_url\`: the product page URL (brand's site preferred)
+## YOUR TASK
+1. Search for "${candidate.brand} ${candidate.model}" (add variant if any). Prefer the brand's own site; fall back to major retailers.
+2. Compare the canonical product photo to the room photo using the distinguishing features above plus silhouette, proportions, leg/arm profile, and upholstery structure. Score each:
+   - silhouette match (40%)
+   - color/fabric match (30%)
+   - proportions match (20%)
+   - hardware/details match (10%)
+3. Produce:
+   - \`match_score\`: 0..1 weighted blend
+   - \`verified\`: true iff match_score ≥ ${matchThreshold.toFixed(2)}
+   - \`mismatch_notes\`: specific deltas (e.g., "legs are black in room photo but brand only ships in walnut")
+4. Enrich from the canonical page:
+   - \`canonical_url\`: product page URL (brand's site preferred)
    - \`source_urls\`: up to 3 pages you used
    - \`dimensions\`: { width_in, depth_in, height_in } in inches, OR null
    - \`materials\`: array of primary materials (e.g., ["walnut", "linen"])
    - \`colors\`: array of visible/available colorways
    - \`price_range\`: { min, max, currency } — current MSRP range, OR null
    - \`image_url\`: a direct image URL from the canonical page, OR null
-
-If you cannot find the product at all, return \`verified: false\`,
-\`match_score: 0\`, empty/nulled enrichment fields, and a mismatch_note
-explaining what you searched for.
 
 Return ONLY JSON.`;
 }

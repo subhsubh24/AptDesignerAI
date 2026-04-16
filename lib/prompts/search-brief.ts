@@ -240,38 +240,64 @@ export function getSearchBriefPrompt(
     ? `\n\n${identifiedContext}\nANTI-QUERY: do NOT generate search queries for a REPLACEMENT of any identified piece above. Your queries must target complementary items ONLY. Use the canonical dimensions as scale guardrails — e.g. if a 110" KIVIK sectional is identified, the rug query should specify "at least 9x12" and the coffee table query should specify "48-60 inch length to match a 110" sectional".`
     : "";
 
-  return `Generate search queries for finding furniture and decor for this room across THREE price tiers.
+  return `<role>
+You are a furniture search strategist generating Google search queries to find real, buyable products for a specific client's room. Your queries will be executed verbatim — they must return actual product pages, not category browse pages or generic lists.
+</role>
 
-## PROCESS — Think through this step by step:
-1. For each category, understand what SPECIFICALLY is needed (size, material, color, style from the design direction)
-2. For each price tier, think about which REAL BRANDS AND PRODUCTS would match
-3. Craft each query to find a SPECIFIC product page, not a generic category page
-4. Mentally test: "If I typed this into Google, would it return a real product page?" If no, rewrite.
+<task>
+For each missing category, generate 5 targeted search queries per price tier (budget / balanced / high_end). Each query must target a different angle so they surface genuinely different products.
+</task>
 
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
 - Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}
 
-## INSTRUCTIONS
-For each category, generate search queries for THREE price tiers:
-1. **Budget** — affordable, stylish options from ${TIER_RETAILERS.budget.join(", ")}
-2. **Balanced** — mid-range quality from ${TIER_RETAILERS.balanced.join(", ")}
-3. **High End** — premium/investment pieces from ${TIER_RETAILERS.high_end.join(", ")}
+<reasoning_process>
+For each category, think through:
+1. What SPECIFICALLY is needed for this room? (exact size, material, color, style from the design direction)
+2. Which real brands and products fit each price tier?
+3. Test each query mentally: "If I typed this into Google right now, would the first result be a real product page?" If no, rewrite.
+4. Would these 5 queries surface 5 genuinely different products? If two return the same results, rewrite one.
+</reasoning_process>
 
-## QUERY DIVERSITY REQUIREMENT
-Generate exactly **5 high-quality queries per tier**, each from a different angle. Quality over quantity — each query must be highly specific and likely to return actual product pages:
+## TIERS AND RETAILERS
+1. **Budget** — ${TIER_RETAILERS.budget.join(", ")}
+2. **Balanced** — ${TIER_RETAILERS.balanced.join(", ")}
+3. **High End** — ${TIER_RETAILERS.high_end.join(", ")}
 
-1. **product_specific** — Target a specific known product by exact name: "Article Seno walnut coffee table" or "West Elm Mid-Century Pop-Up Storage Coffee Table"
-2. **style_material** — Describe style + material + color + size using design direction: "modern solid walnut coffee table tapered legs 48 inch"
-3. **retailer_browse** — Browse a specific retailer's filtered selection: "West Elm coffee tables walnut under $800"
-4. **comparison** — Find recent comparison/roundup articles: "best mid-century walnut coffee tables 2025 review"
-5. **brand_collection** — Target a specific brand or designer collection: "Floyd The Coffee Table walnut"
+## 5 QUERY ANGLES (one per tier, each must surface different products)
+1. **product_specific** — exact known product: "Article Seno walnut coffee table"
+2. **style_material** — style + material + color + size: "modern solid walnut coffee table tapered legs 48 inch"
+3. **retailer_browse** — specific retailer + filter: "West Elm coffee tables walnut under $800"
+4. **comparison** — recent roundup: "best mid-century walnut coffee tables 2026 review"
+5. **brand_collection** — brand or designer collection: "Floyd The Coffee Table walnut"
 
-Each query MUST return meaningfully different results. Test mentally: would these 5 queries surface 5 different products? If two queries would find the same products, rewrite one.
+<constraints>
+GOOD queries — specific, will find product pages:
+  "Article Texa rug 8x10 cream wool"
+  "CB2 Dondra teak media console 64 inch"
+  "West Elm Mid-Century coffee table walnut under $600"
+  "Castlery Miso round dining table 47 inch"
 
-## OUTPUT FORMAT
-Return a JSON object:
+BAD queries — generic, will return category pages:
+  "modern rugs" ← no size/material/color
+  "TV stands" ← no style, no material, no retailer
+  "affordable coffee tables" ← no specifics
+
+Rules:
+- Include brand/retailer name + product type + material + color in product_specific and brand_collection queries
+- Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic
+- Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers
+- For high end, include retailer name to find specific premium products
+- NEVER repeat the same search terms across different angles
+- For comparison queries, include "2025" or "2026" to find recent roundups
+- Do NOT generate queries for replacements of any identified existing piece
+</constraints>
+
+<output_contract>
+JSON only. No prose, no markdown fences.
+
 {
   "categories": [
     {
@@ -279,8 +305,7 @@ Return a JSON object:
       "tiers": {
         "budget": {
           "search_queries": [
-            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" },
-            ... exactly 5 queries
+            { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" }
           ],
           "price_range": { "min": number, "max": number },
           "retailers_to_target": ["retailer1", "retailer2", "retailer3", "retailer4"]
@@ -288,34 +313,12 @@ Return a JSON object:
         "balanced": { ... same structure ... },
         "high_end": { ... same structure ... }
       },
-      "key_requirements": ["at least 4-6 specific requirements for this category — include size, material, color, style, and functional requirements"]
+      "key_requirements": ["4-6 specific requirements — size, material, color, style, functional needs"]
     }
   ]
 }
 
-## CRITICAL RULES for search queries:
-- Each query MUST target a SPECIFIC PRODUCT or specific retailer page, not a generic category.
-- Include brand/retailer name + product type + material + color in product_specific and brand_collection queries.
-- Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic.
-- GOOD queries (specific, will find product pages):
-  "Article Texa rug 8x10 cream wool"
-  "CB2 Dondra teak media console 64 inch"
-  "West Elm Mid-Century coffee table walnut under $600"
-  "Castlery Miso round dining table 47 inch"
-  "best walnut coffee tables with shelf 2025"
-- BAD queries (generic, will return category pages):
-  "modern rugs" ← too vague, no size/material/color
-  "TV stands" ← no style, no material, no retailer
-  "affordable coffee tables" ← no specifics
-  "nice dining chairs" ← useless
-- Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers.
-- For high end, include retailer name to find specific premium products.
-- NEVER repeat the same search terms across different angles — each must surface genuinely different products.
-- For comparison queries, include "2025" or "2026" to find recent roundups.
-- For key_requirements: include at least 4-6 requirements covering size constraints, material preferences, color range, style direction, and functional needs.
-
-## EXAMPLE — For "coffee_table" category in a warm modern living room:
-\`\`\`json
+EXAMPLE for "coffee_table" in a warm modern living room:
 {
   "category": "coffee_table",
   "tiers": {
@@ -324,7 +327,7 @@ Return a JSON object:
         { "query": "IKEA Stockholm walnut coffee table", "angle": "product_specific" },
         { "query": "modern walnut coffee table with shelf under $200 48 inch", "angle": "style_material" },
         { "query": "Target threshold coffee tables wood under $250", "angle": "retailer_browse" },
-        { "query": "best budget mid-century coffee tables 2025 under $300", "angle": "comparison" },
+        { "query": "best budget mid-century coffee tables 2026 under $300", "angle": "comparison" },
         { "query": "Walker Edison mid century coffee table walnut", "angle": "brand_collection" }
       ],
       "price_range": { "min": 80, "max": 300 },
@@ -333,6 +336,6 @@ Return a JSON object:
   },
   "key_requirements": ["48-54 inch length to match 84 inch sofa", "walnut or warm wood tone", "clean lines / mid-century style", "shelf or storage preferred", "under 18 inch height", "solid wood or wood veneer (not laminate)"]
 }
-\`\`\`
-Follow this level of specificity for all categories.`;
+Follow this level of specificity for all categories.
+</output_contract>`;
 }

@@ -205,48 +205,70 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
  * attention on its own question.
  */
 export function getAestheticEvalPrompt(args: EvalContextArgs): string {
-  const { budgetMode } = args;
   const assembledContext = buildEvalContext(args);
 
-  return `You are a world-class interior designer evaluating a specific product for a specific client. This pass focuses exclusively on **aesthetic fit** — does the product look right in this apartment? A separate pass handles spatial/functional fit; do not score those dimensions here.
+  return `<role>
+You are a world-class interior designer evaluating a specific product for a specific client's room. This pass focuses exclusively on aesthetic fit — does the product look right in this apartment? A separate pass handles spatial and functional fit; do not score those dimensions here.
+</role>
 
-## SCORING PROCESS — For each dimension below:
-1. What specific evidence (in the product image and room photos) supports a high score?
-2. What specific evidence supports a low score?
-3. Based on the balance of evidence, what score is fair?
+<task>
+Score 4 aesthetic dimensions, write area and apartment fit notes, and provide specific reasoning. Every score must be grounded in evidence from the product image, room photos, and design direction above.
+</task>
 
 ${assembledContext}
 
-## AESTHETIC SCORING (4 dimensions, each 0-10)
+<reasoning_process>
+For each dimension:
+1. What specific evidence (product image + room photos) supports a HIGH score?
+2. What specific evidence supports a LOW score?
+3. What is the honest score based on the balance of evidence?
+Score based on the ACTUAL apartment context — not generic assumptions about the style category.
+</reasoning_process>
 
-1. **style_fit_score**: Does it match the design direction above? Score based on the ACTUAL style direction for this apartment — not generic assumptions.
-   - Example: If direction is "warm modern" and product is "industrial chrome wire shelf" → 2-3. If "walnut shelf with clean lines" → 8-9.
+<scoring_calibration>
+Read ALL anchors before scoring. These are concrete examples of what each score level looks like.
 
-2. **palette_fit_score**: Does it complement the apartment's actual palette? Consider building finishes (floors, cabinetry, countertops) and colors visible in room photos.
-   - Example: "warm oak" in a room with cool gray floors and chrome fixtures → 4-5 (undertone clash). "warm walnut" in warm oak + brass room → 8-9.
+style_fit_score:
+- 8: Warm modern room (light oak floors, linen sofa, brass accents) + walnut shelf with tapered legs and clean lines → every design tag aligns
+- 5: Warm modern room + blonde Scandi shelf — adjacent style, not actively wrong but the warm undertone is missing
+- 3: Warm modern room + black industrial pipe shelf with hairpin legs → completely different vocabulary, no shared tags
 
-3. **material_fit_score**: Does the material work with existing finishes visible in room photos?
-   - Also consider **durability/maintenance**: white boucle with pets = problem. Glass coffee table with toddlers = risk. Velvet in humid climates degrades.
-   - Consider **climate suitability** of the material for the apartment's climate.
+palette_fit_score:
+- 8: Room anchored by warm oak + cream linen + brushed brass; product has warm walnut finish + natural linen seat → shares the warm undertone
+- 5: Room with warm oak floors + product has cool gray upholstery → undertones fight at arm's length; coexists but doesn't sing
+- 3: Room built on warm neutrals + product is a saturated navy velvet — the accent color has no echo anywhere in the room
 
-4. **cohesion_fit_score**: Does it work with what's already in the room? Look at the room photos — consider existing furniture, finishes, and overall vibe. Base this on what you SEE.
+material_fit_score:
+- 8: High-traffic family living room + performance velvet + metal frame → durability matches use; material family echoes existing pieces
+- 5: Low-humidity apartment + linen sofa — linen works in dry climates but not humid ones; slightly risky
+- 3: Household with two dogs + white boucle chair → maintenance disaster waiting to happen; material is actively wrong for lifestyle
 
-## SCORE CALIBRATION — READ ALL, THEN SCORE
-- **9-10 (Exceptional)**: Materials/palette match exactly, style is cohesive. RARE.
-- **7-8 (Strong)**: Genuinely good fit with minor concerns.
-- **5-6 (Mediocre)**: Safe but uninspired. THIS IS AVERAGE.
-- **3-4 (Poor)**: Actively conflicts (wrong finish family, clashing undertones).
-- **1-2 (Wrong)**: Completely wrong style family.
+cohesion_fit_score:
+- 8: Every visible room element (floors, existing sofa, lighting) shares the same warm-organic vocabulary as the product being evaluated
+- 5: Product works with most of the room but one existing anchor piece (e.g., chrome floor lamp) creates a minor undertone clash
+- 3: Product belongs to a different era or aesthetic than the rest of the room — feels like it wandered in from a different apartment
 
-CRITICAL: Use the full 0-10 scale. Do NOT cluster scores in 6-8.
+CRITICAL: Use the FULL 0-10 range. Do NOT cluster scores in 6-8. A genuinely mediocre fit is a 5, not a 7.
+</scoring_calibration>
 
-${budgetMode ? "" : ""}## AREA FIT NOTE
-2-3 sentences on how this product works with OTHER pieces in the same area. Reference specific existing furniture.
+<scoring_dimensions>
+Score each 0-10 using the calibration above:
 
-## APARTMENT FIT NOTE
-1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?
+1. **style_fit_score**: Does it match the design direction? Reference the ACTUAL style notes from the room diagnosis — name specific style tags and whether this product carries them.
 
-## OUTPUT FORMAT (JSON, no prose, no markdown fences)
+2. **palette_fit_score**: Does it complement the apartment's actual palette? Check undertones (warm/cool/neutral) against building finishes (floors, cabinetry, countertops) and colors visible in room photos. Undertone clashes lower this score even when the hue is close.
+
+3. **material_fit_score**: Does the material work with existing finishes AND the lifestyle?
+   - White boucle + pets = 3 regardless of style fit
+   - Glass top + toddlers = flag as risk
+   - Material must complement existing finishes visible in room photos
+
+4. **cohesion_fit_score**: Does it work with what's ALREADY IN THE ROOM? Look at the room photos — existing furniture, finishes, overall vibe. Base this on what you SEE, not what should theoretically be there.
+</scoring_dimensions>
+
+<output_contract>
+JSON only. No prose, no markdown fences.
+
 {
   "scores": {
     "style_fit_score": number,
@@ -255,13 +277,14 @@ ${budgetMode ? "" : ""}## AREA FIT NOTE
     "cohesion_fit_score": number
   },
   "reasoning": {
-    "top_reasons": ["3-5 strongest reasons — reference actual product attributes and diagnosis"],
-    "risks": ["2-4 specific risks — e.g. 'brass legs may clash with chrome kitchen fixtures'"],
-    "suggestions": ["1-3 alternatives or modifications"]
+    "top_reasons": ["3-5 strongest reasons — reference actual product attributes and specific room elements"],
+    "risks": ["2-4 specific risks — e.g. 'brass legs may clash with chrome kitchen fixtures visible in photo'"],
+    "suggestions": ["1-3 actionable alternatives or modifications"]
   },
-  "area_fit_note": "2-3 sentences on area-level fit",
-  "apartment_fit_note": "1-2 sentences on apartment-wide coherence"
-}`;
+  "area_fit_note": "2-3 sentences on how this product works with OTHER pieces in the same area — reference specific existing furniture",
+  "apartment_fit_note": "1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?"
+}
+</output_contract>`;
 }
 
 /**
@@ -272,52 +295,72 @@ export function getFunctionalEvalPrompt(args: EvalContextArgs): string {
   const { budgetMode } = args;
   const assembledContext = buildEvalContext(args);
 
-  return `You are a world-class interior designer evaluating the **spatial and functional fit** of a specific product. This pass focuses exclusively on: will it fit, will it work, is it good value? A separate pass handles aesthetic fit — do not score style/palette/material/cohesion here.
+  return `<role>
+You are a world-class interior designer evaluating the spatial and functional fit of a specific product. This pass focuses exclusively on: will it fit, will it work, is it good value? A separate pass handles aesthetic fit — do not score style, palette, material, or cohesion here.
+</role>
 
-## SCORING PROCESS — For each dimension below:
-1. What specific evidence (dimensions, placement, room photos, floor plan) supports a high score?
-2. What specific evidence supports a low score?
-3. Based on the balance of evidence, what score is fair?
+<task>
+Score 4 functional dimensions. Every score must be grounded in specific evidence: product dimensions, placement description, floor plan data, and room photos.
+</task>
 
 ${assembledContext}
 
-## FUNCTIONAL SCORING (4 dimensions, each 0-10)
+<reasoning_process>
+For each dimension:
+1. What specific evidence (dimensions, placement, floor plan, room photos) supports a HIGH score?
+2. What specific evidence supports a LOW score?
+3. What is the honest score?
+If the room diagnosis lists scale_proportion_issues, CHECK this product's dimensions against them — penalize if it repeats the same problem.
+</reasoning_process>
 
-1. **scale_fit_score**: Will it physically fit and be correctly scaled? Use the floor plan, placement, and room photos.
-   - Check dimensions against available space and the intended placement description.
-   - Rugs too small for the seating area: heavily penalize.
-   - Dining tables must seat the right number AND leave 24" pullback for chairs.
-   - Art too small for the wall: penalize. Oversized pieces that block walkways: penalize.
-   - **Window/door clearance**: Would this block a window, obstruct a door swing, or crowd a doorway?
-   - If no dimensions listed, score 5 (neutral).
+<scoring_calibration>
+scale_fit_score:
+- 8: 8×10 rug anchors a 7-piece seating group; 18" extension beyond sofa legs on each side; coffee table ≈ ⅔ sofa width — textbook proportions with no clearance issues
+- 5: 6×9 rug mostly covers the seating group with sofa legs barely on it — undersized but the room is functional; no clearance violations
+- 3: 5×7 rug in a 12×16 living room with an L-shaped sectional — rug is visually lost, wrong by two size classes, reads as an error
+
+function_fit_score:
+- 8: Floor lamp placed between sofa and reading chair, within 3 feet of a likely outlet (outlet position known from floor plan); solves the "dark corner" diagnosis issue directly
+- 5: Floor lamp goes in a reasonable spot but no outlet confirmed nearby and the diagnosed lighting issue is only partially addressed
+- 3: Dining table that seats 4 for a client whose diagnosis noted "needs seating for 6-8 guests" — functional need not met
+
+value_fit_score (budget mode: ${budgetMode}):
+${budgetMode === "budget" ? "- 8: Under $300, solid construction, no visible quality compromises\n- 5: $450 for what should be a $200 item — over-tier for this budget\n- 2: $800+ product in a budget search — wrong tier entirely" : budgetMode === "best_possible" ? "- 8: Premium brand, verified quality materials, price justified by craftsmanship\n- 5: Good quality but mid-tier brand without premium justification\n- 3: Mid-tier quality at luxury price — the value equation is off" : "- 8: Quality matches price; no over-pay or under-quality signals\n- 5: Reasonable but not notable value\n- 3: Clearly over-priced or clearly low quality for the ask"}
+
+confidence_score:
+- 9-10: title + price + materials + all three dimensions + multiple clear product images + lifestyle photo
+- 7-8: mostly complete, missing one field (e.g., depth only)
+- 5-6: title and maybe price, but materials/dimensions unclear or absent
+- 3-4: only title and retailer name — no specs
+- 1-2: almost no reliable data; product identity uncertain
+</scoring_calibration>
+
+<scoring_dimensions>
+Score each 0-10 using the calibration above:
+
+1. **scale_fit_score**: Will it physically fit and be correctly proportioned?
+   - Check dimensions against available space and intended placement
+   - Rugs too small for seating area: heavily penalize
+   - Dining tables must seat the required count AND leave 24" chair pullback
+   - Art too small for the wall: penalize. Pieces that block walkways: penalize.
+   - Window/door clearance: would this obstruct a door swing or crowd a doorway?
+   - If no dimensions listed, score 5 (neutral)
 
 2. **function_fit_score**: Does it solve a real problem AND work in its intended position?
-   - Seating capacity for hosting; dining capacity; storage for clutter; task lighting near reading areas.
-   - **Flow**: does it work with the room's traffic patterns and spatial layout?
-   - **Lighting suitability**: reading lamp near reading spot? Glossy surfaces near windows creating glare?
-   - **Acoustic impact**: in all-hard-surface rooms (hardwood + glass + concrete), textiles matter. Penalize adding MORE hard surfaces to an acoustically harsh room.
-   - **Outlet proximity**: lamps, media consoles, powered items — is there a likely outlet near the intended placement?
+   - Seating capacity; dining capacity; storage; task lighting placement
+   - Traffic flow: does it work with the room's spatial layout?
+   - Acoustic impact: in all-hard-surface rooms, more hard surfaces = penalize
+   - Outlet proximity: lamps, powered items — is there a likely outlet nearby?
 
 3. **value_fit_score**: Price vs. quality/impact. ${budgetMode === "budget" ? "Weight HEAVILY. Over-tier products → score 3 or below." : budgetMode === "best_possible" ? "Weight less — quality over price." : "Balance quality and price."}
-   - If price is missing, score 5 (neutral) — do NOT assume good value.
+   - If price is missing, score 5 (neutral) — do NOT assume good value
 
-4. **confidence_score**: How reliable is the product data?
-   - 9-10: complete — title, price, materials, dimensions, multiple clear images, lifestyle photo
-   - 7-8: mostly complete, missing one field
-   - 5-6: partial — title and maybe price, but materials/dimensions unclear
-   - 3-4: minimal — only title and retailer
-   - 1-2: almost no reliable data
+4. **confidence_score**: How reliable is the product data? (see calibration above)
+</scoring_dimensions>
 
-## SCORE CALIBRATION
-- **9-10**: Perfect fit for the space, solves a diagnosed problem, strong value.
-- **7-8**: Works with minor concerns.
-- **5-6**: Acceptable but not ideal. THIS IS AVERAGE.
-- **3-4**: Obvious issues (wrong size, blocks flow, missing dimensions = likely trouble).
-- **1-2**: Clearly wrong (won't fit, blocks a walkway, completely impractical).
+<output_contract>
+JSON only. No prose, no markdown fences.
 
-CRITICAL: Use the full 0-10 scale. If the room diagnosis lists scale_proportion_issues, you MUST check this product's dimensions against them and penalize if it repeats the problem.
-
-## OUTPUT FORMAT (JSON, no prose, no markdown fences)
 {
   "scores": {
     "scale_fit_score": number,
@@ -325,5 +368,6 @@ CRITICAL: Use the full 0-10 scale. If the room diagnosis lists scale_proportion_
     "value_fit_score": number,
     "confidence_score": number
   }
-}`;
+}
+</output_contract>`;
 }

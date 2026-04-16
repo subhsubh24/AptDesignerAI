@@ -138,35 +138,75 @@ function buildBundleContext(args: BundleEvalContextArgs): string {
  */
 export function getBundleScoringPrompt(args: BundleEvalContextArgs): string {
   const assembledContext = buildBundleContext(args);
-  return `Evaluate this bundle of products as a COMPLETE ROOM CONCEPT. This pass scores the bundle on 7 dimensions plus a summary verdict and analysis. Pairwise conflicts and room vibe are handled by separate passes — do NOT produce them here.
+  return `<role>
+You are a world-class interior designer evaluating a proposed set of products as a complete room concept for a real client. You know their building, finishes, room, and how they live. You have reviewed thousands of rooms and you use the FULL scoring range — most rooms you see are average (5-6), genuinely good ones are 7-8, exceptional sets are rare (9-10).
+</role>
 
-You are a world-class designer reviewing a proposed set for a real client's apartment. You know their building, finishes, room, and how they live.
+<task>
+Evaluate the bundle below on 7 dimensions plus a verdict. This pass only scores dimensions and writes a verdict. Pairwise conflicts and room vibe are handled by separate passes — do NOT produce them here.
+</task>
 
 ${assembledContext}
 
-## SCORE CALIBRATION — READ BEFORE SCORING
-- **9-10 (Exceptional)**: Professional-grade curation. Every piece intentional. THIS IS RARE.
-- **7-8 (Strong)**: Solid set with minor concerns.
-- **5-6 (Mediocre)**: Safe but uninspired. THIS IS AVERAGE.
-- **3-4 (Poor)**: Active conflicts. Wrong scale, clashing materials, or missing key pieces.
-- **1-2 (Wrong)**: Incoherent set.
+<scoring_calibration>
+Read ALL examples before scoring. Use these as anchors.
 
-CRITICAL: Use the FULL 0-10 range.
+**9-10 (Exceptional — RARE)**: Professional-grade curation. Every piece intentional, nothing redundant. Style thread runs through every item. Would appear in an editorial shoot.
+**7-8 (Strong)**: Solid, cohesive set. Minor concerns that a swap would fix. A skilled designer would recommend it.
+**5-6 (Mediocre — THIS IS AVERAGE)**: Safe but uninspired. Items don't actively fight but don't reinforce each other either. A showroom floor.
+**3-4 (Poor)**: Active conflicts. Wrong scale, clashing materials, or essential categories missing.
+**1-2 (Wrong)**: Incoherent. Random items assembled with no design logic.
 
-## SCORING DIMENSIONS (each 0-10)
+CONCRETE ANCHORS — use these to calibrate, not to copy:
 
-1. **palette_harmony_score**: Do the colors work together? List each product's primary colors, map to warm/cool/neutral, check against actual apartment finishes, verdict: cohesive or clash?
-2. **material_balance_score**: Is there a healthy mix of 3-4+ distinct material types (wood, textile, metal, stone/ceramic, glass, leather)? Check durability/maintenance for the room's use (pets/kids/humidity) and climate suitability.
-3. **scale_balance_score**: Pieces correctly proportioned vs. each other AND the room? Rug covers 60-80% of seating area; coffee table ⅔-full width of sofa; dining table seats the needed count.
-4. **style_consistency_score**: Unified aesthetic. Use visual style tags. Conflicting tags = lower score.
-5. **room_completion_score**: Does this make the room feel fully furnished? Tiered: missing essentials (sofa/bed/table/rug/primary light) → below 6. Only essentials, no standard → below 7. No finishing (art/plants/objects) → cap at 7. Dead-zone activation = bonus.
-6. **spatial_arrangement_score**: Physical arrangement feasible. Traffic flow (36" main paths, 18" between coffee table and sofa), zone clarity, window/door clearance, outlet access for powered items.
-7. **practicality_score**: Livable. Seating capacity for hosting, dining capacity, durability, lighting adequacy, acoustic balance (textiles in hard-surface rooms).
+palette_harmony_score:
+- 8: Warm walnut table + cream linen sofa + brushed brass lamp in a room with oak floors — materials share the same warm undertone and reinforce each other.
+- 5: Off-white sofa + chrome side table + warm oak coffee table — inconsistent undertones; neither fully warm nor fully cool. Items coexist but don't sing together.
+- 3: Navy velvet chair + rust throw pillows + teal rug in a room with beige walls — accent colors compete rather than harmonize; no clear palette anchor.
 
-## COMPOUNDING SCORING
-Your 7 dimensions are combined using a weighted geometric mean. ONE bad dimension tanks the overall score. Be PRECISE — inflating one score cannot compensate.
+scale_balance_score:
+- 8: 8×10 rug anchors the seating group with 18" extending beyond the sofa; 48" coffee table ≈ ⅔ the 72" sofa — textbook proportions.
+- 5: 5×7 rug only covers under the coffee table, leaving sofa legs off the rug — too small but the room is still somewhat functional.
+- 3: 36" coffee table for a 108" sectional — visually lost; the disconnect reads as a mistake, not a design choice.
 
-## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+room_completion_score:
+- 7: Sofa + coffee table + side table + rug + floor lamp — all essentials present; no finishing layer (plants, art, objects) but the room is livable.
+- 5: Sofa and rug only — missing coffee table (nowhere to set a drink), no dedicated lighting beyond overhead.
+- 3: Only a sofa — the room is not furnished, it just has a seat.
+
+style_consistency_score:
+- 8: Every item shares 2-3 consistent style tags (e.g., "organic", "textured", "warm-toned") — the room has a clear point of view.
+- 5: Mix of two compatible but distinct sub-styles (e.g., mid-century modern sofa + Scandi side table) — coherent but unfocused.
+- 3: Industrial metal shelving + ornate traditional mirror + minimalist white sofa — three unrelated aesthetic vocabularies.
+
+CRITICAL: Use the FULL 0-10 range. ONE low-scoring dimension tanks the bundle — be precise, not generous.
+</scoring_calibration>
+
+<scoring_dimensions>
+Score each 0-10 using the calibration above as your reference:
+
+1. **palette_harmony_score**: Do the colors work together? Map each product's primary color to warm/cool/neutral. Check against actual apartment finishes. Verdict: cohesive or clash?
+
+2. **material_balance_score**: Is there a healthy mix of 3-4+ distinct material types (wood, textile, metal, stone/ceramic, glass, leather)? Check durability/maintenance for the room's use (pets/kids/humidity). Consider climate suitability — velvet in humid climates degrades, untreated wood outdoors fails. Does it work with the building's existing finishes?
+
+3. **scale_balance_score**: Pieces correctly proportioned vs each other AND the room? Rug covers the seating area (≥60%); coffee table ≈ ⅔ the sofa width; dining table seats the needed count and leaves 24" chair pullback. Use floor plan dimensions if available.
+
+4. **style_consistency_score**: Unified aesthetic. Identify the style tags each item carries — conflicting tags lower this score. Two items can be individually beautiful and wrong together.
+
+5. **room_completion_score**: Does this make the room feel fully furnished?
+   - Missing essentials (sofa/bed/table/rug/primary light) → cap at 5
+   - Essentials only, nothing standard → cap at 7
+   - No finishing layer (art/plants/objects) → cap at 7
+   - Activates a diagnosed dead zone → +0.5 bonus
+
+6. **spatial_arrangement_score**: Physical arrangement feasible. Traffic flow (36" main paths, 18" coffee table to sofa), zone clarity, window/door clearance, outlet access for powered items. Penalize if the bundle would create obvious bottlenecks.
+
+7. **practicality_score**: Livable for how THIS client lives. Seating capacity for hosting needs, dining capacity, durability for pets/kids/use-pattern, lighting adequacy, acoustic balance (textiles needed in hard-surface rooms).
+</scoring_dimensions>
+
+<output_contract>
+JSON only. No prose, no markdown fences. Think hard before scoring — your numbers never appear without being grounded in specific evidence from the product data and room context above.
+
 {
   "scores": {
     "palette_harmony_score": number,
@@ -183,8 +223,9 @@ Your 7 dimensions are combined using a weighted geometric mean. ONE bad dimensio
     "what_feels_missing": "specific categories/elements still needed",
     "what_should_be_swapped_first": "which item, replaced with what, and why"
   },
-  "verdict": "2-3 sentence summary. Would a designer recommend this?"
-}`;
+  "verdict": "2-3 sentence summary. Would a designer recommend this set?"
+}
+</output_contract>`;
 }
 
 /**
@@ -193,35 +234,47 @@ Your 7 dimensions are combined using a weighted geometric mean. ONE bad dimensio
  */
 export function getBundlePairwisePrompt(args: BundleEvalContextArgs): string {
   const assembledContext = buildBundleContext(args);
-  return `You are evaluating PAIRWISE COMPATIBILITY between products in a bundle. This pass has ONE job: identify which pairs of items don't work well together, and why. Do NOT score the bundle overall; that's a separate pass.
+  return `<role>
+You are evaluating PAIRWISE COMPATIBILITY between products in a proposed room bundle. This pass has exactly one job: identify which pairs of items conflict with each other, and why. You do NOT score the bundle overall — that is a separate pass.
+</role>
+
+<task>
+For every pair of products in the bundle, silently assess compatibility (0-10). Report ONLY pairs with compatibility below 9.0. Omit pairs that work well together.
+</task>
 
 ${assembledContext}
 
-## YOUR TASK
-For every PAIR of products in the bundle, silently assess compatibility (0-10). Then:
+<reasoning_process>
+For each reported conflict:
+1. Name both products specifically (title or category)
+2. Identify the conflict type: color_clash | material_mismatch | scale_conflict | style_conflict | spatial_crowding
+3. Explain the specific visible attribute that drives the conflict (e.g., "warm oak tabletop + cool chrome frame — undertone mismatch; one anchors warm, the other anchors cool")
+4. Two individually excellent products can be terrible together — evaluate the PAIR, not each piece in isolation
+5. Common traps: two different wood species in close proximity; warm-toned lamp next to cool-toned art; oversized sofa + undersized coffee table
+</reasoning_process>
 
-- Report ONLY pairs with compatibility < 9.0. Omit pairs that work well together.
-- For each reported pair: compatibility (0-10), conflict_type, reason.
-- conflict_type examples: "color_clash", "material_mismatch", "scale_conflict", "style_conflict", "spatial_crowding"
-- Two individually great products can be terrible together (two different wood species; warm lamp + cool art; oversized sofa + oversized coffee table).
+<constraints>
+- Name product titles or categories specifically — never say "the first item"
+- Do NOT invent conflicts that aren't visible in the product attributes or images
+- Scale conflicts require visible dimensions to report — do not penalize unknown-size items
+- If all pairs are compatible (all ≥ 9.0), return an empty array
+</constraints>
 
-## CRITICAL
-- Be specific. Name product titles or categories.
-- If all pairs are compatible (all ≥ 9.0), return an empty array.
-- Do NOT invent conflicts that aren't visible in product attributes/images.
+<output_contract>
+JSON only. No prose, no markdown fences.
 
-## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
   "pairwise_conflicts": [
     {
       "product_a": "category_or_title_of_first_item",
       "product_b": "category_or_title_of_second_item",
       "compatibility": number_0_to_10,
-      "conflict_type": "type_of_clash",
-      "reason": "specific explanation"
+      "conflict_type": "color_clash | material_mismatch | scale_conflict | style_conflict | spatial_crowding",
+      "reason": "specific explanation referencing visible product attributes"
     }
   ]
-}`;
+}
+</output_contract>`;
 }
 
 /**
@@ -231,21 +284,34 @@ For every PAIR of products in the bundle, silently assess compatibility (0-10). 
  */
 export function getBundleVibePrompt(args: BundleEvalContextArgs, scoringVerdict?: string): string {
   const assembledContext = buildBundleContext(args);
-  return `You are writing the "vibe" narrative for a proposed bundle of products. This pass is purely descriptive — imagine walking into the finished room and describe what it feels like. Do NOT score dimensions or identify conflicts; those are separate passes.
+  return `<role>
+You are writing the "vibe" narrative for a proposed room bundle. This pass is purely descriptive — imagine walking into the finished room and describe what it feels and looks like. You do NOT score dimensions or identify conflicts; those are separate passes.
+</role>
 
-${scoringVerdict ? `## SCORING VERDICT (from earlier pass — match the tone of your vibe to this)\n${scoringVerdict}\n` : ""}
+<task>
+Write a designer's pitch of the room's atmosphere. Reference specific products that drive the vibe. Be evocative and concrete — not generic. A good vibe narrative makes the client see, feel, and want to live in the room.
+</task>
+
+${scoringVerdict ? `<scoring_context>\n${scoringVerdict}\nAlign the tone of your narrative to this verdict — a mediocre-scoring bundle gets honest, grounded language; a strong bundle gets energetic, aspirational language.\n</scoring_context>\n` : ""}
 ${assembledContext}
 
-## YOUR TASK
-Write a designer's pitch of the room's atmosphere. Reference specific products that drive the vibe. Be evocative, not generic.
+<constraints>
+- Reference specific products by name or category — not vague gestures at "the furniture"
+- Style keywords must be specific (e.g., "warm minimalist", "lived-in modern") not generic ("cozy", "nice")
+- Color story must name the dominant tone and explain how light interacts with it
+- Mood must be a single evocative phrase, not a description of the furniture
+</constraints>
 
-## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+<output_contract>
+JSON only. No prose, no markdown fences.
+
 {
   "room_vibe": {
     "vibe_summary": "2-3 sentences describing the mood and feeling of walking into this room. Reference specific products that create the vibe.",
-    "style_keywords": ["3-5 style keywords — e.g., 'warm minimalist', 'lived-in modern', 'earthy calm'"],
-    "color_story": "1-2 sentences on the color narrative — dominant tone, accents, light interaction",
-    "mood": "one word or short phrase capturing the emotional quality — e.g., 'cozy refuge', 'calm sophistication'"
+    "style_keywords": ["3-5 specific style keywords — e.g., 'warm minimalist', 'lived-in modern', 'earthy calm'"],
+    "color_story": "1-2 sentences on the color narrative — dominant tone, accents, how light interacts",
+    "mood": "one evocative phrase — e.g., 'cozy refuge', 'calm sophistication', 'grounded warmth'"
   }
-}`;
+}
+</output_contract>`;
 }

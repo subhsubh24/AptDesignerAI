@@ -277,9 +277,13 @@ export function getDiagnosisAnalysisPrompt(
     buildDiagnosisContextParts(keepItems, userContext, otherRoomsContext);
   const profileSection = buildDesignProfileSection(profile);
 
-  return `Analyze the room photos provided and produce a comprehensive diagnosis plus design direction.
+  return `<role>
+You are a world-class interior designer conducting a rigorous room diagnosis from photos. You see what other designers miss: the understated carpet that's a half-tone too cool, the empty corner that needs a tall plant, the dead zone that only a floor lamp can activate. You are opinionated, specific, and never generic.
+</role>
 
-This is PASS 1 of 2. Your ONLY job here is observation + problem identification + design direction. A separate pass will synthesize the action plan — do NOT produce missing_categories or action_list in this response.
+<task>
+This is PASS 1 of 2. Your ONLY job: observe the room, identify problems, and recommend a design direction. A separate pass synthesizes the action plan — do NOT produce missing_categories or action_list in this response.
+</task>
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
@@ -287,66 +291,68 @@ This is PASS 1 of 2. Your ONLY job here is observation + problem identification 
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
 ${parsedSections ? `\n${parsedSections}\n` : ""}${crossRoomSection}${profileSection}
-## STEP-BY-STEP ANALYSIS PROCESS
+<reasoning_process>
+Work through these steps in order. Spend the most time on Step 1.
 
-### Step 1: OBSERVE (spend the most time here)
-Look at EVERY photo carefully. For each photo, note:
-- Floor: material + color (e.g., "medium-tone oak engineered hardwood")
-- Walls: exact color (e.g., "warm off-white, close to Benjamin Moore Swiss Coffee")
+**Step 1: OBSERVE every photo**
+For each photo:
+- Floor: material + exact color (e.g., "medium-tone oak engineered hardwood" not "wood floor")
+- Walls: exact color (e.g., "warm off-white, close to Benjamin Moore Swiss Coffee" not "white")
 - Windows: count, size, light direction, treatments
 - Ceiling: height estimate, features (molding, beams, recessed lights)
 - Every piece of furniture: name, material, color, condition, approximate size
-- Lighting: existing fixtures, dark corners, natural light
+- Lighting: existing fixtures, dark corners, natural light quality
 - Personal items: culturally significant or personal items (art, statues, collections)
 
-### Step 2: ASSESS what's working — explain WHY each kept/working item works
-### Step 3: IDENTIFY what's NOT working — be specific about WHAT and WHY
-### Step 4: CALL OUT SPATIAL GAPS — empty corners, dead zones, unused walls
-### Step 5: THINK ABOUT LIFESTYLE — how does someone actually LIVE here?${priorities.length > 0 ? ` The client cares about: ${priorities.join(", ")}. Weight heavily.` : ""}
-### Step 6: DESIGN DIRECTION based on finishes + lifestyle
+**Step 2: ASSESS what's working** — explain WHY each kept/working item works
+
+**Step 3: IDENTIFY what's NOT working** — be specific about WHAT and WHY. GOOD: "Small round glass coffee table is drastically undersized for the L-shaped sectional — should be at least 48 inches". BAD: "Coffee table is too small."
+
+**Step 4: CALL OUT SPATIAL GAPS** — empty corners, dead zones behind furniture, unused wall stretches
+
+**Step 5: THINK ABOUT LIFESTYLE** — how does someone actually LIVE here?${priorities.length > 0 ? ` The client cares about: ${priorities.join(", ")}. Weight these heavily.` : ""}
+
+**Step 6: DESIGN DIRECTION** based on existing finishes + lifestyle
 - Specific color palette (6-10 named colors like "warm ivory", "walnut brown")
 - Specific materials (5-8 like "solid walnut", "linen", "brushed brass")
-- Style direction (3-4 sentences) MUST reference the client's specific lifestyle, personality, building finishes, and how design serves their daily life
+- Style direction (3-4 sentences) MUST reference the client's specific identity, personality, building finishes, and how design serves their daily life
+</reasoning_process>
 
 ## ARRAY SIZE REQUIREMENTS
 - what_is_working: **5-8 items**. Every room has things working — find them all.
 - what_is_not_working: **5-8 issues**. Be thorough.
 - biggest_improvement_opportunities: **5-7 changes** ranked by impact.
-- missing_furniture_categories: **ALL missing categories** (8-15 items across essential/standard/finishing tiers). (This is part of DIAGNOSIS. The top-level \`missing_categories\` + \`action_list\` come from pass 2.)
+- missing_furniture_categories: **ALL missing categories** (8-15 items across essential/standard/finishing tiers). This is part of the DIAGNOSIS — the top-level \`missing_categories\` + \`action_list\` come from pass 2.
 - color_issues / texture_material_issues / scale_proportion_issues / layout_issues / spatial_gaps / lighting_issues: **3-5 observations each**
 - clutter_editing_issues: can be 0 if room is clean
 
-## SPECIFICITY REQUIREMENT
-Every item in every array MUST reference a specific visible object. GOOD: "Small round glass coffee table is drastically undersized for the L-shaped sectional — should be at least 48 inches". BAD: "Coffee table is too small".
+<output_contract>
+JSON only. No prose, no markdown fences. Do NOT include missing_categories or action_list — those come from pass 2.
 
-## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
   "diagnosis": {
     "current_vibe_summary": "3-4 sentences with dominant colors/materials/style",
-    "what_is_working": ["5-8 specific items"],
-    "what_is_not_working": ["5-8 specific issues"],
+    "what_is_working": ["5-8 specific items with item name + material + color"],
+    "what_is_not_working": ["5-8 specific issues with item name + problem + why"],
     "biggest_improvement_opportunities": ["5-7 ranked changes"],
-    "missing_furniture_categories": ["8-15 items across all tiers"],
-    "color_issues": ["3-5 observations"],
+    "missing_furniture_categories": ["8-15 items across essential/standard/finishing tiers"],
+    "color_issues": ["3-5 specific observations naming actual colors"],
     "texture_material_issues": ["3-5 observations"],
-    "scale_proportion_issues": ["3-5 observations"],
-    "layout_issues": ["3-5 observations"],
-    "spatial_gaps": ["3-5 observations with suggestions for each"],
-    "lighting_issues": ["3-5 observations"],
-    "clutter_editing_issues": ["specific items to remove or 0 items"]
+    "scale_proportion_issues": ["3-5 observations referencing actual item dimensions"],
+    "layout_issues": ["3-5 observations noting traffic paths and dead zones"],
+    "spatial_gaps": ["3-5 empty corners/dead zones with suggestions for each"],
+    "lighting_issues": ["3-5 observations on natural light direction and artificial gaps"],
+    "clutter_editing_issues": ["specific items to remove, or empty array"]
   },
   "design_direction": {
-    "recommended_palette": ["6-10 specific named colors"],
-    "recommended_materials": ["5-8 specific materials"],
-    "recommended_textures": ["4-6 textures"],
-    "recommended_furniture_types": ["every needed type with specific notes"],
-    "style_notes": "3-4 sentences referencing client's identity, lifestyle, building context"
+    "recommended_palette": ["6-10 specific named colors — e.g. 'warm ivory', 'walnut brown', 'muted sage'"],
+    "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen', 'brushed brass'"],
+    "recommended_textures": ["4-6 textures — e.g. 'high-low pile wool', 'ribbed knit', 'woven rattan'"],
+    "recommended_furniture_types": ["every needed furniture type with specific notes"],
+    "style_notes": "3-4 sentences referencing client's specific identity, lifestyle, building finishes, and how design serves their daily life"
   }
 }
-
-Do NOT include missing_categories or action_list — those come from pass 2.
-
-Be specific and opinionated. Reference actual items visible in the photos.`;
+</output_contract>`;
 }
 
 /**
@@ -364,9 +370,15 @@ export function getDiagnosisPlanPrompt(
 ): string {
   const { allKeepItems, userNotes, keepItemsWarning } = buildDiagnosisContextParts(keepItems, userContext);
 
-  return `You are synthesizing an action plan for a ${roomType} based on a prior detailed diagnosis. The diagnosis is complete — your ONLY job is to produce:
-1. A final list of missing furniture categories (shopping list keys)
-2. A ranked action_list with specific, buyable recommendations
+  return `<role>
+You are synthesizing an action plan for a ${roomType} from a completed room diagnosis. The observation and problem-identification phase is done — your ONLY job is to translate it into a ranked shopping list.
+</role>
+
+<task>
+Produce two outputs:
+1. missing_categories — flat array of snake_case shopping-pipeline keys
+2. action_list — ranked, specific, buyable recommendations with material/color/size guidance
+</task>
 
 ## ROOM CONTEXT
 - Room type: ${roomType}
@@ -377,40 +389,43 @@ export function getDiagnosisPlanPrompt(
 ## PRIOR DIAGNOSIS (source of truth — do not contradict)
 ${analysisJson}
 
-## YOUR TASK
+## DERIVATION RULES
 
-### missing_categories (flat array of category keys)
-Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys the shopping pipeline expects (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "wall_art", "plant"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15 items). Do NOT include items the client wants to keep.
+### missing_categories
+Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "wall_art", "plant"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15). Do NOT include items the client wants to keep.
 
-Finishing tier includes (use as a checklist — include any that are missing and relevant):
+Finishing tier checklist — include any that are missing and relevant:
 candles, baskets, books_styled, greenery_small, greenery_tall, sculptures, frames, poufs,
 decorative_bowls, tray_styling, throw_blanket, decorative_objects, vase, wall_art, plant,
 bench, table_runner, pouf, floor_cushion.
 
-### action_list (ranked, specific)
-For each missing category, write ONE action item per DISTINCT variant. If a category needs meaningfully different versions, emit separate entries with a "variant" field:
-- "tall floor plant (fiddle leaf)" AND "trailing shelf plant (pothos)" are distinct entries with variant set
-- "3 throw pillows, same fabric, different sizes" → single entry with quantity: 3
+### action_list
+Write ONE action per DISTINCT variant. If a category has meaningfully different variants, emit separate entries:
+- "tall floor plant (fiddle leaf)" AND "trailing shelf plant (pothos)" → two entries, each with a \`variant\` field
+- "3 throw pillows, same fabric, different sizes" → single entry with \`quantity: 3\`
 
 Fields:
-- priority: 1 = highest impact, increase as priority drops
-- action: specific, includes material/color/size guidance (reference the design_direction palette and materials)
+- priority: 1 = highest impact, increasing as priority drops
+- action: specific, with material/color/size guidance (reference design_direction palette + materials from the diagnosis)
 - category: matches an entry in missing_categories
-- reasoning: why this matters — what problem from the diagnosis it solves
+- reasoning: which diagnosis problem this solves (trace back to what_is_not_working or missing_furniture_categories)
 - variant: (optional) sub-type label when the same category has multiple distinct entries
-- quantity: (optional) integer when multiple identical/near-identical items are needed (e.g., 3 throw pillows, 2 candles)
+- quantity: (optional) integer when multiple identical/near-identical items are needed
 
-Rank by impact: foundational pieces first (rug, anchor seating, primary lighting), then standard (accent seating, textiles, art), then finishing (plants, objects, candles, baskets, books).
+Rank by impact: foundational (rug, anchor seating, primary lighting) → standard (accent seating, textiles, art) → finishing (plants, objects, candles, baskets, books).
 
 ⚠️ If the user used plural language (e.g., "plants", "art", "candles") infer quantity ≥ 2 for that category.
 
-## ⚠️ CRITICAL CONSTRAINTS
-- NEVER recommend a new item in the same category as a kept item (e.g., if client is keeping a floor lamp, do NOT recommend a new floor lamp)
+<constraints>
+- NEVER recommend a new item in the same category as a kept item
 - NEVER include kept items in missing_categories
-- Every action must trace back to a problem in \`diagnosis.what_is_not_working\` or \`diagnosis.missing_furniture_categories\`
+- Every action must trace back to a problem in the diagnosis
 ${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
+</constraints>
 
-## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
+<output_contract>
+JSON only. No prose, no markdown fences.
+
 {
   "missing_categories": ["rug", "coffee_table", "accent_chair", "wall_art", "floor_lamp", "throw_pillows", "plant", "candles"],
   "action_list": [
@@ -418,14 +433,14 @@ ${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
       "priority": 1,
       "action": "Area rug at least 8x10, wool or wool-blend, warm neutral with subtle texture — extends beyond front legs of sofa to anchor seating area",
       "category": "rug",
-      "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; a properly scaled rug anchors the seating zone and adds the warm texture the diagnosis flagged as missing"
+      "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; properly scaled rug anchors the seating zone and adds warm texture flagged as missing"
     },
     {
       "priority": 4,
       "action": "Tall statement plant, fiddle leaf fig or olive tree, 5–6 ft, in a woven rattan basket planter — positioned in the empty corner by the window",
       "category": "plant",
       "variant": "tall floor",
-      "reasoning": "The diagnosis noted the room lacks greenery and the tall corner is visually empty"
+      "reasoning": "Diagnosis noted room lacks greenery and the tall corner is visually empty"
     },
     {
       "priority": 5,
@@ -442,5 +457,6 @@ ${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
       "reasoning": "Adds warm ambient texture and breaks up the empty coffee table surface"
     }
   ]
-}`;
+}
+</output_contract>`;
 }
