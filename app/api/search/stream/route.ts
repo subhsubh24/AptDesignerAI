@@ -5,6 +5,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import type { AgentContext } from "@/lib/agents/types";
+import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 
 /**
  * SSE streaming search endpoint.
@@ -269,6 +270,25 @@ export async function POST(request: Request) {
           controller.close();
           return;
         }
+
+        // Ground-truth the top candidate per category via Computer Use
+        // before we persist. Silent no-op when Browserbase isn't
+        // configured; otherwise merges live price / stock / dimensions
+        // into each winning row so the bundle reflects the retailer's
+        // current state, not the stale search snippet.
+        send("step", { step: "Verifying top products", status: "running" });
+        const verification = await verifyTopSearchCandidates(
+          result.data.candidatesByCategory,
+          result.data.evaluations,
+        );
+        send("step", {
+          step: "Verifying top products",
+          status: "done",
+          data: {
+            attempted: verification.attempted,
+            succeeded: verification.succeeded,
+          },
+        });
 
         // Save products to DB — batch inserts instead of N+1
         send("step", { step: "Saving results", status: "running" });

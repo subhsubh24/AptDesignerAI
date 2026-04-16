@@ -7,6 +7,7 @@ import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import type { AgentContext } from "@/lib/agents/types";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import type { IdentifiedProduct } from "@/lib/types/database";
+import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -254,6 +255,20 @@ export async function POST(request: Request) {
   }
 
   console.log(`[search] Complete. Found ${Object.values(result.data.candidatesByCategory).flat().length} products`);
+
+  // Ground-truth the top candidate per category via Computer Use before
+  // we persist. No-op when Browserbase isn't configured, otherwise merges
+  // live price / stock / dimensions into the winning rows so the bundle
+  // reflects what's actually on the retailer page right now.
+  const verification = await verifyTopSearchCandidates(
+    result.data.candidatesByCategory,
+    result.data.evaluations,
+  );
+  if (verification.attempted > 0) {
+    console.log(
+      `[search] Product verification: ${verification.succeeded}/${verification.attempted} succeeded`,
+    );
+  }
 
   // Save all discovered products to DB — batch inserts instead of N+1
   const allProducts = Object.values(result.data.candidatesByCategory).flat();

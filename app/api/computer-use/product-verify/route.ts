@@ -1,11 +1,10 @@
 /**
  * POST /api/computer-use/product-verify
  *
- * Standalone product verifier — visits a retailer page and extracts
- * current price, stock, dimensions, etc. Not wired into the main product
- * pipeline by default. Intended as an opt-in enrichment step for cases
- * where Google Shopping snippets are stale or a product's fit hinges on
- * exact dimensions not in the search result.
+ * Manual single-URL product verifier. The same verifier runs
+ * automatically as a post-search step in /api/search — this route is
+ * kept for ad-hoc re-verification (e.g. a "refresh price" action from
+ * the dashboard) and for debugging. Requires Browserbase credentials.
  */
 
 import { NextResponse } from "next/server";
@@ -16,9 +15,9 @@ import { createLogger } from "@/lib/logging/logger";
 const log = createLogger("api-computer-use-product-verify");
 
 export async function POST(request: Request) {
-  if (process.env.ENABLE_COMPUTER_USE !== "1") {
+  if (!process.env.BROWSERBASE_API_KEY || !process.env.BROWSERBASE_PROJECT_ID) {
     return NextResponse.json(
-      { error: "Computer Use is disabled. Set ENABLE_COMPUTER_USE=1 to enable." },
+      { error: "Browserbase credentials not configured on this deployment." },
       { status: 503 },
     );
   }
