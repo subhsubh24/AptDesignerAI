@@ -13,6 +13,9 @@ import { validateProductSet } from "./validation-agent";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
+import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
+import { selectByMMR } from "@/lib/scoring/mmr-reranker";
+import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
 import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -273,6 +276,18 @@ export async function runAgenticSearch(
           });
         }
       }
+    }
+
+    // Inject exploration queries: alternative style synonyms and boutique
+    // modifiers to escape the deterministic LLM query generation rut.
+    // Seeded per room so results are reproducible but vary across rooms.
+    const explorationQueries = generateExplorationQueries(
+      searchTasks,
+      ctx.roomId,
+      ctx.designDirection?.style_notes
+    );
+    for (const eq of explorationQueries) {
+      searchTasks.push(eq);
     }
 
     stats.totalSearchQueries = searchTasks.length;
@@ -842,15 +857,22 @@ export async function runAgenticSearch(
     });
 
     // ═══════════════════════════════════════════════════════════
-    // Organize final results: top 5 per tier per category + alternatives
+    // Phase 5c: Pairwise re-rank top-scored products per category
+    //
+    // Deep scoring produces pointwise scores that cluster in 6.5-7.5, making
+    // intra-category rankings unreliable. Pairwise LLM comparisons ("A or B?")
+    // exploit the model's stronger comparative judgment. Run in parallel
+    // across categories; each category does its own Flash Lite pairwise pass.
     // ═══════════════════════════════════════════════════════════
-    // (s) Also track "also considered" products (positions 6-20) for user browsing
-    const alsoConsidered: Record<string, CandidateProduct[]> = {};
+    reportStep({ step: "Pairwise re-ranking top candidates", status: "running" });
+
+    const pairwiseRerankedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
+    const pairwisePromises: Promise<void>[] = [];
 
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
-      const kept: CandidateProduct[] = [];
-      const alternatives: CandidateProduct[] = [];
-
+      pairwiseRerankedByCategory[category] = {
+        budget: [], balanced: [], high_end: [],
+      } as Record<PriceTier, CandidateProduct[]>;
       for (const tier of PRICE_TIERS) {
         const products = tierResults[tier].filter((p) => {
           const ev = evaluations.get(p.id);
@@ -858,14 +880,61 @@ export async function runAgenticSearch(
           if (ev.scores?.confidence_score !== undefined && ev.scores.confidence_score < 4) return false;
           return true;
         });
+        // Sort by deep score first as the input to pairwise
         products.sort((a, b) => {
           const scoreA = evaluations.get(a.id)?.final_item_score || 0;
           const scoreB = evaluations.get(b.id)?.final_item_score || 0;
           return (scoreB - scoreA) || tiebreakProduct(a, b);
         });
-        kept.push(...products.slice(0, 5));
-        // (s) Keep positions 6-20 as "also considered" for user browsing
-        alternatives.push(...products.slice(5, 20));
+        if (products.length === 0) continue;
+
+        pairwisePromises.push(
+          (async () => {
+            if (tokenBudget.exceeded) {
+              pairwiseRerankedByCategory[category][tier] = products;
+              return;
+            }
+            const reranked = await pairwiseRerank(products, evaluations, {
+              roomType: ctx.roomType,
+              category,
+              designDirection: ctx.designDirection?.style_notes,
+              palette: ctx.designDirection?.recommended_palette,
+              existingItems: ctx.keepItems,
+            });
+            pairwiseRerankedByCategory[category][tier] = reranked;
+          })()
+        );
+      }
+    }
+    await Promise.all(pairwisePromises);
+
+    reportStep({ step: "Pairwise re-ranking top candidates", status: "completed" });
+
+    // ═══════════════════════════════════════════════════════════
+    // Phase 5d: MMR diversity selection + final organization
+    //
+    // After pairwise re-ranking, top-k products can still be redundant (same
+    // retailer, material, color). MMR picks 5 that balance relevance and
+    // diversity — λ=0.7 favors relevance but penalizes near-duplicates.
+    // ═══════════════════════════════════════════════════════════
+    const alsoConsidered: Record<string, CandidateProduct[]> = {};
+
+    for (const [category, tierResults] of Object.entries(pairwiseRerankedByCategory)) {
+      const kept: CandidateProduct[] = [];
+      const alternatives: CandidateProduct[] = [];
+
+      for (const tier of PRICE_TIERS) {
+        const products = tierResults[tier];
+        if (products.length === 0) continue;
+
+        // MMR diversity selection for top 5
+        const diverse = selectByMMR(products, evaluations, 5, 0.7);
+        kept.push(...diverse);
+
+        // "Also considered": the rest, ordered by pairwise rank (already sorted)
+        const diverseIds = new Set(diverse.map((p) => p.id));
+        const remaining = products.filter((p) => !diverseIds.has(p.id));
+        alternatives.push(...remaining.slice(0, 15));
       }
 
       candidatesByCategory[category] = kept;
