@@ -13,15 +13,16 @@ import type {
 } from "./provider";
 
 // NOTE on thought signatures (Gemini 3):
-// Gemini 3 returns encrypted `thoughtSignature` parts inside
-// response.candidates[0].content.parts. For single-turn calls (our current
-// usage throughout the agent pipeline), we can safely discard them. If we
-// ever start passing the model's response back as a `model`-role message
-// (i.e., multi-turn chat or function-calling continuations), we MUST preserve
-// the full parts array including any `thoughtSignature` fields — otherwise
-// reasoning quality degrades (and function-calling will 400). The
-// convertMessages() function below currently only emits text + inlineData;
-// update it if we introduce multi-turn flows.
+// Gemini 3 returns encrypted `thoughtSignature` fields inside
+// response.candidates[0].content.parts. They matter only when continuing a
+// conversation (multi-turn) or doing client-side function calling — echoing
+// them back preserves the model's reasoning state across turns and prevents
+// 400 errors on sequential function-call continuations. All current
+// callsites in this codebase are single-turn, so we simply surface any
+// returned signatures on AIResponse.thoughtSignatures for future use.
+// convertMessages() passes through signatures on model-role messages if a
+// caller ever hands them back in assistant content (currently no caller
+// does). See https://ai.google.dev/gemini-api/docs/thought-signatures
 
 const log = createLogger("gemini");
 
@@ -444,9 +445,12 @@ export const geminiProvider: AIProvider = {
       }
     }
 
-    // Extract text content
+    // Extract text content + any thought signatures (Gemini 3).
+    // Signatures are surfaced on AIResponse so future multi-turn callers
+    // can echo them back; single-turn callers can safely ignore them.
     let content = "";
     let imageData: { mimeType: string; data: string } | undefined;
+    const thoughtSignatures: string[] = [];
 
     if (response.candidates && response.candidates.length > 0) {
       const candidate = response.candidates[0];
@@ -462,6 +466,9 @@ export const geminiProvider: AIProvider = {
               mimeType: inline.mimeType,
               data: inline.data,
             };
+          }
+          if (typeof p.thoughtSignature === "string" && p.thoughtSignature.length > 0) {
+            thoughtSignatures.push(p.thoughtSignature);
           }
         }
       }
@@ -516,6 +523,7 @@ export const geminiProvider: AIProvider = {
       truncated,
       groundingMetadata,
       imageData,
+      thoughtSignatures: thoughtSignatures.length > 0 ? thoughtSignatures : undefined,
     };
   },
 };

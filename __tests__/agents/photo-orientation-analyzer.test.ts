@@ -7,6 +7,11 @@ vi.mock("@/lib/ai/gemini", () => ({
 }));
 vi.mock("@/lib/ai/models", () => ({
   selectModel: () => "gemini-test-model",
+  selectThinkingLevel: () => "low",
+  selectModelConfig: () => ({
+    model: "gemini-test-model",
+    thinkingConfig: { thinkingLevel: "low" },
+  }),
 }));
 
 import {

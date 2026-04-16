@@ -1,5 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModel, selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   getAestheticEvalPrompt,
@@ -111,7 +111,7 @@ export async function scoreProduct(
   product: CandidateProduct,
   scoringCtx: ScoringContext
 ): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
-  const model = selectModel("scoring");
+  const { model, thinkingConfig } = selectModelConfig("scoring");
   const system = getSystemPrompt(scoringCtx.designProfile);
 
   const evalCtx: EvalContextArgs = {
@@ -228,13 +228,13 @@ export async function scoreProduct(
 
         const response = await geminiProvider.chat({
           model,
+          thinkingConfig,
           system,
           messages: [{ role: "user", content: retryContent }],
           // Aesthetic pass carries the reasoning + notes; functional is pure scores.
           max_tokens: passName === "aesthetic" ? 8000 : 4000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "high" },
           mediaResolution: "ultra_high",
         });
 

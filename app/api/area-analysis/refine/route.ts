@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModel, selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -158,7 +158,7 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
 
   try {
     const profile = buildDesignProfile(project);
-    const model = selectModel("area_analysis");
+    const { model, thinkingConfig } = selectModelConfig("area_analysis");
     const system = getSystemPrompt(profile);
 
     /**
@@ -226,12 +226,12 @@ ${JSON.stringify({
     } else {
       const interpretResponse = await geminiProvider.chat({
         model,
+        thinkingConfig,
         system,
         messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
         max_tokens: 2500,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "medium" },
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
       interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
@@ -306,12 +306,12 @@ CRITICAL RULES:
 
     const response = await geminiProvider.chat({
       model,
+      thinkingConfig,
       system,
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 10000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "medium" },
     });
 
     if (response.truncated) {

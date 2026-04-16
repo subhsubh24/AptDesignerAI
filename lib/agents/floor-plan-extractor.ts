@@ -9,7 +9,7 @@
 // When extraction succeeds, agents receive ground-truth geometry; when it fails
 // (bad image, parse error, network) they fall back to existing behavior.
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -134,9 +134,11 @@ export async function runFloorPlanExtraction(
   imageUrl: string,
   imageDescription?: string,
 ): Promise<AgentResult<ExtractedFloorPlan>> {
+  const { model, thinkingConfig } = selectModelConfig("diagnosis"); // reasoning model for accurate extraction
   try {
     const response = await geminiProvider.chat({
-      model: selectModel("diagnosis"),  // reasoning model for accurate extraction
+      model,
+      thinkingConfig,
       system: FLOOR_PLAN_EXTRACTOR_SYSTEM_PROMPT,
       messages: [
         {

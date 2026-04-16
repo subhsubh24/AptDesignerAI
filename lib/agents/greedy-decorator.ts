@@ -10,7 +10,7 @@
 // action_list with more entries.
 
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig, type ThinkingLevel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
 import {
@@ -174,7 +174,7 @@ export async function runDiagnosisExpansion(
   ctx: ExpansionContext,
 ): Promise<ExpansionResult> {
   const maxIterations = ctx.maxIterations ?? 20;
-  const model = selectModel("diagnosis"); // same tier as Pass 2 — thoughtful reasoning
+  const { model, thinkingConfig } = selectModelConfig("diagnosis"); // same tier as Pass 2 — thoughtful reasoning
 
   let items: Array<ActionItem & { variant?: string; quantity?: number; source?: string }> =
     ctx.currentItems.map(i => ({ ...i, source: "diagnosis" as const }));
@@ -223,6 +223,7 @@ export async function runDiagnosisExpansion(
     try {
       const response = await geminiProvider.chat({
         model,
+        thinkingConfig,
         system: EXPANSION_SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
         max_tokens: 1500,
@@ -289,6 +290,7 @@ export async function runDiagnosisExpansion(
       try {
         const retryResponse = await geminiProvider.chat({
           model,
+          thinkingConfig,
           system: EXPANSION_SYSTEM_PROMPT,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 1500,
@@ -386,6 +388,7 @@ export async function runDiagnosisExpansion(
         profile,
         ctx,
         model,
+        thinkingConfig,
       });
       items = critiqueOutcome.items;
       profile = critiqueOutcome.profile;
@@ -452,8 +455,9 @@ async function runCritiquePass(args: {
   profile: SaturationProfile;
   ctx: ExpansionContext;
   model: string;
+  thinkingConfig: { thinkingLevel: ThinkingLevel };
 }): Promise<CritiqueOutcome> {
-  const { originalCount, ctx, model } = args;
+  const { originalCount, ctx, model, thinkingConfig } = args;
   let items = args.items;
   let profile = args.profile;
   const decisions: DecoratorDecision[] = [];
@@ -486,6 +490,7 @@ async function runCritiquePass(args: {
   try {
     response = await geminiProvider.chat({
       model,
+      thinkingConfig,
       system: CRITIQUE_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       max_tokens: 2000,

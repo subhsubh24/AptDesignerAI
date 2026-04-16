@@ -1,5 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
@@ -243,7 +243,7 @@ export async function validateRoomHarmony(
     designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
-  const model = selectModel("validation");
+  const { model, thinkingConfig } = selectModelConfig("validation");
   const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
@@ -578,11 +578,11 @@ ${itemScoresJson}
             : passBPrompt;
           const response = await geminiProvider.chat({
             model,
+            thinkingConfig,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
             max_tokens: 10000,
             seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel: "high" },
             responseMimeType: "application/json",
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
@@ -710,7 +710,7 @@ export async function performFinalAssessment(
     designDirection?: DesignDirection;
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
-  const model = selectModel("validation");
+  const { model, thinkingConfig } = selectModelConfig("validation");
   const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
@@ -1047,11 +1047,11 @@ ${itemScoresJson}
             : passBPrompt;
           const response = await geminiProvider.chat({
             model,
+            thinkingConfig,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
             max_tokens: 10000,
             seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel: "high" },
             responseMimeType: "application/json",
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
@@ -1131,6 +1131,7 @@ ${convergenceCtx}
             : passCPrompt;
           const response = await geminiProvider.chat({
             model,
+            thinkingConfig,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
             max_tokens: 1500,
@@ -1245,7 +1246,7 @@ export async function validateProductSet(
     diagnosis?: DiagnosisData;
   }
 ): Promise<AgentResult<ValidationResult>> {
-  const model = selectModel("validation");
+  const { model, thinkingConfig } = selectModelConfig("validation");
   const system = getSystemPrompt(roomContext.designProfile);
 
   // Build environmental context section
@@ -1394,11 +1395,11 @@ Return JSON:
 
         const response = await geminiProvider.chat({
           model,
+          thinkingConfig,
           system,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel: "high" },
           responseMimeType: "application/json",
           responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",

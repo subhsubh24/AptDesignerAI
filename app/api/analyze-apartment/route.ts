@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -80,7 +80,7 @@ Summary: ${br.summary || ""}
 
   try {
     const profile = buildDesignProfile(project);
-    const model = selectModel("apartment_analysis");
+    const { model, thinkingConfig } = selectModelConfig("apartment_analysis");
     const system = getSystemPrompt(profile);
 
     /**
@@ -149,6 +149,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
 
       const response = await geminiProvider.chat({
         model,
+        thinkingConfig,
         system,
         messages: [{ role: "user", content: roomContent }],
         max_tokens: 4000,
@@ -211,6 +212,7 @@ ${synthInput}
 
     const synthResponse = await geminiProvider.chat({
       model,
+      thinkingConfig,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
       max_tokens: 2000,

@@ -119,8 +119,10 @@ export function truncateContext(
  */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "gemini-3.1-flash-lite-preview": 800_000,
-  "gemini-3-flash-preview": 800_000,
   "gemini-3.1-flash-image-preview": 800_000,
+  // Legacy — retained for any hardcoded references; current pipeline runs
+  // on flash-lite with thinking levels instead of switching to flash.
+  "gemini-3-flash-preview": 800_000,
 };
 
 /**

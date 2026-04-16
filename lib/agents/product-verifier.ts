@@ -10,7 +10,7 @@
  */
 
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -91,7 +91,7 @@ export interface VerifyResult {
  * can't, we fall back to parsing free-text JSON. This mirrors shopping-researcher.ts.
  */
 export async function runProductVerifier(input: VerifyInput): Promise<VerifyResult> {
-  const model = selectModel("validation"); // grounding quality matters, use reasoning tier
+  const { model, thinkingConfig } = selectModelConfig("validation"); // grounding quality matters, use reasoning tier
   const system = getSystemPrompt();
 
   const { candidate } = input;
@@ -113,6 +113,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
     try {
       response = await geminiProvider.chat({
         model,
+        thinkingConfig,
         system,
         messages: [
           {
@@ -134,6 +135,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
       });
       response = await geminiProvider.chat({
         model,
+        thinkingConfig,
         system,
         messages: [
           {

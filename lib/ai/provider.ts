@@ -41,6 +41,17 @@ export interface AIResponse {
     mimeType: string;
     data: string; // base64
   };
+  /**
+   * Gemini 3 thought signatures — encrypted representations of the model's
+   * reasoning state. Required ONLY when continuing the same conversation
+   * across turns (chat history) or when doing client-side function calling
+   * with sequential calls. All current callsites are single-turn, so callers
+   * can ignore this. If a future multi-turn flow is added, echo the full
+   * parts array (text + thoughtSignature) back as the next `model` message,
+   * or the model will 400 on function-calling continuations.
+   * See: https://ai.google.dev/gemini-api/docs/thought-signatures
+   */
+  thoughtSignatures?: string[];
 }
 
 export interface GoogleMapsToolConfig {

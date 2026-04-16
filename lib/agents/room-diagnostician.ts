@@ -1,5 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
-import { selectModel } from "@/lib/ai/models";
+import { selectModelConfig } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisAnalysisPrompt, getDiagnosisPlanPrompt } from "@/lib/prompts/diagnosis";
 import {
@@ -37,7 +37,7 @@ export interface DiagnosisResult {
  * most of the token budget, and gives each job the model's full attention.
  */
 export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesignProfile): Promise<AgentResult<DiagnosisResult>> {
-  const model = selectModel("diagnosis");
+  const { model, thinkingConfig } = selectModelConfig("diagnosis");
   const system = getSystemPrompt(profile);
 
   // ─── Pass 1: Analysis (vision + design direction) ───────────
@@ -96,6 +96,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
 
           const response = await geminiProvider.chat({
             model,
+            thinkingConfig,
             system,
             messages: [{ role: "user", content: retryContent }],
             max_tokens: 6000,
@@ -131,7 +132,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
     // evaluates the room; it only compares the candidate analyses against each
     // other on coherence / concreteness / actionability.
     const judgeAnalyses = async (candidates: Sample[]): Promise<number> => {
-      const judgeModel = selectModel("diagnosis");
+      const { model: judgeModel, thinkingConfig: judgeThinkingConfig } = selectModelConfig("diagnosis");
       const summaries = candidates.map((c, i) => {
         const d = c.parsed.diagnosis;
         const dd = c.parsed.design_direction;
@@ -163,6 +164,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       try {
         const resp = await geminiProvider.chat({
           model: judgeModel,
+          thinkingConfig: judgeThinkingConfig,
           system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 400,
@@ -234,6 +236,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
 
         const response = await geminiProvider.chat({
           model,
+          thinkingConfig,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: retryText }] }],
           max_tokens: 4000,

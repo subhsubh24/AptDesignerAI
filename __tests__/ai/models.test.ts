@@ -1,66 +1,54 @@
 import { describe, it, expect } from "vitest";
-import { MODELS, selectModel } from "@/lib/ai/models";
+import {
+  MODELS,
+  selectModel,
+  selectThinkingLevel,
+  selectModelConfig,
+} from "@/lib/ai/models";
 
 describe("MODELS", () => {
-  it("should have fast, reasoning, and image tiers", () => {
-    expect(MODELS).toHaveProperty("fast");
-    expect(MODELS).toHaveProperty("reasoning");
+  it("exposes text and image tiers", () => {
+    expect(MODELS).toHaveProperty("text");
     expect(MODELS).toHaveProperty("image");
   });
 
-  it("should use distinct models for each tier", () => {
-    const models = new Set([MODELS.fast, MODELS.reasoning, MODELS.image]);
-    expect(models.size).toBe(3);
+  it("uses gemini model identifiers", () => {
+    expect(MODELS.text).toMatch(/^gemini-/);
+    expect(MODELS.image).toMatch(/^gemini-/);
   });
 
-  it("should use gemini model identifiers", () => {
-    expect(MODELS.fast).toMatch(/^gemini-/);
-    expect(MODELS.reasoning).toMatch(/^gemini-/);
-    expect(MODELS.image).toMatch(/^gemini-/);
+  it("uses distinct models for text vs image", () => {
+    expect(MODELS.text).not.toBe(MODELS.image);
   });
 });
 
 describe("selectModel", () => {
-  describe("reasoning tasks → Flash (complex reasoning)", () => {
-    const reasoningTasks = [
-      "area_analysis",
-      "scoring",
-      "bundle",
-      "validation",
-      "diagnosis",
-      "apartment_analysis",
-    ] as const;
-
-    for (const task of reasoningTasks) {
-      it(`should route "${task}" to reasoning model`, () => {
-        expect(selectModel(task)).toBe(MODELS.reasoning);
-      });
-    }
-  });
-
-  describe("fast tasks → Flash Lite (high-volume)", () => {
-    const fastTasks = [
-      "extraction",
-      "search_brief",
-      "search",
-      "quick_score",
-      "quick_screen",
-      "mockup_prompt",
-      "apartment_research",
-    ] as const;
-
-    for (const task of fastTasks) {
-      it(`should route "${task}" to fast model`, () => {
-        expect(selectModel(task)).toBe(MODELS.fast);
-      });
-    }
-  });
-
-  it("should route image_generation to image model", () => {
+  it("routes image_generation to the image model", () => {
     expect(selectModel("image_generation")).toBe(MODELS.image);
   });
 
-  it("should never return undefined or empty string", () => {
+  it("routes all text tasks to the unified text model", () => {
+    const textTasks = [
+      "diagnosis",
+      "apartment_analysis",
+      "area_analysis",
+      "extraction",
+      "scoring",
+      "bundle",
+      "search_brief",
+      "mockup_prompt",
+      "validation",
+      "apartment_research",
+      "search",
+      "quick_score",
+      "quick_screen",
+    ] as const;
+    for (const task of textTasks) {
+      expect(selectModel(task)).toBe(MODELS.text);
+    }
+  });
+
+  it("never returns undefined or empty string", () => {
     const allTasks = [
       "diagnosis", "apartment_analysis", "area_analysis", "extraction",
       "scoring", "bundle", "search_brief", "mockup_prompt", "validation",
@@ -72,5 +60,51 @@ describe("selectModel", () => {
       expect(result, `selectModel("${task}") should return a non-empty string`).toBeTruthy();
       expect(typeof result).toBe("string");
     }
+  });
+});
+
+describe("selectThinkingLevel", () => {
+  const highThinkingTasks = [
+    "diagnosis",
+    "apartment_analysis",
+    "area_analysis",
+    "scoring",
+    "bundle",
+    "validation",
+  ] as const;
+
+  for (const task of highThinkingTasks) {
+    it(`uses "high" thinking for ${task}`, () => {
+      expect(selectThinkingLevel(task)).toBe("high");
+    });
+  }
+
+  const lowThinkingTasks = [
+    "extraction",
+    "search_brief",
+    "search",
+    "quick_score",
+    "quick_screen",
+    "mockup_prompt",
+    "apartment_research",
+  ] as const;
+
+  for (const task of lowThinkingTasks) {
+    it(`uses "low" thinking for ${task}`, () => {
+      expect(selectThinkingLevel(task)).toBe("low");
+    });
+  }
+});
+
+describe("selectModelConfig", () => {
+  it("pairs model with thinkingConfig", () => {
+    const cfg = selectModelConfig("diagnosis");
+    expect(cfg.model).toBe(MODELS.text);
+    expect(cfg.thinkingConfig.thinkingLevel).toBe("high");
+  });
+
+  it("returns image model for image_generation", () => {
+    const cfg = selectModelConfig("image_generation");
+    expect(cfg.model).toBe(MODELS.image);
   });
 });
