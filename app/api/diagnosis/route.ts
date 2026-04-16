@@ -190,7 +190,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         currentItems: expandedActionList,
         room: {
           type: ctx.roomType,
-          sqft: (ctx.floorPlan?.total_sqft as number | undefined),
+          sqft: ctx.extractedFloorPlan?.total_sqft
+            ?? (ctx.floorPlan?.total_sqft as number | undefined),
         },
         designDirection: diagnosisData.design_direction ?? undefined,
         roomPhotos: ctx.imageUrls,
