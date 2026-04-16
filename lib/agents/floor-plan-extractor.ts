@@ -10,6 +10,7 @@
 // (bad image, parse error, network) they fall back to existing behavior.
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -136,6 +137,12 @@ export async function runFloorPlanExtraction(
 ): Promise<AgentResult<ExtractedFloorPlan>> {
   const model = selectModel("diagnosis"); // reasoning model for accurate extraction
   try {
+    // Floor plans may be PDFs (developer marketing plans, CAD exports) — those
+    // must go through the Files API. preferFilesApi uploads once and returns
+    // a file_uri block with the correct mimeType (application/pdf), bypassing
+    // the image-only URL fetch path.
+    const imageBlock = await resolveImageBlock(imageUrl, { preferFilesApi: true });
+
     const response = await geminiProvider.chat({
       model,
       system: FLOOR_PLAN_EXTRACTOR_SYSTEM_PROMPT,
@@ -143,7 +150,7 @@ export async function runFloorPlanExtraction(
         {
           role: "user",
           content: [
-            { type: "image", source: { type: "url", url: imageUrl } },
+            imageBlock,
             { type: "text", text: buildFloorPlanExtractorPrompt(imageDescription) },
           ],
         },

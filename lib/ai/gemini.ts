@@ -78,14 +78,18 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
       throw new Error(`Local image is empty: ${filePath}`);
     }
     const ext = path.extname(filePath).toLowerCase();
-    const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+    const mimeType =
+      ext === ".png" ? "image/png" :
+      ext === ".webp" ? "image/webp" :
+      ext === ".pdf" ? "application/pdf" :
+      "image/jpeg";
     return { data: buffer.toString("base64"), mimeType };
   }
 
   const response = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,application/pdf,*/*;q=0.8",
       "Referer": new URL(url).origin + "/",
     },
     signal: AbortSignal.timeout(10000),
@@ -94,10 +98,11 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     throw new Error(`Image fetch failed: ${response.status} ${response.statusText} for ${url}`);
   }
 
-  // Reject responses that aren't actually images (e.g., HTML 404 pages, redirects to login)
+  // Reject responses that aren't actually images or PDFs (e.g., HTML 404
+  // pages, redirects to login). PDFs are allowed for floor plan extraction.
   const contentType = response.headers.get("content-type") || "";
-  if (!contentType.startsWith("image/")) {
-    throw new Error(`Image URL returned non-image content-type: ${contentType} for ${url}`);
+  if (!contentType.startsWith("image/") && !contentType.startsWith("application/pdf")) {
+    throw new Error(`URL returned unsupported content-type: ${contentType} for ${url}`);
   }
 
   const buffer = await response.arrayBuffer();
