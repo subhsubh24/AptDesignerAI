@@ -344,20 +344,42 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-2">
+              <Sparkles className="h-3 w-3" />
+              Let&apos;s design your apartment
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
             <p className="text-lg text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Show us your apartment, and we&apos;ll help you furnish it — room by room, piece by piece.
+              A few minutes of photos and notes, and we&apos;ll hand you a fully
+              furnished apartment — every piece chosen for your space.
             </p>
           </div>
+
+          {/* Quick what-to-expect strip */}
+          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
+            {[
+              { n: "01", label: "Layout & location", hint: "30 sec" },
+              { n: "02", label: "Photos & floor plan", hint: "3 min" },
+              { n: "03", label: "Your designs", hint: "2 min" },
+            ].map((s) => (
+              <div key={s.n} className="rounded-xl border bg-card p-3 text-left">
+                <div className="text-[10px] font-bold text-accent-warm">{s.n}</div>
+                <div className="text-xs font-semibold mt-0.5">{s.label}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">~{s.hint}</div>
+              </div>
+            ))}
+          </div>
+
           <Button
             size="xl"
             variant="warm"
             className="mt-4"
             onClick={() => setStep("layout")}
           >
-            Let&apos;s go
+            Start designing
             <ChevronRight className="h-5 w-5 ml-2" />
           </Button>
+          <p className="text-xs text-muted-foreground">Free forever on one room. No credit card.</p>
         </div>
       </div>
     );
@@ -368,10 +390,10 @@ export default function DashboardPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
-          step={2}
-          total={4}
-          title="What&apos;s your layout?"
-          subtitle="So we know which rooms to ask for."
+          step={1}
+          total={3}
+          title="Tell us about your apartment"
+          subtitle="We&apos;ll tailor the design journey to your exact layout."
         />
 
         <div className="space-y-8 mt-8">
@@ -483,10 +505,10 @@ export default function DashboardPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
-          step={3}
-          total={4}
+          step={2}
+          total={3}
           title="Where&apos;s home?"
-          subtitle="Helps us understand your local design context and source from nearby retailers."
+          subtitle="Your neighborhood shapes the design — local light, local style, nearby retailers."
         />
 
         <div className="space-y-6 mt-8">
@@ -568,10 +590,10 @@ export default function DashboardPage() {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
         <StepHeader
-          step={4}
-          total={4}
-          title="Your apartment"
-          subtitle="Tell us about your building and show us your rooms. We&apos;ll handle the rest."
+          step={3}
+          total={3}
+          title="Show us your space"
+          subtitle="Find your building and share a photo or two of each room. That&apos;s all we need."
         />
 
         <div className="space-y-8 mt-8">
@@ -707,7 +729,7 @@ export default function DashboardPage() {
             disabled={totalImages === 0 || analyzing}
           >
             <Sparkles className="h-5 w-5" />
-            Analyze my apartment ({totalImages} {totalImages === 1 ? "photo" : "photos"})
+            Design my apartment · {totalImages} {totalImages === 1 ? "photo" : "photos"}
           </Button>
         </div>
       </div>
@@ -721,25 +743,37 @@ export default function DashboardPage() {
     const showBuildingStep = !!buildingName && !buildingResearch;
 
     return (
-      <div className="max-w-xl mx-auto px-4 py-24 text-center animate-fade-in-up">
-        <Loader2 className="h-12 w-12 animate-spin text-accent-warm mx-auto" />
-        <h2 className="text-2xl font-bold mt-6">
-          {analyzePhase === "building" ? "Researching your building..." : "Analyzing your rooms..."}
+      <div className="max-w-xl mx-auto px-4 py-20 text-center animate-fade-in-up">
+        {/* Animated logo-ish halo */}
+        <div className="relative inline-flex h-20 w-20 items-center justify-center mx-auto">
+          <div className="absolute inset-0 rounded-full bg-accent-warm/15 animate-ping" />
+          <div className="relative h-20 w-20 rounded-full bg-gradient-warm-button flex items-center justify-center shadow-warm-md">
+            <Sparkles className="h-9 w-9 text-white" />
+          </div>
+        </div>
+
+        <h2 className="text-2xl md:text-3xl font-bold mt-8">
+          {analyzePhase === "building" ? "Getting to know your building…" : "Finding your style…"}
         </h2>
-        <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+        <p className="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
           {analyzePhase === "building"
-            ? "Looking up floor plans, finishes, and architectural details."
-            : "Examining each room, cross-referencing your building\u2019s finishes, and forming a design perspective."}
+            ? "We&apos;re researching the floor plans, finishes, and architectural details that make your space unique."
+            : "We&apos;re studying how your rooms feel — the light, the proportions, the details — so every recommendation fits like it was made for you."}
         </p>
-        <div className="flex flex-col gap-2 mt-8 text-sm text-muted-foreground">
-          <StepIndicator done label={`${totalImages} photo${totalImages === 1 ? "" : "s"} received`} />
+
+        <div className="flex flex-col gap-2.5 mt-10 text-sm text-left max-w-sm mx-auto">
+          <StepIndicator done label={`${totalImages} photo${totalImages === 1 ? "" : "s"} safely uploaded`} />
           {showBuildingStep && (
-            <StepIndicator done={buildingDone} active={analyzePhase === "building"} label="Researching building finishes & floor plans" />
+            <StepIndicator done={buildingDone} active={analyzePhase === "building"} label="Researching your building's finishes & floor plans" />
           )}
           {buildingResearch && !showBuildingStep && <StepIndicator done label="Building context loaded" />}
-          <StepIndicator done={photosDone} active={analyzePhase === "photos"} label="Studying rooms holistically" />
-          <StepIndicator done={photosDone} label="Forming design direction" />
+          <StepIndicator done={photosDone} active={analyzePhase === "photos"} label="Reading each room — light, scale, and materials" />
+          <StepIndicator done={photosDone} active={analyzePhase === "photos"} label="Forming a design direction that feels like you" />
         </div>
+
+        <p className="text-xs text-muted-foreground mt-8 italic">
+          This usually takes a minute. Grab a coffee — we&apos;re almost there.
+        </p>
       </div>
     );
   }
@@ -776,11 +810,12 @@ export default function DashboardPage() {
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium mb-4">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Apartment analyzed
+            Apartment analyzed · ready to design
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Where should we start?</h1>
-          <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-            Pick a room and we&apos;ll do a deep dive — what to keep, what to change, and exactly what to get.
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Pick a room to start with</h1>
+          <p className="text-muted-foreground mt-3 max-w-lg mx-auto leading-relaxed">
+            We recommend the room you spend the most time in. Don&apos;t worry — you can
+            design the others right after, and they&apos;ll all speak the same design language.
           </p>
         </div>
 

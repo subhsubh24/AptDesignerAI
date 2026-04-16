@@ -67,10 +67,9 @@ export default async function ProjectPage({
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 animate-float">
               <DoorOpen className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No rooms yet</h3>
+            <h3 className="text-lg font-semibold mb-2">Which room comes first?</h3>
             <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
-              Add your first room to begin the design process. Start with your
-              highest priority room.
+              Most people start with the room they spend the most time in — a living room, bedroom, or studio. You can always add more later.
             </p>
             <CreateRoomDialog projectId={projectId} />
           </CardContent>

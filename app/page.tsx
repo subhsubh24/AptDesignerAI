@@ -2,28 +2,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Camera, ShoppingBag, Palette, Shield, ArrowRight, Star, Sparkles, CheckCircle2, Zap } from "lucide-react";
-import { LogoMark } from "@/components/ui/logo-mark";
+import { MarketingHeader } from "@/components/marketing/marketing-header";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-6 md:px-8 py-5 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2.5">
-          <LogoMark className="h-7 w-7 text-foreground" />
-          <span className="text-xl font-semibold tracking-tight">
-            Apt<span className="text-gradient-warm">Designer</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button asChild variant="warm" size="sm">
-            <Link href="/signup">Get Started</Link>
-          </Button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col">
+      <MarketingHeader />
 
       {/* Hero */}
       <main className="relative">
@@ -319,20 +304,10 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Footer */}
-          <footer className="border-t py-8 mt-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <LogoMark className="h-5 w-5 text-foreground" />
-                <span className="font-medium text-foreground">
-                  Apt<span className="text-accent-warm">Designer</span>
-                </span>
-              </div>
-              <p>&copy; {new Date().getFullYear()} AptDesigner. All rights reserved.</p>
-            </div>
-          </footer>
         </div>
       </main>
+
+      <MarketingFooter />
     </div>
   );
 }

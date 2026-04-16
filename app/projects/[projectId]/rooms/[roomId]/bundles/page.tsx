@@ -217,9 +217,9 @@ export default function BundlesPage() {
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
               <LayoutGrid className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No bundles yet</h3>
-            <p className="text-sm text-muted-foreground">
-              Shortlist some products, then create a bundle to see how they work together.
+            <h3 className="text-lg font-semibold mb-2">See the room come together</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Shortlist a few products, then create a bundle to see how they harmonize — palette, proportion, style cohesion, all scored.
             </p>
           </CardContent>
         </Card>

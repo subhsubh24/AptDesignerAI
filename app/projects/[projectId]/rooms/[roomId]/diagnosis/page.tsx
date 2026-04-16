@@ -164,23 +164,23 @@ export default function DiagnosisPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Room
         </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-headline">Room Diagnosis</h1>
+            <h1 className="text-headline">Your room, studied</h1>
             <p className="text-muted-foreground mt-1">
-              AI analysis of your room with actionable recommendations
+              A clear read on what&apos;s working, what&apos;s not, and what to do about it.
             </p>
           </div>
           <Button onClick={handleRunDiagnosis} disabled={loading} variant={diagnosis ? "outline" : "warm"}>
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
+                Studying your room…
               </>
             ) : (
               <>
                 {diagnosis ? <RotateCcw className="h-4 w-4 mr-2" /> : <Stethoscope className="h-4 w-4 mr-2" />}
-                {diagnosis ? "Re-analyze" : "Run Diagnosis"}
+                {diagnosis ? "Re-analyze" : "Start diagnosis"}
               </>
             )}
           </Button>

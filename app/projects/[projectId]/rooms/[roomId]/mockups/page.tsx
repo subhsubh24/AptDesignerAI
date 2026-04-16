@@ -157,13 +157,13 @@ export default function MockupsPage() {
             <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-6 animate-float">
               <ImageIcon className="h-10 w-10 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No mockups yet</h3>
+            <h3 className="text-lg font-semibold mb-2">See it before you buy it</h3>
             <p className="text-sm text-muted-foreground text-center max-w-sm mb-6">
-              Shortlist products and click &quot;Generate Mockup&quot; to see how your room could look.
+              We&apos;ll render your shortlisted pieces right into your actual room — so you know it&apos;s right before spending a dollar.
             </p>
             <Button onClick={handleGenerate} variant="warm" size="lg" className="animate-gentle-glow">
               <Sparkles className="h-4 w-4 mr-2" />
-              Generate Your First Mockup
+              Generate my first mockup
             </Button>
           </CardContent>
         </Card>

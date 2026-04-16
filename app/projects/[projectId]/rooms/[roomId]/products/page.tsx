@@ -302,10 +302,12 @@ export default function ProductsPage() {
               <ShoppingBag className="h-8 w-8 text-accent-warm/50" />
             </div>
             <h3 className="text-lg font-semibold mb-2">
-              {products.length === 0 ? "No products yet" : "No matching products"}
+              {products.length === 0 ? "Let's find your pieces" : "No matching products"}
             </h3>
-            <p className="text-sm text-muted-foreground">
-              {products.length === 0 ? "Add a URL or run AI search to find products." : "Try adjusting your filters."}
+            <p className="text-sm text-muted-foreground text-center max-w-sm">
+              {products.length === 0
+                ? "Run AI search to see handpicked furniture and decor that fit your space — or paste a URL to score a specific piece."
+                : "Try adjusting your filters to see more options."}
             </p>
           </CardContent>
         </Card>
