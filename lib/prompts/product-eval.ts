@@ -27,6 +27,14 @@ export interface EvalContextArgs {
    * byte-for-byte equivalent to the pre-feature shape.
    */
   identifiedContext?: string;
+  /**
+   * Top anchor products already confirmed by quick-score for the room, keyed
+   * by category (e.g. "sofa", "area_rug"). Format per value:
+   *   "title | dimensions: W×D×H | material: … | colors: …"
+   * Injected into scoring for dependent categories so the LLM scores against
+   * the actual found anchor, not abstract requirements.
+   */
+  anchorSpecs?: Record<string, string>;
 }
 
 /**
@@ -55,6 +63,7 @@ function buildEvalContext(args: EvalContextArgs): string {
     userContext,
     replaceItems,
     identifiedContext,
+    anchorSpecs,
   } = args;
 
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -170,6 +179,17 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
       key: "identified_pieces",
       priority: 1,
       content: `${identifiedContext}\nIMPORTANT for scoring: Treat these as EXISTING FIXTURES. The product being evaluated must be COMPATIBLE with them — matching scale (within ~20% of canonical dimensions), complementary materials, and a palette that works alongside the listed colors. Products proposing a REPLACEMENT for any identified piece (same category) should be scored down hard unless the room's replace_items list it.`,
+    });
+  }
+
+  if (anchorSpecs && Object.keys(anchorSpecs).length > 0) {
+    const anchorLines = Object.entries(anchorSpecs)
+      .map(([cat, spec]) => `- **${cat}**: ${spec}`)
+      .join("\n");
+    sections.push({
+      key: "anchor_specs",
+      priority: 1,
+      content: `## ANCHOR PIECES ALREADY CONFIRMED FOR THIS ROOM\nThese are the top-scored products found during this search session for their categories. Treat them as the real items that will share the room with the product you're scoring.\n${anchorLines}\nFor scale scoring: the product being evaluated must be PROPORTIONAL to these anchors (e.g., a coffee table should be ~⅔ the sofa width; a rug should extend 12-18" beyond the sofa on each side). For material/palette scoring: it must COMPLEMENT these pieces — not match them identically, but harmonize.`,
     });
   }
 

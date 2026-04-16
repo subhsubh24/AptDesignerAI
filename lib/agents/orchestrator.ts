@@ -669,6 +669,47 @@ export async function runAgenticSearch(
       data: { quickScored: stats.totalQuickScored },
     });
 
+    // Build anchorSpecs: top quick-scored product per anchor category.
+    // Dependent categories (coffee_table, side_table, nightstand, area_rug,
+    // etc.) will receive these specs so deep-scoring is grounded in the real
+    // found anchor, not abstract requirements.
+    const ANCHOR_CATEGORIES = new Set([
+      "sofa", "sectional", "area_rug", "bed", "dining_table",
+      "media_console", "accent_chair",
+    ]);
+    const DEPENDENT_CATEGORIES = new Set([
+      "coffee_table", "side_table", "end_table", "nightstand",
+      "floor_lamp", "table_lamp", "throw_pillows", "throw_blanket",
+      "dining_chairs", "pendant_light",
+    ]);
+
+    const anchorSpecs: Record<string, string> = {};
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      if (!ANCHOR_CATEGORIES.has(category)) continue;
+      // Find the highest quick-scored product across all tiers for this anchor
+      let bestProduct: CandidateProduct | null = null;
+      let bestScore = -1;
+      for (const tier of PRICE_TIERS) {
+        for (const p of tierResults[tier]) {
+          const qs = quickScoresByProduct.get(p.id) ?? 0;
+          if (qs > bestScore) { bestScore = qs; bestProduct = p; }
+        }
+      }
+      if (!bestProduct) continue;
+      const dim = bestProduct.dimensions;
+      const dimStr = dim
+        ? [
+            dim.width && `W:${dim.width}${dim.unit === "cm" ? "cm" : '"'}`,
+            dim.depth && `D:${dim.depth}${dim.unit === "cm" ? "cm" : '"'}`,
+            dim.height && `H:${dim.height}${dim.unit === "cm" ? "cm" : '"'}`,
+            dim.diameter && `Ø:${dim.diameter}${dim.unit === "cm" ? "cm" : '"'}`,
+          ].filter(Boolean).join("×")
+        : "dimensions unknown";
+      const matStr = bestProduct.materials?.join(", ") || "material unknown";
+      const colStr = bestProduct.colors?.join(", ") || "colors unknown";
+      anchorSpecs[category] = `${bestProduct.title || category} | dimensions: ${dimStr} | material: ${matStr} | colors: ${colStr}`;
+    }
+
     // ═══════════════════════════════════════════════════════════
     // PHASE 5b: Deep score top candidates with Pro (images, 8 dims)
     // ═══════════════════════════════════════════════════════════
@@ -712,6 +753,7 @@ export async function runAgenticSearch(
                 tracer.traceFilter("deep_score", product.id, product.product_url || "", "token budget exceeded");
                 return;
               }
+              const productCategory = product.category || "";
               const scoreResult = await scoreProduct(product, {
                 roomType: ctx.roomType,
                 budgetMode: ctx.budgetMode,
@@ -723,7 +765,7 @@ export async function runAgenticSearch(
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
                 userFeedbackContext: ctx.userFeedbackContext,
-                placement: ctx.placementMap?.[product.category || ""],
+                placement: ctx.placementMap?.[productCategory],
                 spatialLayout: ctx.spatialLayout,
                 floorPlan: ctx.floorPlan,
                 extractedFloorPlan: ctx.extractedFloorPlan,
@@ -733,6 +775,11 @@ export async function runAgenticSearch(
                 userContext: ctx.userContext,
                 replaceItems: ctx.replaceItems,
                 identifiedContext: ctx.identifiedContext,
+                // Only pass anchor context to dependent categories so anchor
+                // categories themselves don't get confused by self-reference.
+                anchorSpecs: DEPENDENT_CATEGORIES.has(productCategory) && Object.keys(anchorSpecs).length > 0
+                  ? anchorSpecs
+                  : undefined,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -1113,6 +1160,7 @@ export async function runAgenticSearch(
               };
 
               // Deep score the backfill product directly
+              const backfillCategory = product.category || "";
               const scoreResult = await scoreProduct(product, {
                 roomType: ctx.roomType,
                 budgetMode: ctx.budgetMode,
@@ -1124,7 +1172,7 @@ export async function runAgenticSearch(
                 diagnosis: ctx.diagnosis,
                 designDirection: ctx.designDirection,
                 userFeedbackContext: ctx.userFeedbackContext,
-                placement: ctx.placementMap?.[product.category || ""],
+                placement: ctx.placementMap?.[backfillCategory],
                 spatialLayout: ctx.spatialLayout,
                 floorPlan: ctx.floorPlan,
                 extractedFloorPlan: ctx.extractedFloorPlan,
@@ -1134,6 +1182,9 @@ export async function runAgenticSearch(
                 userContext: ctx.userContext,
                 replaceItems: ctx.replaceItems,
                 identifiedContext: ctx.identifiedContext,
+                anchorSpecs: DEPENDENT_CATEGORIES.has(backfillCategory) && Object.keys(anchorSpecs).length > 0
+                  ? anchorSpecs
+                  : undefined,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);

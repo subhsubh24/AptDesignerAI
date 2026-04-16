@@ -15,6 +15,7 @@ import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
 export async function GET(request: NextRequest) {
@@ -505,6 +506,30 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       furnishing = furnishingRaw ?? {};
     }
     console.log(`[area-analysis] Pass B (furnishing) complete — ${furnishing.what_it_needs?.length || 0} items`);
+
+    // Enrich any what_it_needs items that lack specific dimensions or materials.
+    // Pass B instructs the LLM to include these, but it doesn't always comply.
+    // The enricher runs one batch call to fill in missing search_title/specs fields,
+    // grounded in the Pass 1 design brief. Failures fall back to the original items.
+    if (Array.isArray(furnishing.what_it_needs) && furnishing.what_it_needs.length > 0) {
+      // Compute sqft from available sources: user-provided override first, then building_research floor_plan
+      const enricherSqft = userSqft
+        ?? ((brForFP?.floor_plan as Record<string, unknown> | undefined)?.total_sqft as number | undefined);
+      furnishing.what_it_needs = await enrichWhatItNeeds(
+        furnishing.what_it_needs,
+        {
+          roomType: room.room_type,
+          roomSqft: enricherSqft,
+          designDirection: understanding.design_direction_raw as DesignDirection | undefined,
+          pass1Brief: JSON.stringify({
+            design_direction: understanding.design_direction,
+            recommended_palette: understanding.recommended_palette,
+            recommended_materials: understanding.recommended_materials,
+            spatial_layout: understanding.spatial_layout,
+          }),
+        }
+      );
+    }
 
     // Merge Pass A + Pass B into the legacy analysis shape
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response

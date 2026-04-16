@@ -66,6 +66,15 @@ export interface ScoringContext {
    * prompt stays byte-for-byte equivalent to the pre-feature shape.
    */
   identifiedContext?: string;
+  /**
+   * Top anchor products already confirmed in the room (sofa, area_rug, bed,
+   * dining_table, etc.), formatted as short spec strings so dependent
+   * categories (coffee_table, rug, nightstand) score against real found items
+   * rather than abstract requirements.
+   *
+   * Format per entry: "title | dimensions: W×D×H | material: … | colors: …"
+   */
+  anchorSpecs?: Record<string, string>;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -124,6 +133,7 @@ export async function scoreProduct(
     userContext: scoringCtx.userContext,
     replaceItems: scoringCtx.replaceItems,
     identifiedContext: scoringCtx.identifiedContext,
+    anchorSpecs: scoringCtx.anchorSpecs,
   };
   const aestheticPrompt = getAestheticEvalPrompt(evalCtx);
   const functionalPrompt = getFunctionalEvalPrompt(evalCtx);
