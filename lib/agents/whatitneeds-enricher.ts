@@ -143,7 +143,7 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
       model: selectModel("search"),
       system: "You are a precise product specification writer for an interior design tool. Always return valid JSON.",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 2000,
+      max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });

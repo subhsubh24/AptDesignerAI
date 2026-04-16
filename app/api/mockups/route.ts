@@ -231,19 +231,38 @@ export async function POST(request: Request) {
     // Build architectural context from building research
     const archContext = buildArchitecturalContext(buildingResearch, room.room_type);
 
-    // Build extra context for vision mode
+    // Build extra context for vision mode — pull ALL available data from the
+    // diagnosis so the image model generates a room matching the actual photos,
+    // not a generic render.
     const existingItems = (djson?.what_works as string[]) || (djson?.what_is_working as string[]) || [];
     const keepSection = existingItems.length > 0
       ? `\nExisting furniture to KEEP in the scene:\n${existingItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
       : "";
+
+    // Use diagnosis design_direction when the caller doesn't send one
+    const effectiveDirection = design_direction
+      || (djson?.design_direction as string)
+      || (ddJson?.style_notes as string)
+      || "modern, cohesive apartment design";
+
+    // Build specific items description from what_it_needs when caller didn't provide one
+    const whatItNeedsItems = (djson?.what_it_needs as Array<Record<string, unknown>>) || [];
+    const effectiveItems = items_description
+      || (whatItNeedsItems.length > 0
+        ? whatItNeedsItems.map((item, i) =>
+          `${i + 1}. [${item.category}] ${item.search_title}${item.placement ? ` — placed ${item.placement}` : ""}`
+        ).join("\n")
+        : "Furnish the room according to the design direction");
+
     const paletteSection = palette.length > 0 ? `\nColor palette: ${palette.join(", ")}` : "";
     const materialsSection = materials.length > 0 ? `\nMaterials: ${materials.join(", ")}` : "";
     const texturesSection = textures.length > 0 ? `\nTextures: ${textures.join(", ")}` : "";
-    const spatialSection = spatialLayout ? `\nSpatial layout plan: ${spatialLayout}` : "";
-    const lightingSection = lightingConditions ? `\nLighting conditions: ${lightingConditions}` : "";
-    const windowDoorSection = windowDoorPositions ? `\nWindow/door positions: ${windowDoorPositions}` : "";
     const userContextSection = room.user_context ? `\nUser notes: "${room.user_context}" — respect these notes in the visualization.` : "";
     const prioritiesSection = room.priorities?.length ? `\nClient priorities: ${room.priorities.join(", ")}` : "";
+
+    // Current room summary from diagnosis — the most specific description of
+    // what the room ACTUALLY looks like right now
+    const roomSummary = (djson?.summary as string) || "";
 
     const iterationSection = iteration_notes
       ? `\n\nITERATION FEEDBACK — The user has seen a previous version and wants these changes:\n"${iteration_notes}"\nApply these changes while keeping everything else the same.`
@@ -251,28 +270,33 @@ export async function POST(request: Request) {
 
     const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
 
-CRITICAL — MATCH THE ACTUAL ROOM:
-Study the reference photos carefully. The generated image MUST preserve:
-- The EXACT same room shape, dimensions, and proportions
-- The EXACT same flooring (type, color, plank direction)
-- The EXACT same wall color and finish
-- The EXACT same windows (shape, size, position, trim style)
-- The EXACT same ceiling height and any ceiling details
-- The EXACT same doorways, built-ins, and architectural features
-- The same natural lighting direction and quality
+CRITICAL — THIS IS A REAL APARTMENT. MATCH IT EXACTLY.
+${roomSummary ? `\nCURRENT ROOM (from analysis of the reference photos):\n${roomSummary}\n` : ""}
+The reference photos show the EXACT physical room you must render. Your generated image MUST reproduce:
+- The EXACT same room shape, dimensions, and proportions as shown in the photos
+- The EXACT same flooring — match the precise color, material, plank/tile pattern, and sheen visible in the photos
+- The EXACT same wall color, undertone, and finish — do NOT default to white if the photos show a different color
+- The EXACT same windows — count them, match their size, position on the correct walls, frame style, and trim
+- The EXACT same ceiling height and any ceiling details visible in the photos
+- The EXACT same doorways, built-ins, outlets, and architectural features
+- The same natural lighting direction and quality as seen in the photos
 ${archContext}
+${spatialLayout ? `\nSpatial layout: ${spatialLayout}` : ""}
+${lightingConditions ? `\nLighting: ${lightingConditions}` : ""}
+${windowDoorPositions ? `\nWindows and doors: ${windowDoorPositions}` : ""}
 
-Design direction: ${design_direction || "modern, cohesive apartment design"}${paletteSection}${materialsSection}${texturesSection}${spatialSection}${lightingSection}${windowDoorSection}${prioritiesSection}${userContextSection}${keepSection}
+Design direction: ${effectiveDirection}${paletteSection}${materialsSection}${texturesSection}${prioritiesSection}${userContextSection}${keepSection}
 
 New furniture and decor to place in the room:
-${items_description || "All recommended furniture and decor items from the diagnosis"}${iterationSection}
+${effectiveItems}${iterationSection}
 
 RULES:
-- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos — same colors, same materials, same proportions.
+- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos — same colors, same materials, same proportions. If you are uncertain about a feature, match the reference photos, not a generic assumption.
 - Only change the furniture and decor, not the architecture.
 - Place furniture at realistic scale relative to the actual room size visible in photos.
 - Use natural lighting consistent with the window positions in the reference photos.
-- The result should look like a real photograph taken in this exact apartment, not a generic render.`;
+- The result should look like a real photograph taken in this exact apartment, not a generic render or a showroom.
+- Do NOT brighten, whiten, or "clean up" the walls or floors — match their actual tone from the photos.`;
 
     // Check mockup cache first — identical room photos + identical prompt =
     // identical render, no need to re-run the image model.
