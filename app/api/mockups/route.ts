@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
+import { extractRoomArchitecture, formatArchitectureForPrompt } from "@/lib/agents/room-architecture-extractor";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
@@ -187,13 +188,17 @@ export async function POST(request: Request) {
   const thisRoomDimensions = roomDims?.[room.room_type] ?? undefined;
   const extractedRoom = getRoomFromFloorPlan(extractedFloorPlan, room.room_type);
 
-  // Run a single batched vision call to produce per-photo orientation
-  // captions. The extracted floor plan room (walls[], window positions) is
-  // passed so the analyzer knows which walls have windows BEFORE seeing the
-  // photos — greatly improving orientation accuracy. Non-fatal on failure.
-  const photoOrientations = roomImageUrls.length > 0
-    ? await analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions, extractedRoom)
-    : [];
+  // Run photo orientation analysis and room architecture extraction in parallel.
+  // Both are non-fatal — if either fails, the mockup still generates without
+  // the extra grounding information.
+  const [photoOrientations, roomArchitecture] = await Promise.all([
+    roomImageUrls.length > 0
+      ? analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions, extractedRoom)
+      : Promise.resolve([]),
+    roomImageUrls.length > 0
+      ? extractRoomArchitecture(roomImageUrls, room.room_type, floorPlanImageUrl)
+      : Promise.resolve(null),
+  ]);
 
   // Extract diagnosis context that's useful for both modes
   const djson = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
@@ -268,18 +273,24 @@ export async function POST(request: Request) {
       ? `\n\nITERATION FEEDBACK — The user has seen a previous version and wants these changes:\n"${iteration_notes}"\nApply these changes while keeping everything else the same.`
       : "";
 
-    const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
-
-CRITICAL — THIS IS A REAL APARTMENT. MATCH IT EXACTLY.
-${roomSummary ? `\nCURRENT ROOM (from analysis of the reference photos):\n${roomSummary}\n` : ""}
-The reference photos show the EXACT physical room you must render. Your generated image MUST reproduce:
+    // Build the architecture block — verbatim extracted values when available,
+    // fall back to the generic "match the photos" directive when not.
+    const architectureBlock = roomArchitecture
+      ? formatArchitectureForPrompt(roomArchitecture)
+      : `The reference photos show the EXACT physical room you must render. Your generated image MUST reproduce:
 - The EXACT same room shape, dimensions, and proportions as shown in the photos
 - The EXACT same flooring — match the precise color, material, plank/tile pattern, and sheen visible in the photos
 - The EXACT same wall color, undertone, and finish — do NOT default to white if the photos show a different color
 - The EXACT same windows — count them, match their size, position on the correct walls, frame style, and trim
 - The EXACT same ceiling height and any ceiling details visible in the photos
-- The EXACT same doorways, built-ins, outlets, and architectural features
-- The same natural lighting direction and quality as seen in the photos
+- The EXACT same doorways, built-ins, and architectural features
+- The same natural lighting direction and quality as seen in the photos`;
+
+    const visionPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type}.
+
+CRITICAL — THIS IS A REAL APARTMENT. MATCH IT EXACTLY.
+${roomSummary ? `\nCURRENT ROOM (from analysis of the reference photos):\n${roomSummary}\n` : ""}
+${architectureBlock}
 ${archContext}
 ${spatialLayout ? `\nSpatial layout: ${spatialLayout}` : ""}
 ${lightingConditions ? `\nLighting: ${lightingConditions}` : ""}
@@ -291,7 +302,7 @@ New furniture and decor to place in the room:
 ${effectiveItems}${iterationSection}
 
 RULES:
-- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos — same colors, same materials, same proportions. If you are uncertain about a feature, match the reference photos, not a generic assumption.
+- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos and the architecture block above — same colors, same materials, same proportions.
 - Only change the furniture and decor, not the architecture.
 - Place furniture at realistic scale relative to the actual room size visible in photos.
 - Use natural lighting consistent with the window positions in the reference photos.
