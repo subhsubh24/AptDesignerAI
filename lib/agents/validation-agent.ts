@@ -18,7 +18,8 @@ import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/pars
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
-import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
+import type { DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores } from "@/lib/scoring/harmony-composite";
 
@@ -232,6 +233,8 @@ export async function validateRoomHarmony(
     apartmentAnalysis?: Record<string, unknown>;
     designProfile?: DynamicDesignProfile;
     floorPlan?: Record<string, unknown>;
+    floorPlanImageUrl?: string;
+    extractedFloorPlan?: ExtractedFloorPlan;
     userContext?: string;
     otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
     mathScoresText?: string;
@@ -252,14 +255,26 @@ export async function validateRoomHarmony(
   const { buildingCtx, apartmentCtx, otherRoomsCtx, floorPlanCtx, userCtx, identifiedCtx, diagnosisCtx, directionCtx } =
     buildHarmonyContextBlocks({ context });
 
-  // Shared image content — both passes see the room photos.
+  // Shared image content — floor plan first (ground truth), then room photos.
   const roomImages: AIContentBlock[] = [];
+  if (context.floorPlanImageUrl) {
+    roomImages.push({
+      type: "text",
+      text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features, and orientation. Use this as spatial ground truth for all spatial_fit scoring.",
+    });
+    roomImages.push({ type: "image", source: { type: "url", url: context.floorPlanImageUrl } });
+  }
   for (const url of context.roomImageUrls.slice(0, 4)) {
     roomImages.push({ type: "image", source: { type: "url", url } });
   }
 
+  // Replace legacy floorPlanCtx with extracted floor plan when available
+  const resolvedFloorPlanCtx = context.extractedFloorPlan
+    ? `\n\n${formatExtractedFloorPlanForPrompt(context.extractedFloorPlan, context.roomType)}`
+    : floorPlanCtx;
+
   const sharedHeader = `## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userCtx}${identifiedCtx}${diagnosisCtx}${directionCtx}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${resolvedFloorPlanCtx}${otherRoomsCtx}${userCtx}${identifiedCtx}${diagnosisCtx}${directionCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}
@@ -682,6 +697,8 @@ export async function performFinalAssessment(
     apartmentAnalysis?: Record<string, unknown>;
     designProfile?: DynamicDesignProfile;
     floorPlan?: Record<string, unknown>;
+    floorPlanImageUrl?: string;
+    extractedFloorPlan?: ExtractedFloorPlan;
     userContext?: string;
     otherRooms?: Array<{ name: string; roomType: string; palette?: string[]; materials?: string[]; designDirection?: string; keyItems?: string[] }>;
     mathScoresText?: string;
@@ -728,12 +745,23 @@ This analysis went through ${context.roundsCompleted} iterative rounds. Here's w
   }
 
   const roomImages: AIContentBlock[] = [];
+  if (context.floorPlanImageUrl) {
+    roomImages.push({
+      type: "text",
+      text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features, and orientation. Use this as spatial ground truth for all spatial_fit scoring.",
+    });
+    roomImages.push({ type: "image", source: { type: "url", url: context.floorPlanImageUrl } });
+  }
   for (const url of context.roomImageUrls.slice(0, 4)) {
     roomImages.push({ type: "image", source: { type: "url", url } });
   }
 
+  const resolvedFloorPlanCtxFinal = context.extractedFloorPlan
+    ? `\n\n${formatExtractedFloorPlanForPrompt(context.extractedFloorPlan, context.roomType)}`
+    : floorPlanCtx;
+
   const sharedHeader = `## ROOM
-${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${floorPlanCtx}${otherRoomsCtx}${userNotesShort}${identifiedCtx}${diagnosisCtx}${directionCtx}
+${context.roomName} (${context.roomType})${buildingCtx}${apartmentCtx}${resolvedFloorPlanCtxFinal}${otherRoomsCtx}${userNotesShort}${identifiedCtx}${diagnosisCtx}${directionCtx}
 
 ## DESIGN DIRECTION
 ${designDirection}

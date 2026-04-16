@@ -1,5 +1,6 @@
 import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
-import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 
 export interface BundleEvalContextArgs {
   roomType: string;
@@ -9,6 +10,8 @@ export interface BundleEvalContextArgs {
   spatialLayout?: string;
   placementMap?: Record<string, string>;
   floorPlan?: Record<string, unknown>;
+  /** Structured floor plan extracted via vision model — preferred over legacy floorPlan */
+  extractedFloorPlan?: ExtractedFloorPlan;
   lightingConditions?: string;
   windowDoorPositions?: string;
   outletPositions?: string;
@@ -26,6 +29,7 @@ export interface BundleEvalContextArgs {
 function buildBundleContext(args: BundleEvalContextArgs): string {
   const {
     roomType, priorities, diagnosis, designDirection, spatialLayout, placementMap, floorPlan,
+    extractedFloorPlan,
     lightingConditions, windowDoorPositions, outletPositions,
     existingItems, userContext, replaceItems, whatShouldGo, identifiedContext,
   } = args;
@@ -76,7 +80,13 @@ function buildBundleContext(args: BundleEvalContextArgs): string {
     sections.push({ key: "spatial_layout", priority: 3, content: `## SPATIAL LAYOUT PLAN\n${spatialLayout}` });
   }
 
-  if (floorPlan) {
+  if (extractedFloorPlan) {
+    sections.push({
+      key: "floor_plan",
+      priority: 2,
+      content: `## FLOOR PLAN (EXTRACTED — AUTHORITATIVE)\n${formatExtractedFloorPlanForPrompt(extractedFloorPlan, roomType)}`,
+    });
+  } else if (floorPlan) {
     sections.push({ key: "floor_plan", priority: 3, content: `## FLOOR PLAN DIMENSIONS\nTotal sqft: ${floorPlan.total_sqft || "unknown"}\nRoom dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}\nRoom layout: ${floorPlan.room_layout || "unknown"}` });
   }
 

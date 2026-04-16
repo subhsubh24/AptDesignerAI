@@ -105,8 +105,11 @@ export async function POST(request: Request) {
   const whatWorks = diagnosisJson?.what_works as string[] | undefined;
   const whatShouldGo = diagnosisJson?.what_should_go as string[] | undefined;
 
-  // Extract floor plan from building research
-  const floorPlan = (project?.building_research as Record<string, unknown> | undefined)?.floor_plan as Record<string, unknown> | undefined;
+  // Extract floor plan data from building research
+  const _br = project?.building_research as Record<string, unknown> | undefined;
+  const floorPlan = _br?.floor_plan as Record<string, unknown> | undefined;
+  const floorPlanImageUrl = _br?.floor_plan_image_url as string | undefined;
+  const extractedFloorPlan = _br?.extracted_floor_plan as import("@/lib/types/database").ExtractedFloorPlan | undefined;
 
   // Extract environmental context from diagnosis
   const lightingConditions = diagnosisJson?.lighting_conditions as string | undefined;
@@ -176,6 +179,8 @@ export async function POST(request: Request) {
     spatialLayout: spatialLayout || undefined,
     placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
     floorPlan: floorPlan || undefined,
+    floorPlanImageUrl: floorPlanImageUrl || undefined,
+    extractedFloorPlan: extractedFloorPlan || undefined,
     lightingConditions: lightingConditions || undefined,
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,

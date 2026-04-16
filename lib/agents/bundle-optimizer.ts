@@ -21,7 +21,7 @@ import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
-import type { CandidateProduct, DiagnosisData, DesignDirection } from "@/lib/types/database";
+import type { CandidateProduct, DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { MATH_VETO } from "@/lib/config/pipeline";
 import { computeBundleMathScores, formatBundleMathForPrompt } from "@/lib/validation/bundle-math";
@@ -39,6 +39,8 @@ export interface BundleContext {
   spatialLayout?: string;
   placementMap?: Record<string, string>;
   floorPlan?: Record<string, unknown>;
+  /** Structured floor plan extracted via vision model — preferred over legacy floorPlan */
+  extractedFloorPlan?: ExtractedFloorPlan;
   lightingConditions?: string;
   windowDoorPositions?: string;
   outletPositions?: string;
@@ -73,6 +75,7 @@ export async function evaluateBundle(
     spatialLayout: bundleCtx.spatialLayout,
     placementMap: bundleCtx.placementMap,
     floorPlan: bundleCtx.floorPlan,
+    extractedFloorPlan: bundleCtx.extractedFloorPlan,
     lightingConditions: bundleCtx.lightingConditions,
     windowDoorPositions: bundleCtx.windowDoorPositions,
     outletPositions: bundleCtx.outletPositions,

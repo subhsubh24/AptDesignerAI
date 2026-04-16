@@ -89,6 +89,11 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     });
   }
 
+  // Extract floor plan data from building_research (if user has uploaded one)
+  const br = project?.building_research as Record<string, unknown> | undefined;
+  const floorPlanImageUrl = br?.floor_plan_image_url as string | undefined;
+  const extractedFloorPlan = br?.extracted_floor_plan as import("@/lib/types/database").ExtractedFloorPlan | undefined;
+
   // Build context and run diagnosis
   const ctx: AgentContext = {
     roomId: room_id,
@@ -100,6 +105,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     sourcingMode: room.sourcing_mode,
     imageUrls,
     userContext: sanitized?.sanitized || rawUserContext,
+    floorPlanImageUrl,
+    extractedFloorPlan,
   };
 
   const result = await runRoomDiagnosis(ctx, profile);

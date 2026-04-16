@@ -21,7 +21,7 @@ import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
-import type { CandidateProduct, DesignDirection, DiagnosisData } from "@/lib/types/database";
+import type { CandidateProduct, DesignDirection, DiagnosisData, ExtractedFloorPlan } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeProductMathScores, formatProductMathForPrompt, type ProductMathScores } from "@/lib/validation/product-math";
 import { resolveLifestyleFlags } from "@/lib/validation/durability-map";
@@ -48,6 +48,8 @@ export interface ScoringContext {
   spatialLayout?: string;
   /** Floor plan dimensions if available */
   floorPlan?: Record<string, unknown>;
+  /** Structured floor plan extracted via vision model — preferred over legacy floorPlan */
+  extractedFloorPlan?: ExtractedFloorPlan;
   /** Lighting conditions description */
   lightingConditions?: string;
   /** Window and door positions */
@@ -115,6 +117,7 @@ export async function scoreProduct(
     placement: scoringCtx.placement,
     spatialLayout: scoringCtx.spatialLayout,
     floorPlan: scoringCtx.floorPlan,
+    extractedFloorPlan: scoringCtx.extractedFloorPlan,
     lightingConditions: scoringCtx.lightingConditions,
     windowDoorPositions: scoringCtx.windowDoorPositions,
     outletPositions: scoringCtx.outletPositions,

@@ -10,8 +10,49 @@ export type SearchSessionStatus = "active" | "paused" | "completed" | "cancelled
 export type AgentType = "diagnostician" | "researcher" | "extractor" | "scorer" | "bundler" | "mockup";
 export type AgentRunStatus = "running" | "completed" | "failed" | "cancelled";
 export type MockupStatus = "pending" | "generating" | "completed" | "failed";
-export type ImageType = "room" | "apartment_context" | "detail";
+export type ImageType = "room" | "apartment_context" | "detail" | "floor_plan";
 export type Verdict = "strong_yes" | "yes" | "maybe" | "no";
+
+// ─── Floor Plan Types ─────────────────────────────────────────────────────────
+
+export interface WallFeature {
+  type: "window" | "door" | "closet" | "built_in" | "opening" | "radiator";
+  position_on_wall: "left" | "left-center" | "center" | "right-center" | "right";
+  width_ft?: number;
+  notes?: string;
+}
+
+export interface FloorPlanWall {
+  /** Compass direction if determinable from north arrow, otherwise "wall_1" etc. */
+  direction: string;
+  length_ft?: number;
+  features: WallFeature[];
+}
+
+export interface FloorPlanRoom {
+  room_type: string;           // "living_room" | "bedroom" | etc.
+  label: string;               // As labeled on the plan: "Living/Dining", "BR1"
+  sqft?: number;
+  dimensions_text?: string;    // "12 × 15 ft"
+  width_ft?: number;
+  depth_ft?: number;
+  shape: "rectangular" | "L-shaped" | "irregular";
+  walls: FloorPlanWall[];
+  natural_light: "high" | "medium" | "low";
+  traffic_notes?: string;
+  notes?: string;
+}
+
+export interface ExtractedFloorPlan {
+  image_url: string;
+  extracted_at: string;        // ISO timestamp
+  confidence: "high" | "medium" | "low";
+  total_sqft?: number;
+  building_orientation?: string; // "north arrow points up", "south-facing main facade"
+  rooms: FloorPlanRoom[];
+  scale_note?: string;
+  overall_notes?: string;
+}
 
 export interface Profile {
   id: string;

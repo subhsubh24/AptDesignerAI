@@ -51,6 +51,18 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
   );
 
   const analysisContent: AIContentBlock[] = [];
+
+  // Floor plan image first (authoritative spatial ground truth) — when present
+  // the model should read dimensions, wall features, and orientation from this
+  // rather than inferring them from room photos.
+  if (ctx.floorPlanImageUrl) {
+    analysisContent.push({
+      type: "text",
+      text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features (windows/doors/built-ins), and building orientation. Use this as the ground truth for all spatial facts. Do not infer or contradict any dimension readable from this plan.",
+    });
+    analysisContent.push({ type: "image", source: { type: "url", url: ctx.floorPlanImageUrl } });
+  }
+
   for (const url of ctx.imageUrls) {
     analysisContent.push({ type: "image", source: { type: "url", url } });
   }

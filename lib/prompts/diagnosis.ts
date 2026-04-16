@@ -1,4 +1,6 @@
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { ExtractedFloorPlan } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 interface DiagnosisContextParts {
@@ -24,6 +26,7 @@ function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
   const building = p.building_research as Record<string, unknown> | undefined;
   const apartment = p.apartment_analysis as Record<string, unknown> | undefined;
   const floorPlan = p.floor_plan as Record<string, unknown> | undefined;
+  const extractedFloorPlan = p.extractedFloorPlan as ExtractedFloorPlan | undefined;
 
   if (building) {
     const style = building.building_style || building.style;
@@ -41,7 +44,10 @@ function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
     if (typeof overall === "string" && overall) lines.push(`Apartment — ${overall}`);
   }
 
-  if (floorPlan) {
+  // Prefer structured extracted floor plan over legacy floor_plan object
+  if (extractedFloorPlan) {
+    lines.push(`Floor plan (extracted — authoritative) — ${formatExtractedFloorPlanForPrompt(extractedFloorPlan)}`);
+  } else if (floorPlan) {
     const sqft = floorPlan.total_sqft;
     const dims = floorPlan.room_dimensions;
     const layout = floorPlan.room_layout;

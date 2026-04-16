@@ -1,4 +1,5 @@
 import type { DynamicDesignProfile } from "./user-profile";
+import type { ExtractedFloorPlan } from "@/lib/types/database";
 
 /**
  * Build a DynamicDesignProfile from a project record.
@@ -63,7 +64,18 @@ export function buildDesignProfile(
     };
   }
 
+  // Floor plan image URL + extracted data — loaded from building_research
+  if (project.building_research) {
+    const br = project.building_research as Record<string, unknown>;
+    if (br.floor_plan_image_url) {
+      profile.floorPlanImageUrl = br.floor_plan_image_url as string;
+    }
+    if (br.extracted_floor_plan) {
+      profile.extractedFloorPlan = br.extracted_floor_plan as ExtractedFloorPlan;
+    }
+  }
+
   // Return undefined if nothing was populated
-  const hasData = profile.location || profile.buildingResearch || profile.apartmentAnalysis || profile.bedrooms || profile.lifestyle;
+  const hasData = profile.location || profile.buildingResearch || profile.apartmentAnalysis || profile.bedrooms || profile.lifestyle || profile.floorPlanImageUrl;
   return hasData ? profile : undefined;
 }

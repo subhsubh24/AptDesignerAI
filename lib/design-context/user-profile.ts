@@ -1,3 +1,5 @@
+import type { ExtractedFloorPlan } from "@/lib/types/database";
+
 /**
  * Dynamic design profile generation.
  * Generates design context from apartment analysis + building research
@@ -36,6 +38,10 @@ export interface DynamicDesignProfile {
     work_from_home?: boolean;
     notes?: string;
   };
+  /** URL of the uploaded floor plan image — passed to vision agents as first block */
+  floorPlanImageUrl?: string;
+  /** Structured spatial data extracted from the floor plan image */
+  extractedFloorPlan?: ExtractedFloorPlan;
 }
 
 /**
@@ -148,6 +154,28 @@ ${f.fixtures ? `- Fixtures: ${f.fixtures}` : ""}`);
     if (building.summary) {
       sections.push(`## BUILDING SUMMARY\n${building.summary}`);
     }
+  }
+
+  // Extracted floor plan — shown in system prompt as reference so all agents
+  // are aware of the ground-truth spatial data before they see any photos
+  if (profile.extractedFloorPlan) {
+    const efp = profile.extractedFloorPlan;
+    const efpLines: string[] = [];
+    if (efp.building_orientation) efpLines.push(`- Orientation: ${efp.building_orientation}`);
+    if (efp.total_sqft) efpLines.push(`- Total: ~${efp.total_sqft} sqft`);
+    if (efp.scale_note) efpLines.push(`- Scale: ${efp.scale_note}`);
+    efpLines.push(`- Confidence: ${efp.confidence}`);
+    for (const room of efp.rooms) {
+      const parts: string[] = [`- ${room.label} (${room.room_type})`];
+      if (room.dimensions_text) parts.push(`~${room.dimensions_text}`);
+      else if (room.sqft) parts.push(`~${room.sqft} sqft`);
+      const windowWalls = room.walls
+        .filter(w => w.features.some(f => f.type === "window"))
+        .map(w => w.direction);
+      if (windowWalls.length) parts.push(`windows: ${windowWalls.join(", ")} wall`);
+      efpLines.push(parts.join(" — "));
+    }
+    sections.push(`## UPLOADED FLOOR PLAN (authoritative spatial data)\n${efpLines.join("\n")}\nUse these exact dimensions and wall layouts. Do not infer or contradict this data from photos.`);
   }
 
   // Apartment analysis

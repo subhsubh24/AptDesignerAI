@@ -1,5 +1,6 @@
 import { truncateContext, type ContextSection } from "@/lib/ai/context-truncation";
-import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 
 export interface EvalContextArgs {
   roomType: string;
@@ -13,6 +14,8 @@ export interface EvalContextArgs {
   placement?: string;
   spatialLayout?: string;
   floorPlan?: Record<string, unknown>;
+  /** Structured floor plan extracted via vision model — preferred over legacy floorPlan */
+  extractedFloorPlan?: ExtractedFloorPlan;
   lightingConditions?: string;
   windowDoorPositions?: string;
   outletPositions?: string;
@@ -45,6 +48,7 @@ function buildEvalContext(args: EvalContextArgs): string {
     placement,
     spatialLayout,
     floorPlan,
+    extractedFloorPlan,
     lightingConditions,
     windowDoorPositions,
     outletPositions,
@@ -127,7 +131,13 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
     sections.push({ key: "spatial_layout", priority: 3, content: `## SPATIAL LAYOUT PLAN\n${spatialLayout}` });
   }
 
-  if (floorPlan) {
+  if (extractedFloorPlan) {
+    sections.push({
+      key: "floor_plan",
+      priority: 2,
+      content: `## FLOOR PLAN (EXTRACTED — AUTHORITATIVE)\n${formatExtractedFloorPlanForPrompt(extractedFloorPlan, roomType)}`,
+    });
+  } else if (floorPlan) {
     sections.push({
       key: "floor_plan",
       priority: 3,

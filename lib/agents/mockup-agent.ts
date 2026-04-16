@@ -195,6 +195,7 @@ export async function generateMockupPrompt(
   mockupContext?: MockupContext,
   roomImageUrls?: string[],
   photoOrientations?: PhotoOrientation[],
+  floorPlanImageUrl?: string,
 ): Promise<AgentResult<MockupPromptResult>> {
   const model = selectModel("mockup_prompt");
   const system = getSystemPrompt();
@@ -225,12 +226,23 @@ export async function generateMockupPrompt(
   // anchor the model sees photos in isolation and can flip the layout.
   let content: string | AIContentBlock[] = prompt;
   if (roomImageUrls && roomImageUrls.length > 0) {
-    const blocks: AIContentBlock[] = [
-      {
+    const blocks: AIContentBlock[] = [];
+
+    // Floor plan image comes first — it is the authoritative source for all
+    // spatial facts (dimensions, wall features, orientation). The downstream
+    // image generator must use it to place windows/doors on the correct walls.
+    if (floorPlanImageUrl) {
+      blocks.push({
         type: "text",
-        text: "REFERENCE PHOTOS OF THE ACTUAL ROOM — the prompt you write will be fed to an image generator that MUST render this exact room. Describe the wall color, floor, windows, trim, ceiling, and light direction precisely from these photos so the generator matches them:",
-      },
-    ];
+        text: "AUTHORITATIVE FLOOR PLAN — exact room dimensions, wall positions, window and door locations. Use this as the ground truth for spatial layout. The generated image MUST match this floor plan's wall arrangement.",
+      });
+      blocks.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+    }
+
+    blocks.push({
+      type: "text",
+      text: "REFERENCE PHOTOS OF THE ACTUAL ROOM — the prompt you write will be fed to an image generator that MUST render this exact room. Describe the wall color, floor, windows, trim, ceiling, and light direction precisely from these photos so the generator matches them:",
+    });
 
     const usedUrls = roomImageUrls.slice(0, 4);
     const captionByIndex = new Map<number, PhotoOrientation>();
@@ -303,6 +315,7 @@ export async function generateMockupImage(
   roomImageUrls?: string[],
   options: MockupImageOptions = {},
   photoOrientations?: PhotoOrientation[],
+  floorPlanImageUrl?: string,
 ): Promise<AgentResult<MockupGenerationResult>> {
   const imageSize = options.imageSize ?? (IMAGE_GENERATION_CONFIG.defaultImageSize as ImageSize);
   const aspectRatio = options.aspectRatio ?? (IMAGE_GENERATION_CONFIG.defaultAspectRatio as ImageAspectRatio);
@@ -311,6 +324,15 @@ export async function generateMockupImage(
   try {
     // Build content blocks: room photos first (if any), then prompt text
     const content: AIContentBlock[] = [];
+
+    // Floor plan image first when available — authoritative spatial ground truth
+    if (floorPlanImageUrl) {
+      content.push({
+        type: "text",
+        text: "AUTHORITATIVE FLOOR PLAN — exact room dimensions, wall layout, window and door positions. Use this as the ground truth for spatial layout. The generated image MUST match this floor plan — windows go on the walls shown here, doors open where shown. Do NOT mirror or rotate the room relative to this plan.",
+      });
+      content.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+    }
 
     if (roomImageUrls && roomImageUrls.length > 0) {
       content.push({

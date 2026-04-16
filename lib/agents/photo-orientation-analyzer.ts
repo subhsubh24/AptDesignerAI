@@ -20,6 +20,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIContentBlock } from "@/lib/ai/provider";
+import type { FloorPlanRoom } from "@/lib/types/database";
 
 const log = createLogger("photo-orientation-analyzer");
 
@@ -74,7 +75,10 @@ Output ONLY valid JSON — no prose, no markdown fences.`;
  * @param roomImageUrls  URLs from `room_images` for this room only.
  * @param roomType       Room label, e.g. "living_room", "bedroom".
  * @param roomDimensions Optional known dimensions of this room (e.g. "12 × 15 ft" or "~180 sqft").
- *                       Helps the analyzer calibrate scale and proportions correctly.
+ *                       Superseded by extractedRoom when both are provided.
+ * @param extractedRoom  Optional room data from an uploaded floor plan — provides exact wall
+ *                       feature positions so the analyzer knows which walls have windows BEFORE
+ *                       looking at photos, dramatically improving orientation accuracy.
  *
  * Cheap and non-fatal: if analysis fails (network, parse error, empty
  * response), returns an empty array. Callers must handle that gracefully
@@ -84,6 +88,7 @@ export async function analyzePhotoOrientations(
   roomImageUrls: string[],
   roomType: string,
   roomDimensions?: string,
+  extractedRoom?: FloorPlanRoom,
 ): Promise<PhotoOrientation[]> {
   if (!roomImageUrls || roomImageUrls.length === 0) return [];
 
@@ -91,11 +96,32 @@ export async function analyzePhotoOrientations(
   // and adds latency/cost. The first N are typically the most representative.
   const photos = roomImageUrls.slice(0, MAX_ANALYZED_PHOTOS);
 
-  const dimHint = roomDimensions ? ` (~${roomDimensions})` : "";
+  // Build dimension/layout context hint — prefer extracted floor plan data
+  const dimHint = extractedRoom?.dimensions_text
+    ? ` (~${extractedRoom.dimensions_text})`
+    : roomDimensions
+      ? ` (~${roomDimensions})`
+      : "";
+
+  // Build a wall-feature summary from extracted floor plan so the model knows
+  // exactly which walls have windows/doors before it even looks at the photos.
+  let floorPlanWallHint = "";
+  if (extractedRoom && extractedRoom.walls.length > 0) {
+    const wallLines = extractedRoom.walls
+      .filter(w => w.features.length > 0)
+      .map(w => {
+        const feats = w.features.map(f => `${f.type} (${f.position_on_wall})`).join(", ");
+        return `${w.direction} wall: ${feats}`;
+      });
+    if (wallLines.length > 0) {
+      floorPlanWallHint = `\n\nFLOOR PLAN WALL DATA (authoritative — use to identify which wall is which in photos):\n${wallLines.join("\n")}`;
+    }
+  }
+
   const content: AIContentBlock[] = [
     {
       type: "text",
-      text: `You will see ${photos.length} photo${photos.length === 1 ? "" : "s"} of a ${roomType}${dimHint}, numbered in the order shown. Analyze each one and return a JSON object.`,
+      text: `You will see ${photos.length} photo${photos.length === 1 ? "" : "s"} of a ${roomType}${dimHint}, numbered in the order shown. Analyze each one and return a JSON object.${floorPlanWallHint}`,
     },
   ];
 

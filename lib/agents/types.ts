@@ -1,5 +1,5 @@
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
-import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
+import type { DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 
 export interface DiagnosisItem {
   category: string;
@@ -47,6 +47,11 @@ export interface AgentContext {
   spatialLayout?: string;
   placementMap?: Record<string, string>;
   floorPlan?: Record<string, unknown>;
+
+  // Floor plan image + extracted spatial data (ground truth for all spatial facts).
+  // When present these take priority over floorPlan and all photo-inferred dimensions.
+  floorPlanImageUrl?: string;
+  extractedFloorPlan?: ExtractedFloorPlan;
 
   // Environmental context — lighting, windows/doors, outlets
   lightingConditions?: string;

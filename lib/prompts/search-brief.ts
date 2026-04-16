@@ -1,4 +1,5 @@
-import type { DesignDirection } from "@/lib/types/database";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 export type PriceTier = "budget" | "balanced" | "high_end";
@@ -16,6 +17,7 @@ function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
   const building = p.building_research as Record<string, unknown> | undefined;
   const apartment = p.apartment_analysis as Record<string, unknown> | undefined;
   const floorPlan = p.floor_plan as Record<string, unknown> | undefined;
+  const extractedFloorPlan = p.extractedFloorPlan as ExtractedFloorPlan | undefined;
   const lines: string[] = [];
 
   if (building) {
@@ -31,7 +33,11 @@ function buildDesignProfileSection(profile?: DynamicDesignProfile): string {
   if (apartment && typeof apartment.overall === "string" && apartment.overall) {
     lines.push(`Apartment — ${apartment.overall}`);
   }
-  if (floorPlan) {
+
+  // Prefer structured extracted floor plan over legacy floor_plan object
+  if (extractedFloorPlan) {
+    lines.push(`Floor plan (extracted) — ${formatExtractedFloorPlanForPrompt(extractedFloorPlan)}`);
+  } else if (floorPlan) {
     const sqft = floorPlan.total_sqft;
     const dims = floorPlan.room_dimensions;
     const layout = floorPlan.room_layout;

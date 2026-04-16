@@ -14,7 +14,8 @@ import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/pars
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
-import type { DesignDirection, IdentifiedProduct } from "@/lib/types/database";
+import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -112,8 +113,22 @@ async function runAnalysis(supabase: any, room_id: string, project_id: string | 
     supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id),
   ]);
 
+  // Extract floor plan data from building_research (new structured extraction)
+  const brForFP = project?.building_research as Record<string, unknown> | undefined;
+  const floorPlanImageUrl = brForFP?.floor_plan_image_url as string | undefined;
+  const extractedFloorPlan = brForFP?.extracted_floor_plan as ExtractedFloorPlan | undefined;
+
   // Build vision content
   const contentBlocks: AIContentBlock[] = [];
+
+  // Inject floor plan image as first block — authoritative spatial ground truth
+  if (floorPlanImageUrl) {
+    contentBlocks.push({
+      type: "text",
+      text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features (windows/doors/built-ins), and building orientation. Use this as the ground truth for all spatial facts. Do not infer or contradict any dimension readable from this plan.",
+    });
+    contentBlocks.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+  }
 
   // Extract user-provided sqft override from context (e.g., "My apt sq ft is 725")
   const userSqftMatch = room.user_context?.match(/(?:sq\s*ft|square\s*feet?|sqft)\s*(?:is|:)?\s*(\d{3,5})/i)
@@ -126,7 +141,11 @@ async function runAnalysis(supabase: any, room_id: string, project_id: string | 
     const floorPlan = br.floor_plan as Record<string, unknown> | undefined;
     // Use user-provided sqft if available, otherwise fall back to building research
     const effectiveSqft = userSqft || floorPlan?.total_sqft || "unknown";
-    const floorPlanSection = floorPlan
+
+    // Prefer structured extracted floor plan text over legacy floor_plan object
+    const floorPlanSection = extractedFloorPlan
+      ? `\n\n${formatExtractedFloorPlanForPrompt(extractedFloorPlan, room.room_type)}`
+      : floorPlan
       ? `\nFloor Plan: ${effectiveSqft} sqft${userSqft ? " (per client)" : ""} | Living/dining combined: ${floorPlan.living_dining_combined ?? "unknown"} | Kitchen: ${floorPlan.kitchen_style || "unknown"}
 Room layout: ${floorPlan.room_layout || "unknown"}
 Room dimensions: ${JSON.stringify(floorPlan.room_dimensions || {})}
@@ -651,6 +670,8 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       apartmentAnalysis: project?.apartment_analysis as Record<string, unknown> | undefined,
       designProfile: profile,
       floorPlan,
+      floorPlanImageUrl,
+      extractedFloorPlan,
       userContext: room.user_context || undefined,
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
       identifiedContext: identifiedPiecesBlock || undefined,

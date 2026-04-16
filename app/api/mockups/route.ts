@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
+import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
+import type { ExtractedFloorPlan } from "@/lib/types/database";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -172,24 +174,25 @@ export async function POST(request: Request) {
     .single();
 
   const buildingResearch = project?.building_research as Record<string, unknown> | undefined;
+  const floorPlanImageUrl = buildingResearch?.floor_plan_image_url as string | undefined;
+  const extractedFloorPlan = buildingResearch?.extracted_floor_plan as ExtractedFloorPlan | undefined;
 
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
-  // Extract this room's specific dimensions from building research so the
-  // orientation analyzer knows the actual scale of the room it's looking at
-  // (not apartment-level sqft). Falls back gracefully to undefined.
+  // Extract this room's specific dimensions — prefer extracted floor plan room
+  // data (exact), fall back to legacy room_dimensions text string.
   const fp = buildingResearch?.floor_plan as Record<string, unknown> | undefined;
   const roomDims = fp?.room_dimensions as Record<string, string> | undefined;
   const thisRoomDimensions = roomDims?.[room.room_type] ?? undefined;
+  const extractedRoom = getRoomFromFloorPlan(extractedFloorPlan, room.room_type);
 
   // Run a single batched vision call to produce per-photo orientation
-  // captions ("Photo 1 — taken from doorway facing window wall; light from
-  // left"). Only photos from this specific room are analyzed.
-  // Non-fatal: on failure the analyzer returns [] and generation proceeds
-  // without the anchor.
+  // captions. The extracted floor plan room (walls[], window positions) is
+  // passed so the analyzer knows which walls have windows BEFORE seeing the
+  // photos — greatly improving orientation accuracy. Non-fatal on failure.
   const photoOrientations = roomImageUrls.length > 0
-    ? await analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions)
+    ? await analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions, extractedRoom)
     : [];
 
   // Extract diagnosis context that's useful for both modes
@@ -297,7 +300,7 @@ RULES:
       });
     }
 
-    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions, photoOrientations);
+    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
 
     if (!imageResult.success || !imageResult.data) {
       await completeAgentRun(supabase, agentRun.id, {
@@ -422,6 +425,7 @@ RULES:
     mockupCtx,
     roomImageUrls,
     photoOrientations,
+    floorPlanImageUrl,
   );
 
   if (!promptResult.success || !promptResult.data) {
@@ -453,8 +457,8 @@ RULES:
             .slice(0, 8),
   };
 
-  // Generate image — pass room photos for visual reference
-  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions, photoOrientations);
+  // Generate image — pass room photos and floor plan for visual reference
+  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
 
   if (!imageResult.success || !imageResult.data) {
     await supabase
