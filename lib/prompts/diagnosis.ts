@@ -359,6 +359,9 @@ JSON only. No prose, no markdown fences. Do NOT include missing_categories or ac
  * Split-pass Call B: synthesize the plan from Call A's analysis.
  * No images — consumes the diagnosis + design_direction as text input
  * and produces missing_categories + action_list.
+ *
+ * @param fewShotBlock  Pre-formatted XML block from formatExamplesForPrompt().
+ *                      Pass "" (empty string) for zero-shot (default).
  */
 export function getDiagnosisPlanPrompt(
   roomType: string,
@@ -367,6 +370,7 @@ export function getDiagnosisPlanPrompt(
   replaceItems: string[],
   priorities: string[],
   userContext?: string,
+  fewShotBlock?: string,
 ): string {
   const { allKeepItems, userNotes, keepItemsWarning } = buildDiagnosisContextParts(keepItems, userContext);
 
@@ -386,8 +390,14 @@ Produce two outputs:
 - Items to replace: ${replaceItems.length > 0 ? replaceItems.join(", ") : "none specified"}
 - User priorities: ${priorities.length > 0 ? priorities.join(", ") : "not specified"}${userNotes}${keepItemsWarning}
 
-## PRIOR DIAGNOSIS (source of truth — do not contradict)
+${fewShotBlock ?? ""}
+<prior_diagnosis>
+The following is the completed observation and problem-identification analysis for this room.
+Treat every field as ground truth — do not contradict it. Your action_list must trace
+every item back to a problem or gap identified here.
+
 ${analysisJson}
+</prior_diagnosis>
 
 ## DERIVATION RULES
 

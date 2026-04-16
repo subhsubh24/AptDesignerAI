@@ -3,6 +3,7 @@ import { selectModel } from "@/lib/ai/models";
 import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisAnalysisPrompt, getDiagnosisPlanPrompt } from "@/lib/prompts/diagnosis";
+import { fetchDiagnosisExamples, formatExamplesForPrompt } from "@/lib/db/diagnosis-examples";
 import {
   DiagnosisAnalysisResponseSchema,
   DiagnosisPlanResponseSchema,
@@ -213,6 +214,22 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
 
   // ─── Pass 2: Plan (consumes Pass 1's analysis as text) ──────
   const analysisJson = JSON.stringify(analysis, null, 2);
+
+  // Fetch DB-backed few-shot examples: top-N past action_lists from
+  // diagnoses of the same room_type. Real accepted outputs calibrate
+  // specificity and category coverage better than synthetic examples.
+  const fewShotExamples = await fetchDiagnosisExamples(
+    ctx.roomType,
+    null, // direction label not in schema yet — room_type match only
+  );
+  const fewShotBlock = formatExamplesForPrompt(fewShotExamples);
+  if (fewShotExamples.length > 0) {
+    log.info("Injecting few-shot examples into Pass 2 prompt", {
+      count: fewShotExamples.length,
+      roomType: ctx.roomType,
+    });
+  }
+
   const planPrompt = getDiagnosisPlanPrompt(
     ctx.roomType,
     analysisJson,
@@ -220,6 +237,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
     ctx.replaceItems,
     ctx.priorities,
     ctx.userContext,
+    fewShotBlock,
   );
 
   let planTokens = 0;

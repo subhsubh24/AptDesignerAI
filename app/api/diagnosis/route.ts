@@ -287,6 +287,10 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       action_list: expandedActionList,
       model_used: result.model,
       expansion_log: expansionLog,
+      // Quality tracking columns (migration 010) — enable DB few-shot retrieval.
+      // design_direction_label left null for now (schema lacks a label field).
+      room_type: room.room_type ?? null,
+      action_list_count: expandedActionList.length,
     })
     .select()
     .single();
