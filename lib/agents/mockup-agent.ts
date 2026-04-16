@@ -402,31 +402,58 @@ Use these real-world references to render furniture and materials accurately (co
       ? `\n\nYou have access to real-time Google Search (including image results). When a real product, brand, or named style is referenced, look up current reference imagery and match its actual silhouette, proportions, material, and finish. Never invent branded products — verify them via search.`
       : "";
 
-    const imageSystemPrompt = `You are a photorealistic interior design visualization specialist.
+    // Nano Banana Pro has thinking always on — the system prompt focuses on
+    // the visual and spatial reasoning we want it to apply during that thinking.
+    const imageSystemPrompt = `You are a professional interior design photographer and visualizer producing final images for Architectural Digest.
 
-ABSOLUTE RULE: The generated room must look like the SAME PHYSICAL ROOM shown in the reference photos. Match the exact:
-- Wall color and finish
-- Floor material, color, and pattern (e.g. light oak hardwood, gray tile, dark walnut planks)
-- Window positions, sizes, and style (the room's natural light comes from these exact windows)
-- Room dimensions and proportions (narrow vs wide, ceiling height)
-- Architectural features (crown molding, baseboards, built-ins, radiators)
+<visual_anchoring>
+The reference photos show the EXACT physical room. Your generated image must render the SAME room:
+- Floor: identical material, color, plank/tile pattern, and sheen level
+- Walls: identical color, undertone, and paint finish
+- Windows: identical position on the correct walls, frame style, and trim
+- Ceiling: identical height, profile, and any molding or texture
+- Architectural details: crown molding, baseboards, built-ins, radiators — all must match
 
-You are ONLY replacing/adding furniture and decor items. The room shell (walls, floors, ceiling, windows, doors) must be identical to the reference photos.
+You are ONLY changing the furniture and decor. The room shell is fixed. Do not alter, add, or remove any architectural feature.
+</visual_anchoring>
 
-Generate images in a photorealistic, editorial interior photography style — warm natural light, slight depth of field, as if shot with a professional camera for Architectural Digest.${groundingSystemNote}`;
+<photography_brief>
+- Shot style: editorial interior photography, as published in Architectural Digest or Elle Decor
+- Lens: 24mm wide-angle, eye-level viewpoint, showing the full room depth
+- Depth of field: sharp foreground and midground with gentle bokeh in the far corners
+- Lighting: warm, directional natural light from the actual window positions shown in the reference photos; warm secondary light pools from any lamps in the scene
+- Color grading: slightly warm, natural — not cold or clinical; not overexposed
+- Mood: lived-in designer apartment — not a furniture showroom, not a staged open house
+</photography_brief>
 
-    // Image generation benefits from some stochasticity — we keep a moderate
-    // temperature but add seed for best-effort reproducibility. Full
-    // byte-identical reproducibility is handled at the route level by
-    // caching rendered images keyed on (room image hash + product set).
+<material_fidelity>
+Every material must read as physically real — the weight of natural linen, the grain of oiled oak, the matte depth of a ceramic vase. Never render materials as flat, plasticky, or CGI. If you consulted web references for a product, match its actual proportions and material texture precisely.
+</material_fidelity>
+${groundingSystemNote}`;
+
+    // Nano Banana Pro (gemini-3-pro-image-preview) is the default for final
+    // room mockups — thinking always on, 4K capable, professional asset
+    // production quality. If Pro is unavailable, fall back to Nano Banana 2
+    // with thinkingLevel: "high" to match Pro's composition reasoning.
+    const imageModel = selectModel("mockup_image"); // → gemini-3-pro-image-preview
+    const isProModel = imageModel.includes("pro");
+
+    // For Nano Banana 2 (fallback): explicitly set thinking to "high" to
+    // maximally improve composition quality. For Pro, thinking is always on
+    // and the thinkingConfig field is ignored (no-op to pass it).
+    const thinkingCfg = isProModel
+      ? undefined
+      : { thinkingLevel: "high" as const };
+
     const response = await geminiProvider.chat({
-      model: selectModel("image_generation"),
+      model: imageModel,
       system: imageSystemPrompt,
       messages: [{ role: "user", content }],
-      // No temperature override — Gemini 3 is optimized for its default (1.0).
+      // No temperature override — Gemini 3 image models are optimized for default (1.0).
       seed: DETERMINISTIC_SEED,
       responseModalities: ["Text", "Image"],
       imageConfig: { imageSize, aspectRatio },
+      ...(thinkingCfg ? { thinkingConfig: thinkingCfg } : {}),
       ...(useGrounding ? { tools: [{ googleSearch: {} as Record<string, never> }] } : {}),
     });
 

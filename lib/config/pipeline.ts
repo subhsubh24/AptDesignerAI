@@ -169,9 +169,17 @@ export const SCALE_RELATIONS_CONFIG = {
  *   before rendering.
  */
 export const IMAGE_GENERATION_CONFIG = {
-  defaultImageSize: "1K",
+  /**
+   * Default output resolution for Nano Banana Pro (gemini-3-pro-image-preview).
+   * 2K is the recommended default for room mockups — sharp enough for full-screen
+   * preview without the cost/latency of 4K. Use 4K for premium export.
+   */
+  defaultImageSize: "2K",
   defaultAspectRatio: "16:9",
   defaultThumbnailSize: "0.5K",
+
+  /** Fast-preview size for Nano Banana 2 quick renders (progress thumbnails). */
+  fastPreviewImageSize: "1K",
 
   allowedImageSizes: ["0.5K", "1K", "2K", "4K"] as const,
   allowedAspectRatios: [
