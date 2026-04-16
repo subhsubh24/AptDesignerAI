@@ -374,16 +374,29 @@ ${analysisJson}
 ## YOUR TASK
 
 ### missing_categories (flat array of category keys)
-Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys the shopping pipeline expects (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "art", "plants"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15). Do NOT include items the client wants to keep.
+Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys the shopping pipeline expects (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "wall_art", "plant"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15 items). Do NOT include items the client wants to keep.
+
+Finishing tier includes (use as a checklist — include any that are missing and relevant):
+candles, baskets, books_styled, greenery_small, greenery_tall, sculptures, frames, poufs,
+decorative_bowls, tray_styling, throw_blanket, decorative_objects, vase, wall_art, plant,
+bench, table_runner, pouf, floor_cushion.
 
 ### action_list (ranked, specific)
-For each missing category, write ONE action item:
+For each missing category, write ONE action item per DISTINCT variant. If a category needs meaningfully different versions, emit separate entries with a "variant" field:
+- "tall floor plant (fiddle leaf)" AND "trailing shelf plant (pothos)" are distinct entries with variant set
+- "3 throw pillows, same fabric, different sizes" → single entry with quantity: 3
+
+Fields:
 - priority: 1 = highest impact, increase as priority drops
 - action: specific, includes material/color/size guidance (reference the design_direction palette and materials)
 - category: matches an entry in missing_categories
 - reasoning: why this matters — what problem from the diagnosis it solves
+- variant: (optional) sub-type label when the same category has multiple distinct entries
+- quantity: (optional) integer when multiple identical/near-identical items are needed (e.g., 3 throw pillows, 2 candles)
 
-Rank by impact: foundational pieces first (rug, anchor seating, primary lighting), then standard (accent seating, textiles, art), then finishing (plants, objects).
+Rank by impact: foundational pieces first (rug, anchor seating, primary lighting), then standard (accent seating, textiles, art), then finishing (plants, objects, candles, baskets, books).
+
+⚠️ If the user used plural language (e.g., "plants", "art", "candles") infer quantity ≥ 2 for that category.
 
 ## ⚠️ CRITICAL CONSTRAINTS
 - NEVER recommend a new item in the same category as a kept item (e.g., if client is keeping a floor lamp, do NOT recommend a new floor lamp)
@@ -393,13 +406,34 @@ ${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
 
 ## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
-  "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", "plants"],
+  "missing_categories": ["rug", "coffee_table", "accent_chair", "wall_art", "floor_lamp", "throw_pillows", "plant", "candles"],
   "action_list": [
     {
       "priority": 1,
       "action": "Area rug at least 8x10, wool or wool-blend, warm neutral with subtle texture — extends beyond front legs of sofa to anchor seating area",
       "category": "rug",
       "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; a properly scaled rug anchors the seating zone and adds the warm texture the diagnosis flagged as missing"
+    },
+    {
+      "priority": 4,
+      "action": "Tall statement plant, fiddle leaf fig or olive tree, 5–6 ft, in a woven rattan basket planter — positioned in the empty corner by the window",
+      "category": "plant",
+      "variant": "tall floor",
+      "reasoning": "The diagnosis noted the room lacks greenery and the tall corner is visually empty"
+    },
+    {
+      "priority": 5,
+      "action": "Trailing pothos or philodendron on the bookshelf, 4-inch pot in a ceramic planter",
+      "category": "plant",
+      "variant": "trailing shelf",
+      "reasoning": "Second scale of greenery adds life to the shelf without competing with the floor plant"
+    },
+    {
+      "priority": 5,
+      "action": "Set of 3 pillar candles, varying heights 4\"/6\"/8\", unscented, cream wax, grouped on a small round tray on the coffee table",
+      "category": "candles",
+      "quantity": 3,
+      "reasoning": "Adds warm ambient texture and breaks up the empty coffee table surface"
     }
   ]
 }`;

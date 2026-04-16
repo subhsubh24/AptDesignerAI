@@ -451,8 +451,9 @@ function computeCompleteness(products: BundleProduct[], ctx: BundleMathContext):
     ? (tiers.finishing.length - missingFinishing.length) / tiers.finishing.length
     : 1.0;
 
-  // Tiered score: essential 65%, standard 25%, finishing 10%
-  let score = essentialCoverage * 0.65 + standardCoverage * 0.25 + finishingCoverage * 0.10;
+  // Tiered score: essential 50%, standard 30%, finishing 20%
+  // (finishing weight doubled to reward rooms with abundant decorative layers)
+  let score = essentialCoverage * 0.50 + standardCoverage * 0.30 + finishingCoverage * 0.20;
 
   // Under-minimum penalty
   if (products.length < tiers.minItemCount) {
@@ -461,10 +462,14 @@ function computeCompleteness(products: BundleProduct[], ctx: BundleMathContext):
     issues.push(`Bundle has ${products.length} items (minimum: ${tiers.minItemCount}) — significant furnishing gap`);
   }
 
-  // Diminishing returns over optimal (gentle: -0.02 per excess item, max -0.10)
+  // Diminishing returns only apply when a saturation hard cap is exceeded,
+  // not just because item count is above optimalRange.  The greedy expansion
+  // is saturation-aware and will stop before hard caps; optimalRange is now
+  // a soft guideline, not a ceiling.  We keep a very gentle safety penalty
+  // (−0.005 per excess item, max −0.05) to avoid runaway edge cases.
   if (products.length > tiers.optimalRange[1]) {
     const excess = products.length - tiers.optimalRange[1];
-    score -= Math.min(excess * 0.02, 0.10);
+    score -= Math.min(excess * 0.005, 0.05);
   }
 
   if (missingEssential.length > 0) {

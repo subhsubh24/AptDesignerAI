@@ -66,6 +66,8 @@ export interface RoomDiagnosis {
   missing_categories: string[] | null;
   action_list: ActionItem[] | null;
   model_used: string | null;
+  /** Greedy expansion decision log — null when expansion was skipped */
+  expansion_log?: DecoratorDecision[] | null;
   created_at: string;
 }
 
@@ -245,6 +247,22 @@ export interface ActionItem {
   action: string;
   category: string;
   reasoning: string;
+  /** Distinguishes sub-types within a category (e.g. "trailing shelf" vs "tall floor") */
+  variant?: string;
+  /** Number of this item to source — undefined = 1 */
+  quantity?: number;
+  /** Tracks whether produced by initial diagnosis or greedy expansion */
+  source?: "diagnosis" | "expansion";
+}
+
+/** One step in the greedy expansion decision log */
+export interface DecoratorDecision {
+  iteration: number;
+  verdict: "ADD" | "STOP" | "GUARDRAIL_REJECTED";
+  item?: Partial<ActionItem>;
+  reasoning: string;
+  density_feel: string;
+  saturation_pct: number;
 }
 
 export interface ProductDimensions {

@@ -337,6 +337,12 @@ export const ActionItemSchema = z.object({
   action: z.string(),
   category: z.string(),
   reasoning: z.string().default(""),
+  /** Distinguishes sub-types within a category (e.g., "trailing shelf" vs "tall floor") */
+  variant: z.string().optional(),
+  /** Number of this item to source — null / undefined = 1 */
+  quantity: z.coerce.number().optional(),
+  /** Tracks whether this entry was produced by the initial diagnosis or the greedy expansion */
+  source: z.enum(["diagnosis", "expansion"]).default("diagnosis"),
 });
 
 export const DiagnosisResponseSchema = z.object({

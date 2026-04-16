@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
+import { runDiagnosisExpansion } from "@/lib/agents/greedy-decorator";
 import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -169,16 +170,52 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     }
   }
 
-  // Save diagnosis
+  // ─── Greedy expansion: grow action_list until room is saturated ────────────
+  // Runs after validation / patching, before saving, so the expanded list is
+  // what gets persisted and consumed by the product search pipeline.
+  // Non-fatal: if expansion throws, we continue with the baseline action_list.
+  let expandedActionList = diagnosisData.action_list ?? [];
+  let expansionLog: import("@/lib/types/database").DecoratorDecision[] | null = null;
+
+  if (expandedActionList.length > 0) {
+    try {
+      const expansion = await runDiagnosisExpansion({
+        currentItems: expandedActionList,
+        room: {
+          type: ctx.roomType,
+          sqft: (ctx.floorPlan?.total_sqft as number | undefined),
+        },
+        designDirection: diagnosisData.design_direction ?? undefined,
+        roomPhotos: ctx.imageUrls,
+      });
+      expandedActionList = expansion.expanded_items;
+      expansionLog = expansion.decision_log;
+      log.info("Greedy expansion complete", {
+        room_id,
+        baseline: diagnosisData.action_list?.length ?? 0,
+        expanded: expansion.expanded_items.length,
+        added: expansion.added_count,
+        stopReason: expansion.stop_reason,
+      });
+    } catch (err) {
+      log.warn("Greedy expansion failed — using baseline action_list", {
+        room_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Save diagnosis (with expanded action_list + expansion_log)
   const { data: diagnosis, error: saveError } = await supabase
     .from("room_diagnoses")
     .insert({
       room_id,
       diagnosis_json: diagnosisJsonToSave,
       design_direction_json: diagnosisData.design_direction,
-      missing_categories: diagnosisData.missing_categories,
-      action_list: diagnosisData.action_list,
+      missing_categories: [...new Set(expandedActionList.map(i => i.category))],
+      action_list: expandedActionList,
       model_used: result.model,
+      expansion_log: expansionLog,
     })
     .select()
     .single();
