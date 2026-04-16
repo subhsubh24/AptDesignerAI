@@ -355,7 +355,10 @@ export const geminiProvider: AIProvider = {
       config.temperature = effectiveTemperature;
     }
 
-    if (typeof effectiveSeed === "number") {
+    // seed is incompatible with responseSchema on Gemini 3.1 Flash Lite —
+    // combining them produces INVALID_ARGUMENT (400). The schema already
+    // enforces a deterministic output structure, so seed is redundant here.
+    if (typeof effectiveSeed === "number" && !responseSchema) {
       config.seed = effectiveSeed;
     }
 
