@@ -176,13 +176,20 @@ export async function POST(request: Request) {
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
+  // Extract this room's specific dimensions from building research so the
+  // orientation analyzer knows the actual scale of the room it's looking at
+  // (not apartment-level sqft). Falls back gracefully to undefined.
+  const fp = buildingResearch?.floor_plan as Record<string, unknown> | undefined;
+  const roomDims = fp?.room_dimensions as Record<string, string> | undefined;
+  const thisRoomDimensions = roomDims?.[room.room_type] ?? undefined;
+
   // Run a single batched vision call to produce per-photo orientation
   // captions ("Photo 1 — taken from doorway facing window wall; light from
-  // left"). These are interleaved with the image blocks during generation so
-  // the image model doesn't mirror/flip the room. Non-fatal: on failure the
-  // analyzer returns [] and generation proceeds without the anchor.
+  // left"). Only photos from this specific room are analyzed.
+  // Non-fatal: on failure the analyzer returns [] and generation proceeds
+  // without the anchor.
   const photoOrientations = roomImageUrls.length > 0
-    ? await analyzePhotoOrientations(roomImageUrls, room.room_type)
+    ? await analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions)
     : [];
 
   // Extract diagnosis context that's useful for both modes
@@ -543,6 +550,26 @@ function buildArchitecturalContext(
 
   const lines: string[] = [];
 
+  // ── Room-specific context first (highest priority for the image generator) ──
+  const fp = br.floor_plan as Record<string, unknown> | undefined;
+  if (fp) {
+    const dims = fp.room_dimensions as Record<string, string> | undefined;
+    // Prefer the exact room's dimension; do NOT fall back to another room's dims
+    const roomDim = dims?.[roomType];
+    if (roomDim) lines.push(`${roomType} dimensions: ~${roomDim}`);
+  }
+
+  if (br.ceiling_height) lines.push(`Ceiling height: ${br.ceiling_height}`);
+
+  // Cardinal orientation of this room — helps the image generator correctly
+  // place which wall the windows are on and where light enters from
+  const loc = br.location_context as Record<string, unknown> | undefined;
+  if (loc) {
+    if (loc.primary_orientation) lines.push(`Room orientation: ${loc.primary_orientation}-facing`);
+    if (loc.likely_light_direction) lines.push(`Dominant daylight: ${loc.likely_light_direction}`);
+  }
+
+  // ── Finishes (room-level surface details) ───────────────────────────────────
   const finishes = br.finishes as Record<string, string> | undefined;
   if (finishes) {
     if (finishes.flooring) lines.push(`Flooring: ${finishes.flooring}`);
@@ -552,28 +579,11 @@ function buildArchitecturalContext(
   }
 
   if (br.windows) lines.push(`Windows: ${br.windows}`);
-  if (br.ceiling_height) lines.push(`Ceiling height: ${br.ceiling_height}`);
-  if (br.layout_style) lines.push(`Layout: ${br.layout_style}`);
+
+  // ── Building-level context (lower priority — background reference only) ─────
+  if (br.layout_style) lines.push(`Layout style: ${br.layout_style}`);
   if (br.building_style) lines.push(`Building style: ${br.building_style}`);
 
-  // Cardinal orientation — researched upstream in apartment-research but
-  // never previously surfaced to the image generator. Without this, the
-  // model can't reconcile the light direction it sees in photos with the
-  // actual building orientation, leading to mirror-flipped mockups.
-  const loc = br.location_context as Record<string, unknown> | undefined;
-  if (loc) {
-    if (loc.primary_orientation) lines.push(`Apartment orientation: ${loc.primary_orientation}-facing`);
-    if (loc.likely_light_direction) lines.push(`Dominant daylight: ${loc.likely_light_direction}`);
-  }
-
-  const fp = br.floor_plan as Record<string, unknown> | undefined;
-  if (fp) {
-    const dims = fp.room_dimensions as Record<string, string> | undefined;
-    const roomDim = dims?.[roomType] || dims?.living_room;
-    if (roomDim) lines.push(`Room dimensions: ~${roomDim}`);
-    if (fp.total_sqft) lines.push(`Apartment: ~${fp.total_sqft} sqft`);
-  }
-
   if (lines.length === 0) return "";
-  return `\nKnown architectural details (from building research):\n${lines.map((l) => `- ${l}`).join("\n")}`;
+  return `\nKnown architectural details for this ${roomType}:\n${lines.map((l) => `- ${l}`).join("\n")}`;
 }

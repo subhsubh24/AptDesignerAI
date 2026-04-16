@@ -68,6 +68,14 @@ Output ONLY valid JSON — no prose, no markdown fences.`;
  * Run a single batched vision call that returns a per-photo orientation
  * caption for every image in {@link roomImageUrls}.
  *
+ * Only analyzes photos of the specific room being rendered — callers must
+ * pre-filter to `room_images` for that room before calling this function.
+ *
+ * @param roomImageUrls  URLs from `room_images` for this room only.
+ * @param roomType       Room label, e.g. "living_room", "bedroom".
+ * @param roomDimensions Optional known dimensions of this room (e.g. "12 × 15 ft" or "~180 sqft").
+ *                       Helps the analyzer calibrate scale and proportions correctly.
+ *
  * Cheap and non-fatal: if analysis fails (network, parse error, empty
  * response), returns an empty array. Callers must handle that gracefully
  * — the mockup still generates, just without the extra orientation anchor.
@@ -75,6 +83,7 @@ Output ONLY valid JSON — no prose, no markdown fences.`;
 export async function analyzePhotoOrientations(
   roomImageUrls: string[],
   roomType: string,
+  roomDimensions?: string,
 ): Promise<PhotoOrientation[]> {
   if (!roomImageUrls || roomImageUrls.length === 0) return [];
 
@@ -82,10 +91,11 @@ export async function analyzePhotoOrientations(
   // and adds latency/cost. The first N are typically the most representative.
   const photos = roomImageUrls.slice(0, MAX_ANALYZED_PHOTOS);
 
+  const dimHint = roomDimensions ? ` (~${roomDimensions})` : "";
   const content: AIContentBlock[] = [
     {
       type: "text",
-      text: `You will see ${photos.length} photo${photos.length === 1 ? "" : "s"} of a ${roomType}, numbered in the order shown. Analyze each one and return a JSON object.`,
+      text: `You will see ${photos.length} photo${photos.length === 1 ? "" : "s"} of a ${roomType}${dimHint}, numbered in the order shown. Analyze each one and return a JSON object.`,
     },
   ];
 

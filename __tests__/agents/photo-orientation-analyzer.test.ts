@@ -136,6 +136,24 @@ describe("analyzePhotoOrientations", () => {
     const allText = textBlocks.map((b: { text: string }) => b.text).join(" ");
     expect(allText).toContain("home_office");
   });
+
+  it("includes room dimensions hint when provided", async () => {
+    mockChat.mockResolvedValueOnce({
+      content: JSON.stringify({ photos: [] }),
+    });
+    await analyzePhotoOrientations(
+      ["https://example.com/a.jpg"],
+      "bedroom",
+      "12 × 14 ft",
+    );
+    const call = mockChat.mock.calls[0][0];
+    const messageContent = call.messages[0].content;
+    const textBlocks = Array.isArray(messageContent)
+      ? messageContent.filter((b: { type: string }) => b.type === "text")
+      : [];
+    const allText = textBlocks.map((b: { text: string }) => b.text).join(" ");
+    expect(allText).toContain("12 × 14 ft");
+  });
 });
 
 describe("formatOrientationSummary", () => {
