@@ -109,7 +109,7 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
     "rug": ["area_rug", "rug", "area rug", "carpet"],
     "coffee table": ["coffee_table", "coffee table"],
     "dining table": ["dining_table", "dining table"],
-    "bookshelf": ["bookshelf", "shelf", "shelving", "bookcase"],
+    "bookshelf": ["bookshelf", "shelving", "bookcase"],
     "tv console": ["media_console", "tv console", "media console", "tv stand", "entertainment center"],
     "light": ["table_lamp", "table lamp", "light", "lamp", "light stand", "sconce", "wall light", "accent light"],
   };
@@ -203,6 +203,15 @@ export function validateAreaAnalysis(
   }
 
   // --- Check 2: Keep-item violations ---
+  // These are pure decor/accessory categories — they go ON top of kept furniture
+  // (e.g., vases on a kept bookshelf), they never REPLACE it. Exempt them from
+  // the keep_item_replaced check to avoid false positives.
+  const DECOR_CATEGORIES = new Set([
+    "vase", "candles", "candle", "books", "tray", "decorative_objects",
+    "baskets", "frames", "throw_pillows", "throw_blanket", "plant",
+    "wall_art", "wall_art_small", "mirror_small",
+  ]);
+
   if (allKeepItems.length > 0) {
     const keepCategories = extractKeepCategories(allKeepItems);
 
@@ -212,6 +221,8 @@ export function validateAreaAnalysis(
       // Check if what_it_needs recommends a NEW item in the same category as a kept item
       if (Array.isArray(patched.what_it_needs)) {
         patched.what_it_needs = patched.what_it_needs.filter((rec: AnalysisItem) => {
+          // Pure decor/accessory items complement kept furniture — never replace it
+          if (DECOR_CATEGORIES.has((rec.category || "").toLowerCase())) return true;
           const recText = `${rec.category || ""} ${rec.search_title || ""}`;
           const match = mentionsAny(recText, keywords);
           if (match) {
