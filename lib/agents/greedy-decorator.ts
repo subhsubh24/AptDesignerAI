@@ -13,6 +13,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { createLogger } from "@/lib/logging/logger";
 import {
@@ -144,6 +145,7 @@ interface LLMExpansionResponse {
     category?: string;
     action?: string;
     variant?: string | null;
+    placement?: string;
     quantity?: number | null;
     priority?: number;
     reasoning?: string;
@@ -174,7 +176,7 @@ function buildActionItem(
     reasoning: llmItem.reasoning ?? "",
     variant: llmItem.variant ?? undefined,
     quantity: llmItem.quantity ?? undefined,
-    // source is set by the caller via object spread after type assertions
+    placement: llmItem.placement ?? undefined,
   };
 }
 
@@ -247,6 +249,7 @@ export async function runDiagnosisExpansion(
         system: EXPANSION_SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
         max_tokens: 1500,
+        seed: DETERMINISTIC_SEED + i,
       });
       parsed = parseExpansionResponse(response.content);
     } catch (err) {
@@ -309,6 +312,7 @@ export async function runDiagnosisExpansion(
           system: EXPANSION_SYSTEM_PROMPT,
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 1500,
+          seed: DETERMINISTIC_SEED + i,
         });
         retryParsed = parseExpansionResponse(retryResponse.content);
       } catch {
@@ -505,6 +509,7 @@ async function runCritiquePass(args: {
       system: CRITIQUE_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       max_tokens: 2000,
+      seed: DETERMINISTIC_SEED,
     });
   } catch (err) {
     log.warn("Critique LLM call failed", { error: String(err) });

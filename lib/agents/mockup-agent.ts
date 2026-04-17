@@ -152,8 +152,18 @@ export function buildMockupContext(input: BuildMockupContextInput): MockupContex
   const lightingConditions = (djson?.lighting_conditions as string) || undefined;
   const windowDoorPositions = (djson?.window_door_positions as string) || undefined;
 
-  // Build placement map from what_it_needs (category → placement description).
+  // Build placement map from action_list (diagnosis) and what_it_needs (area-analysis).
+  // action_list is populated first (lower priority), then what_it_needs overwrites
+  // with more specific placements when available.
   const placementMap: Record<string, string> = {};
+  const actionList = djson?.action_list as Array<{ category?: string; placement?: string }> | undefined;
+  if (actionList) {
+    for (const item of actionList) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
   const whatItNeeds = djson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
   if (whatItNeeds) {
     for (const item of whatItNeeds) {
@@ -406,16 +416,20 @@ Use these real-world references to render furniture and materials accurately (co
     // the visual and spatial reasoning we want it to apply during that thinking.
     const imageSystemPrompt = `You are a professional interior design photographer and visualizer producing final images for Architectural Digest.
 
-<visual_anchoring>
-The reference photos show the EXACT physical room. Your generated image must render the SAME room:
-- Floor: identical material, color, plank/tile pattern, and sheen level
-- Walls: identical color, undertone, and paint finish
-- Windows: identical position on the correct walls, frame style, and trim
-- Ceiling: identical height, profile, and any molding or texture
-- Architectural details: crown molding, baseboards, built-ins, radiators — all must match
+<what_stays_fixed>
+The reference photos are your STRICT architectural template. Preserve EXACTLY:
+- Floor: same material, same color, same plank/tile pattern, same sheen — do NOT lighten, darken, or change the flooring
+- Walls: same color, same undertone, same paint finish — if the walls are greige, keep them greige. Do NOT default to white
+- Windows: same count, same walls, same size, same frame style and color
+- Ceiling: same height, same color, same features (or lack of features)
+- All architectural details: baseboards, crown molding, built-ins, radiators, outlets — preserve everything
 
-You are ONLY changing the furniture and decor. The room shell is fixed. Do not alter, add, or remove any architectural feature.
-</visual_anchoring>
+These elements are LOCKED. You cannot change, improve, brighten, or "clean up" any of them.
+</what_stays_fixed>
+
+<what_changes>
+You are ADDING furniture and decor to this existing room. The user prompt specifies exactly what items to place and where. Treat placement instructions as spatial constraints — place items at the described positions relative to walls, windows, and other furniture.
+</what_changes>
 
 <photography_brief>
 - Shot style: editorial interior photography, as published in Architectural Digest or Elle Decor

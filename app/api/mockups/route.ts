@@ -214,8 +214,18 @@ export async function POST(request: Request) {
   const materials = (ddJson?.recommended_materials as string[]) || (djson?.recommended_materials as string[]) || [];
   const textures = (ddJson?.recommended_textures as string[]) || (djson?.recommended_textures as string[]) || [];
 
-  // Build placement map from what_it_needs
+  // Build placement map from what_it_needs (area-analysis) and action_list (diagnosis).
+  // Both carry per-category placement descriptions; prefer what_it_needs (more specific)
+  // but fall back to action_list when available.
   const placementMap: Record<string, string> = {};
+  const actionList = djson?.action_list as Array<{ category?: string; placement?: string }> | undefined;
+  if (actionList) {
+    for (const item of actionList) {
+      if (item.category && item.placement) {
+        placementMap[item.category] = item.placement;
+      }
+    }
+  }
   const whatItNeeds = djson?.what_it_needs as Array<{ category?: string; placement?: string }> | undefined;
   if (whatItNeeds) {
     for (const item of whatItNeeds) {
@@ -250,13 +260,19 @@ export async function POST(request: Request) {
       || (ddJson?.style_notes as string)
       || "modern, cohesive apartment design";
 
-    // Build specific items description from what_it_needs when caller didn't provide one
+    // Build specific items description from what_it_needs (area-analysis) or
+    // action_list (diagnosis). Prefer what_it_needs — it has search_title + specs.
+    // Fall back to action_list when area-analysis hasn't run yet.
     const whatItNeedsItems = (djson?.what_it_needs as Array<Record<string, unknown>>) || [];
+    const diagActionList = (djson?.action_list as Array<Record<string, unknown>>) || [];
+    const itemsSource = whatItNeedsItems.length > 0 ? whatItNeedsItems : diagActionList;
     const effectiveItems = items_description
-      || (whatItNeedsItems.length > 0
-        ? whatItNeedsItems.map((item, i) =>
-          `${i + 1}. [${item.category}] ${item.search_title}${item.placement ? ` — placed ${item.placement}` : ""}`
-        ).join("\n")
+      || (itemsSource.length > 0
+        ? itemsSource.map((item, i) => {
+          const title = item.search_title || item.action || item.category;
+          const placement = item.placement ? ` — PLACE: ${item.placement}` : "";
+          return `${i + 1}. [${item.category}] ${title}${placement}`;
+        }).join("\n")
         : "Furnish the room according to the design direction");
 
     const paletteSection = palette.length > 0 ? `\nColor palette: ${palette.join(", ")}` : "";

@@ -8,7 +8,6 @@ import {
   DiagnosisAnalysisResponseSchema,
   DiagnosisPlanResponseSchema,
 } from "@/lib/types/schemas";
-import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -19,9 +18,6 @@ import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/dat
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 const log = createLogger("room-diagnostician");
-
-const DIAGNOSIS_ANALYSIS_GEMINI_SCHEMA = zodToGeminiSchema(DiagnosisAnalysisResponseSchema);
-const DIAGNOSIS_PLAN_GEMINI_SCHEMA = zodToGeminiSchema(DiagnosisPlanResponseSchema);
 
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
@@ -103,7 +99,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             messages: [{ role: "user", content: retryContent }],
             max_tokens: 6000,
             seed,
-            responseSchema: DIAGNOSIS_ANALYSIS_GEMINI_SCHEMA,
+            responseMimeType: "application/json",
             mediaResolution: "ultra_high",
           });
 
@@ -169,6 +165,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 2000,
+          seed: DETERMINISTIC_SEED,
         });
         const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };
         const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
@@ -258,7 +255,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           messages: [{ role: "user", content: [{ type: "text", text: retryText }] }],
           max_tokens: 4000,
           seed: DETERMINISTIC_SEED,
-          responseSchema: DIAGNOSIS_PLAN_GEMINI_SCHEMA,
+          responseMimeType: "application/json",
         });
 
         const raw = extractJsonObject(response.content);

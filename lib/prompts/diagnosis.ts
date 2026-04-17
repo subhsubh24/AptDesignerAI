@@ -419,6 +419,7 @@ Fields:
 - action: specific, with material/color/size guidance (reference design_direction palette + materials from the diagnosis)
 - category: matches an entry in missing_categories
 - reasoning: which diagnosis problem this solves (trace back to what_is_not_working or missing_furniture_categories)
+- placement: WHERE in the room, referencing specific walls, windows, doors, and existing furniture as landmarks (e.g., "against the south wall, between the window and the entry door" or "centered under the pendant light, in front of the sofa")
 - variant: (optional) sub-type label when the same category has multiple distinct entries
 - quantity: (optional) integer when multiple identical/near-identical items are needed
 
@@ -443,13 +444,15 @@ JSON only. No prose, no markdown fences.
       "priority": 1,
       "action": "Area rug at least 8x10, wool or wool-blend, warm neutral with subtle texture — extends beyond front legs of sofa to anchor seating area",
       "category": "rug",
+      "placement": "Centered in front of the sofa, extending under the front legs, between the sofa and the TV wall",
       "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; properly scaled rug anchors the seating zone and adds warm texture flagged as missing"
     },
     {
       "priority": 4,
-      "action": "Tall statement plant, fiddle leaf fig or olive tree, 5–6 ft, in a woven rattan basket planter — positioned in the empty corner by the window",
+      "action": "Tall statement plant, fiddle leaf fig or olive tree, 5–6 ft, in a woven rattan basket planter",
       "category": "plant",
       "variant": "tall floor",
+      "placement": "In the empty corner between the window wall and the entry wall, behind the sofa arm",
       "reasoning": "Diagnosis noted room lacks greenery and the tall corner is visually empty"
     },
     {
@@ -457,6 +460,7 @@ JSON only. No prose, no markdown fences.
       "action": "Trailing pothos or philodendron on the bookshelf, 4-inch pot in a ceramic planter",
       "category": "plant",
       "variant": "trailing shelf",
+      "placement": "On the second shelf of the bookshelf on the east wall, trailing over the edge",
       "reasoning": "Second scale of greenery adds life to the shelf without competing with the floor plant"
     },
     {
@@ -464,6 +468,7 @@ JSON only. No prose, no markdown fences.
       "action": "Set of 3 pillar candles, varying heights 4\"/6\"/8\", unscented, cream wax, grouped on a small round tray on the coffee table",
       "category": "candles",
       "quantity": 3,
+      "placement": "Grouped on a tray on the coffee table, slightly off-center toward the sofa side",
       "reasoning": "Adds warm ambient texture and breaks up the empty coffee table surface"
     }
   ]

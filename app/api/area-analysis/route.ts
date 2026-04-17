@@ -11,6 +11,7 @@ import { computeFinalHarmonyScore, type MathDimensionCaps } from "@/lib/scoring/
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
@@ -543,7 +544,7 @@ Reference Pass 1's \`spatial_layout\`, \`window_door_positions\`, and \`outlet_p
       "description": "Why this item — what problem from Pass 1's diagnosis it solves. 2-3 sentences.",
       "priority": "high | medium | low",
       "specs": "Exact dimensions, materials, color range, approximate price range for the budget tier",
-      "placement": "WHERE in the room and HOW oriented — reference windows, doors, outlets, traffic paths from Pass 1"
+      "placement": "EXACT position: which wall, how far from which landmark (window, door, corner). Reference spatial_layout and window_door_positions from Pass 1. E.g., 'Against the south wall, centered between the two windows' or 'In the empty corner between the east wall and the entry door, 2ft from each wall'. NEVER write vague placements like 'in the room' or 'by the wall'."
     }
   ]
 }
@@ -555,7 +556,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
       max_tokens: 12000,
-      // No temperature override — Gemini 3 is optimized for its default (1.0).
+      seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
     if (passBResponse.truncated) {

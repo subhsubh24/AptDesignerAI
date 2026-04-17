@@ -341,6 +341,8 @@ export const ActionItemSchema = z.object({
   variant: z.string().optional(),
   /** Number of this item to source — null / undefined = 1 */
   quantity: z.coerce.number().optional(),
+  /** WHERE in the room — reference walls, windows, doors, and existing furniture */
+  placement: z.string().optional(),
   /** Tracks whether this entry was produced by the initial diagnosis or the greedy expansion */
   source: z.enum(["diagnosis", "expansion"]).default("diagnosis"),
 });

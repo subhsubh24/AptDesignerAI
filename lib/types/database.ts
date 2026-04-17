@@ -292,6 +292,8 @@ export interface ActionItem {
   variant?: string;
   /** Number of this item to source — undefined = 1 */
   quantity?: number;
+  /** WHERE in the room — reference walls, windows, doors, and existing furniture */
+  placement?: string;
   /** Tracks whether produced by initial diagnosis or greedy expansion */
   source?: "diagnosis" | "expansion";
 }

@@ -221,6 +221,7 @@ export function buildExpansionPrompt(ctx: ExpansionPromptContext): string {
       variant: "e.g. 'trailing shelf' vs 'tall floor' — only if distinguishing a sub-type",
       quantity: "number or null (null = 1)",
       priority: "1–5",
+      placement: "WHERE in the room — reference specific walls, windows, and existing furniture as landmarks",
       reasoning: "why this addition helps or why you're stopping",
     },
     density_feel: "sparse | balanced | cozy | full | cluttered",
