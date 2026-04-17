@@ -485,9 +485,12 @@ export async function runAgenticSearch(
 
     const extractLimit = pLimit(10);
     // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
-    // Gated on Browserbase credentials; becomes a no-op when they're absent.
+    // Gated on Browserbase credentials + package availability; becomes a no-op when absent.
     const cuFallbackLimit = pLimit(3);
-    const cuEnabled = Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
+    let cuEnabled = Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
+    if (cuEnabled) {
+      try { require.resolve("@browserbasehq/sdk"); } catch { cuEnabled = false; }
+    }
 
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 

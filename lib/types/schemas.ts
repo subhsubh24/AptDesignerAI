@@ -431,14 +431,14 @@ export const ExtractedProductSchema = z.object({
     diameter: z.coerce.number().optional(),
     unit: z.enum(["inches", "cm"]).default("inches"),
   }).nullable().default(null),
-  materials: z.array(z.string()).default([]),
-  colors: z.array(z.string()).default([]),
-  category: z.string().default("unknown"),
+  materials: z.array(z.string()).catch([]),
+  colors: z.array(z.string()).catch([]),
+  category: z.string().catch("unknown"),
   description: z.string().nullable().default(null),
   image_url: z.string().nullable().default(null),
   lifestyle_image_url: z.string().nullable().optional().default(null),
-  visual_style_tags: z.array(z.string()).optional().default([]),
-  available_variants: z.array(z.string()).optional().default([]),
+  visual_style_tags: z.array(z.string()).catch([]),
+  available_variants: z.array(z.string()).catch([]),
 });
 
 // ─── Search Products ──────────────────────────────────────────

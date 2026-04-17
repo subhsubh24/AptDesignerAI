@@ -356,10 +356,12 @@ export const geminiProvider: AIProvider = {
       config.temperature = effectiveTemperature;
     }
 
-    // seed is incompatible with responseSchema on Gemini 3.1 Flash Lite —
-    // combining them produces INVALID_ARGUMENT (400). The schema already
-    // enforces a deterministic output structure, so seed is redundant here.
-    if (typeof effectiveSeed === "number" && !responseSchema) {
+    // Pre-compute: urlContext tool presence gates multiple config fields below.
+    const hasUrlContext = tools?.some((t) => "urlContext" in (t as Record<string, unknown>));
+
+    // seed is incompatible with responseSchema AND urlContext tools on
+    // Gemini 3.1 Flash Lite — combining them produces INVALID_ARGUMENT (400).
+    if (typeof effectiveSeed === "number" && !responseSchema && !hasUrlContext) {
       config.seed = effectiveSeed;
     }
 
@@ -401,11 +403,8 @@ export const geminiProvider: AIProvider = {
     // our reasoning-heavy tasks. We force every call to "high" unless:
     //   (a) the caller explicitly passed a thinkingConfig, OR
     //   (b) responseSchema is set — structured output mode is incompatible with
-    //       thinkingConfig on flash-lite, causing INVALID_ARGUMENT (400). The
-    //       schema itself guides the model's output without needing thinking.
-    //   (c) urlContext tool is active — retrieval calls don't need deep reasoning
-    //       and combining high thinking with URL Context causes 400 on Flash Lite.
-    const hasUrlContext = tools?.some((t) => "urlContext" in (t as Record<string, unknown>));
+    //       thinkingConfig on flash-lite, causing INVALID_ARGUMENT (400).
+    //   (c) urlContext tool is active — retrieval + thinking causes 400.
     const effectiveThinkingConfig = thinkingConfig
       ?? (responseSchema || hasUrlContext ? undefined : { thinkingLevel: "high" });
     if (effectiveThinkingConfig) {
