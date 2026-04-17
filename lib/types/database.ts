@@ -225,6 +225,42 @@ export interface SavedItem {
   created_at: string;
 }
 
+export interface SavedDesign {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  room_id: string | null;
+  title: string;
+  room_type: string | null;
+  stage: "assessment" | "full";
+  snapshot: SavedDesignSnapshot;
+  thumbnail_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedDesignSnapshot {
+  assessment: {
+    what_it_needs: unknown[];
+    what_works: unknown[];
+    what_should_go: unknown[];
+    design_direction: unknown;
+    room_description: string;
+    mockup_url?: string | null;
+    floor_plan_dims?: unknown;
+  };
+  products?: {
+    bundles: unknown[];
+    per_tier_products: Record<string, unknown[]>;
+    validation?: unknown;
+  };
+  metadata: {
+    saved_at: string;
+    project_name?: string;
+    building_name?: string;
+  };
+}
+
 export interface AgentRun {
   id: string;
   room_id: string | null;

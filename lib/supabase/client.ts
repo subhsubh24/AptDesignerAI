@@ -1,40 +1,49 @@
 "use client";
 
-// Browser-side: auth actions call fetch to API routes,
-// so we only need the auth methods here.
+import { createBrowserClient } from "@supabase/ssr";
+
+let _client: ReturnType<typeof createBrowserClient> | null = null;
+
 export function createClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    return createMockClient();
+  }
+
+  if (!_client) {
+    _client = createBrowserClient(url, key);
+  }
+  return _client;
+}
+
+function createMockClient() {
+  const MOCK_USER = {
+    id: "00000000-0000-0000-0000-000000000001",
+    email: "user@aptdesigner.local",
+    user_metadata: { full_name: "Designer" },
+  };
+
   return {
     auth: {
-      signInWithPassword: async ({ email }: { email: string; password: string }) => {
-        // Auth is bypassed — always succeed
-        return {
-          data: {
-            user: { id: "00000000-0000-0000-0000-000000000001", email },
-            session: { access_token: "mock" },
-          },
-          error: null,
-        };
-      },
-      signUp: async ({ email }: { email: string; password: string; options?: unknown }) => {
-        return {
-          data: {
-            user: { id: "00000000-0000-0000-0000-000000000001", email },
-            session: { access_token: "mock" },
-          },
-          error: null,
-        };
-      },
-      signOut: async () => ({ error: null }),
-      getUser: async () => ({
-        data: {
-          user: {
-            id: "00000000-0000-0000-0000-000000000001",
-            email: "user@aptdesigner.local",
-            user_metadata: { full_name: "Designer" },
-          },
-        },
+      signInWithPassword: async (_opts: { email: string; password: string }) => ({
+        data: { user: MOCK_USER, session: { access_token: "mock" } },
         error: null,
       }),
+      signUp: async (_opts: { email: string; password: string; options?: unknown }) => ({
+        data: { user: MOCK_USER, session: { access_token: "mock" } },
+        error: null,
+      }),
+      signOut: async () => ({ error: null }),
+      getUser: async () => ({ data: { user: MOCK_USER }, error: null }),
+      getSession: async () => ({
+        data: { session: { user: MOCK_USER, access_token: "mock" } },
+        error: null,
+      }),
+      onAuthStateChange: (_cb: unknown) => ({
+        data: { subscription: { unsubscribe: () => {} } },
+      }),
     },
-  };
+  } as unknown as ReturnType<typeof createBrowserClient>;
 }

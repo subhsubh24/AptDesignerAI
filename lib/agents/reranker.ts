@@ -243,10 +243,14 @@ Be harsh — use the full 0–1 range. 0.9+ only for clear wins (category fit AN
     return { kept, dropped, tokensUsed };
   } catch (err) {
     // Fail open: return all candidates untouched so extract still runs.
+    // Track as a structured event so pipeline stats surface the fallback.
     log.warn("Rerank failed — falling back to pre-rerank candidate set", {
       category,
       tier,
+      candidateCount: candidates.length,
+      errorType: err instanceof Error ? err.constructor.name : "unknown",
       error: err instanceof Error ? err.message : String(err),
+      failOpen: true,
     });
     return { kept: candidates, dropped: [], tokensUsed: 0 };
   }

@@ -34,6 +34,7 @@ const tables: Record<string, Row[]> = {
   // Seeded from catalog images + extended by the self-learning loop when
   // a user confirms an identified product. Rows: ProductImageEmbedding.
   product_image_embeddings: [],
+  saved_designs: [],
 };
 
 // Fake user for auth bypass

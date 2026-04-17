@@ -152,6 +152,31 @@ class TokenBudget {
 /** Default cap: 1.5M tokens per search run (~$3-4 on Gemini pricing). */
 const DEFAULT_TOKEN_CAP = 1_500_000;
 
+// ─── Sentinel Domain Tracker ──────────────────────────────────
+// Tracks extraction failure rates per domain to skip domains that
+// consistently return sentinel titles (category pages, 403s, etc.)
+
+const domainSentinelStats = new Map<string, { total: number; sentinels: number }>();
+
+function trackExtraction(url: string, isSentinel: boolean) {
+  try {
+    const domain = new URL(url).hostname;
+    const entry = domainSentinelStats.get(domain) ?? { total: 0, sentinels: 0 };
+    entry.total++;
+    if (isSentinel) entry.sentinels++;
+    domainSentinelStats.set(domain, entry);
+  } catch { /* invalid URL */ }
+}
+
+function isDomainBlocked(url: string): boolean {
+  try {
+    const domain = new URL(url).hostname;
+    const entry = domainSentinelStats.get(domain);
+    if (!entry || entry.total < 5) return false;
+    return entry.sentinels / entry.total > 0.8;
+  } catch { return false; }
+}
+
 // ─── URL Filtering ─────────────────────────────────────────────
 
 const NON_PRODUCT_PATTERNS = /\/(collections|category|categories|all-|shop-all|browse|blog|magazine|inspiration|ideas|guides|reviews?)\b/i;
@@ -398,9 +423,13 @@ export async function runAgenticSearch(
                 }
               }
             } else {
-              // Fail open: keep all candidates
+              // Fail open: keep all candidates, but log structured event
               screenedByCategory[category][tier] = candidates;
               stats.totalAfterScreen += candidates.length;
+              log.warn("Quick-screen failed — keeping all candidates", {
+                phase: "screen", category, tier, candidateCount: candidates.length,
+                error: screenResult.error || "unknown", failOpen: true,
+              });
             }
           })()
         );
@@ -511,25 +540,33 @@ export async function runAgenticSearch(
           extractPromises.push(
             extractLimit(async () => {
               try {
+                if (isDomainBlocked(candidate.url)) {
+                  tracer.traceFilter("extract", "", candidate.url, "domain blocked (>80% sentinel rate)");
+                  extractedSoFar++;
+                  return;
+                }
                 const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
                 if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; stats.tokensPerPhase.extract += extractResult.tokensUsed; }
                 if (!extractResult.success || !extractResult.data) {
+                  trackExtraction(candidate.url, true);
                   tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
                   extractedSoFar++;
                   return;
                 }
-                // Filter sentinel values from extraction — these are error/category pages, not products
                 const title = extractResult.data.title || "";
                 if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
+                  trackExtraction(candidate.url, true);
                   tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
                   extractedSoFar++;
                   return;
                 }
                 if (!title && !extractResult.data.price) {
+                  trackExtraction(candidate.url, true);
                   tracer.traceFilter("extract", "", candidate.url, "no title or price");
                   extractedSoFar++;
                   return;
                 }
+                trackExtraction(candidate.url, false);
                 // Confidence gate: skip products with no meaningful data
                 const hasSubstance = extractResult.data.title
                   && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
@@ -589,7 +626,7 @@ export async function runAgenticSearch(
                 // JS-heavy retailer pages (West Elm, CB2, RH, etc.) often don't render
                 // their price or dimension tables for text-only scrapers. When both are
                 // missing, launch a real browser session via Browserbase to fill the gaps.
-                if (cuEnabled && !product.price && !product.dimensions) {
+                if (cuEnabled && (!product.price || !product.dimensions)) {
                   await cuFallbackLimit(async () => {
                     try {
                       const verifyResult = await Promise.race([
@@ -659,6 +696,44 @@ export async function runAgenticSearch(
     }
 
     await Promise.all(extractPromises);
+
+    // ── Price-tier reclassification ─────────────────────────────
+    // Products often land in the wrong tier because search queries
+    // are approximate. After extraction we know the actual price —
+    // move products to their correct tier instead of dropping them.
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      const catBriefForTier = brief.categories.find((c) => c.category === category);
+      if (!catBriefForTier) continue;
+
+      const toMove: Array<{ product: CandidateProduct; fromTier: PriceTier; toTier: PriceTier }> = [];
+
+      for (const fromTier of PRICE_TIERS) {
+        const products = tierResults[fromTier];
+        for (const product of products) {
+          if (!product.price) continue;
+          // Find the correct tier based on actual price
+          for (const candidateTier of PRICE_TIERS) {
+            if (candidateTier === fromTier) continue;
+            const range = catBriefForTier.tiers[candidateTier]?.price_range;
+            if (range && product.price >= range.min * 0.6 && product.price <= range.max * 1.4) {
+              const origRange = catBriefForTier.tiers[fromTier]?.price_range;
+              if (origRange && (product.price > origRange.max * 1.5 || product.price < origRange.min * 0.5)) {
+                toMove.push({ product, fromTier, toTier: candidateTier });
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      for (const { product, fromTier, toTier } of toMove) {
+        extractedByCategory[category][fromTier] = extractedByCategory[category][fromTier].filter((p) => p.id !== product.id);
+        product.metadata = { ...(product.metadata ?? {}), price_tier: toTier, reclassified_from: fromTier };
+        extractedByCategory[category][toTier].push(product);
+        tracer.trace({ phase: "extract", action: "tier_reclassify", productId: product.id, url: product.product_url ?? undefined, category, metadata: { from: fromTier, to: toTier } });
+        log.info("Reclassified product tier", { category, url: product.product_url, from: fromTier, to: toTier, price: product.price });
+      }
+    }
 
     // Deduplicate extracted products by title+retailer within each tier
     // Uses fuzzy matching: normalize titles by removing size/color variants,
@@ -876,12 +951,27 @@ export async function runAgenticSearch(
 
     await Promise.all(deepScorePromises);
 
+    // Progressive degradation: if budget is tight, shed expensive phases
+    // instead of aborting entirely.
+    const budgetPct = tokenBudget.used / tokenBudget.cap;
+    const skipPairwise = budgetPct > 0.85;
+    const skipBackfill = budgetPct > 0.75;
+    if (skipPairwise) {
+      log.info("Budget >85% — skipping pairwise re-rank to preserve budget for validation/bundling", {
+        tokensUsed: stats.tokensUsed, budgetPct: Math.round(budgetPct * 100),
+      });
+      (stats as Record<string, unknown>).bottlenecks = [...((stats as Record<string, unknown>).bottlenecks as string[] || []), "Pairwise re-rank skipped (budget conservation)"];
+    }
+    if (skipBackfill) {
+      log.info("Budget >75% — skipping backfill to preserve budget for validation/bundling", {
+        tokensUsed: stats.tokensUsed, budgetPct: Math.round(budgetPct * 100),
+      });
+    }
+
     if (tokenBudget.exceeded) {
-      log.warn("Token budget exceeded, skipping validation and bundles", { tokensUsed: stats.tokensUsed, tokenCap: DEFAULT_TOKEN_CAP, deepScored: stats.totalDeepScored, quickScored: stats.totalQuickScored, roomId: ctx.roomId });
+      log.warn("Token budget fully exceeded — returning scored results", { tokensUsed: stats.tokensUsed, tokenCap: DEFAULT_TOKEN_CAP, deepScored: stats.totalDeepScored });
       reportStep({ step: "Token budget exceeded — returning scored results", status: "completed" });
 
-      // Safety net: even with budget exceeded, organize what we have into partial results
-      // so the user gets recommendations instead of an empty response
       for (const [category, tierResults] of Object.entries(extractedByCategory)) {
         const kept: CandidateProduct[] = [];
         for (const tier of PRICE_TIERS) {
@@ -905,7 +995,7 @@ export async function runAgenticSearch(
           evaluations,
           bundles: [],
           steps,
-          stats: { ...stats, bottlenecks: ["Token budget exceeded before validation/bundling — partial results returned"] },
+          stats: { ...stats, bottlenecks: [...((stats as Record<string, unknown>).bottlenecks as string[] || []), "Token budget exceeded before validation/bundling — partial results returned"] },
           trace: tracer.getTrace(),
         },
       };
@@ -919,57 +1009,70 @@ export async function runAgenticSearch(
 
     // ═══════════════════════════════════════════════════════════
     // Phase 5c: Pairwise re-rank top-scored products per category
-    //
-    // Deep scoring produces pointwise scores that cluster in 6.5-7.5, making
-    // intra-category rankings unreliable. Pairwise LLM comparisons ("A or B?")
-    // exploit the model's stronger comparative judgment. Run in parallel
-    // across categories; each category does its own Flash Lite pairwise pass.
     // ═══════════════════════════════════════════════════════════
-    reportStep({ step: "Pairwise re-ranking top candidates", status: "running" });
+    if (skipPairwise) {
+      reportStep({ step: "Pairwise re-ranking skipped (budget conservation)", status: "completed" });
+    }
+    if (!skipPairwise) reportStep({ step: "Pairwise re-ranking top candidates", status: "running" });
 
     const pairwiseRerankedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
-    const pairwisePromises: Promise<void>[] = [];
 
-    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
-      pairwiseRerankedByCategory[category] = {
-        budget: [], balanced: [], high_end: [],
-      } as Record<PriceTier, CandidateProduct[]>;
-      for (const tier of PRICE_TIERS) {
-        const products = tierResults[tier].filter((p) => {
-          const ev = evaluations.get(p.id);
-          if (!ev) return false;
-          if (ev.scores?.confidence_score !== undefined && ev.scores.confidence_score < 4) return false;
-          return true;
-        });
-        // Sort by deep score first as the input to pairwise
-        products.sort((a, b) => {
-          const scoreA = evaluations.get(a.id)?.final_item_score || 0;
-          const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-          return (scoreB - scoreA) || tiebreakProduct(a, b);
-        });
-        if (products.length === 0) continue;
+    if (!skipPairwise) {
+      const pairwisePromises: Promise<void>[] = [];
 
-        pairwisePromises.push(
-          (async () => {
-            if (tokenBudget.exceeded) {
-              pairwiseRerankedByCategory[category][tier] = products;
-              return;
-            }
-            const reranked = await pairwiseRerank(products, evaluations, {
-              roomType: ctx.roomType,
-              category,
-              designDirection: ctx.designDirection?.style_notes,
-              palette: ctx.designDirection?.recommended_palette,
-              existingItems: ctx.keepItems,
-            });
-            pairwiseRerankedByCategory[category][tier] = reranked;
-          })()
-        );
+      for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+        pairwiseRerankedByCategory[category] = {
+          budget: [], balanced: [], high_end: [],
+        } as Record<PriceTier, CandidateProduct[]>;
+        for (const tier of PRICE_TIERS) {
+          const products = tierResults[tier].filter((p) => {
+            const ev = evaluations.get(p.id);
+            if (!ev) return false;
+            if (ev.scores?.confidence_score !== undefined && ev.scores.confidence_score < 4) return false;
+            return true;
+          });
+          products.sort((a, b) => {
+            const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+            const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+            return (scoreB - scoreA) || tiebreakProduct(a, b);
+          });
+          if (products.length === 0) continue;
+
+          pairwisePromises.push(
+            (async () => {
+              if (tokenBudget.exceeded) {
+                pairwiseRerankedByCategory[category][tier] = products;
+                return;
+              }
+              const reranked = await pairwiseRerank(products, evaluations, {
+                roomType: ctx.roomType,
+                category,
+                designDirection: ctx.designDirection?.style_notes,
+                palette: ctx.designDirection?.recommended_palette,
+                existingItems: ctx.keepItems,
+              });
+              pairwiseRerankedByCategory[category][tier] = reranked;
+            })()
+          );
+        }
+      }
+      await Promise.all(pairwisePromises);
+      reportStep({ step: "Pairwise re-ranking top candidates", status: "completed" });
+    } else {
+      // Skipped pairwise — use deep-scored products directly, sorted by score
+      for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+        pairwiseRerankedByCategory[category] = { budget: [], balanced: [], high_end: [] } as Record<PriceTier, CandidateProduct[]>;
+        for (const tier of PRICE_TIERS) {
+          const products = tierResults[tier].filter((p) => evaluations.has(p.id));
+          products.sort((a, b) => {
+            const scoreA = evaluations.get(a.id)?.final_item_score || 0;
+            const scoreB = evaluations.get(b.id)?.final_item_score || 0;
+            return (scoreB - scoreA) || tiebreakProduct(a, b);
+          });
+          pairwiseRerankedByCategory[category][tier] = products;
+        }
       }
     }
-    await Promise.all(pairwisePromises);
-
-    reportStep({ step: "Pairwise re-ranking top candidates", status: "completed" });
 
     // ═══════════════════════════════════════════════════════════
     // Phase 5d: MMR diversity selection + final organization
@@ -1235,7 +1338,7 @@ export async function runAgenticSearch(
       }
     }
 
-    if (weakTiers.length > 0 && !tokenBudget.exceeded) {
+    if (weakTiers.length > 0 && !tokenBudget.exceeded && !skipBackfill) {
       reportStep({
         step: `Backfilling ${weakTiers.length} weak tier(s)`,
         status: "running",

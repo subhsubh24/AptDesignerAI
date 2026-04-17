@@ -29,6 +29,8 @@ import {
   RefreshCw,
   ArrowRight,
   LinkIcon,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
 import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingForm";
 import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
@@ -173,6 +175,10 @@ export default function FocusPage() {
   // Manual sourcing state
   const [manualLoading, setManualLoading] = useState(false);
   const [manualResult, setManualResult] = useState<EvaluateSetResult | null>(null);
+
+  // Save design state
+  const [saving, setSaving] = useState(false);
+  const [savedStage, setSavedStage] = useState<"assessment" | "full" | null>(null);
 
   // Elapsed time counter during search
   useEffect(() => {
@@ -397,6 +403,23 @@ export default function FocusPage() {
       setShowVisionOverlay(true);
     }
     setGeneratingVision(false);
+  };
+
+  const handleSaveDesign = async (stage: "assessment" | "full") => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/saved-designs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_id: roomId, project_id: projectId, stage }),
+      });
+      if (res.ok) {
+        setSavedStage(stage);
+      }
+    } catch {
+      // silently fail — non-critical
+    }
+    setSaving(false);
   };
 
   // Agentic search with SSE streaming for live progress
@@ -887,6 +910,21 @@ export default function FocusPage() {
               I&apos;ll find my own
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => handleSaveDesign("assessment")}
+            disabled={saving || savedStage === "assessment" || savedStage === "full"}
+          >
+            {savedStage ? (
+              <><BookmarkCheck className="h-4 w-4 mr-1.5 text-emerald-600" /> Design saved</>
+            ) : saving ? (
+              <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Saving...</>
+            ) : (
+              <><Bookmark className="h-4 w-4 mr-1.5" /> Save this design</>
+            )}
+          </Button>
         </>
       )}
 
@@ -1088,6 +1126,19 @@ export default function FocusPage() {
           {/* Actions */}
           <div className="flex gap-4 justify-center pt-4">
             <Button variant="outline" onClick={() => setStep("analysis")}>Back to assessment</Button>
+            <Button
+              variant={savedStage === "full" ? "outline" : "default"}
+              onClick={() => handleSaveDesign("full")}
+              disabled={saving || savedStage === "full"}
+            >
+              {savedStage === "full" ? (
+                <><BookmarkCheck className="h-4 w-4 mr-2 text-emerald-600" /> Saved</>
+              ) : saving ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+              ) : (
+                <><Bookmark className="h-4 w-4 mr-2" /> {savedStage === "assessment" ? "Save with products" : "Save full design"}</>
+              )}
+            </Button>
             <Button onClick={handleSaveAndContinue}>
               <CheckCircle2 className="h-4 w-4 mr-2" /> Done — next room
             </Button>

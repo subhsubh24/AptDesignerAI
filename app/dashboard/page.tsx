@@ -586,6 +586,53 @@ export default function DashboardPage() {
   }
 
   // ─── Step: Setup (Building + Photos combined) ─────────────────
+
+  function BuildingPhoto({ placeId }: { placeId: string }) {
+    const [photo, setPhoto] = useState<{ url: string; attributions: string[] } | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      let cancelled = false;
+      setLoading(true);
+      fetch(`/api/places/photo?place_id=${encodeURIComponent(placeId)}`)
+        .then((r) => r.json())
+        .then((data: { photoUrl?: string | null; attributions?: string[] }) => {
+          if (!cancelled && data.photoUrl) {
+            setPhoto({ url: data.photoUrl, attributions: data.attributions ?? [] });
+          }
+          setLoading(false);
+        })
+        .catch(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }, [placeId]);
+
+    if (!loading && !photo) return null;
+
+    return (
+      <div className="overflow-hidden rounded-2xl border shadow-sm">
+        {loading ? (
+          <div className="h-[180px] bg-muted animate-pulse flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo!.url}
+              alt={buildingName || "Building exterior"}
+              className="w-full h-[180px] object-cover"
+            />
+            {photo!.attributions.length > 0 && (
+              <p className="text-[10px] text-muted-foreground px-2 py-1 bg-muted/50">
+                Photo: {photo!.attributions.join(", ")}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (step === "setup") {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
@@ -665,6 +712,8 @@ export default function DashboardPage() {
                         Change
                       </Button>
                     </div>
+
+                    <BuildingPhoto placeId={buildingPlaceId!} />
 
                     {mapsApiKey && (
                       <div className="overflow-hidden rounded-2xl border shadow-sm">
