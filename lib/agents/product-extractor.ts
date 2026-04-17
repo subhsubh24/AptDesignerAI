@@ -346,6 +346,39 @@ async function validateExtractedImages(
   };
 }
 
+// Retailers that ship clean JSON-LD Product schema + reliable og meta. For
+// these, scraping the HTML directly is faster and more accurate than URL
+// Context (which struggles with JS-heavy retailer pages). URL Context remains
+// the generic path for unknown retailers.
+const STRUCTURED_SCRAPE_FIRST = [
+  "westelm.com",
+  "cb2.com",
+  "rh.com",
+  "restorationhardware.com",
+  "article.com",
+  "burrow.com",
+  "crateandbarrel.com",
+  "potterybarn.com",
+];
+
+function shouldTryStructuredScrapeFirst(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return STRUCTURED_SCRAPE_FIRST.some((d) => host === d || host.endsWith(`.${d}`));
+  } catch {
+    return false;
+  }
+}
+
+// Consider scraped context "sufficient" only when it includes at least a
+// Title AND one of (Price, Description). Otherwise fall through to URL Context.
+function isScrapeContextSufficient(ctx: string): boolean {
+  const hasTitle = /^Title:/m.test(ctx);
+  const hasPrice = /^Price:/m.test(ctx);
+  const hasDesc = /^Description:/m.test(ctx);
+  return hasTitle && (hasPrice || hasDesc);
+}
+
 /**
  * Parse JSON from a potentially messy LLM response (may have markdown, extra text, etc.)
  * Then validate through the ExtractedProduct Zod schema.
@@ -417,6 +450,45 @@ export async function extractFromUrl(
     blocks.push({ type: "text", text });
     return blocks;
   };
+
+  // Attempt 0 (known-brittle retailers only): try HTML structured scrape first.
+  // These retailers ship clean JSON-LD Product schema — scraping is faster and
+  // more reliable than URL Context, which struggles with JS-heavy PDPs.
+  if (shouldTryStructuredScrapeFirst(url)) {
+    try {
+      const pageContext = await scrapePageContext(url);
+      if (pageContext && isScrapeContextSufficient(pageContext)) {
+        const scrapeFirstContent = `${extractionPrompt}\n\nExtract product information for: ${url}\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: buildContent(scrapeFirstContent) }],
+          max_tokens: 6000,
+          seed: DETERMINISTIC_SEED,
+        });
+
+        const raw = response.content.trim();
+        if (raw) {
+          let parsed = parseAndValidateExtraction(raw);
+          parsed = await validateExtractedImages(parsed, url);
+          cacheExtraction(url, parsed);
+          log.debug("Extracted via structured scrape (known retailer)", { url });
+          return {
+            success: true,
+            data: parsed,
+            tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
+            model: response.model,
+          };
+        }
+      }
+    } catch (scrapeErr) {
+      log.debug("Structured-scrape-first path failed, falling through to URL Context", {
+        url,
+        error: scrapeErr instanceof Error ? scrapeErr.message : String(scrapeErr),
+      });
+    }
+  }
 
   // Attempt 1: with urlContext tool
   try {
