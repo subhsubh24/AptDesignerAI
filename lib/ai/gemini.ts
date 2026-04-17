@@ -403,8 +403,11 @@ export const geminiProvider: AIProvider = {
     //   (b) responseSchema is set — structured output mode is incompatible with
     //       thinkingConfig on flash-lite, causing INVALID_ARGUMENT (400). The
     //       schema itself guides the model's output without needing thinking.
+    //   (c) urlContext tool is active — retrieval calls don't need deep reasoning
+    //       and combining high thinking with URL Context causes 400 on Flash Lite.
+    const hasUrlContext = tools?.some((t) => "urlContext" in (t as Record<string, unknown>));
     const effectiveThinkingConfig = thinkingConfig
-      ?? (responseSchema ? undefined : { thinkingLevel: "high" });
+      ?? (responseSchema || hasUrlContext ? undefined : { thinkingLevel: "high" });
     if (effectiveThinkingConfig) {
       config.thinkingConfig = effectiveThinkingConfig;
     }

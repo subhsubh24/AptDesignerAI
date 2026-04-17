@@ -197,6 +197,86 @@ async function scrapeProductImages(
 }
 
 /**
+ * Fetch a product page's HTML and extract structured product context:
+ * JSON-LD Product schema, og meta tags, and any visible price/title text.
+ * Returns a formatted string ready to inject into the LLM extraction prompt.
+ * Returns null if the page can't be fetched.
+ */
+async function scrapePageContext(pageUrl: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(pageUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const lines: string[] = [];
+
+    // 1. JSON-LD Product schema — best structured source for title, price, description
+    const jsonLdBlocks = html.match(/<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    if (jsonLdBlocks) {
+      for (const block of jsonLdBlocks) {
+        try {
+          const content = block
+            .replace(/<script\s+type=["']application\/ld\+json["'][^>]*>/i, "")
+            .replace(/<\/script>/i, "");
+          const ld = JSON.parse(content);
+          const items = ld["@graph"] ? ld["@graph"] : [ld];
+          for (const item of items) {
+            if (item["@type"] === "Product" || String(item["@type"]).includes("Product")) {
+              const name = item.name || item.headline;
+              if (name) lines.push(`Title: ${name}`);
+              if (item.description) lines.push(`Description: ${String(item.description).slice(0, 600)}`);
+              // Price from offers
+              const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              if (offers?.price) lines.push(`Price: $${offers.price} ${offers.priceCurrency || "USD"}`);
+              if (offers?.availability) lines.push(`Availability: ${offers.availability}`);
+              if (item.brand?.name) lines.push(`Brand: ${item.brand.name}`);
+              // Dimensions often appear in additionalProperty or as part of description
+              if (Array.isArray(item.additionalProperty)) {
+                const dimProps = item.additionalProperty
+                  .filter((p: Record<string, string>) => /dimension|width|depth|height|size|weight/i.test(p.name || ""))
+                  .map((p: Record<string, string>) => `${p.name}: ${p.value}`);
+                if (dimProps.length) lines.push(`Specs: ${dimProps.join(", ")}`);
+              }
+              if (item.material) lines.push(`Material: ${Array.isArray(item.material) ? item.material.join(", ") : item.material}`);
+              if (item.color) lines.push(`Color: ${item.color}`);
+            }
+          }
+        } catch { /* malformed JSON-LD block */ }
+      }
+    }
+
+    // 2. og meta tags as fallback for title/description/image
+    const ogTitle = html.match(/<meta\s+(?:property|name)=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1]
+      || html.match(/<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["']og:title["']/i)?.[1];
+    const ogDesc = html.match(/<meta\s+(?:property|name)=["']og:description["']\s+content=["']([^"']+)["']/i)?.[1]
+      || html.match(/<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["']og:description["']/i)?.[1];
+    const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim();
+
+    if (!lines.some((l) => l.startsWith("Title:"))) {
+      if (ogTitle) lines.push(`Title: ${ogTitle}`);
+      else if (titleTag) lines.push(`Title: ${titleTag}`);
+    }
+    if (!lines.some((l) => l.startsWith("Description:")) && ogDesc) {
+      lines.push(`Description: ${ogDesc.slice(0, 400)}`);
+    }
+
+    return lines.length > 0 ? lines.join("\n") : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Validate and fix image URLs in an extracted product.
  *
  * Strategy:
@@ -361,8 +441,9 @@ export async function extractFromUrl(
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
       model: response.model,
     };
-  } catch {
+  } catch (attempt1Error) {
     // Attempt 2: retry with urlContext after brief delay (transient errors)
+    log.debug("urlContext attempt 1 failed", { url, error: attempt1Error instanceof Error ? attempt1Error.message : String(attempt1Error) });
     await new Promise((r) => setTimeout(r, 1500));
     try {
       const response = await geminiProvider.chat({
@@ -386,12 +467,22 @@ export async function extractFromUrl(
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
         model: response.model,
       };
-    } catch {
-      // Attempt 3: fall back to plain prompt WITHOUT urlContext
-      // Flash Lite can still extract from the URL if given just the text prompt
-      log.warn("urlContext failed, falling back to plain extraction", { url });
+    } catch (attempt2Error) {
+      // Attempt 3: fall back to HTML scraping — fetch the raw page and extract
+      // JSON-LD Product schema + og meta ourselves, then pass as structured
+      // context to the model. This works better than URL slug inference for
+      // JS-heavy retailer pages (Target, AllModern, Joss & Main, etc.)
+      log.warn("urlContext failed, falling back to plain extraction", {
+        url,
+        error: attempt2Error instanceof Error ? attempt2Error.message : String(attempt2Error),
+      });
       try {
-        const fallbackContent = `${extractionPrompt}\n\nI need you to extract product information from this URL: ${url}\n\nBased on the URL structure and any information you can infer from it, provide your best extraction. If the URL contains a product slug, use it to infer the product name. Set confidence fields low if you're uncertain.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+        const pageContext = await scrapePageContext(url);
+        const contextBlock = pageContext
+          ? `\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.`
+          : `\n\nNote: The page could not be fetched. Extract what you can from the URL slug itself and set all fields conservatively.`;
+
+        const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}${contextBlock}\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
         const response = await geminiProvider.chat({
           model,
