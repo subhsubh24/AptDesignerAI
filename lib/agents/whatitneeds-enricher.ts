@@ -114,16 +114,28 @@ ${STANDARD_SIZING}
 ## YOUR TASK
 For each item below, rewrite search_title and specs to be fully specific.
 
-search_title rules:
-- Must include: material/finish + color + size + style + product type
-- Good: "Large 8x10 hand-knotted wool area rug in warm cream with geometric texture"
-- Good: "Solid walnut round coffee table 36-40 inch diameter with tapered legs and lower shelf"
-- Bad: "Coffee table" — no material, no color, no size
-- Bad: "Area rug" — no material, no color, no size
+MANDATORY — every search_title MUST contain ALL of these:
+1. A specific MATERIAL or FINISH (e.g., "solid walnut", "oak veneer", "linen upholstered", "boucle fabric")
+2. A specific SIZE with a number and unit (e.g., "36 inch diameter", "84 inch wide", "60x36 inch")
+3. A COLOR descriptor (e.g., "warm cream", "charcoal", "natural oak")
+4. STYLE + product type (e.g., "mid-century modern dining table", "Parsons-style console")
 
-specs rules:
-- Must include: dimensions (W × D × H or diameter), material(s), color range, approximate price range
-- Price should match the budget tier implied by the design brief
+If you omit the material keyword or the dimension number, the item FAILS validation. Do not return generic titles.
+
+search_title examples (GOOD — pass validation):
+- "Large 8x10 hand-knotted wool area rug in warm cream with geometric texture"
+- "Solid walnut round coffee table 36-40 inch diameter with tapered legs and lower shelf"
+- "Linen upholstered dining chair with oak legs, 19 inch seat width, natural oatmeal tone"
+- "Solid oak rectangular dining table 72x36 inch with trestle base in warm natural finish"
+- "Boucle upholstered accent chair 30 inch wide with walnut frame in ivory cream"
+
+search_title examples (BAD — fail validation):
+- "Coffee table" — no material, no color, no size
+- "Modern dining table for six" — no material, no dimensions
+- "Comfortable accent chair in neutral tone" — no material keyword, no size
+- "Dining chairs set of 4" — no material, no dimensions
+
+specs MUST include: W × D × H (with numbers and "inch" or "ft" unit), material(s), color range, ~$price range
 
 Items to enrich (${vagueItems.length} total):
 ${vagueItems.map((item, pos) => `[${pos}] category="${item.category}" current_title="${item.search_title || ""}" current_specs="${item.specs || ""}" description="${item.description || ""}"`).join("\n")}
@@ -133,8 +145,8 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
   {
     "index": 0,
     "category": "same as input — do not change",
-    "search_title": "fully specific title as described above",
-    "specs": "W × D × H, material(s), color range, ~$price range"
+    "search_title": "MUST contain a material keyword + a number with unit — see examples above",
+    "specs": "W × D × H in inches, material(s), color range, ~$price range"
   }
 ]`;
 

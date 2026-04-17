@@ -114,7 +114,7 @@ Follow this structure in your prompt:
 4. EXISTING FURNITURE — Place each keep item by position, color, and material (e.g. "a charcoal linen sofa against the left wall, its low profile anchored by three ivory boucle throw pillows").
 
 5. NEW PRODUCTS — Describe each new item as if photographing it in the room:
-   - Position: where it sits relative to other pieces and walls
+   - Position: USE the "placement:" field from the product info as a SPATIAL CONSTRAINT — it specifies exactly where the item goes (e.g., "centered in front of the sofa" or "against the north wall between the windows"). Weave this placement naturally into the narrative.
    - Material + color: exact descriptors from the product info
    - Scale: how it relates to surrounding pieces
    - Integration: how its material/color reads against the floor and walls

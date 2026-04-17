@@ -631,49 +631,58 @@ export default function FocusPage() {
           {/* Floor plan context */}
           {floorPlanFound !== null && (
             <div className={cn(
-              "flex items-start gap-3 p-3 rounded-xl text-sm",
+              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm",
               floorPlanFound
-                ? "bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300"
-                : "bg-muted/50 border text-muted-foreground"
+                ? "bg-muted/40 border text-foreground"
+                : "bg-muted/30 border border-dashed text-muted-foreground"
             )}>
               {floorPlanFound ? (
-                <Ruler className="h-5 w-5 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                <Ruler className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <LayoutGrid className="h-5 w-5 shrink-0 mt-0.5" />
+                <LayoutGrid className="h-4 w-4 shrink-0" />
               )}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 {floorPlanFound && floorPlan ? (
-                  <>
-                    <span className="font-medium">Floor plan found</span>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs">
-                      {floorPlan.total_sqft && (
-                        <span>{floorPlan.total_sqft} sqft</span>
-                      )}
-                      {floorPlan.room_dimensions && roomInfo && floorPlan.room_dimensions[roomInfo.room_type] && (
-                        <span>This room: ~{floorPlan.room_dimensions[roomInfo.room_type]}</span>
-                      )}
-                      {floorPlan.living_dining_combined && (
-                        <span>Combined living/dining</span>
-                      )}
-                      {floorPlan.kitchen_style && (
-                        <span>Kitchen: {floorPlan.kitchen_style}</span>
-                      )}
-                    </div>
-                    {floorPlan.notable_spatial_features && floorPlan.notable_spatial_features.length > 0 && (
-                      <p className="text-xs mt-1 opacity-80">
-                        Layout: {floorPlan.notable_spatial_features.join(", ")}
-                      </p>
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <span className="font-medium text-sm">Floor plan</span>
+                    <span className="text-muted-foreground">·</span>
+                    {floorPlan.total_sqft && (
+                      <span className="text-muted-foreground text-xs">{floorPlan.total_sqft} sqft</span>
                     )}
-                  </>
+                    {floorPlan.room_dimensions && roomInfo && floorPlan.room_dimensions[roomInfo.room_type] && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground text-xs">This room: ~{floorPlan.room_dimensions[roomInfo.room_type]}</span>
+                      </>
+                    )}
+                    {floorPlan.living_dining_combined && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground text-xs">Combined living/dining</span>
+                      </>
+                    )}
+                    {floorPlan.kitchen_style && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground text-xs">Kitchen: {floorPlan.kitchen_style}</span>
+                      </>
+                    )}
+                    {floorPlan.notable_spatial_features && floorPlan.notable_spatial_features.length > 0 && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground text-xs">{floorPlan.notable_spatial_features.join(", ")}</span>
+                      </>
+                    )}
+                  </div>
                 ) : (
-                  <span>No floor plan — sizing estimated from photos.{" "}
+                  <span className="text-xs">No floor plan — sizing estimated from photos.{" "}
                     <Link
                       href={`/projects/${projectId}/rooms/${roomId}/setup`}
                       className="underline font-medium hover:opacity-80"
                     >
-                      Upload a floor plan
+                      Upload one
                     </Link>{" "}
-                    in Room Setup for significantly better recommendations.
+                    for better recommendations.
                   </span>
                 )}
               </div>
