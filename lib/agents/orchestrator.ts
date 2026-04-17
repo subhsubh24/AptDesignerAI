@@ -7,6 +7,7 @@ import {
   type SearchBrief,
 } from "./shopping-researcher";
 import { extractFromUrl } from "./product-extractor";
+import { runProductVerifier } from "./computer-use/product-verifier";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
@@ -483,6 +484,11 @@ export async function runAgenticSearch(
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
     const extractLimit = pLimit(10);
+    // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
+    // Gated on Browserbase credentials; becomes a no-op when they're absent.
+    const cuFallbackLimit = pLimit(3);
+    const cuEnabled = Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
+
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
     const totalToExtract = Object.values(screenedByCategory).reduce(
@@ -575,6 +581,58 @@ export async function runAgenticSearch(
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                 };
+
+                // ── Computer Use fallback: text extraction got a title but no price/dimensions ──
+                // JS-heavy retailer pages (West Elm, CB2, RH, etc.) often don't render
+                // their price or dimension tables for text-only scrapers. When both are
+                // missing, launch a real browser session via Browserbase to fill the gaps.
+                if (cuEnabled && !product.price && !product.dimensions) {
+                  await cuFallbackLimit(async () => {
+                    try {
+                      const verifyResult = await Promise.race([
+                        runProductVerifier({
+                          productUrl: candidate.url,
+                          expectedTitle: product.title ?? undefined,
+                          expectedColor: product.colors?.[0],
+                          maxTurns: 10,
+                        }),
+                        new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60_000)),
+                      ]);
+                      if (verifyResult === "timeout" || !verifyResult.product) return;
+                      const v = verifyResult.product;
+                      if (typeof v.price === "number") product.price = v.price;
+                      if (v.dimensions?.width_in || v.dimensions?.depth_in || v.dimensions?.height_in) {
+                        product.dimensions = {
+                          ...(v.dimensions.width_in != null ? { width: v.dimensions.width_in } : {}),
+                          ...(v.dimensions.depth_in != null ? { depth: v.dimensions.depth_in } : {}),
+                          ...(v.dimensions.height_in != null ? { height: v.dimensions.height_in } : {}),
+                          unit: "inches" as const,
+                        };
+                      }
+                      if (v.materials.length && !product.materials?.length) product.materials = v.materials;
+                      if (v.available_colors.length && !product.colors?.length) product.colors = v.available_colors;
+                      product.metadata = {
+                        ...(product.metadata ?? {}),
+                        cu_fallback: true,
+                        cu_turns: verifyResult.turns,
+                        in_stock: v.in_stock ?? null,
+                      };
+                      log.info("Computer use fallback enriched product", {
+                        phase: "extract",
+                        url: candidate.url,
+                        category,
+                        filledPrice: typeof v.price === "number",
+                        filledDimensions: Boolean(product.dimensions),
+                      });
+                    } catch (cuErr) {
+                      log.warn("Computer use fallback failed", {
+                        phase: "extract",
+                        url: candidate.url,
+                        error: cuErr instanceof Error ? cuErr.message : String(cuErr),
+                      });
+                    }
+                  });
+                }
 
                 extractedByCategory[category][tier].push(product);
                 stats.totalExtracted++;
