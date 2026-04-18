@@ -176,7 +176,7 @@ export interface AIProvider {
      * as net-new input. Typical use: cache room images + design context
      * across many fit-scoring calls that share the same session.
      *
-     * Requires `ENABLE_GEMINI_CACHE=1`. Any failure (prompt too small, API
+     * Enabled by default (set `ENABLE_GEMINI_CACHE=0` to disable). Any failure (prompt too small, API
      * error) transparently falls back to inlining `cacheScope.content`
      * ahead of the first message — behavior is identical, just without the
      * token savings.

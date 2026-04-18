@@ -326,8 +326,10 @@ export const geminiProvider: AIProvider = {
     // On success, we set config.cachedContent and send only the net-new
     // messages. On failure, we prepend the cacheable parts to the first
     // user message so behavior matches the pre-caching baseline.
+    // Skip combined cache when tools are present — some Gemini tool types
+    // (googleSearch, urlContext) may be incompatible with cachedContent.
     let combinedCacheName: string | null = null;
-    if (cacheScope && cacheScope.content.length > 0) {
+    if (cacheScope && cacheScope.content.length > 0 && !tools?.length) {
       const cacheableConverted = await convertMessages(
         [{ role: "user", content: cacheScope.content }],
         partMediaResolutionLevel,
@@ -402,17 +404,22 @@ export const geminiProvider: AIProvider = {
       log.debug("deterministic call", { model, seed: effectiveSeed, temperatureOverridden: effectiveTemperature === undefined });
     }
 
+    // Gemini rejects `cachedContent` when `tools` or `tool_config` are
+    // present (HTTP 400: "CachedContent can not be used with GenerateContent
+    // request setting system_instruction, tools or tool_config"). Guard ALL
+    // cache paths against tools.
+    const hasTools = !!tools?.length;
+
     if (combinedCacheName) {
-      // Combined cache contains systemInstruction + cacheable user parts.
-      // Do NOT set systemInstruction separately — that would double up.
       config.cachedContent = combinedCacheName;
     } else if (system) {
-      // Prefer explicit Gemini context caching when enabled and the prompt
-      // is large enough for Gemini to accept. On any failure path we fall
-      // back to passing systemInstruction inline — identical behavior.
-      const cacheName = await getOrCreateSystemCache(model, system);
-      if (cacheName) {
-        config.cachedContent = cacheName;
+      if (!hasTools) {
+        const cacheName = await getOrCreateSystemCache(model, system);
+        if (cacheName) {
+          config.cachedContent = cacheName;
+        } else {
+          config.systemInstruction = system;
+        }
       } else {
         config.systemInstruction = system;
       }

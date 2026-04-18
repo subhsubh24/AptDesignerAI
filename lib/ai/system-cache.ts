@@ -11,8 +11,8 @@
  * payloads we catch the error, memoize `null`, and callers fall back to
  * inline systemInstruction without breakage.
  *
- * Opt-in via `ENABLE_GEMINI_CACHE=1` env var. Off by default so local
- * development and tests never make unnecessary API calls.
+ * Enabled by default. Set `ENABLE_GEMINI_CACHE=0` to disable (e.g. in
+ * local development where the cache-create round-trip isn't worth it).
  */
 
 import crypto from "crypto";
@@ -58,7 +58,7 @@ export async function getOrCreateSystemCache(
   model: string,
   systemPrompt: string
 ): Promise<string | null> {
-  if (process.env.ENABLE_GEMINI_CACHE !== "1") return null;
+  if (process.env.ENABLE_GEMINI_CACHE === "0") return null;
   if (!systemPrompt || systemPrompt.length === 0) return null;
 
   const key = cacheKey(model, systemPrompt);

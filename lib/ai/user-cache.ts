@@ -7,8 +7,9 @@
  * images and design context; this cache lets Gemini re-tokenize those parts
  * at the cheaper cached rate.
  *
- * Opt-in via `ENABLE_GEMINI_CACHE=1`. Any failure (prompt too small, API
- * error, missing content) returns null; callers fall back to inline content.
+ * Enabled by default. Set `ENABLE_GEMINI_CACHE=0` to disable. Any
+ * failure (prompt too small, API error) returns null and callers fall
+ * back to inline content.
  */
 
 import crypto from "crypto";
@@ -79,7 +80,7 @@ function cacheKey(params: CombinedCacheParams): string {
 export async function getOrCreateCombinedCache(
   params: CombinedCacheParams
 ): Promise<string | null> {
-  if (process.env.ENABLE_GEMINI_CACHE !== "1") return null;
+  if (process.env.ENABLE_GEMINI_CACHE === "0") return null;
   if (!params.cacheableParts || params.cacheableParts.length === 0) return null;
 
   const key = cacheKey(params);
