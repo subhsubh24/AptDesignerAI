@@ -5,6 +5,7 @@ import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { getOrCreateSystemCache } from "./system-cache";
+import { getOrCreateCombinedCache } from "./user-cache";
 import type {
   AIProvider,
   AIMessage,
@@ -302,6 +303,7 @@ export const geminiProvider: AIProvider = {
     responseModalities,
     mediaResolution,
     imageConfig,
+    cacheScope,
   }): Promise<AIResponse> {
     // Gemini 3 is optimized for temperature=1.0 (its default). Google warns
     // that sub-1.0 values can cause looping / degraded reasoning. We no
@@ -318,6 +320,37 @@ export const geminiProvider: AIProvider = {
     // ultra_high entirely).
     const partMediaResolutionLevel = toPartMediaResolutionLevel(mediaResolution);
     const contents = await convertMessages(messages, partMediaResolutionLevel);
+
+    // Combined cache: when caller opts in, convert the cacheable content
+    // parts and try to create/reuse a cache that covers system + these parts.
+    // On success, we set config.cachedContent and send only the net-new
+    // messages. On failure, we prepend the cacheable parts to the first
+    // user message so behavior matches the pre-caching baseline.
+    let combinedCacheName: string | null = null;
+    if (cacheScope && cacheScope.content.length > 0) {
+      const cacheableConverted = await convertMessages(
+        [{ role: "user", content: cacheScope.content }],
+        partMediaResolutionLevel,
+      );
+      const cacheableParts = cacheableConverted[0]?.parts ?? [];
+      if (cacheableParts.length > 0) {
+        combinedCacheName = await getOrCreateCombinedCache({
+          model,
+          system,
+          cacheableParts,
+          sessionKey: cacheScope.sessionKey,
+        });
+        if (!combinedCacheName) {
+          // Fallback: prepend cached parts to the first user message so the
+          // model still sees the full context inline.
+          if (contents.length > 0) {
+            contents[0].parts = [...cacheableParts, ...contents[0].parts];
+          } else {
+            contents.push({ role: "user", parts: cacheableParts });
+          }
+        }
+      }
+    }
 
     // ─── Prompt size monitoring ──────────────────────────────
     // Rough token estimate: ~4 chars per token for English text.
@@ -369,7 +402,11 @@ export const geminiProvider: AIProvider = {
       log.debug("deterministic call", { model, seed: effectiveSeed, temperatureOverridden: effectiveTemperature === undefined });
     }
 
-    if (system) {
+    if (combinedCacheName) {
+      // Combined cache contains systemInstruction + cacheable user parts.
+      // Do NOT set systemInstruction separately — that would double up.
+      config.cachedContent = combinedCacheName;
+    } else if (system) {
       // Prefer explicit Gemini context caching when enabled and the prompt
       // is large enough for Gemini to accept. On any failure path we fall
       // back to passing systemInstruction inline — identical behavior.

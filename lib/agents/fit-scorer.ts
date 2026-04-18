@@ -18,6 +18,7 @@ import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
+import crypto from "crypto";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
@@ -159,16 +160,25 @@ export async function scoreProduct(
     .filter(Boolean)
     .join("\n");
 
-  // Shared image content — both passes see the same photos.
-  const sharedImages: AIContentBlock[] = [];
-  for (const url of scoringCtx.roomImageUrls.slice(0, 3)) {
-    sharedImages.push({ type: "image", source: { type: "url", url } });
-  }
+  // Room images are stable per session — hoist them into `cacheScope` so
+  // Gemini context caching (when enabled) re-tokenizes them at the cheaper
+  // cached rate across the many per-product scoring calls. Product-specific
+  // images stay in the per-call message.
+  const cachedRoomImages: AIContentBlock[] = scoringCtx.roomImageUrls
+    .slice(0, 3)
+    .map((url) => ({ type: "image", source: { type: "url", url } }));
+  const roomSessionKey = crypto
+    .createHash("sha256")
+    .update(`${scoringCtx.roomType}|${scoringCtx.roomImageUrls.slice(0, 3).join("|")}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  const productImages: AIContentBlock[] = [];
   if (product.image_url) {
-    sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
+    productImages.push({ type: "image", source: { type: "url", url: product.image_url } });
   }
   if (lifestyleImageUrl) {
-    sharedImages.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
+    productImages.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
   }
 
   // Compute deterministic math scores before LLM evaluation
@@ -201,11 +211,11 @@ export async function scoreProduct(
   const productTextTail = `\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images — not just the text description. If a lifestyle image is included, use it to assess real-world scale and setting.`;
 
   const aestheticContent: AIContentBlock[] = [
-    ...sharedImages,
+    ...productImages,
     { type: "text", text: `${aestheticPrompt}${productTextTail}` },
   ];
   const functionalContent: AIContentBlock[] = [
-    ...sharedImages,
+    ...productImages,
     { type: "text", text: `${functionalPrompt}${productTextTail}` },
   ];
 
@@ -235,6 +245,10 @@ export async function scoreProduct(
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           mediaResolution: "ultra_high",
+          cacheScope:
+            cachedRoomImages.length > 0
+              ? { sessionKey: roomSessionKey, content: cachedRoomImages }
+              : undefined,
         });
 
         const raw = extractJsonObject(response.content);

@@ -169,5 +169,21 @@ export interface AIProvider {
      * resolution and aspect ratio.
      */
     imageConfig?: ImageConfig;
+    /**
+     * Opt-in Gemini context caching for user-role content. When provided,
+     * the provider builds (or reuses) a cache entry containing the given
+     * content blocks alongside the system prompt, and only sends `messages`
+     * as net-new input. Typical use: cache room images + design context
+     * across many fit-scoring calls that share the same session.
+     *
+     * Requires `ENABLE_GEMINI_CACHE=1`. Any failure (prompt too small, API
+     * error) transparently falls back to inlining `cacheScope.content`
+     * ahead of the first message — behavior is identical, just without the
+     * token savings.
+     */
+    cacheScope?: {
+      sessionKey: string;
+      content: AIContentBlock[];
+    };
   }): Promise<AIResponse>;
 }
