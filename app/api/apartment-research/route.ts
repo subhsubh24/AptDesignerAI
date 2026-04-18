@@ -874,6 +874,17 @@ ${floorPlanSchema}`;
           ? ` (Google Maps place_id: ${building_place_id})`
           : "";
 
+        console.log("[apartment-research] Maps enrichment inputs", {
+          hasLatLng: !!mapsConfig.latLng,
+          lat: resolvedLat ?? null,
+          lng: resolvedLng ?? null,
+          hasPlaceId: !!building_place_id,
+          placeId: building_place_id ?? null,
+          buildingName: building_name ?? null,
+          textLocation,
+          mode: mapsConfig.latLng ? "structured-latLng" : building_place_id ? "placeId-text-only" : "name-text-only",
+        });
+
         const mapsResponse = await geminiProvider.chat({
           model: selectModel("apartment_research"),
           system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Never invent — return null for anything Maps doesn't reveal.",
