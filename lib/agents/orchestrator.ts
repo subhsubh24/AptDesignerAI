@@ -17,6 +17,7 @@ import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-
 import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
+import { productMatchesCategory } from "@/lib/validation/category-match";
 import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -628,6 +629,21 @@ export async function runAgenticSearch(
                   && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
                 if (!hasSubstance) {
                   tracer.traceFilter("extract", "", candidate.url, "insufficient substance");
+                  extractedSoFar++;
+                  return;
+                }
+
+                // Category guard: reject products that don't match the
+                // requested category (e.g. a lint roller returned for a
+                // "vase" search). Quick-screen is URL-heuristic only; this
+                // is the first semantic check on actual product content.
+                const catCheck = productMatchesCategory(
+                  category,
+                  extractResult.data.category,
+                  extractResult.data.title,
+                );
+                if (!catCheck.ok) {
+                  tracer.traceFilter("extract", "", candidate.url, `category mismatch: ${catCheck.reason}`);
                   extractedSoFar++;
                   return;
                 }
@@ -1468,6 +1484,17 @@ export async function runAgenticSearch(
               const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
               if (!extractResult.success || !extractResult.data) continue;
               if (!extractResult.data.title && !extractResult.data.price) continue;
+
+              // Same category guard used in the main path.
+              const catCheck = productMatchesCategory(
+                wt.category,
+                extractResult.data.category,
+                extractResult.data.title,
+              );
+              if (!catCheck.ok) {
+                tracer.traceFilter("extract", "", candidate.url, `backfill category mismatch: ${catCheck.reason}`);
+                continue;
+              }
 
               const product: CandidateProduct = {
                 id: crypto.randomUUID(),
