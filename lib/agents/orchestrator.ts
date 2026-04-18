@@ -518,7 +518,8 @@ export async function runAgenticSearch(
     const cuFallbackLimit = pLimit(3);
     let cuEnabled = Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
     if (cuEnabled) {
-      try { require.resolve("@browserbasehq/sdk"); } catch { cuEnabled = false; }
+      // @ts-expect-error — optional dependency, not installed in all envs
+      try { await import(/* webpackIgnore: true */ "@browserbasehq/sdk"); } catch { cuEnabled = false; }
     }
 
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
