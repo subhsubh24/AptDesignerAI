@@ -243,8 +243,7 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         room: {
           type: ctx.roomType,
           sqft: expansionRoom?.sqft
-            ?? ctx.extractedFloorPlan?.total_sqft
-            ?? (ctx.floorPlan?.total_sqft as number | undefined),
+            ?? ctx.extractedFloorPlan?.total_sqft,
         },
         designDirection: diagnosisData.design_direction ?? undefined,
         roomPhotos: ctx.imageUrls,
@@ -296,7 +295,8 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     .single();
 
   if (saveError) {
-    return NextResponse.json({ error: saveError.message }, { status: 500 });
+    console.error("[diagnosis] Failed to save diagnosis:", saveError.message);
+    return NextResponse.json({ error: "Failed to save diagnosis" }, { status: 500 });
   }
 
   // Update room status

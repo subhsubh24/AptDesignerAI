@@ -284,12 +284,16 @@ export async function generateMockupPrompt(
 
   promptBlocks.push({ type: "text", text: prompt });
 
-  const mockupSessionKey = roomImageUrls && roomImageUrls.length > 0
-    ? crypto
-        .createHash("sha256")
-        .update(`mockup|${roomType}|${roomImageUrls.slice(0, 4).join("|")}`)
-        .digest("hex")
-        .slice(0, 16)
+  // Include floor plan URL in the hash so a floor-plan-only prompt gets a
+  // stable non-empty key even when no room photos are available.
+  const cacheKeyInput = [
+    "mockup",
+    roomType,
+    ...(roomImageUrls?.slice(0, 4) ?? []),
+    ...(floorPlanImageUrl ? [floorPlanImageUrl] : []),
+  ].join("|");
+  const mockupSessionKey = cacheKeyInput.length > "mockup|".length
+    ? crypto.createHash("sha256").update(cacheKeyInput).digest("hex").slice(0, 16)
     : "";
 
   try {

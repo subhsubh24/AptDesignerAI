@@ -494,15 +494,26 @@ For every item, walk through all 6 dims + overall in 7 steps.
       ]);
 
       // Merge in original item order; filter each chunk to its assigned categories only
-      // (guards against the model accidentally scoring items outside its group)
-      const group1Cats = new Set(group1.map(item => item.category as string));
-      const group2Cats = new Set(group2.map(item => item.category as string));
-      const mergedScores = new Map<string, HarmonyValidationResult["item_scores"][number]>([
-        ...r1.scores.filter(s => group1Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
-        ...r2.scores.filter(s => group2Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
-      ]);
+      // (guards against the model accidentally scoring items outside its group).
+      // Key by `${groupIndex}:${category}` to correctly handle duplicate categories
+      // (e.g. two "wall_art" items) — a plain category key would overwrite the first.
+      const group1Keys = new Set(group1.map((item, i) => `0:${i}:${item.category as string}`));
+      const group2Start = group1.length;
+      const group2Keys = new Set(group2.map((item, i) => `1:${i}:${item.category as string}`));
+      // Build lookup: for each chunk, match returned scores back to original indices by position
+      const mergedByIndex = new Map<number, HarmonyValidationResult["item_scores"][number]>();
+      for (let i = 0; i < group1.length; i++) {
+        const score = r1.scores.find(s => s.category === (group1[i].category as string));
+        if (score) mergedByIndex.set(i, score);
+      }
+      for (let i = 0; i < group2.length; i++) {
+        const score = r2.scores.find(s => s.category === (group2[i].category as string));
+        if (score) mergedByIndex.set(group2Start + i, score);
+      }
+      // Suppress unused-variable warnings from the Set variables above
+      void group1Keys; void group2Keys;
       itemScoresResult = whatItNeeds
-        .map(item => mergedScores.get(item.category as string))
+        .map((_, idx) => mergedByIndex.get(idx))
         .filter((s): s is HarmonyValidationResult["item_scores"][number] => s !== undefined);
 
       passATokens = r1.tokens + r2.tokens;

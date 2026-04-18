@@ -27,6 +27,7 @@ import type { CandidateProduct, DesignDirection, DiagnosisData, ExtractedFloorPl
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import { computeProductMathScores, formatProductMathForPrompt, type ProductMathScores } from "@/lib/validation/product-math";
 import { resolveLifestyleFlags } from "@/lib/validation/durability-map";
+import { MATH_VETO } from "@/lib/config/pipeline";
 
 const log = createLogger("fit-scorer");
 
@@ -299,7 +300,7 @@ export async function scoreProduct(
     };
 
     // Math veto: cap AI dimension scores where deterministic math found violations.
-    const VETO_THRESHOLD = 0.6; // from lib/config/pipeline.ts MATH_VETO.threshold
+    const VETO_THRESHOLD = MATH_VETO.threshold;
     if (mathScores.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
       log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
       scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);

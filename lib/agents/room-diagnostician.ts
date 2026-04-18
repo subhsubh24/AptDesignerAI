@@ -208,9 +208,6 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       return { success: false, error: msg };
     }
 
-    // Preserve the original seeded-by-DETERMINISTIC_SEED behavior as a fallback
-    // reference for any downstream code inspecting this constant.
-    void DETERMINISTIC_SEED;
   }
 
   log.info("Diagnosis analysis pass complete", {

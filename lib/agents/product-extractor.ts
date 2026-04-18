@@ -431,25 +431,14 @@ export async function extractFromUrl(
 
   const userContent = `${extractionPrompt}\n\nExtract product information from this URL: ${url}\n\nVisit the page, read all the content, examine all product images carefully, and check for available color/material variants.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
-  // Build message content. When room photos are available, include them as
-  // visual grounding so fields like visual_style_tags are judged against
-  // the actual room — not a generic ideal. Extracted product facts (title,
-  // price, dimensions) remain URL-derived, so the URL-keyed cache is still
-  // valid.
-  const buildContent = (text: string): string | AIContentBlock[] => {
-    if (!roomImageUrls || roomImageUrls.length === 0) return text;
-    const blocks: AIContentBlock[] = [
-      {
-        type: "text",
-        text: "REFERENCE PHOTOS OF THE ACTUAL ROOM the product is being considered for (use these to inform visual_style_tags and any style-judgment fields):",
-      },
-    ];
-    for (const u of roomImageUrls.slice(0, 3)) {
-      blocks.push({ type: "image", source: { type: "url", url: u } });
-    }
-    blocks.push({ type: "text", text });
-    return blocks;
-  };
+  // Room images are intentionally NOT sent during extraction:
+  // 1. urlContext tool + inline images = Gemini 400 INVALID_ARGUMENT.
+  // 2. Each image adds ~1500–2500 tokens at ultra_high resolution; across 100
+  //    extractions that burns ~600K tokens for marginal style-tag benefit.
+  //    The design profile (text) already carries style context. Deep-score
+  //    calls later send room images where vision actually matters.
+  // Kept as a no-op helper so fallback paths still compile unchanged.
+  const buildContent = (text: string): string => text;
 
   // Attempt 0 (known-brittle retailers only): try HTML structured scrape first.
   // These retailers ship clean JSON-LD Product schema — scraping is faster and

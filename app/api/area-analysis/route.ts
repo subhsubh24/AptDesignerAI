@@ -67,18 +67,21 @@ export async function POST(request: Request) {
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
   // If another request for the same room is already running, wait for it.
-  const existing = inFlightAnalyses.get(room_id);
+  // Key includes user.id so concurrent requests from different users never share
+  // a result built under a different auth context.
+  const inflightKey = `${user.id}:${room_id}`;
+  const existing = inFlightAnalyses.get(inflightKey);
   if (existing) {
     console.log(`[area-analysis] Coalescing in-flight request for room ${room_id}`);
     return existing;
   }
 
   const work = runAnalysis(supabase, room_id, project_id);
-  inFlightAnalyses.set(room_id, work);
+  inFlightAnalyses.set(inflightKey, work);
   try {
     return await work;
   } finally {
-    inFlightAnalyses.delete(room_id);
+    inFlightAnalyses.delete(inflightKey);
   }
 }
 
@@ -276,8 +279,12 @@ These photos show the REST of the apartment. Study them to understand:
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const otherRoom of otherRooms as any[]) {
-      const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown> }> | undefined;
-      const otherDiagnosis = diagnoses?.[diagnoses.length - 1];
+      const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; created_at?: string }> | undefined;
+      // Sort descending by created_at so we always use the most recent diagnosis.
+      const sortedDiagnoses = diagnoses?.slice().sort((a, b) =>
+        (b.created_at ?? "").localeCompare(a.created_at ?? "")
+      );
+      const otherDiagnosis = sortedDiagnoses?.[0];
       const djson = otherDiagnosis?.diagnosis_json;
       const summary = djson?.summary as string | undefined;
       const direction = djson?.design_direction as string | undefined;
@@ -399,7 +406,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
     type PassASample = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: Record<string, any>;
-      tokens: { input: number; output: number };
+      tokens: { input: number; output: number; thinking: number };
     };
 
     const generatePassASample = async (seed: number): Promise<PassASample | null> => {
@@ -434,6 +441,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           tokens: {
             input: response.usage?.input_tokens ?? 0,
             output: response.usage?.output_tokens ?? 0,
+            thinking: response.usage?.thinking_tokens ?? 0,
           },
         };
       } catch (err) {
@@ -502,8 +510,8 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
     // Sum tokens across every surviving sample — the generation cost is N×,
     // not 1×, and we want usage accounting to reflect that.
     const passATokens = selection.candidates.reduce(
-      (acc, s) => ({ input: acc.input + s.tokens.input, output: acc.output + s.tokens.output }),
-      { input: 0, output: 0 },
+      (acc, s) => ({ input: acc.input + s.tokens.input, output: acc.output + s.tokens.output, thinking: acc.thinking + (s.tokens.thinking ?? 0) }),
+      { input: 0, output: 0, thinking: 0 },
     );
     // Suppress unused-import warning; seedForSample is reserved for future
     // callers that want per-sample seed inspection.
@@ -637,7 +645,13 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
         {
           roomType: room.room_type,
           roomSqft: enricherSqft,
-          designDirection: understanding.design_direction_raw as DesignDirection | undefined,
+          designDirection: {
+            recommended_palette: (understanding.recommended_palette as string[] | undefined) ?? [],
+            recommended_materials: (understanding.recommended_materials as string[] | undefined) ?? [],
+            recommended_textures: (understanding.recommended_textures as string[] | undefined) ?? [],
+            recommended_furniture_types: (understanding.recommended_furniture_types as string[] | undefined) ?? [],
+            style_notes: (understanding.design_direction as string | undefined) ?? "",
+          } as DesignDirection,
           pass1Brief: JSON.stringify({
             design_direction: understanding.design_direction,
             recommended_palette: understanding.recommended_palette,
@@ -660,8 +674,9 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       usage: {
         input_tokens: passATokens.input + (passBResponse.usage?.input_tokens || 0),
         output_tokens: passATokens.output + (passBResponse.usage?.output_tokens || 0),
+        thinking_tokens: passATokens.thinking + (passBResponse.usage?.thinking_tokens || 0),
       },
-    } as { usage: { input_tokens: number; output_tokens: number } };
+    } as { usage: { input_tokens: number; output_tokens: number; thinking_tokens: number } };
 
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
       throw new Error(`AI Pass B missing required field "what_it_needs". Got keys: ${Object.keys(furnishing).join(", ")}.`);
@@ -818,7 +833,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     // for soft categories (plants, art, rugs) within ~2 rounds. Chasing 9.5
     // across 10 rounds burned ~420k tokens/run with no quality gain — items
     // stabilized at the same "best" score they hit in round 2.
-    const MAX_HARMONY_ROUNDS = 2;
+    const MAX_HARMONY_ROUNDS = 3;
     /** Target: items at or above this score are "locked in" and skip revision. */
     const TARGET_SCORE = 8.5;
     let validation = null;
@@ -1404,8 +1419,8 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       for (const item of items) {
         const priceMatch = item.specs?.match(/\$(\d[\d,]*)\s*[-–]\s*\$?(\d[\d,]*)/);
         if (priceMatch) {
-          const low = parseInt(priceMatch[1].replace(",", ""), 10);
-          const high = parseInt(priceMatch[2].replace(",", ""), 10);
+          const low = parseInt(priceMatch[1].replace(/,/g, ""), 10);
+          const high = parseInt(priceMatch[2].replace(/,/g, ""), 10);
           const mid = (low + high) / 2;
           estimatedTotal += mid;
           itemBudgets.push({ category: item.category, estimated_price: `$${low}-$${high}` });

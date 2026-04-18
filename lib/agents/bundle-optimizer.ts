@@ -18,6 +18,7 @@ import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
+import { isGeminiCompatibleImageUrl } from "@/lib/ai/image-mime";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { BundleEvaluationResult } from "@/lib/types/scoring";
@@ -121,12 +122,12 @@ export async function evaluateBundle(
     sharedImages.push({ type: "image", source: { type: "url", url } });
   }
   for (const product of products) {
-    if (product.image_url) {
+    if (product.image_url && isGeminiCompatibleImageUrl(product.image_url)) {
       sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
     }
     const meta = product.metadata as Record<string, unknown> | null;
     const lifestyleUrl = meta?.lifestyle_image_url as string | undefined;
-    if (lifestyleUrl) {
+    if (lifestyleUrl && isGeminiCompatibleImageUrl(lifestyleUrl)) {
       sharedImages.push({ type: "image", source: { type: "url", url: lifestyleUrl } });
     }
   }

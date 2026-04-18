@@ -125,41 +125,49 @@ export async function runIdentifiedProductsPipeline(
   const identifyResults = await Promise.all(
     cropperOut.crops.map((crop) =>
       identifyLimit(async (): Promise<IdentifyResult> => {
-        let priors: RetrievalPrior[] = [];
         try {
-          const vec = await embedImage({
-            image: crop.source_image_url,
-            text: crop.label,
+          let priors: RetrievalPrior[] = [];
+          try {
+            const vec = await embedImage({
+              image: crop.source_image_url,
+              text: crop.label,
+            });
+            const matches = await topKSimilar(input.supabase, vec, { k: 3 });
+            priors = matches.map((m) => ({
+              brand: m.brand,
+              model: m.model,
+              similarity: m.similarity,
+            }));
+          } catch (err) {
+            log.debug("embedding/retrieval skipped for crop", {
+              label: crop.label,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+
+          const idOut = await runProductIdentifier({
+            roomImageUrl: crop.source_image_url,
+            box: crop.box,
+            label: crop.label,
+            priors,
+            roomType: input.roomType,
+            aestheticHint: input.aestheticHint,
+            budgetMode: input.budgetMode,
+            roomDimensions: input.roomDimensions,
           });
-          const matches = await topKSimilar(input.supabase, vec, { k: 3 });
-          priors = matches.map((m) => ({
-            brand: m.brand,
-            model: m.model,
-            similarity: m.similarity,
-          }));
+          return {
+            crop,
+            priors,
+            top: idOut.candidates[0] ?? null,
+            tokens: idOut.tokensUsed,
+          };
         } catch (err) {
-          log.debug("embedding/retrieval skipped for crop", {
+          log.warn("identify task failed for crop — skipping", {
             label: crop.label,
             error: err instanceof Error ? err.message : String(err),
           });
+          return { crop, priors: [], top: null, tokens: 0 };
         }
-
-        const idOut = await runProductIdentifier({
-          roomImageUrl: crop.source_image_url,
-          box: crop.box,
-          label: crop.label,
-          priors,
-          roomType: input.roomType,
-          aestheticHint: input.aestheticHint,
-          budgetMode: input.budgetMode,
-          roomDimensions: input.roomDimensions,
-        });
-        return {
-          crop,
-          priors,
-          top: idOut.candidates[0] ?? null,
-          tokens: idOut.tokensUsed,
-        };
       }),
     ),
   );
@@ -169,7 +177,12 @@ export async function runIdentifiedProductsPipeline(
   }
 
   // Verify phase — sequentially to respect maxVerifyCalls cap.
-  for (const r of identifyResults) {
+  // Sort by top candidate confidence so the highest-confidence crops are verified
+  // first; low-confidence crops at the end are dropped when the cap is reached.
+  const verifyOrder = [...identifyResults].sort(
+    (a, b) => (b.top?.confidence ?? 0) - (a.top?.confidence ?? 0),
+  );
+  for (const r of verifyOrder) {
     if (!r.top) continue;
     if (verifyCallsMade >= maxVerifyCalls) {
       log.info("verify cap reached, skipping", {
