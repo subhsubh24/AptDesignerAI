@@ -887,27 +887,31 @@ ${floorPlanSchema}`;
 
         const mapsResponse = await geminiProvider.chat({
           model: selectModel("apartment_research"),
-          system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Never invent — return null for anything Maps doesn't reveal.",
+          system: "You are an interior-design research assistant using Google Maps. Extract location-aware context that affects design decisions — orientation, typical view, neighborhood aesthetic character. Use all available evidence: satellite view, Street View, street geometry, and address data.",
           messages: [{
             role: "user",
             content: `Using Google Maps, look up ${textLocation}${placeIdHint}${mapsConfig.latLng ? " (structured lat/lng is attached via retrievalConfig)" : ""}.
 
-Extract ONLY what Maps actually reveals (buildings, streetview, reviews, nearby places). Return JSON:
+Extract location-aware context using ALL available evidence. Return JSON:
 {
-  "primary_orientation": "N | S | E | W | NE | NW | SE | SW | null — which way does the building's main facade face?",
-  "likely_light_direction": "morning | afternoon | evening | mixed | null — based on orientation, when is natural light strongest in typical units?",
+  "primary_orientation": "N | S | E | W | NE | NW | SE | SW | null — which way does the building's main facade face? INFERENCE IS ALLOWED: a building whose address is on an E-W street faces N or S (whichever side it's on); a building on a N-S street faces E or W. Use satellite view to confirm. Only use null if you genuinely cannot determine it.",
+  "likely_light_direction": "morning | afternoon | evening | mixed | null — derive from primary_orientation: N-facing = indirect/even; S-facing = all-day/afternoon strongest; E-facing = morning; W-facing = afternoon/evening. 'mixed' only for buildings that span a full block with units on all sides.",
   "view_character": "skyline | water | park | street | mixed-urban | industrial | residential | null",
   "nearby_design_references": ["up to 3 notable design-relevant nearby places — art museum, design district, architectural landmark"],
   "neighborhood_aesthetic_cues": ["2-4 short phrases describing the visual/material character of the block — e.g. 'prewar brick', 'modern glass towers', 'tree-lined brownstones'"],
   "confidence": "high | medium | low"
 }
 
-If Maps doesn't reveal the answer, use null — DO NOT GUESS.
+ORIENTATION INFERENCE RULES (prefer inference over null):
+- Address on an E-W street (e.g. Madison St, Monroe St): main facade faces N if building is on the south side of the street, faces S if on the north side. Confirm with satellite/streetview.
+- Address on a N-S street (e.g. State St, Michigan Ave): main facade faces E or W. Confirm with satellite/streetview.
+- If the building spans a full block (bounded by streets on all four sides): orientation = "mixed", light = "mixed".
+- Use null ONLY if the street direction is ambiguous AND satellite/streetview is unavailable.
 
-CONFIDENCE RULES (critical — self-inconsistency breaks downstream design decisions):
-- "high" ONLY if you populated primary_orientation AND likely_light_direction from concrete Maps evidence (satellite view, streetview orientation, or an explicit building-facing detail).
-- "medium" if you filled orientation OR light (not both) from evidence, or if neighborhood_aesthetic_cues is rich.
-- "low" MUST be used if primary_orientation, likely_light_direction, and view_character are ALL null. A high-confidence reply with every useful field null is forbidden — that is a self-contradiction.`,
+CONFIDENCE RULES:
+- "high" if primary_orientation AND likely_light_direction are populated (from any evidence — inference counts).
+- "medium" if only one of orientation/light is filled, or if neighborhood_aesthetic_cues is rich but orientation is uncertain.
+- "low" ONLY if orientation, light, AND view_character are all null.`,
           }],
           max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
