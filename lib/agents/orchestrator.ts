@@ -1450,7 +1450,10 @@ export async function runAgenticSearch(
         const strongProducts = tierProducts.filter(
           (p) => (evaluations.get(p.id)?.final_item_score || 0) >= 7
         );
-        if (strongProducts.length < 3) {
+        // Short-circuit: if we already have 2+ strong products, skip backfill.
+        // Previous threshold (<3) triggered an expensive extract+deep-score pass
+        // for marginal gains; <2 still preserves a safety net for sparse tiers.
+        if (strongProducts.length < 2) {
           weakTiers.push({ category, tier });
         }
       }
@@ -1462,6 +1465,12 @@ export async function runAgenticSearch(
         status: "running",
         data: { weakTiers: weakTiers.map((t) => `${t.category}/${t.tier}`) },
       });
+
+      // Track tiers that actually received new strong products; only THOSE
+      // tiers need bundle re-evaluation. Previously every weak tier was
+      // re-evaluated even if backfill produced nothing, burning ~20-30K
+      // tokens on already-known bundles.
+      const tiersWithNewProducts = new Set<PriceTier>();
 
       // Run targeted backfill searches for weak tiers
       const backfillSearchLimit = pLimit(10);
@@ -1475,14 +1484,14 @@ export async function runAgenticSearch(
           const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));
           const deduped = deduplicateCandidates(filtered);
 
-          // Extract top 5 backfill candidates
+          // Phase 1 — extract top 5 backfill candidates in parallel.
+          const extracted: CandidateProduct[] = [];
           for (const candidate of deduped.slice(0, 5)) {
             try {
               const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
               if (!extractResult.success || !extractResult.data) continue;
               if (!extractResult.data.title && !extractResult.data.price) continue;
 
-              // Same category guard used in the main path.
               const catCheck = productMatchesCategory(
                 wt.category,
                 extractResult.data.category,
@@ -1493,7 +1502,7 @@ export async function runAgenticSearch(
                 continue;
               }
 
-              const product: CandidateProduct = {
+              extracted.push({
                 id: crypto.randomUUID(),
                 room_id: ctx.roomId,
                 search_session_id: null,
@@ -1519,46 +1528,85 @@ export async function runAgenticSearch(
                 status: "pending",
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-              };
-
-              // Deep score the backfill product directly
-              const backfillCategory = product.category || "";
-              const scoreResult = await scoreProduct(product, {
-                roomType: ctx.roomType,
-                budgetMode: ctx.budgetMode,
-                existingItems: ctx.keepItems,
-                roomImageUrls: ctx.imageUrls,
-                priorities: ctx.priorities,
-                otherRoomsContext: ctx.otherRoomsContext,
-                designProfile: ctx.designProfile,
-                diagnosis: ctx.diagnosis,
-                designDirection: ctx.designDirection,
-                userFeedbackContext: ctx.userFeedbackContext,
-                placement: ctx.placementMap?.[backfillCategory],
-                spatialLayout: ctx.spatialLayout,
-                floorPlan: ctx.floorPlan,
-                extractedFloorPlan: ctx.extractedFloorPlan,
-                lightingConditions: ctx.lightingConditions,
-                windowDoorPositions: ctx.windowDoorPositions,
-                outletPositions: ctx.outletPositions,
-                userContext: ctx.userContext,
-                replaceItems: ctx.replaceItems,
-                identifiedContext: ctx.identifiedContext,
-                anchorSpecs: DEPENDENT_CATEGORIES.has(backfillCategory) && Object.keys(anchorSpecs).length > 0
-                  ? anchorSpecs
-                  : undefined,
-                includeFitNotes: false,
               });
-              if (scoreResult.success && scoreResult.data) {
-                evaluations.set(product.id, scoreResult.data);
-                if (scoreResult.data.final_item_score >= 6) {
-                  candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
-                  candidatesByCategory[wt.category].push(product);
-                  stats.totalFinal++;
-                }
-              }
             } catch {
               // Skip failed backfill extractions
+            }
+          }
+
+          if (extracted.length === 0) return;
+
+          // Phase 2 — quick-score to filter out obvious duds BEFORE paying the
+          // deep-score cost. Mirrors the main-path screening gate.
+          const backfillCategory = extracted[0]?.category || wt.category;
+          const quickRes = await quickScoreProducts(
+            extracted,
+            backfillCategory,
+            ctx.roomType,
+            ctx.budgetMode,
+            ctx.designDirection,
+            ctx.placementMap?.[backfillCategory],
+            ctx.floorPlan,
+            ctx.diagnosis as Record<string, unknown> | undefined,
+            ctx.priorities,
+            ctx.keepItems,
+          );
+          if (quickRes.tokensUsed) {
+            tokenBudget.add(quickRes.tokensUsed);
+            stats.tokensUsed += quickRes.tokensUsed;
+            stats.tokensPerPhase.quick_score += quickRes.tokensUsed;
+          }
+          const quickScoreByProductId = new Map<string, number>();
+          if (quickRes.success && quickRes.data) {
+            for (const entry of quickRes.data) {
+              quickScoreByProductId.set(entry.productId, entry.quickScore);
+            }
+          }
+
+          const QUICK_SCORE_GATE = 4.0;
+          const survivors = extracted.filter((p) => {
+            const qs = quickScoreByProductId.get(p.id);
+            // If quick-score failed entirely, keep the product (fail-open).
+            return qs === undefined || qs >= QUICK_SCORE_GATE;
+          });
+
+          // Phase 3 — deep-score the survivors only.
+          for (const product of survivors) {
+            const cat = product.category || "";
+            const scoreResult = await scoreProduct(product, {
+              roomType: ctx.roomType,
+              budgetMode: ctx.budgetMode,
+              existingItems: ctx.keepItems,
+              roomImageUrls: ctx.imageUrls,
+              priorities: ctx.priorities,
+              otherRoomsContext: ctx.otherRoomsContext,
+              designProfile: ctx.designProfile,
+              diagnosis: ctx.diagnosis,
+              designDirection: ctx.designDirection,
+              userFeedbackContext: ctx.userFeedbackContext,
+              placement: ctx.placementMap?.[cat],
+              spatialLayout: ctx.spatialLayout,
+              floorPlan: ctx.floorPlan,
+              extractedFloorPlan: ctx.extractedFloorPlan,
+              lightingConditions: ctx.lightingConditions,
+              windowDoorPositions: ctx.windowDoorPositions,
+              outletPositions: ctx.outletPositions,
+              userContext: ctx.userContext,
+              replaceItems: ctx.replaceItems,
+              identifiedContext: ctx.identifiedContext,
+              anchorSpecs: DEPENDENT_CATEGORIES.has(cat) && Object.keys(anchorSpecs).length > 0
+                ? anchorSpecs
+                : undefined,
+              includeFitNotes: false,
+            });
+            if (scoreResult.success && scoreResult.data) {
+              evaluations.set(product.id, scoreResult.data);
+              if (scoreResult.data.final_item_score >= 6) {
+                candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
+                candidatesByCategory[wt.category].push(product);
+                stats.totalFinal++;
+                tiersWithNewProducts.add(wt.tier);
+              }
             }
           }
         })
@@ -1567,9 +1615,10 @@ export async function runAgenticSearch(
       await Promise.all(backfillPromises);
       reportStep({ step: `Backfilling ${weakTiers.length} weak tier(s)`, status: "completed" });
 
-      // Re-run bundle evaluation for tiers that got backfill products
-      if (!tokenBudget.exceeded) {
-        const backfilledTiers = new Set(weakTiers.map((wt) => wt.tier));
+      // Re-run bundle evaluation only for tiers that actually received new
+      // strong products (not just every tier we tried to backfill).
+      if (!tokenBudget.exceeded && tiersWithNewProducts.size > 0) {
+        const backfilledTiers = tiersWithNewProducts;
         reportStep({ step: "Re-evaluating bundles after backfill", status: "running" });
 
         for (const tier of backfilledTiers) {
@@ -1589,6 +1638,13 @@ export async function runAgenticSearch(
           if (topByCategory.length === 0) continue;
 
           let combos = cartesian(topByCategory);
+          // Incremental re-eval: only evaluate combos containing ≥1 new
+          // backfill product — the rest were already scored in the main pass
+          // and their bundle scores haven't changed.
+          const backfillOnly = combos.filter((combo) =>
+            combo.some((p) => (p.metadata as { backfill?: boolean } | null)?.backfill === true)
+          );
+          if (backfillOnly.length > 0) combos = backfillOnly;
           if (combos.length > 27) {
             combos.sort((a, b) => {
               const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
@@ -1625,6 +1681,16 @@ export async function runAgenticSearch(
             validResults.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
             const best = validResults[0];
 
+            // Incremental guard: keep the prior bundle if no new combo beats it.
+            // Avoids wasting vibe tokens when backfill produced no improvement.
+            const existingIdx = bundles.findIndex((b) => (b as { tier: string }).tier === tier);
+            const prior = existingIdx >= 0 ? (bundles[existingIdx] as { final_bundle_score?: number }) : null;
+            const priorScore = prior?.final_bundle_score ?? 0;
+            if (best.final_bundle_score <= priorScore) {
+              tracer.trace({ phase: "bundle", action: "backfill_reeval_noop", tier, score: best.final_bundle_score });
+              continue;
+            }
+
             // Vibe for the winner only
             let roomVibe: unknown = undefined;
             if (!tokenBudget.exceeded) {
@@ -1633,8 +1699,6 @@ export async function runAgenticSearch(
               if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
             }
 
-            // Replace existing bundle for this tier
-            const existingIdx = bundles.findIndex((b) => (b as { tier: string }).tier === tier);
             const newBundle = {
               tier,
               scores: best.scores,

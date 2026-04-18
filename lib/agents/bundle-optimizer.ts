@@ -27,6 +27,23 @@ import { computeBundleMathScores, formatBundleMathForPrompt } from "@/lib/valida
 
 const log = createLogger("bundle-optimizer");
 
+// Process-memory cache for bundle vibe narratives. Same sorted product-id set
+// + verdict + room-image key → same vibe output, so we skip a 20-60K token
+// call on duplicate evaluations (common during backfill re-eval on unchanged
+// combos and during manual-path re-visits within the same process).
+type VibePayload = NonNullable<Awaited<ReturnType<typeof generateBundleVibe>>["data"]>;
+const VIBE_CACHE_MAX = 200;
+const vibeCache = new Map<string, VibePayload>();
+function vibeCacheKey(
+  products: CandidateProduct[],
+  bundleCtx: BundleContext,
+  verdict: string,
+): string {
+  const ids = products.map((p) => p.id).sort().join("|");
+  const images = [...bundleCtx.roomImageUrls].sort().slice(0, 2).join("|");
+  return `${bundleCtx.roomType}::${ids}::${verdict}::${images}`;
+}
+
 export interface BundleContext {
   roomType: string;
   roomImageUrls: string[];
@@ -288,6 +305,12 @@ export async function generateBundleVibe(
   bundleCtx: BundleContext,
   verdict: string,
 ): Promise<AgentResult<{ room_vibe: { vibe_summary: string; style_keywords: string[]; color_story: string; mood: string } | undefined }>> {
+  const cacheKey = vibeCacheKey(products, bundleCtx, verdict);
+  const cached = vibeCache.get(cacheKey);
+  if (cached) {
+    return { success: true, data: cached, tokensUsed: 0 };
+  }
+
   const model = selectModel("bundle");
   const system = getSystemPromptCore(bundleCtx.designProfile);
 
@@ -378,9 +401,16 @@ export async function generateBundleVibe(
         },
       }
     );
+    const payload = { room_vibe: res.data.room_vibe };
+    if (vibeCache.size >= VIBE_CACHE_MAX) {
+      // Drop oldest entry — Map preserves insertion order.
+      const firstKey = vibeCache.keys().next().value;
+      if (firstKey !== undefined) vibeCache.delete(firstKey);
+    }
+    vibeCache.set(cacheKey, payload);
     return {
       success: true,
-      data: { room_vibe: res.data.room_vibe },
+      data: payload,
       tokensUsed: res.tokens,
     };
   } catch (error) {

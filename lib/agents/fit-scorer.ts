@@ -450,29 +450,9 @@ export async function quickScoreProducts(
         floorPlan?.total_sqft && `Apartment: ~${floorPlan.total_sqft} sqft`,
       ].filter(Boolean).join("\n");
 
-      // Build diagnosis context
-      const diagnosisHint = (() => {
-        if (!diagnosis) return "";
-        const parts: string[] = [];
-        if (diagnosis.summary) parts.push(`Room assessment: ${diagnosis.summary}`);
-        const issues = [
-          ...(diagnosis.scale_proportion_issues as string[] || []),
-          ...(diagnosis.color_issues as string[] || []),
-          ...(diagnosis.texture_material_issues as string[] || []),
-        ];
-        if (issues.length > 0) parts.push(`Known issues to solve: ${issues.join("; ")}`);
-        return parts.length > 0 ? parts.join("\n") : "";
-      })();
-
-      // Build existing items context
-      const existingHint = existingItems && existingItems.length > 0
-        ? `Existing items to harmonize with: ${existingItems.join(", ")}`
-        : "";
-
-      // Build priorities context
-      const prioritiesHint = priorities && priorities.length > 0
-        ? `Client priorities: ${priorities.join(", ")}`
-        : "";
+      // Quick-score context is intentionally minimal — just style/spatial/placement.
+      // Full diagnosis and priorities are re-applied in deep-score; shipping them
+      // here inflates every batch by ~500-800 tokens for no screening gain.
 
       const prompt = `Quick-score these ${category} products for a ${roomType}. Budget mode: ${budgetMode}.
 
@@ -484,9 +464,6 @@ PROCESS: For each product, think step-by-step:
 
 Design direction: ${aesthetic}
 ${spatialHint ? `\n## SPATIAL CONTEXT\n${spatialHint}` : ""}
-${diagnosisHint ? `\n## ROOM DIAGNOSIS\n${diagnosisHint}` : ""}
-${existingHint ? `\n## EXISTING ITEMS\n${existingHint}` : ""}
-${prioritiesHint ? `\n## CLIENT PRIORITIES\n${prioritiesHint}` : ""}
 
 ## PRODUCTS
 ${productList}
