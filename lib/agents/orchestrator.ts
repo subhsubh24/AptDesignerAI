@@ -149,8 +149,8 @@ class TokenBudget {
   }
 }
 
-/** Default cap: 1.5M tokens per search run (~$3-4 on Gemini pricing). */
-const DEFAULT_TOKEN_CAP = 1_500_000;
+/** Default cap: 2.5M tokens per search run (~$5-7 on Gemini pricing). */
+const DEFAULT_TOKEN_CAP = 2_500_000;
 
 // ─── Sentinel Domain Tracker ──────────────────────────────────
 // Tracks extraction failure rates per domain to skip domains that
@@ -457,9 +457,9 @@ export async function runAgenticSearch(
 
     // Hard cap on screened candidates per (category, tier) before extraction.
     // Extraction is the most expensive phase (URL Context + CU fallback) and
-    // quality plateaus after ~7 products per tier — beyond that we pay token
+    // quality plateaus after ~4 products per tier — beyond that we pay token
     // cost for products that won't survive deep-score. Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "7");
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "4");
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -588,6 +588,14 @@ export async function runAgenticSearch(
           extractPromises.push(
             extractLimit(async () => {
               try {
+                // Extraction budget gate: stop extracting once we've consumed
+                // 55% of the total budget. This reserves headroom for deep-
+                // scoring, bundling, and validation downstream.
+                if (tokenBudget.used / tokenBudget.cap > 0.55) {
+                  tracer.traceFilter("extract", "", candidate.url, "extraction budget gate (>55% used)");
+                  extractedSoFar++;
+                  return;
+                }
                 if (isDomainBlocked(candidate.url)) {
                   tracer.traceFilter("extract", "", candidate.url, "domain blocked (>80% sentinel rate)");
                   extractedSoFar++;
