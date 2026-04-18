@@ -17,6 +17,7 @@ import { recordProductScores } from "@/lib/scoring/drift-monitor";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
+import { isGeminiCompatibleImageUrl } from "@/lib/ai/image-mime";
 import { createLogger } from "@/lib/logging/logger";
 import crypto from "crypto";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -174,10 +175,10 @@ export async function scoreProduct(
     .slice(0, 16);
 
   const productImages: AIContentBlock[] = [];
-  if (product.image_url) {
+  if (product.image_url && isGeminiCompatibleImageUrl(product.image_url)) {
     productImages.push({ type: "image", source: { type: "url", url: product.image_url } });
   }
-  if (lifestyleImageUrl) {
+  if (lifestyleImageUrl && isGeminiCompatibleImageUrl(lifestyleImageUrl)) {
     productImages.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
   }
 
@@ -507,10 +508,12 @@ Return JSON:
   ]
 }`;
 
-      // Build visual content: include product images for visual pre-filtering
+      // Build visual content: include product images for visual pre-filtering.
+      // Skip images whose URL ends in a Gemini-incompatible extension (TIFF,
+      // BMP, SVG, RAW) — sending them triggers a 400 that fails the whole batch.
       const qsContent: AIContentBlock[] = [];
       for (const p of batch) {
-        if (p.image_url) {
+        if (p.image_url && isGeminiCompatibleImageUrl(p.image_url)) {
           qsContent.push({ type: "image", source: { type: "url", url: p.image_url } });
         }
       }

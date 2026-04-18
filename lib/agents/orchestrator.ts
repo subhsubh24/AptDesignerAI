@@ -362,17 +362,34 @@ export async function runAgenticSearch(
       searchResultsByCategory[result.category][result.tier].push(...result.candidates);
     }
 
-    // Count raw URLs and deduplicate per category+tier
+    // Count raw URLs and deduplicate per category+tier, then also across
+    // tiers of the same category — the same product URL frequently surfaces
+    // in budget/balanced/high_end since price bands overlap. Keeping only
+    // the first occurrence halves extraction work on noisy runs. The
+    // post-extraction price-tier reclassification step moves products into
+    // the correct tier based on actual price anyway.
     const dedupedByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
 
     for (const [category, tierResults] of Object.entries(searchResultsByCategory)) {
       dedupedByCategory[category] = { budget: [], balanced: [], high_end: [] };
+      const seenAcrossTiers = new Set<string>();
       for (const tier of PRICE_TIERS) {
         const raw = tierResults[tier].filter((c) => c.url && isLikelyProductUrl(c.url));
         stats.totalRawUrls += raw.length;
-        const deduped = deduplicateCandidates(raw);
-        stats.totalAfterDedup += deduped.length;
-        dedupedByCategory[category][tier] = deduped;
+        const dedupedInTier = deduplicateCandidates(raw);
+        const kept: SearchCandidate[] = [];
+        for (const c of dedupedInTier) {
+          let urlKey = c.url;
+          try {
+            const u = new URL(c.url);
+            urlKey = `${u.hostname}${u.pathname.replace(/\/+$/, "")}`;
+          } catch { /* keep raw url as key */ }
+          if (seenAcrossTiers.has(urlKey)) continue;
+          seenAcrossTiers.add(urlKey);
+          kept.push(c);
+        }
+        stats.totalAfterDedup += kept.length;
+        dedupedByCategory[category][tier] = kept;
       }
     }
 
@@ -438,10 +455,35 @@ export async function runAgenticSearch(
 
     await Promise.all(screenPromises);
 
+    // Hard cap on screened candidates per (category, tier) before extraction.
+    // Extraction is the most expensive phase (URL Context + CU fallback) and
+    // quality plateaus after ~7 products per tier — beyond that we pay token
+    // cost for products that won't survive deep-score. Override via env.
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "7");
+    let totalCapped = 0;
+    for (const [category, tierResults] of Object.entries(screenedByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        const cands = tierResults[tier];
+        if (cands.length > maxExtractPerCatTier) {
+          const dropped = cands.slice(maxExtractPerCatTier);
+          screenedByCategory[category][tier] = cands.slice(0, maxExtractPerCatTier);
+          totalCapped += dropped.length;
+          for (const d of dropped) {
+            tracer.traceFilter("screen", "", d.url, `capped at ${maxExtractPerCatTier}/tier`);
+          }
+        }
+      }
+    }
+    if (totalCapped > 0) {
+      log.info("Capped screened candidates before extraction", {
+        phase: "screen", cap: maxExtractPerCatTier, dropped: totalCapped,
+      });
+    }
+
     reportStep({
       step: "Quick-screening candidates",
       status: "completed",
-      data: { screened: stats.totalAfterScreen },
+      data: { screened: stats.totalAfterScreen, capped: totalCapped },
     });
 
     // ═══════════════════════════════════════════════════════════
@@ -899,19 +941,29 @@ export async function runAgenticSearch(
         });
 
         // Filter out low-confidence products (quick score confidence < 4)
+        // and products with no image — deep-score is vision-based, so a
+        // null image_url means the LLM is scoring a blank prompt and
+        // wasting tokens on a product it can't evaluate.
         products = products.filter((p) => {
           const qs = quickScoresByProduct.get(p.id);
           if (qs !== undefined && qs < 4) {
             tracer.traceFilter("quick_score", p.id, p.product_url || "", `quickScore ${qs} < 4`);
             return false;
           }
+          if (!p.image_url) {
+            tracer.traceFilter("quick_score", p.id, p.product_url || "", "no image_url");
+            return false;
+          }
           return true;
         });
 
-        // Keep top 8 or those with quickScore >= 6, whichever is more
+        // Tier early-exit: if 3+ products already pass the 6.0 bar, deep-
+        // score only those (max 5). Otherwise fall back to top-8 to give
+        // sparse tiers a chance. Saves 40–60% of deep-score tokens on
+        // healthy tiers where we've already found enough winners.
         const passThreshold = products.filter((p) => (quickScoresByProduct.get(p.id) || 0) >= 6);
         const topN = products.slice(0, 8);
-        const toScore = passThreshold.length > topN.length ? passThreshold.slice(0, 12) : topN;
+        const toScore = passThreshold.length >= 3 ? passThreshold.slice(0, 5) : topN;
         totalToDeepScore += toScore.length;
 
         for (const product of toScore) {

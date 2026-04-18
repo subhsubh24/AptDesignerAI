@@ -462,10 +462,23 @@ Return ONLY a valid JSON object — no text before or after:
         responseMimeType: "application/json",
       });
     } catch (schemaErr) {
-      // If the combined request is rejected, retry without responseSchema and
-      // fall through to the existing text-parse / grounding-metadata fallback.
+      // Circuit breaker: if the failure is 503/429/overloaded, the model is
+      // hot — retrying the exact same call with one knob removed will almost
+      // always hit the same limit and burn a second set of input tokens
+      // against the budget. Bail fast instead. Other errors (schema
+      // incompat, parsing) still fall through to the text-parse retry.
+      const errMsg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
+      const isUpstreamPressure =
+        /\b(503|429)\b/.test(errMsg) ||
+        /overloaded|unavailable|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(errMsg);
+      if (isUpstreamPressure) {
+        log.warn("search call hit upstream pressure — skipping fallback retry", {
+          phase: "search", query, tier, category, error: errMsg,
+        });
+        return { success: true, data: [], tokensUsed: 0 };
+      }
       log.warn("structured+grounding call failed, falling back to text parsing", {
-        error: schemaErr instanceof Error ? schemaErr.message : String(schemaErr),
+        error: errMsg,
       });
       response = await geminiProvider.chat({
         model: selectModel("search"),
