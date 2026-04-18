@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { z } from "zod";
 
 // (c) Zod schema for structured validation of research output
@@ -898,7 +899,7 @@ CONFIDENCE RULES (critical — self-inconsistency breaks downstream design decis
 - "low" MUST be used if primary_orientation, likely_light_direction, and view_character are ALL null. A high-confidence reply with every useful field null is forbidden — that is a self-contradiction.`,
           }],
           max_tokens: 8000,
-          // No temperature override — Gemini 3 is optimized for its default (1.0).
+          seed: DETERMINISTIC_SEED,
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
           // latLng is routed into toolConfig.retrievalConfig by
