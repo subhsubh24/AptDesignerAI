@@ -462,18 +462,20 @@ Return ONLY a valid JSON object — no text before or after:
         responseMimeType: "application/json",
       });
     } catch (schemaErr) {
-      // Circuit breaker: if the failure is 503/429/overloaded, the model is
-      // hot — retrying the exact same call with one knob removed will almost
-      // always hit the same limit and burn a second set of input tokens
-      // against the budget. Bail fast instead. Other errors (schema
-      // incompat, parsing) still fall through to the text-parse retry.
+      // Circuit breaker: if the failure is 503/429/UNAVAILABLE, the model is
+      // under pressure — retrying with one knob removed will almost always
+      // hit the same limit and burn a second quota of input tokens. Bail fast.
+      // Check the numeric .status property first (ApiError shape) because the
+      // human-readable message ("Deadline expired …") doesn't contain the code.
+      const errStatus = (schemaErr as { status?: number })?.status;
       const errMsg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
       const isUpstreamPressure =
+        errStatus === 503 || errStatus === 429 ||
         /\b(503|429)\b/.test(errMsg) ||
-        /overloaded|unavailable|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(errMsg);
+        /overloaded|unavailable|deadline expired|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(errMsg);
       if (isUpstreamPressure) {
         log.warn("search call hit upstream pressure — skipping fallback retry", {
-          phase: "search", query, tier, category, error: errMsg,
+          phase: "search", query, tier, category, status: errStatus, error: errMsg,
         });
         return { success: true, data: [], tokensUsed: 0 };
       }
@@ -539,7 +541,19 @@ Return ONLY a valid JSON object — no text before or after:
       }
       return { success: true, data: [], tokensUsed };
     }
-  } catch {
+  } catch (outerErr) {
+    const outerStatus = (outerErr as { status?: number })?.status;
+    const outerMsg = outerErr instanceof Error ? outerErr.message : String(outerErr);
+    const isUpstreamPressure =
+      outerStatus === 503 || outerStatus === 429 ||
+      /\b(503|429)\b/.test(outerMsg) ||
+      /overloaded|unavailable|deadline expired|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(outerMsg);
+    if (isUpstreamPressure) {
+      log.warn("search call hit upstream pressure", {
+        phase: "search", query, tier, category, status: outerStatus, error: outerMsg,
+      });
+      return { success: true, data: [], tokensUsed: 0 };
+    }
     return { success: false, error: "Search failed" };
   }
 }
