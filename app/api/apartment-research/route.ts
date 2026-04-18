@@ -894,8 +894,8 @@ ${floorPlanSchema}`;
 
 Extract location-aware context using ALL available evidence. Return JSON:
 {
-  "primary_orientation": "N | S | E | W | NE | NW | SE | SW | null — which way does the building's main facade face? INFERENCE IS ALLOWED: a building whose address is on an E-W street faces N or S (whichever side it's on); a building on a N-S street faces E or W. Use satellite view to confirm. Only use null if you genuinely cannot determine it.",
-  "likely_light_direction": "morning | afternoon | evening | mixed | null — derive from primary_orientation: N-facing = indirect/even; S-facing = all-day/afternoon strongest; E-facing = morning; W-facing = afternoon/evening. 'mixed' only for buildings that span a full block with units on all sides.",
+  "primary_orientation": "N | S | E | W | NE | NW | SE | SW | null — which way does the building's main entrance/facade face? This is always a single cardinal direction (never 'mixed'). INFERENCE IS ALLOWED: a building whose address is on an E-W street faces N or S (whichever side the entrance is on); a building on a N-S street faces E or W. Use satellite/streetview to confirm. Only use null if genuinely indeterminate.",
+  "likely_light_direction": "morning | afternoon | evening | mixed | null — the dominant natural light experience for most units. Derive from primary_orientation: N-facing = indirect/even light all day; S-facing = afternoon strongest; E-facing = morning; W-facing = afternoon/evening. Use 'mixed' only if the building spans a full city block (units face all four directions, so light varies by unit — primary_orientation is still set to the main entrance direction).",
   "view_character": "skyline | water | park | street | mixed-urban | industrial | residential | null",
   "nearby_design_references": ["up to 3 notable design-relevant nearby places — art museum, design district, architectural landmark"],
   "neighborhood_aesthetic_cues": ["2-4 short phrases describing the visual/material character of the block — e.g. 'prewar brick', 'modern glass towers', 'tree-lined brownstones'"],
@@ -905,7 +905,7 @@ Extract location-aware context using ALL available evidence. Return JSON:
 ORIENTATION INFERENCE RULES (prefer inference over null):
 - Address on an E-W street (e.g. Madison St, Monroe St): main facade faces N if building is on the south side of the street, faces S if on the north side. Confirm with satellite/streetview.
 - Address on a N-S street (e.g. State St, Michigan Ave): main facade faces E or W. Confirm with satellite/streetview.
-- If the building spans a full block (bounded by streets on all four sides): orientation = "mixed", light = "mixed".
+- If the building spans a full block (bounded by streets on all four sides): primary_orientation = the street the main entrance is on (still a single direction), light = "mixed".
 - Use null ONLY if the street direction is ambiguous AND satellite/streetview is unavailable.
 
 CONFIDENCE RULES:
