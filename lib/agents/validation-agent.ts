@@ -1,6 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPrompt } from "@/lib/prompts/system";
+import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
   HarmonyGlobalResponseSchema,
@@ -156,7 +156,6 @@ export interface ValidationResult {
   isValid: boolean;
   confidence: number;
   issues: string[];
-  suggestions: string[];
   revisedAnalysis?: Record<string, unknown>;
   /** Per-product harmony scores — returned by validateProductSet */
   product_flags?: Array<{
@@ -164,7 +163,6 @@ export interface ValidationResult {
     category: string;
     harmony_score: number;
     sub_scores?: HarmonySubScores;
-    clashes_with: string[];
     reason: string;
   }>;
   /** Pairwise conflicts between products (pairs with compatibility < 9.0) */
@@ -244,7 +242,7 @@ export async function validateRoomHarmony(
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPrompt(context.designProfile);
+  const system = getSystemPromptCore(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
   const whatShouldGo = (analysis.what_should_go as string[]) || [];
@@ -719,7 +717,7 @@ export async function performFinalAssessment(
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
   const model = selectModel("validation");
-  const system = getSystemPrompt(context.designProfile);
+  const system = getSystemPromptCore(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
   const whatShouldGo = (analysis.what_should_go as string[]) || [];
@@ -1254,7 +1252,7 @@ export async function validateProductSet(
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPrompt(roomContext.designProfile);
+  const system = getSystemPromptCore(roomContext.designProfile);
 
   // Build environmental context section
   const envContext = [
@@ -1353,7 +1351,6 @@ Return JSON:
   "isValid": true/false,
   "confidence": 0-10 (use decimals),
   "issues": ["specific problems — reference what you SEE in the images"],
-  "suggestions": ["specific improvements"],
   "product_flags": [
     {
       "title": "product title",
@@ -1363,7 +1360,6 @@ Return JSON:
         "color_fit": number, "spatial_fit": number, "material_fit": number,
         "style_coherence": number, "cross_room_fit": number, "functional_fit": number
       },
-      "clashes_with": ["items it clashes with — existing or other products"],
       "reason": "why it fits or doesn't fit"
     }
   ],

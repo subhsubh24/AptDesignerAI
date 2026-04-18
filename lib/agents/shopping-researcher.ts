@@ -59,7 +59,6 @@ interface QueryWithAngle {
 interface TierBrief {
   search_queries: QueryWithAngle[];
   price_range: { min: number; max: number };
-  retailers_to_target: string[];
 }
 
 interface SearchBriefCategory {

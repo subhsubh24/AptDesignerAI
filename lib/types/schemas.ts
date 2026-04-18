@@ -114,15 +114,7 @@ export const RoomVibeSchema = z.object({
   mood: z.string().default(""),
 }).optional();
 
-export const BundlePairwiseConflictSchema = z.object({
-  product_a: z.string(),
-  product_b: z.string(),
-  compatibility: score,
-  conflict_type: z.string().default(""),
-  reason: z.string().default(""),
-});
-
-// Split-pass sub-schemas for bundle evaluation (3 focused calls merge into BundleEvalResponseSchema).
+// Split-pass sub-schemas for bundle evaluation.
 
 /** Call A: dimension scores + verdict + analysis (holistic bundle quality). */
 export const BundleScoringResponseSchema = z.object({
@@ -131,12 +123,7 @@ export const BundleScoringResponseSchema = z.object({
   analysis: BundleAnalysisSchema,
 });
 
-/** Call B: pairwise conflicts between products (focused O(n²) compatibility analysis). */
-export const BundlePairwiseResponseSchema = z.object({
-  pairwise_conflicts: z.array(BundlePairwiseConflictSchema).default([]),
-});
-
-/** Call C: room vibe narrative (purely descriptive, consumes Call A's verdict). */
+/** Call B: room vibe narrative (purely descriptive, consumes Call A's verdict). */
 export const BundleVibeResponseSchema = z.object({
   room_vibe: RoomVibeSchema,
 });
@@ -146,8 +133,6 @@ export const BundleEvalResponseSchema = z.object({
   verdict: z.string().default("No verdict provided"),
   analysis: BundleAnalysisSchema,
   room_vibe: RoomVibeSchema,
-  /** Pairwise conflicts between products in the bundle (pairs with compatibility < 9.0) */
-  pairwise_conflicts: z.array(BundlePairwiseConflictSchema).default([]),
 });
 
 // ─── Harmony Validation ───────────────────────────────────────
@@ -290,7 +275,6 @@ export const ProductFlagSchema = z.object({
   harmony_score: score,
   /** 6-dimensional sub-scores for granular per-product assessment */
   sub_scores: HarmonySubScoresSchema.optional(),
-  clashes_with: stringArray,
   reason: z.string().default(""),
 });
 
@@ -298,7 +282,6 @@ export const ProductSetValidationResponseSchema = z.object({
   isValid: z.boolean(),
   confidence: score,
   issues: stringArray,
-  suggestions: stringArray,
   product_flags: z.array(ProductFlagSchema).optional(),
   /** Pairwise conflicts between products in the set (pairs with compatibility < 9.0) */
   pairwise_conflicts: z.array(PairwiseConflictSchema).default([]),
@@ -382,7 +365,6 @@ export const TierBriefSchema = z.object({
     min: z.coerce.number().min(0),
     max: z.coerce.number().min(0),
   }),
-  retailers_to_target: stringArray,
 });
 
 // NOTE: `tiers` MUST use an explicit object with fixed keys rather than

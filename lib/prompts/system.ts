@@ -1,10 +1,11 @@
 import { getDesignContextPrompt, type DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 /**
- * Build the system prompt with dynamic design context.
- * Accepts optional profile data; falls back to defaults.
+ * Core designer system prompt — shared by every agent call. Scoring, bundle,
+ * validation, and quick-score callers get THIS only (no agentic planning
+ * section, since they run a single step).
  */
-export function getSystemPrompt(profile?: DynamicDesignProfile): string {
+function getCoreSystemPrompt(profile?: DynamicDesignProfile): string {
   return `You are a world-class interior designer and design strategist working as a personal design copilot. You have 20+ years of experience designing residential spaces, from studio apartments to penthouses. You trained at a top design school, worked at firms like Studio McGee, Jeremiah Brent, and Amber Lewis, and now run your own practice. You have impeccable taste, deep knowledge of furniture, materials, proportions, spatial design, color theory, and how people actually live in their homes.
 
 You are designing for a specific client. All your recommendations must be optimized for this person, their apartment, their taste, their lifestyle, and their goals.
@@ -55,7 +56,15 @@ You approach every project the way a top-tier designer would during an in-person
 8. When scoring anything 0-10, use the FULL range. 5 is mediocre. 3 has real problems. 8+ means genuinely excellent. Do NOT cluster scores in the 6-8 range.
 9. Every claim must be grounded in evidence — reference specific colors, materials, dimensions, or items you can see.
 10. When you're unsure about something (e.g., can't see dimensions clearly in photos), say so explicitly and lower your confidence score.
-11. NEVER suggest removing or replacing an item the client explicitly wants to keep. Design around it. Make it shine.
+11. NEVER suggest removing or replacing an item the client explicitly wants to keep. Design around it. Make it shine.`;
+}
+
+/**
+ * Additional planning instructions for agentic callers (search, extraction,
+ * computer-use). Kept separate so single-step callers (scoring, bundle,
+ * validation, quick-score) don't pay the ~400-token cost.
+ */
+const AGENTIC_TASK_REASONING = `
 
 ## AGENTIC TASK REASONING (applies when executing multi-step search or evaluation tasks)
 Before taking any action in a multi-step pipeline, reason through:
@@ -89,4 +98,21 @@ Before taking any action in a multi-step pipeline, reason through:
 
 Do NOT perform any financial transactions, form submissions, account creation, or actions with
 irreversible side effects. Stop and report if you encounter a CAPTCHA or login wall.`;
+
+/**
+ * Default system prompt — full version with agentic planning. Existing callers
+ * unchanged. Single-step callers should import `getCoreSystemPrompt` directly
+ * via `getSystemPromptCore()` to avoid the agentic overhead.
+ */
+export function getSystemPrompt(profile?: DynamicDesignProfile): string {
+  return getCoreSystemPrompt(profile) + AGENTIC_TASK_REASONING;
+}
+
+/**
+ * Slim system prompt for single-step callers (scoring, bundle, validation,
+ * quick-score). Omits the agentic planning section to save ~400 tokens per
+ * call — these callers never do multi-step search.
+ */
+export function getSystemPromptCore(profile?: DynamicDesignProfile): string {
+  return getCoreSystemPrompt(profile);
 }

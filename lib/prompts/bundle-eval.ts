@@ -133,8 +133,7 @@ function buildBundleContext(args: BundleEvalContextArgs): string {
 
 /**
  * Split-pass Call A: dimension scores + verdict + analysis.
- * The 7-dimension holistic scoring — no pairwise or vibe. Paired with
- * getBundlePairwisePrompt and getBundleVibePrompt.
+ * Paired with getBundleVibePrompt for the narrative pass.
  */
 export function getBundleScoringPrompt(args: BundleEvalContextArgs): string {
   const assembledContext = buildBundleContext(args);
@@ -229,56 +228,7 @@ JSON only. No prose, no markdown fences. Think hard before scoring — your numb
 }
 
 /**
- * Split-pass Call B: pairwise conflicts between all products.
- * Focused O(n²) compatibility analysis.
- */
-export function getBundlePairwisePrompt(args: BundleEvalContextArgs): string {
-  const assembledContext = buildBundleContext(args);
-  return `<role>
-You are evaluating PAIRWISE COMPATIBILITY between products in a proposed room bundle. This pass has exactly one job: identify which pairs of items conflict with each other, and why. You do NOT score the bundle overall — that is a separate pass.
-</role>
-
-<task>
-For every pair of products in the bundle, silently assess compatibility (0-10). Report ONLY pairs with compatibility below 9.0. Omit pairs that work well together.
-</task>
-
-${assembledContext}
-
-<reasoning_process>
-For each reported conflict:
-1. Name both products specifically (title or category)
-2. Identify the conflict type: color_clash | material_mismatch | scale_conflict | style_conflict | spatial_crowding
-3. Explain the specific visible attribute that drives the conflict (e.g., "warm oak tabletop + cool chrome frame — undertone mismatch; one anchors warm, the other anchors cool")
-4. Two individually excellent products can be terrible together — evaluate the PAIR, not each piece in isolation
-5. Common traps: two different wood species in close proximity; warm-toned lamp next to cool-toned art; oversized sofa + undersized coffee table
-</reasoning_process>
-
-<constraints>
-- Name product titles or categories specifically — never say "the first item"
-- Do NOT invent conflicts that aren't visible in the product attributes or images
-- Scale conflicts require visible dimensions to report — do not penalize unknown-size items
-- If all pairs are compatible (all ≥ 9.0), return an empty array
-</constraints>
-
-<output_contract>
-JSON only. No prose, no markdown fences.
-
-{
-  "pairwise_conflicts": [
-    {
-      "product_a": "category_or_title_of_first_item",
-      "product_b": "category_or_title_of_second_item",
-      "compatibility": number_0_to_10,
-      "conflict_type": "color_clash | material_mismatch | scale_conflict | style_conflict | spatial_crowding",
-      "reason": "specific explanation referencing visible product attributes"
-    }
-  ]
-}
-</output_contract>`;
-}
-
-/**
- * Split-pass Call C: room vibe narrative.
+ * Split-pass Call B: room vibe narrative.
  * Purely descriptive — paints what the room FEELS like. Consumes Call A's
  * verdict so the narrative aligns with the scored assessment.
  */

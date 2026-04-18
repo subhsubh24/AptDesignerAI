@@ -19,13 +19,11 @@ describe("ValidationResult interface", () => {
       isValid: true,
       confidence: 8,
       issues: [],
-      suggestions: ["Consider adding a throw blanket for texture"],
       product_flags: [
         {
           title: "Walnut Coffee Table",
           category: "coffee_table",
           harmony_score: 9,
-          clashes_with: [],
           reason: "Perfect match with existing walnut console",
         },
       ],
@@ -40,20 +38,17 @@ describe("ValidationResult interface", () => {
       isValid: false,
       confidence: 6,
       issues: ["Chrome lamp clashes with existing brass fixtures"],
-      suggestions: ["Replace chrome lamp with brass or matte black version"],
       product_flags: [
         {
           title: "Chrome Arc Floor Lamp",
           category: "floor_lamp",
           harmony_score: 2,
-          clashes_with: ["brass pendant light", "brass drawer pulls"],
           reason: "Chrome finish clashes with apartment's brass hardware",
         },
         {
           title: "Wool Area Rug",
           category: "area_rug",
           harmony_score: 8,
-          clashes_with: [],
           reason: "Warm cream tone works beautifully with walnut floors",
         },
       ],

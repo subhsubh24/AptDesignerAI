@@ -39,14 +39,6 @@ export interface RoomVibe {
   mood: string;
 }
 
-export interface BundlePairwiseConflict {
-  product_a: string;
-  product_b: string;
-  compatibility: number;
-  conflict_type: string;
-  reason: string;
-}
-
 export interface BundleEvaluationResult {
   scores: BundleScores;
   final_bundle_score: number;
@@ -58,5 +50,4 @@ export interface BundleEvaluationResult {
     what_should_be_swapped_first: string;
   };
   room_vibe?: RoomVibe;
-  pairwise_conflicts?: BundlePairwiseConflict[];
 }

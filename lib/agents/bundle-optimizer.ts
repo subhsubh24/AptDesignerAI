@@ -1,16 +1,14 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPrompt } from "@/lib/prompts/system";
+import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
   getBundleScoringPrompt,
-  getBundlePairwisePrompt,
   getBundleVibePrompt,
   type BundleEvalContextArgs,
 } from "@/lib/prompts/bundle-eval";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
 import {
   BundleScoringResponseSchema,
-  BundlePairwiseResponseSchema,
   BundleVibeResponseSchema,
 } from "@/lib/types/schemas";
 import { recordBundleScores } from "@/lib/scoring/drift-monitor";
@@ -52,14 +50,12 @@ export interface BundleContext {
 }
 
 /**
- * Evaluate a bundle via three focused calls:
- *   A (scoring):  7 dimension scores + verdict + analysis
- *   B (pairwise): O(n²) pairwise conflicts between products
- *   C (vibe):     room_vibe narrative (depends on A's verdict for tone)
+ * Evaluate a bundle via two focused calls:
+ *   A (scoring): 7 dimension scores + verdict + analysis
+ *   B (vibe):    room_vibe narrative (depends on A's verdict for tone)
  *
- * A and B run in parallel (independent); C runs after A. Each pass has a
- * focused budget so no single job crowds out another within a token ceiling.
- * Math veto applied to Call A scores.
+ * B runs after A. Math veto applied to Call A scores. Pairwise-conflict
+ * output was removed — it was never consumed downstream.
  */
 export interface EvaluateBundleOptions {
   /**
@@ -77,7 +73,7 @@ export async function evaluateBundle(
   options: EvaluateBundleOptions = {}
 ): Promise<AgentResult<BundleEvaluationResult>> {
   const model = selectModel("bundle");
-  const system = getSystemPrompt(bundleCtx.designProfile);
+  const system = getSystemPromptCore(bundleCtx.designProfile);
 
   const evalCtx: BundleEvalContextArgs = {
     roomType: bundleCtx.roomType,
@@ -205,11 +201,7 @@ export async function evaluateBundle(
   };
 
   try {
-    // Calls A + B run in parallel; C runs after A (vibe tone uses A's verdict).
-    const [scoringRes, pairwiseRes] = await Promise.all([
-      runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw)),
-      runPass("pairwise", getBundlePairwisePrompt(evalCtx), 8000, (raw) => BundlePairwiseResponseSchema.parse(raw)),
-    ]);
+    const scoringRes = await runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw));
     const vibeRes = options.skipVibe
       ? null
       : await runPass(
@@ -255,20 +247,12 @@ export async function evaluateBundle(
       final_bundle_score: finalScore,
     });
 
-    const totalTokens = scoringRes.tokens + pairwiseRes.tokens + (vibeRes?.tokens ?? 0);
-
-    if (pairwiseRes.data.pairwise_conflicts.length > 0) {
-      log.info("Bundle pairwise conflicts detected", {
-        count: pairwiseRes.data.pairwise_conflicts.length,
-        conflicts: pairwiseRes.data.pairwise_conflicts.map(c => `${c.product_a} ↔ ${c.product_b}: ${c.compatibility}/10 (${c.conflict_type})`),
-      });
-    }
+    const totalTokens = scoringRes.tokens + (vibeRes?.tokens ?? 0);
 
     log.info("Bundle evaluated (split pass)", {
       model: scoringRes.model,
       tokens: { total: totalTokens },
       scoringTokens: scoringRes.tokens,
-      pairwiseTokens: pairwiseRes.tokens,
       vibeTokens: vibeRes?.tokens ?? 0,
       vibeSkipped: !!options.skipVibe,
       finalScore,
@@ -282,7 +266,6 @@ export async function evaluateBundle(
         verdict: scoringRes.data.verdict,
         analysis: scoringRes.data.analysis,
         room_vibe: vibeRes?.data.room_vibe,
-        pairwise_conflicts: pairwiseRes.data.pairwise_conflicts,
       },
       tokensUsed: totalTokens,
       model: scoringRes.model,
@@ -306,7 +289,7 @@ export async function generateBundleVibe(
   verdict: string,
 ): Promise<AgentResult<{ room_vibe: { vibe_summary: string; style_keywords: string[]; color_story: string; mood: string } | undefined }>> {
   const model = selectModel("bundle");
-  const system = getSystemPrompt(bundleCtx.designProfile);
+  const system = getSystemPromptCore(bundleCtx.designProfile);
 
   const evalCtx: BundleEvalContextArgs = {
     roomType: bundleCtx.roomType,

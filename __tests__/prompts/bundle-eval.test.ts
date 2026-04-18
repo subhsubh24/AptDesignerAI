@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   getBundleScoringPrompt,
-  getBundlePairwisePrompt,
   getBundleVibePrompt,
 } from "@/lib/prompts/bundle-eval";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
@@ -143,24 +142,6 @@ describe("getBundleScoringPrompt", () => {
     expect(prompt).toContain('"verdict"');
     expect(prompt).toContain('"strongest_aspect"');
     expect(prompt).toContain('"weakest_aspect"');
-  });
-});
-
-describe("getBundlePairwisePrompt", () => {
-  it("should generate a non-empty prompt", () => {
-    const prompt = getBundlePairwisePrompt(baseArgs);
-    expect(prompt).toBeTruthy();
-    expect(prompt.length).toBeGreaterThan(200);
-  });
-
-  it("should focus on pairwise conflicts", () => {
-    const prompt = getBundlePairwisePrompt(baseArgs);
-    expect(prompt).toContain("pairwise");
-  });
-
-  it("should request conflicts JSON format", () => {
-    const prompt = getBundlePairwisePrompt(baseArgs);
-    expect(prompt).toContain("conflicts");
   });
 });
 

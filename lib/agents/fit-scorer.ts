@@ -1,6 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPrompt } from "@/lib/prompts/system";
+import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
   getAestheticEvalPrompt,
   getFunctionalEvalPrompt,
@@ -78,6 +78,12 @@ export interface ScoringContext {
    * Format per entry: "title | dimensions: W×D×H | material: … | colors: …"
    */
   anchorSpecs?: Record<string, string>;
+  /**
+   * When true, the aesthetic prompt requests area_fit_note / apartment_fit_note.
+   * Agentic search path sets false (not rendered in focus UI); manual-sourcing
+   * evaluate routes leave default (true) because ManualScorecardView displays them.
+   */
+  includeFitNotes?: boolean;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -115,7 +121,7 @@ export async function scoreProduct(
   scoringCtx: ScoringContext
 ): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
   const model = selectModel("scoring");
-  const system = getSystemPrompt(scoringCtx.designProfile);
+  const system = getSystemPromptCore(scoringCtx.designProfile);
 
   const evalCtx: EvalContextArgs = {
     roomType: scoringCtx.roomType,
@@ -138,7 +144,7 @@ export async function scoreProduct(
     identifiedContext: scoringCtx.identifiedContext,
     anchorSpecs: scoringCtx.anchorSpecs,
   };
-  const aestheticPrompt = getAestheticEvalPrompt(evalCtx);
+  const aestheticPrompt = getAestheticEvalPrompt({ ...evalCtx, includeFitNotes: scoringCtx.includeFitNotes ?? true });
   const functionalPrompt = getFunctionalEvalPrompt(evalCtx);
 
   // Extract visual metadata from product metadata

@@ -1020,6 +1020,7 @@ export async function runAgenticSearch(
                 anchorSpecs: DEPENDENT_CATEGORIES.has(productCategory) && Object.keys(anchorSpecs).length > 0
                   ? anchorSpecs
                   : undefined,
+                includeFitNotes: false,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
               if (scoreResult.success && scoreResult.data) {
@@ -1546,6 +1547,7 @@ export async function runAgenticSearch(
                 anchorSpecs: DEPENDENT_CATEGORIES.has(backfillCategory) && Object.keys(anchorSpecs).length > 0
                   ? anchorSpecs
                   : undefined,
+                includeFitNotes: false,
               });
               if (scoreResult.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);

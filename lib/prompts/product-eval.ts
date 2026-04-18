@@ -204,15 +204,16 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
  * monolith with two focused parallel calls so each pass gets full model
  * attention on its own question.
  */
-export function getAestheticEvalPrompt(args: EvalContextArgs): string {
+export function getAestheticEvalPrompt(args: EvalContextArgs & { includeFitNotes?: boolean }): string {
   const assembledContext = buildEvalContext(args);
+  const includeFitNotes = args.includeFitNotes ?? false;
 
   return `<role>
 You are a world-class interior designer evaluating a specific product for a specific client's room. This pass focuses exclusively on aesthetic fit — does the product look right in this apartment? A separate pass handles spatial and functional fit; do not score those dimensions here.
 </role>
 
 <task>
-Score 4 aesthetic dimensions, write area and apartment fit notes, and provide specific reasoning. Every score must be grounded in evidence from the product image, room photos, and design direction above.
+Score 4 aesthetic dimensions${includeFitNotes ? ", write area and apartment fit notes," : ""} and provide specific reasoning. Every score must be grounded in evidence from the product image, room photos, and design direction above.
 </task>
 
 ${assembledContext}
@@ -280,9 +281,9 @@ JSON only. No prose, no markdown fences.
     "top_reasons": ["3-5 strongest reasons — reference actual product attributes and specific room elements"],
     "risks": ["2-4 specific risks — e.g. 'brass legs may clash with chrome kitchen fixtures visible in photo'"],
     "suggestions": ["1-3 actionable alternatives or modifications"]
-  },
+  }${includeFitNotes ? `,
   "area_fit_note": "2-3 sentences on how this product works with OTHER pieces in the same area — reference specific existing furniture",
-  "apartment_fit_note": "1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?"
+  "apartment_fit_note": "1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?"` : ""}
 }
 </output_contract>`;
 }

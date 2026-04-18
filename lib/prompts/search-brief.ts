@@ -308,8 +308,7 @@ JSON only. No prose, no markdown fences.
           "search_queries": [
             { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" }
           ],
-          "price_range": { "min": number, "max": number },
-          "retailers_to_target": ["retailer1", "retailer2", "retailer3", "retailer4"]
+          "price_range": { "min": number, "max": number }
         },
         "balanced": { ... same structure ... },
         "high_end": { ... same structure ... }
@@ -329,8 +328,7 @@ EXAMPLE for "coffee_table" in a warm modern living room:
         { "query": "modern walnut coffee table with shelf under $200 48 inch", "angle": "style_material" },
         { "query": "Target threshold coffee tables wood under $250", "angle": "retailer_browse" }
       ],
-      "price_range": { "min": 80, "max": 300 },
-      "retailers_to_target": ["IKEA", "Target", "Amazon", "Wayfair"]
+      "price_range": { "min": 80, "max": 300 }
     }
   },
   "key_requirements": ["48-54 inch length to match 84 inch sofa", "walnut or warm wood tone", "clean lines / mid-century style", "shelf or storage preferred", "under 18 inch height", "solid wood or wood veneer (not laminate)"]
