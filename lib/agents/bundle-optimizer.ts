@@ -60,9 +60,20 @@ export interface BundleContext {
  * focused budget so no single job crowds out another within a token ceiling.
  * Math veto applied to Call A scores.
  */
+export interface EvaluateBundleOptions {
+  /**
+   * Skip the room-vibe pass. The vibe call produces a narrative block that
+   * doesn't feed into `final_bundle_score`, so scoring-only callers (e.g.
+   * ranking 20+ combos to pick a winner) can turn it off to save tokens.
+   * Run vibe separately on just the winning combo via `generateBundleVibe`.
+   */
+  skipVibe?: boolean;
+}
+
 export async function evaluateBundle(
   products: CandidateProduct[],
-  bundleCtx: BundleContext
+  bundleCtx: BundleContext,
+  options: EvaluateBundleOptions = {}
 ): Promise<AgentResult<BundleEvaluationResult>> {
   const model = selectModel("bundle");
   const system = getSystemPrompt(bundleCtx.designProfile);
@@ -200,12 +211,14 @@ export async function evaluateBundle(
       runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw)),
       runPass("pairwise", getBundlePairwisePrompt(evalCtx), 3000, (raw) => BundlePairwiseResponseSchema.parse(raw)),
     ]);
-    const vibeRes = await runPass(
-      "vibe",
-      getBundleVibePrompt(evalCtx, scoringRes.data.verdict),
-      2500,
-      (raw) => BundleVibeResponseSchema.parse(raw),
-    );
+    const vibeRes = options.skipVibe
+      ? null
+      : await runPass(
+          "vibe",
+          getBundleVibePrompt(evalCtx, scoringRes.data.verdict),
+          2500,
+          (raw) => BundleVibeResponseSchema.parse(raw),
+        );
 
     const scores = scoringRes.data.scores;
 
@@ -243,7 +256,7 @@ export async function evaluateBundle(
       final_bundle_score: finalScore,
     });
 
-    const totalTokens = scoringRes.tokens + pairwiseRes.tokens + vibeRes.tokens;
+    const totalTokens = scoringRes.tokens + pairwiseRes.tokens + (vibeRes?.tokens ?? 0);
 
     if (pairwiseRes.data.pairwise_conflicts.length > 0) {
       log.info("Bundle pairwise conflicts detected", {
@@ -257,7 +270,8 @@ export async function evaluateBundle(
       tokens: { total: totalTokens },
       scoringTokens: scoringRes.tokens,
       pairwiseTokens: pairwiseRes.tokens,
-      vibeTokens: vibeRes.tokens,
+      vibeTokens: vibeRes?.tokens ?? 0,
+      vibeSkipped: !!options.skipVibe,
       finalScore,
     });
 
@@ -268,7 +282,7 @@ export async function evaluateBundle(
         final_bundle_score: finalScore,
         verdict: scoringRes.data.verdict,
         analysis: scoringRes.data.analysis,
-        room_vibe: vibeRes.data.room_vibe,
+        room_vibe: vibeRes?.data.room_vibe,
         pairwise_conflicts: pairwiseRes.data.pairwise_conflicts,
       },
       tokensUsed: totalTokens,
@@ -277,6 +291,119 @@ export async function evaluateBundle(
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Bundle evaluation failed after retries";
     log.error("Bundle evaluation failed", { error: errMsg });
+    return { success: false, error: errMsg };
+  }
+}
+
+/**
+ * Generate just the room-vibe narrative for a bundle. Used by callers that
+ * evaluate many combos with `skipVibe: true` and then produce the vibe only
+ * for the winning combo — keeps the narrative quality without paying vibe
+ * tokens on 20+ losing combos.
+ */
+export async function generateBundleVibe(
+  products: CandidateProduct[],
+  bundleCtx: BundleContext,
+  verdict: string,
+): Promise<AgentResult<{ room_vibe: { vibe_summary: string; style_keywords: string[]; color_story: string; mood: string } | undefined }>> {
+  const model = selectModel("bundle");
+  const system = getSystemPrompt(bundleCtx.designProfile);
+
+  const evalCtx: BundleEvalContextArgs = {
+    roomType: bundleCtx.roomType,
+    priorities: bundleCtx.priorities,
+    diagnosis: bundleCtx.diagnosis,
+    designDirection: bundleCtx.designDirection,
+    spatialLayout: bundleCtx.spatialLayout,
+    placementMap: bundleCtx.placementMap,
+    floorPlan: bundleCtx.floorPlan,
+    extractedFloorPlan: bundleCtx.extractedFloorPlan,
+    lightingConditions: bundleCtx.lightingConditions,
+    windowDoorPositions: bundleCtx.windowDoorPositions,
+    outletPositions: bundleCtx.outletPositions,
+    existingItems: bundleCtx.existingItems,
+    userContext: bundleCtx.userContext,
+    replaceItems: bundleCtx.replaceItems,
+    whatShouldGo: bundleCtx.whatShouldGo,
+    identifiedContext: bundleCtx.identifiedContext,
+  };
+
+  const bundleInfo = products
+    .map((p, i) => {
+      const meta = p.metadata as Record<string, unknown> | null;
+      const vTags = (meta?.visual_style_tags as string[]) || [];
+      const lines = [
+        `${i + 1}. [${p.category}] ${p.title || "Unknown"} - ${p.retailer || "Unknown retailer"} - $${p.price || "?"}`,
+        `   Materials: ${p.materials?.join(", ") || "unknown"}`,
+        `   Colors: ${p.colors?.join(", ") || "unknown"}`,
+      ];
+      if (vTags.length > 0) lines.push(`   Visual style: ${vTags.join(", ")}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+
+  const sharedImages: AIContentBlock[] = [];
+  for (const url of bundleCtx.roomImageUrls.slice(0, 2)) {
+    sharedImages.push({ type: "image", source: { type: "url", url } });
+  }
+  for (const product of products) {
+    if (product.image_url) {
+      sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
+    }
+  }
+
+  const promptText = `${getBundleVibePrompt(evalCtx, verdict)}\n\n## BUNDLE ITEMS\n${bundleInfo}\n\n**IMPORTANT**: Study the images and capture how these items feel together in the actual room.`;
+
+  try {
+    let lastError: string | undefined;
+    let attempt = 0;
+    const res = await withRetry(
+      async () => {
+        attempt++;
+        const content: AIContentBlock[] = [
+          ...sharedImages,
+          { type: "text", text: promptText },
+        ];
+        const retryContent = attempt > 1 && lastError
+          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON.` }]
+          : content;
+        const response = await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content: retryContent }],
+          max_tokens: 2500,
+          seed: DETERMINISTIC_SEED,
+          responseMimeType: "application/json",
+        });
+        const raw = extractJsonObject(response.content);
+        const data = BundleVibeResponseSchema.parse(raw);
+        const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+        return { data, tokens };
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1500,
+        maxDelayMs: 10000,
+        isRetryable: (error) => {
+          if (isRetryableError(error)) return true;
+          if (error instanceof SyntaxError) return true;
+          if (error instanceof Error && error.name === "ZodError") return true;
+          return false;
+        },
+        onRetry: (retryAttempt, delayMs, error) => {
+          lastError = error instanceof Error ? error.message : "Vibe pass failed";
+          log.warn(`Retry ${retryAttempt} for standalone vibe pass`, { durationMs: delayMs, error: lastError });
+        },
+      }
+    );
+    return {
+      success: true,
+      data: { room_vibe: res.data.room_vibe },
+      tokensUsed: res.tokens,
+    };
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : "Vibe generation failed after retries";
+    log.warn("Vibe generation failed (non-fatal)", { error: errMsg });
     return { success: false, error: errMsg };
   }
 }

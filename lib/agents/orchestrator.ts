@@ -9,7 +9,7 @@ import {
 import { extractFromUrl } from "./product-extractor";
 import { runProductVerifier } from "./computer-use/product-verifier";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
-import { evaluateBundle } from "./bundle-optimizer";
+import { evaluateBundle, generateBundleVibe } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
@@ -1303,13 +1303,15 @@ export async function runAgenticSearch(
         combos = combos.slice(0, 27);
       }
 
-      // Evaluate all combos with concurrency limit
+      // Evaluate all combos with concurrency limit. Vibe is narrative-only
+      // and doesn't affect final_bundle_score, so we skip it here and run it
+      // just for the winning combo below.
       const bundleEvalLimit = pLimit(3);
       const comboResults = await Promise.all(
         combos.map((combo) =>
           bundleEvalLimit(async () => {
             if (tokenBudget.exceeded) return null;
-            const result = await evaluateBundle(combo, bundleCtx);
+            const result = await evaluateBundle(combo, bundleCtx, { skipVibe: true });
             if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; stats.tokensPerPhase.bundle += result.tokensUsed; }
             if (result.success && result.data) {
               return { products: combo, ...result.data };
@@ -1336,12 +1338,22 @@ export async function runAgenticSearch(
         tracer.trace({ phase: "bundle", action: "evaluated", tier, score: r.final_bundle_score, metadata: { verdict: r.verdict } });
       }
       tracer.trace({ phase: "bundle", action: "selected", tier, score: best.final_bundle_score, metadata: { product_ids: best.products.map((p) => p.id) } });
+
+      // Produce the room-vibe narrative for the winner only.
+      let roomVibe: unknown = undefined;
+      if (!tokenBudget.exceeded) {
+        const vibeRes = await generateBundleVibe(best.products, bundleCtx, best.verdict);
+        if (vibeRes.tokensUsed) { tokenBudget.add(vibeRes.tokensUsed); stats.tokensUsed += vibeRes.tokensUsed; stats.tokensPerPhase.bundle += vibeRes.tokensUsed; }
+        if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
+      }
+
       return {
         tier,
         scores: best.scores,
         final_bundle_score: best.final_bundle_score,
         verdict: best.verdict,
         analysis: best.analysis,
+        room_vibe: roomVibe,
         product_ids: best.products.map((p) => p.id),
         combos_evaluated: validResults.length,
       };
@@ -1506,7 +1518,7 @@ export async function runAgenticSearch(
             combos.map((combo) =>
               bundleEvalLimit2(async () => {
                 if (tokenBudget.exceeded) return null;
-                const result = await evaluateBundle(combo, bundleCtx);
+                const result = await evaluateBundle(combo, bundleCtx, { skipVibe: true });
                 if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; }
                 if (result.success && result.data) {
                   return { products: combo, ...result.data };
@@ -1527,6 +1539,15 @@ export async function runAgenticSearch(
           if (validResults.length > 0) {
             validResults.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
             const best = validResults[0];
+
+            // Vibe for the winner only
+            let roomVibe: unknown = undefined;
+            if (!tokenBudget.exceeded) {
+              const vibeRes = await generateBundleVibe(best.products, bundleCtx, best.verdict);
+              if (vibeRes.tokensUsed) { tokenBudget.add(vibeRes.tokensUsed); stats.tokensUsed += vibeRes.tokensUsed; }
+              if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
+            }
+
             // Replace existing bundle for this tier
             const existingIdx = bundles.findIndex((b) => (b as { tier: string }).tier === tier);
             const newBundle = {
@@ -1535,6 +1556,7 @@ export async function runAgenticSearch(
               final_bundle_score: best.final_bundle_score,
               verdict: best.verdict,
               analysis: best.analysis,
+              room_vibe: roomVibe,
               product_ids: best.products.map((p) => p.id),
               combos_evaluated: validResults.length,
               backfill_reeval: true,
