@@ -68,6 +68,21 @@ function browserbaseConfigured(): boolean {
   return Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID);
 }
 
+// Cache the import check so we only test once per process lifecycle.
+let _bbAvailable: boolean | null = null;
+async function browserbaseAvailable(): Promise<boolean> {
+  if (!browserbaseConfigured()) return false;
+  if (_bbAvailable !== null) return _bbAvailable;
+  try {
+    // @ts-expect-error — optional dependency
+    await import(/* webpackIgnore: true */ "@browserbasehq/sdk");
+    _bbAvailable = true;
+  } catch {
+    _bbAvailable = false;
+  }
+  return _bbAvailable;
+}
+
 function toProductDimensions(v: VerifiedProduct["dimensions"]): ProductDimensions | null {
   if (!v) return null;
   const { width_in, depth_in, height_in } = v;
@@ -255,8 +270,8 @@ export async function verifyTopSearchCandidates(
     entries: [],
   };
 
-  if (!browserbaseConfigured()) {
-    log.info("Browserbase not configured — skipping product verification");
+  if (!await browserbaseAvailable()) {
+    log.info("Browserbase not available — skipping product verification");
     return summary;
   }
 
