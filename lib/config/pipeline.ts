@@ -44,8 +44,8 @@ export const DRIFT_MONITOR = {
 // ─── Orchestrator ─────────────────────────────────────────────
 
 export const ORCHESTRATOR = {
-  /** Hard token cap per search run (~$3-4 on Gemini pricing) */
-  defaultTokenCap: 1_500_000,
+  /** Hard token cap per search run (~$5-7 on Gemini pricing) */
+  defaultTokenCap: 2_500_000,
 
   /** Concurrency limits per phase */
   concurrency: {
@@ -70,7 +70,7 @@ export const ORCHESTRATOR = {
     maxDeepScorePerTier: 12,
     topNFinal: 5,
     alsoConsideredMax: 20,
-    cartesianCap: 27,
+    cartesianCap: 12,
     topPerCategoryForBundle: 3,
   },
 

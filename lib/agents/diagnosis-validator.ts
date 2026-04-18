@@ -51,7 +51,7 @@ function mentionsAny(text: string, terms: string[]): string | null {
     if (normalTerm.split(" ").length === 1 && normalTerm.length >= 3) {
       // Word boundary match
       const words = normalText.split(" ");
-      if (words.some((w) => w === normalTerm || w.startsWith(normalTerm))) return term;
+      if (words.some((w) => w === normalTerm)) return term;
     }
   }
   return null;
@@ -66,7 +66,7 @@ function expandExclusionTerms(exclusions: string[]): string[] {
     curtain: ["curtain", "curtains", "drapery", "drapes", "drape", "window treatment", "window treatments", "window panel", "window panels", "window covering", "window coverings", "window dressing", "sheer", "sheers", "curtain panel", "fabric panel", "linen panel"],
     blind: ["blind", "blinds", "shade", "shades", "roller shade"],
     rug: ["rug", "rugs", "carpet", "area rug"],
-    lamp: ["lamp", "floor lamp", "arc lamp", "table lamp", "light"],
+    lamp: ["lamp", "floor lamp", "arc lamp", "table lamp"],
   };
 
   const expanded: string[] = [];
@@ -81,6 +81,25 @@ function expandExclusionTerms(exclusions: string[]): string[] {
   }
   return [...new Set(expanded)];
 }
+
+/**
+ * Strip location/context phrases from keep item text so we only match
+ * the item itself, not where it is. For example:
+ *   "black arc floor lamp behind the sofa" → "black arc floor lamp"
+ *   "two lights next to the TV" → "two lights"
+ */
+function stripLocationContext(text: string): string {
+  return text
+    .replace(/\b(?:behind|next to|near|beside|by|on top of|under|underneath|above|in front of|across from|against|along|around|at|between|in|on|over|to the (?:left|right) of|if possible)\b.*/gi, "")
+    .replace(/\b(?:also)\b/gi, "")
+    .trim();
+}
+
+const DECOR_CATEGORIES = new Set([
+  "vase", "candle", "candles", "tray", "books_styled", "decorative_objects",
+  "decorative_bowl", "decorative_bowls", "baskets", "greenery_small",
+  "centerpiece", "frames", "sculpture", "sculptures", "poufs",
+]);
 
 /**
  * Build keep-item category keywords for detecting replacement recommendations.
@@ -103,7 +122,8 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
   };
 
   return keepItems.map((item) => {
-    const normalItem = normalize(item);
+    const itemOnly = stripLocationContext(item);
+    const normalItem = normalize(itemOnly);
     const keywords: string[] = [];
     for (const [category, patterns] of Object.entries(categoryPatterns)) {
       if (patterns.some((p) => normalItem.includes(p))) {
@@ -218,7 +238,8 @@ export function validateDiagnosis(
         const isReplacement = match
           && !normalize(action.action).includes("style")
           && !normalize(action.action).includes("complement")
-          && !normalize(action.action).includes("pair");
+          && !normalize(action.action).includes("pair")
+          && !DECOR_CATEGORIES.has(normalize(action.category));
         if (isReplacement) {
           issues.push({
             type: "keep_item_replaced",

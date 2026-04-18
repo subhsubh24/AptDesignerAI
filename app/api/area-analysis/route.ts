@@ -776,8 +776,9 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     // Build cross-room context for apartment-wide coherence checks
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const otherRoomsForHarmony = (otherRooms || []).map((r: any) => {
-      const diagnoses = r.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; design_direction_json?: Record<string, unknown> }> | undefined;
-      const latestDiag = diagnoses?.[diagnoses.length - 1];
+      const diagnoses = r.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; design_direction_json?: Record<string, unknown>; created_at?: string }> | undefined;
+      const sortedDiag = diagnoses?.slice().sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+      const latestDiag = sortedDiag?.[0];
       const dj = latestDiag?.diagnosis_json;
       const dd = latestDiag?.design_direction_json as Record<string, unknown> | undefined;
       return {

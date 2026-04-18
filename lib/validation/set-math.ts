@@ -323,7 +323,7 @@ function computeTierDifferentiation(products: SetProduct[]): { score: number; is
   }
 
   let score = 1.0;
-  const tierOrder = ["budget", "middle", "luxury", "best_possible"];
+  const tierOrder = ["budget", "balanced", "high_end", "best_possible"];
   const orderedTiers = tiers.sort((a, b) =>
     tierOrder.indexOf(a.toLowerCase()) - tierOrder.indexOf(b.toLowerCase())
   );
@@ -368,7 +368,7 @@ function computeCollectiveCoverage(products: SetProduct[]): { score: number; iss
   let rolesCovered = 0;
   const missingRoles: string[] = [];
   for (const [role, roleCats] of Object.entries(functionalRoles)) {
-    const found = roleCats.some(rc => [...categories].some(c => c.includes(rc) || rc.includes(c)));
+    const found = roleCats.some(rc => categories.has(rc));
     if (found) rolesCovered++;
     else missingRoles.push(role);
   }

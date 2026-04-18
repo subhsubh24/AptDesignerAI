@@ -126,6 +126,38 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
   const floorPlanImageUrl = br?.floor_plan_image_url as string | undefined;
   const extractedFloorPlan = br?.extracted_floor_plan as import("@/lib/types/database").ExtractedFloorPlan | undefined;
 
+  // Build cross-room coherence context so the design direction
+  // considers palettes/materials already chosen for sibling rooms.
+  let otherRoomsContext: string | undefined;
+  if (project) {
+    const { data: otherRooms } = await supabase
+      .from("rooms")
+      .select("id, name, room_type")
+      .eq("project_id", room.project_id)
+      .neq("id", room_id);
+    if (otherRooms && otherRooms.length > 0) {
+      const { data: otherDiagnoses } = await supabase
+        .from("room_diagnoses")
+        .select("room_id, design_direction_json")
+        .in("room_id", otherRooms.map((r: { id: string }) => r.id));
+      const otherRoomSummaries: string[] = [];
+      for (const otherRoom of otherRooms) {
+        const otherDiag = otherDiagnoses?.find(
+          (d: { room_id: string }) => d.room_id === otherRoom.id
+        );
+        const dd = otherDiag?.design_direction_json as { style_notes?: string; recommended_palette?: string[]; recommended_materials?: string[] } | undefined;
+        let summary = `${otherRoom.name} (${otherRoom.room_type})`;
+        if (dd?.style_notes) summary += `: ${dd.style_notes}`;
+        if (dd?.recommended_palette?.length) summary += ` | Palette: ${dd.recommended_palette.join(", ")}`;
+        if (dd?.recommended_materials?.length) summary += ` | Materials: ${dd.recommended_materials.join(", ")}`;
+        otherRoomSummaries.push(summary);
+      }
+      if (otherRoomSummaries.length > 0) {
+        otherRoomsContext = `Other rooms in apartment:\n${otherRoomSummaries.join("\n")}`;
+      }
+    }
+  }
+
   // Build context and run diagnosis
   const ctx: AgentContext = {
     roomId: room_id,
@@ -139,6 +171,7 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     userContext: sanitized?.sanitized || rawUserContext,
     floorPlanImageUrl,
     extractedFloorPlan,
+    otherRoomsContext,
   };
 
   const result = await runRoomDiagnosis(ctx, profile);

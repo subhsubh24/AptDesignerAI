@@ -978,15 +978,18 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
         runFinalPassAChunk(buildFinalPassAPromptText(group2, true), chunkMaxTokens),
       ]);
 
-      // Merge in original order; filter each chunk to its assigned categories only
-      const group1Cats = new Set(group1.map(item => item.category as string));
-      const group2Cats = new Set(group2.map(item => item.category as string));
-      const mergedFinal = new Map<string, FinalAssessmentResult["item_scores"][number]>([
-        ...r1.scores.filter(s => group1Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
-        ...r2.scores.filter(s => group2Cats.has(s.category)).map(s => [s.category, s] as [string, typeof s]),
-      ]);
+      // Merge by positional index within each chunk so duplicate
+      // categories (e.g. two throw_pillows) don't overwrite each other.
+      const mergedByIndex = new Map<number, FinalAssessmentResult["item_scores"][number]>();
+      const group2Start = group1.length;
+      for (let i = 0; i < r1.scores.length && i < group1.length; i++) {
+        mergedByIndex.set(i, r1.scores[i]);
+      }
+      for (let i = 0; i < r2.scores.length && i < group2.length; i++) {
+        mergedByIndex.set(group2Start + i, r2.scores[i]);
+      }
       itemScores = whatItNeeds
-        .map(item => mergedFinal.get(item.category as string))
+        .map((_, idx) => mergedByIndex.get(idx))
         .filter((s): s is FinalAssessmentResult["item_scores"][number] => s !== undefined);
 
       passATokens = r1.tokens + r2.tokens;
@@ -1440,7 +1443,8 @@ Return JSON:
                 flag.sub_scores as CompositeSubScores,
                 mathCaps,
                 flag.category,
-                pairwiseConflicts
+                pairwiseConflicts,
+                flag.title,
               );
               if (compositeResult.harmony_score < flag.harmony_score) {
                 log.info(`Composite capping product set "${flag.title}": AI=${flag.harmony_score} → composite=${compositeResult.harmony_score}`);

@@ -18,6 +18,7 @@ import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
 import { productMatchesCategory } from "@/lib/validation/category-match";
+import { ORCHESTRATOR } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -150,8 +151,8 @@ class TokenBudget {
   }
 }
 
-/** Default cap: 2.5M tokens per search run (~$5-7 on Gemini pricing). */
-const DEFAULT_TOKEN_CAP = 2_500_000;
+/** Token cap reads from centralized config; env var override available. */
+const DEFAULT_TOKEN_CAP = ORCHESTRATOR.defaultTokenCap;
 
 // ─── Sentinel Domain Tracker ──────────────────────────────────
 // Tracks extraction failure rates per domain to skip domains that
@@ -213,6 +214,7 @@ export async function runAgenticSearch(
   onStep?: (step: OrchestrationStep) => void,
   categoryHints?: Record<string, string>
 ): Promise<AgentResult<OrchestrationResult>> {
+  domainSentinelStats.clear();
   const steps: OrchestrationStep[] = [];
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
   const evaluations = new Map<string, ProductEvaluationResult>();
@@ -614,12 +616,6 @@ export async function runAgenticSearch(
                 if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
                   trackExtraction(candidate.url, true);
                   tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
-                  extractedSoFar++;
-                  return;
-                }
-                if (!title && !extractResult.data.price) {
-                  trackExtraction(candidate.url, true);
-                  tracer.traceFilter("extract", "", candidate.url, "no title or price");
                   extractedSoFar++;
                   return;
                 }
@@ -1284,7 +1280,7 @@ export async function runAgenticSearch(
         for (const flag of clashingProducts) {
           for (const [category, products] of Object.entries(candidatesByCategory)) {
             const idx = products.findIndex(
-              (p) => p.title?.toLowerCase() === flag.title.toLowerCase() || p.category === flag.category
+              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
             );
             if (idx !== -1) {
               log.info(`Removing "${flag.title}" — harmony ${flag.harmony_score}/10`, { phase: "validation", title: flag.title, harmonyScore: flag.harmony_score, reason: flag.reason });
@@ -1471,7 +1467,7 @@ export async function runAgenticSearch(
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
           const styleHint = ctx.designDirection?.style_notes || "modern apartment";
-          const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price 2025`;
+          const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price ${new Date().getFullYear()}`;
           const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 

@@ -163,12 +163,18 @@ export function computeCompositeScore(subScores: HarmonySubScores): number {
  */
 export function computePairwisePenalty(
   category: string,
-  pairwiseConflicts: PairwiseConflict[]
+  pairwiseConflicts: PairwiseConflict[],
+  title?: string,
 ): { factor: number; worstConflict?: PairwiseConflict } {
-  // Find all conflicts involving this item
-  const relevant = pairwiseConflicts.filter(
-    (c) => c.item_a === category || c.item_b === category
-  );
+  const catLower = category.toLowerCase();
+  const titleLower = title?.toLowerCase();
+  const relevant = pairwiseConflicts.filter((c) => {
+    const a = c.item_a.toLowerCase();
+    const b = c.item_b.toLowerCase();
+    return a === catLower || b === catLower
+      || (titleLower && (a === titleLower || b === titleLower))
+      || a.includes(catLower) || b.includes(catLower);
+  });
 
   if (relevant.length === 0) return { factor: 1.0 };
 
@@ -199,7 +205,8 @@ export function computeFinalHarmonyScore(
   subScores: HarmonySubScores,
   mathCaps: MathDimensionCaps,
   category: string,
-  pairwiseConflicts: PairwiseConflict[]
+  pairwiseConflicts: PairwiseConflict[],
+  title?: string,
 ): {
   harmony_score: number;
   composite_before_pairwise: number;
@@ -215,7 +222,7 @@ export function computeFinalHarmonyScore(
   const composite = computeCompositeScore(capped);
 
   // Step 3: Pairwise penalty
-  const { factor, worstConflict } = computePairwisePenalty(category, pairwiseConflicts);
+  const { factor, worstConflict } = computePairwisePenalty(category, pairwiseConflicts, title);
 
   // Step 4: Final score
   const harmony_score = Math.round(composite * factor * 10) / 10;

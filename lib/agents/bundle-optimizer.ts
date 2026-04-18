@@ -125,11 +125,9 @@ export async function evaluateBundle(
     if (product.image_url && isGeminiCompatibleImageUrl(product.image_url)) {
       sharedImages.push({ type: "image", source: { type: "url", url: product.image_url } });
     }
-    const meta = product.metadata as Record<string, unknown> | null;
-    const lifestyleUrl = meta?.lifestyle_image_url as string | undefined;
-    if (lifestyleUrl && isGeminiCompatibleImageUrl(lifestyleUrl)) {
-      sharedImages.push({ type: "image", source: { type: "url", url: lifestyleUrl } });
-    }
+    // Lifestyle images omitted from bundle evaluation — product images
+    // are sufficient for style/color/material comparison, and each
+    // lifestyle image adds ~2500 tokens across 81+ bundle calls.
   }
 
   // Compute deterministic math scores for the bundle
