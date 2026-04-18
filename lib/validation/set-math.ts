@@ -18,7 +18,9 @@ export interface SetMathScores {
   per_product: Array<{
     title: string;
     category: string;
-    math_harmony: number; // 0-1: this product's fit with the rest
+    math_harmony: number;   // 0-1: combined fit with the rest (legacy/back-compat)
+    color_score: number;    // 0-1: dimension-specific color fit
+    material_score: number; // 0-1: dimension-specific material fit
     issues: string[];
   }>;
 }
@@ -87,7 +89,12 @@ function computeColorCoherence(products: SetProduct[], ctx: SetMathContext): {
   for (const p of products) {
     const pColors = productColorMap.get(p.title) || [];
     if (pColors.length === 0) {
-      perProduct.set(p.title, { score: 0.5, issues: ["No resolvable colors"] });
+      // No resolvable colors = no evidence either way. Use a neutral 0.75
+      // so we don't auto-penalize products whose extracted color strings
+      // didn't map to our lookup table (e.g. "walnut brown" or "oat").
+      // Previously 0.5 → dragged math_harmony low → triggered aggressive
+      // composite capping on products that were actually fine.
+      perProduct.set(p.title, { score: 0.75, issues: [] });
       continue;
     }
 
@@ -406,13 +413,15 @@ export function computeSetMathScores(
 
   // Per-product scores
   const perProduct = products.map(p => {
-    const colorEntry = color.perProduct.get(p.title) || { score: 0.5, issues: [] };
-    const matEntry = material.perProduct.get(p.title) || { score: 0.5, issues: [] };
+    const colorEntry = color.perProduct.get(p.title) || { score: 0.75, issues: [] };
+    const matEntry = material.perProduct.get(p.title) || { score: 0.75, issues: [] };
     const combinedScore = colorEntry.score * 0.5 + matEntry.score * 0.5;
     return {
       title: p.title,
       category: p.category,
       math_harmony: Math.round(combinedScore * 100) / 100,
+      color_score: Math.round(colorEntry.score * 100) / 100,
+      material_score: Math.round(matEntry.score * 100) / 100,
       issues: [...colorEntry.issues, ...matEntry.issues],
     };
   });

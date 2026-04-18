@@ -1430,8 +1430,11 @@ Return JSON:
             if (flag.sub_scores) {
               const mathCaps: MathDimensionCaps = {};
               if (mathEntry) {
-                mathCaps.color_fit = mathEntry.math_harmony; // best available proxy
-                mathCaps.material_fit = mathEntry.math_harmony;
+                // Apply dimension-specific caps (not the combined math_harmony,
+                // which would double-penalize — same low average capping both
+                // color_fit AND material_fit independently).
+                mathCaps.color_fit = mathEntry.color_score;
+                mathCaps.material_fit = mathEntry.material_score;
               }
               const compositeResult = computeFinalHarmonyScore(
                 flag.sub_scores as CompositeSubScores,

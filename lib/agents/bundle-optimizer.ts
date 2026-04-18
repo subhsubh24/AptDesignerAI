@@ -210,7 +210,7 @@ export async function evaluateBundle(
     // Calls A + B run in parallel; C runs after A (vibe tone uses A's verdict).
     const [scoringRes, pairwiseRes] = await Promise.all([
       runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw)),
-      runPass("pairwise", getBundlePairwisePrompt(evalCtx), 3000, (raw) => BundlePairwiseResponseSchema.parse(raw)),
+      runPass("pairwise", getBundlePairwisePrompt(evalCtx), 8000, (raw) => BundlePairwiseResponseSchema.parse(raw)),
     ]);
     const vibeRes = options.skipVibe
       ? null
