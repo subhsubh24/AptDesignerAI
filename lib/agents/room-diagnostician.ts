@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { resolveImageBlock } from "@/lib/ai/resolve-image";
@@ -49,24 +50,32 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
     profile,
   );
 
-  const analysisContent: AIContentBlock[] = [];
+  // Cacheable visual blocks (floor plan + room photos) — stable across all N
+  // self-consistency samples. Hoisted into `cacheScope` so Gemini re-tokenizes
+  // them at the cheaper cached rate instead of paying full input cost N times.
+  const cacheableBlocks: AIContentBlock[] = [];
 
-  // Pre-resolve reused visual assets through the Files API cache. Pass 1 runs
-  // N parallel self-consistency samples, so the same floor plan + photos hit
-  // Gemini N× — uploading once eliminates N-1 rounds of fetch + base64. Any
-  // upload failure falls back to URL blocks (the old behavior) transparently.
   if (ctx.floorPlanImageUrl) {
-    analysisContent.push({
+    cacheableBlocks.push({
       type: "text",
       text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features (windows/doors/built-ins), and building orientation. Use this as the ground truth for all spatial facts. Do not infer or contradict any dimension readable from this plan.",
     });
-    analysisContent.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
+    cacheableBlocks.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
   }
 
   for (const url of ctx.imageUrls) {
-    analysisContent.push(await resolveImageBlock(url, { preferFilesApi: true }));
+    cacheableBlocks.push(await resolveImageBlock(url, { preferFilesApi: true }));
   }
-  analysisContent.push({ type: "text", text: analysisPrompt });
+
+  const roomSessionKey = crypto
+    .createHash("sha256")
+    .update(`diag|${ctx.roomType}|${ctx.imageUrls.join("|")}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  const analysisContent: AIContentBlock[] = [
+    { type: "text", text: analysisPrompt },
+  ];
 
   let analysisTokens = 0;
   let analysisModel = model;
@@ -101,6 +110,9 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             seed,
             responseMimeType: "application/json",
             mediaResolution: "ultra_high",
+            cacheScope: cacheableBlocks.length > 0
+              ? { sessionKey: roomSessionKey, content: cacheableBlocks }
+              : undefined,
           });
 
           const raw = extractJsonObject(response.content);

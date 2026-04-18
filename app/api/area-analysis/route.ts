@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
@@ -369,9 +370,22 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
      * Pass A — UNDERSTAND the room.
      * Vision-heavy. Consumes all the shared context + room photos + apartment
      * context photos. Produces everything EXCEPT what_it_needs.
+     *
+     * contentBlocks (floor plan, building context, room photos, apartment
+     * context photos) are stable across all N self-consistency samples. Hoist
+     * them into `cacheScope` so Gemini re-tokenizes them at the cheaper cached
+     * rate instead of paying full input cost N times.
      */
+    const passARoomUrls = (room.room_images || []).map(
+      (img: { image_url: string }) => img.image_url,
+    );
+    const areaSessionKey = crypto
+      .createHash("sha256")
+      .update(`area|${room.room_type}|${passARoomUrls.join("|")}`)
+      .digest("hex")
+      .slice(0, 16);
+
     const passAContent: AIContentBlock[] = [
-      ...contentBlocks,
       { type: "text", text: passAPrompt },
     ];
 
@@ -397,6 +411,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           max_tokens: 8192,
           seed,
           responseMimeType: "application/json",
+          cacheScope: contentBlocks.length > 0
+            ? { sessionKey: areaSessionKey, content: contentBlocks }
+            : undefined,
         });
         if (response.truncated) {
           console.warn("[area-analysis] Pass A sample truncated — discarding");

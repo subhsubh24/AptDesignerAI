@@ -88,68 +88,103 @@ export async function runIdentifiedProductsPipeline(
     };
   }
 
-  // ─── 2. Per-crop: embed + retrieve + identify ──────────────
-  // We do this serially per crop — parallelizing hits Gemini rate limits
-  // fast on free tier, and the embedding call is ~200ms anyway.
+  // ─── 2. Per-crop: embed + retrieve + identify (concurrent) ──
+  // Run embed+identify in parallel (pLimit(4) prevents Gemini rate-limit
+  // spikes), then verify top candidates with a tighter concurrency pool.
   const enrichedResults: IdentifiedProductEnriched[] = [];
   let verifyCallsMade = 0;
 
-  for (const crop of cropperOut.crops) {
-    // Embedding for retrieval prior — failures here just skip priors.
-    let priors: RetrievalPrior[] = [];
-    try {
-      const vec = await embedImage({
-        image: crop.source_image_url,
-        text: crop.label,
-      });
-      const matches = await topKSimilar(input.supabase, vec, { k: 3 });
-      priors = matches.map((m) => ({
-        brand: m.brand,
-        model: m.model,
-        similarity: m.similarity,
-      }));
-    } catch (err) {
-      log.debug("embedding/retrieval skipped for crop", {
-        label: crop.label,
-        error: err instanceof Error ? err.message : String(err),
-      });
+  // Inline concurrency limiter — matches orchestrator.ts pattern.
+  function pLimitFn(concurrency: number) {
+    let active = 0;
+    const queue: Array<() => void> = [];
+    function next() {
+      if (queue.length > 0 && active < concurrency) {
+        active++;
+        const run = queue.shift()!;
+        run();
+      }
     }
+    return function <T>(fn: () => Promise<T>): Promise<T> {
+      return new Promise<T>((resolve, reject) => {
+        queue.push(() => { fn().then(resolve, reject).finally(() => { active--; next(); }); });
+        next();
+      });
+    };
+  }
 
-    const idOut = await runProductIdentifier({
-      roomImageUrl: crop.source_image_url,
-      box: crop.box,
-      label: crop.label,
-      priors,
-      roomType: input.roomType,
-      aestheticHint: input.aestheticHint,
-      budgetMode: input.budgetMode,
-      roomDimensions: input.roomDimensions,
-    });
-    totalTokens += idOut.tokensUsed;
+  const identifyLimit = pLimitFn(4);
 
-    // Only verify the single top candidate per crop — verifier calls are
-    // expensive (grounded search + image compare). If the top one fails,
-    // we accept the unverified entry rather than burn tokens on #2.
-    const top = idOut.candidates[0];
-    if (!top) continue;
+  type IdentifyResult = {
+    crop: typeof cropperOut.crops[number];
+    priors: RetrievalPrior[];
+    top: import("@/lib/types/schemas").IdentifiedProductCandidate | null;
+    tokens: number;
+  };
 
+  const identifyResults = await Promise.all(
+    cropperOut.crops.map((crop) =>
+      identifyLimit(async (): Promise<IdentifyResult> => {
+        let priors: RetrievalPrior[] = [];
+        try {
+          const vec = await embedImage({
+            image: crop.source_image_url,
+            text: crop.label,
+          });
+          const matches = await topKSimilar(input.supabase, vec, { k: 3 });
+          priors = matches.map((m) => ({
+            brand: m.brand,
+            model: m.model,
+            similarity: m.similarity,
+          }));
+        } catch (err) {
+          log.debug("embedding/retrieval skipped for crop", {
+            label: crop.label,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        const idOut = await runProductIdentifier({
+          roomImageUrl: crop.source_image_url,
+          box: crop.box,
+          label: crop.label,
+          priors,
+          roomType: input.roomType,
+          aestheticHint: input.aestheticHint,
+          budgetMode: input.budgetMode,
+          roomDimensions: input.roomDimensions,
+        });
+        return {
+          crop,
+          priors,
+          top: idOut.candidates[0] ?? null,
+          tokens: idOut.tokensUsed,
+        };
+      }),
+    ),
+  );
+
+  for (const r of identifyResults) {
+    totalTokens += r.tokens;
+  }
+
+  // Verify phase — sequentially to respect maxVerifyCalls cap.
+  for (const r of identifyResults) {
+    if (!r.top) continue;
     if (verifyCallsMade >= maxVerifyCalls) {
-      log.info("verify cap reached, emitting candidate unverified", {
-        brand: top.brand,
-        model: top.model,
+      log.info("verify cap reached, skipping", {
+        brand: r.top.brand,
+        model: r.top.model,
         cap: maxVerifyCalls,
       });
-      // Don't throw — still emit the candidate with verified=false by running
-      // the verifier shell in degraded mode. Simpler: skip verify and let the
-      // dropUnverified filter cull it.
-      continue;
+      break;
     }
 
     const verifyOut = await runProductVerifier({
-      candidate: top,
-      roomImageUrl: crop.source_image_url,
-      sourceImageUrl: crop.source_image_url,
-      priors,
+      candidate: r.top,
+      roomImageUrl: r.crop.source_image_url,
+      sourceImageUrl: r.crop.source_image_url,
+      priors: r.priors,
       roomType: input.roomType,
       aestheticHint: input.aestheticHint,
       budgetMode: input.budgetMode,

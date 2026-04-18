@@ -1,7 +1,9 @@
+import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
+import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
@@ -234,22 +236,22 @@ export async function generateMockupPrompt(
   // matching image block so the prompt-writer knows *which wall is which*
   // and can say things like "the window wall is on the right". Without this
   // anchor the model sees photos in isolation and can flip the layout.
-  let content: string | AIContentBlock[] = prompt;
-  if (roomImageUrls && roomImageUrls.length > 0) {
-    const blocks: AIContentBlock[] = [];
+  // Separate visual blocks (cacheable) from prompt text (per-call).
+  // Pre-resolve through Files API so the same images aren't re-fetched
+  // when generateMockupImage runs with the same URLs shortly after.
+  const cacheableBlocks: AIContentBlock[] = [];
+  const promptBlocks: AIContentBlock[] = [];
 
-    // Floor plan image comes first — it is the authoritative source for all
-    // spatial facts (dimensions, wall features, orientation). The downstream
-    // image generator must use it to place windows/doors on the correct walls.
+  if (roomImageUrls && roomImageUrls.length > 0) {
     if (floorPlanImageUrl) {
-      blocks.push({
+      cacheableBlocks.push({
         type: "text",
         text: "AUTHORITATIVE FLOOR PLAN — exact room dimensions, wall positions, window and door locations. Use this as the ground truth for spatial layout. The generated image MUST match this floor plan's wall arrangement.",
       });
-      blocks.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+      cacheableBlocks.push(await resolveImageBlock(floorPlanImageUrl, { preferFilesApi: true }));
     }
 
-    blocks.push({
+    cacheableBlocks.push({
       type: "text",
       text: "REFERENCE PHOTOS OF THE ACTUAL ROOM — the prompt you write will be fed to an image generator that MUST render this exact room. Describe the wall color, floor, windows, trim, ceiling, and light direction precisely from these photos so the generator matches them:",
     });
@@ -260,37 +262,47 @@ export async function generateMockupPrompt(
       for (const o of photoOrientations) captionByIndex.set(o.index, o);
     }
 
-    usedUrls.forEach((url, i) => {
+    for (let i = 0; i < usedUrls.length; i++) {
       const orient = captionByIndex.get(i + 1);
       if (orient) {
         const features = orient.visible_features.length > 0
           ? ` Features: ${orient.visible_features.join("; ")}.`
           : "";
-        blocks.push({
+        cacheableBlocks.push({
           type: "text",
           text: `Photo ${i + 1} — ${orient.camera_position}, facing ${orient.facing}. Light ${orient.light_direction}.${features}`,
         });
       } else {
-        blocks.push({ type: "text", text: `Photo ${i + 1}:` });
+        cacheableBlocks.push({ type: "text", text: `Photo ${i + 1}:` });
       }
-      blocks.push({ type: "image", source: { type: "url", url } });
-    });
+      cacheableBlocks.push(await resolveImageBlock(usedUrls[i], { preferFilesApi: true }));
+    }
 
     const summary = formatOrientationSummary(photoOrientations ?? []);
-    if (summary) blocks.push({ type: "text", text: summary });
-
-    blocks.push({ type: "text", text: prompt });
-    content = blocks;
+    if (summary) cacheableBlocks.push({ type: "text", text: summary });
   }
+
+  promptBlocks.push({ type: "text", text: prompt });
+
+  const mockupSessionKey = roomImageUrls && roomImageUrls.length > 0
+    ? crypto
+        .createHash("sha256")
+        .update(`mockup|${roomType}|${roomImageUrls.slice(0, 4).join("|")}`)
+        .digest("hex")
+        .slice(0, 16)
+    : "";
 
   try {
     const response = await geminiProvider.chat({
       model,
       system,
-      messages: [{ role: "user", content }],
+      messages: [{ role: "user", content: promptBlocks }],
       max_tokens: 6000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      cacheScope: cacheableBlocks.length > 0
+        ? { sessionKey: mockupSessionKey, content: cacheableBlocks }
+        : undefined,
     });
 
     const parsed = extractJsonObject<MockupPromptResult>(response.content);
@@ -332,16 +344,17 @@ export async function generateMockupImage(
   const useGrounding = options.imageSearchGrounding ?? IMAGE_GENERATION_CONFIG.imageSearchGroundingDefault;
 
   try {
-    // Build content blocks: room photos first (if any), then prompt text
+    // Build content blocks: room photos first (if any), then prompt text.
+    // Pre-resolve through Files API so the image model references cached
+    // uploads instead of re-fetching each URL from scratch.
     const content: AIContentBlock[] = [];
 
-    // Floor plan image first when available — authoritative spatial ground truth
     if (floorPlanImageUrl) {
       content.push({
         type: "text",
         text: "AUTHORITATIVE FLOOR PLAN — exact room dimensions, wall layout, window and door positions. Use this as the ground truth for spatial layout. The generated image MUST match this floor plan — windows go on the walls shown here, doors open where shown. Do NOT mirror or rotate the room relative to this plan.",
       });
-      content.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+      content.push(await resolveImageBlock(floorPlanImageUrl, { preferFilesApi: true }));
     }
 
     if (roomImageUrls && roomImageUrls.length > 0) {
@@ -362,17 +375,12 @@ photographer's viewpoint. Use those tags to place windows, doors, and features
 on the CORRECT walls — not mirrored versions of them.`,
       });
 
-      // Interleave each orientation caption with its image block so the model
-      // associates the text ("facing the window wall; light from the left")
-      // with the specific photo it describes. Without this anchor, seeing 3–4
-      // photos from different angles, the model often picks the wrong
-      // canonical viewpoint and flips the layout left-to-right.
       const captionByIndex = new Map<number, PhotoOrientation>();
       if (photoOrientations) {
         for (const o of photoOrientations) captionByIndex.set(o.index, o);
       }
 
-      roomImageUrls.forEach((url, i) => {
+      for (let i = 0; i < roomImageUrls.length; i++) {
         const orient = captionByIndex.get(i + 1);
         if (orient) {
           const features = orient.visible_features.length > 0
@@ -385,8 +393,8 @@ on the CORRECT walls — not mirrored versions of them.`,
         } else {
           content.push({ type: "text", text: `Photo ${i + 1}:` });
         }
-        content.push({ type: "image", source: { type: "url", url } });
-      });
+        content.push(await resolveImageBlock(roomImageUrls[i], { preferFilesApi: true }));
+      }
 
       const summary = formatOrientationSummary(photoOrientations ?? []);
       if (summary) content.push({ type: "text", text: summary });
