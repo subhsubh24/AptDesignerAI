@@ -6,7 +6,7 @@ import {
   getFunctionalEvalPrompt,
   type EvalContextArgs,
 } from "@/lib/prompts/product-eval";
-import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
+import { computeFinalItemScore, determineVerdict, groundConfidence } from "@/lib/scoring/product-scorer";
 import {
   AestheticEvalResponseSchema,
   FunctionalEvalResponseSchema,
@@ -216,8 +216,10 @@ export async function scoreProduct(
     ...productImages,
     { type: "text", text: `${aestheticPrompt}${productTextTail}` },
   ];
+  // Functional pass (scale/value/function) is text-based — dimensions,
+  // price, and description are sufficient. Dropping product images here
+  // halves image-token cost for ~half the deep-score calls.
   const functionalContent: AIContentBlock[] = [
-    ...productImages,
     { type: "text", text: `${functionalPrompt}${productTextTail}` },
   ];
 
@@ -315,7 +317,19 @@ export async function scoreProduct(
     }
 
     const finalScore = computeFinalItemScore(scores, product.category || undefined);
-    const verdict = determineVerdict(finalScore, scores.confidence_score);
+    // Ground the LLM confidence against objective data-quality signals so
+    // sparse products (no dimensions, no image) can't reach strong_yes.
+    const groundedConfidence = groundConfidence(scores.confidence_score, {
+      hasProductImage: productImages.length > 0,
+      hasDimensions: !!(product.dimensions?.width || product.dimensions?.height || product.dimensions?.diameter),
+      hasMaterials: (product.materials?.length ?? 0) > 0,
+      hasPrice: !!product.price,
+      hasDescription: !!(product.description?.length),
+      hasRoomImages: scoringCtx.roomImageUrls.length > 0,
+      mathValidationRan: true,
+    });
+    scores.confidence_score = groundedConfidence;
+    const verdict = determineVerdict(finalScore, groundedConfidence);
 
     const categoryKey = (product.category || "unknown").toLowerCase().replace(/[\s-]+/g, "_");
     recordProductScores({
