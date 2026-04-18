@@ -454,7 +454,9 @@ Return ONLY a valid JSON object — no text before or after:
       response = await geminiProvider.chat({
         model: selectModel("search"),
         system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        messages: [{ role: "user", content: withRoomImages(searchPrompt, roomImageUrls) }],
+        // Room images omitted from search calls — Google Search grounding is
+        // text-only; inline images add ~7.5K tokens per call with no benefit.
+        messages: [{ role: "user", content: searchPrompt }],
         max_tokens: 2000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
@@ -485,7 +487,7 @@ Return ONLY a valid JSON object — no text before or after:
       response = await geminiProvider.chat({
         model: selectModel("search"),
         system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        messages: [{ role: "user", content: withRoomImages(searchPrompt, roomImageUrls) }],
+        messages: [{ role: "user", content: searchPrompt }],
         max_tokens: 2000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
@@ -669,7 +671,7 @@ Return JSON:
         const validated = QuickScreenResponseSchema.parse(raw);
         const passed: SearchCandidate[] = [];
         for (const rating of validated.ratings) {
-          if (rating.rating >= 3) {
+          if (rating.rating >= 4) {
             const idx = rating.index;
             if (idx >= 0 && idx < batch.length) {
               passed.push(batch[idx]);

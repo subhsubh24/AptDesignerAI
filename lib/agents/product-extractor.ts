@@ -359,6 +359,14 @@ const STRUCTURED_SCRAPE_FIRST = [
   "burrow.com",
   "crateandbarrel.com",
   "potterybarn.com",
+  "wayfair.com",
+  "target.com",
+  "ikea.com",
+  "amazon.com",
+  "anthropologie.com",
+  "allmodern.com",
+  "jossandmain.com",
+  "roomandboard.com",
 ];
 
 function shouldTryStructuredScrapeFirst(url: string): boolean {
