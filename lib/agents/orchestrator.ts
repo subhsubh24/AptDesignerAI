@@ -522,6 +522,11 @@ export async function runAgenticSearch(
       try { await import(/* webpackIgnore: true */ "@browserbasehq/sdk"); } catch { cuEnabled = false; }
     }
 
+    // CU fallback promises collected separately from extraction so extraction
+    // slots don't block on browser sessions. Awaited collectively after Phase 4
+    // before Phase 5 (deep-score) reads the product data.
+    const cuPromises: Promise<void>[] = [];
+
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
     const totalToExtract = Object.values(screenedByCategory).reduce(
@@ -623,56 +628,60 @@ export async function runAgenticSearch(
                   updated_at: new Date().toISOString(),
                 };
 
-                // ── Computer Use fallback: text extraction got a title but no price/dimensions ──
+                // ── Computer Use fallback (detached) ──
                 // JS-heavy retailer pages (West Elm, CB2, RH, etc.) often don't render
-                // their price or dimension tables for text-only scrapers. When both are
-                // missing, launch a real browser session via Browserbase to fill the gaps.
+                // price/dimension tables for text-only scrapers. Queue CU as an
+                // independent promise — don't block the extract slot waiting for
+                // a browser session. The CU promise mutates `product` in place
+                // and is awaited before Phase 5 reads product data.
                 if (cuEnabled && (!product.price || !product.dimensions)) {
-                  await cuFallbackLimit(async () => {
-                    try {
-                      const verifyResult = await Promise.race([
-                        runProductVerifier({
-                          productUrl: candidate.url,
-                          expectedTitle: product.title ?? undefined,
-                          expectedColor: product.colors?.[0],
-                          maxTurns: 10,
-                        }),
-                        new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60_000)),
-                      ]);
-                      if (verifyResult === "timeout" || !verifyResult.product) return;
-                      const v = verifyResult.product;
-                      if (typeof v.price === "number") product.price = v.price;
-                      if (v.dimensions?.width_in || v.dimensions?.depth_in || v.dimensions?.height_in) {
-                        product.dimensions = {
-                          ...(v.dimensions.width_in != null ? { width: v.dimensions.width_in } : {}),
-                          ...(v.dimensions.depth_in != null ? { depth: v.dimensions.depth_in } : {}),
-                          ...(v.dimensions.height_in != null ? { height: v.dimensions.height_in } : {}),
-                          unit: "inches" as const,
+                  cuPromises.push(
+                    cuFallbackLimit(async () => {
+                      try {
+                        const verifyResult = await Promise.race([
+                          runProductVerifier({
+                            productUrl: candidate.url,
+                            expectedTitle: product.title ?? undefined,
+                            expectedColor: product.colors?.[0],
+                            maxTurns: 10,
+                          }),
+                          new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60_000)),
+                        ]);
+                        if (verifyResult === "timeout" || !verifyResult.product) return;
+                        const v = verifyResult.product;
+                        if (typeof v.price === "number") product.price = v.price;
+                        if (v.dimensions?.width_in || v.dimensions?.depth_in || v.dimensions?.height_in) {
+                          product.dimensions = {
+                            ...(v.dimensions.width_in != null ? { width: v.dimensions.width_in } : {}),
+                            ...(v.dimensions.depth_in != null ? { depth: v.dimensions.depth_in } : {}),
+                            ...(v.dimensions.height_in != null ? { height: v.dimensions.height_in } : {}),
+                            unit: "inches" as const,
+                          };
+                        }
+                        if (v.materials.length && !product.materials?.length) product.materials = v.materials;
+                        if (v.available_colors.length && !product.colors?.length) product.colors = v.available_colors;
+                        product.metadata = {
+                          ...(product.metadata ?? {}),
+                          cu_fallback: true,
+                          cu_turns: verifyResult.turns,
+                          in_stock: v.in_stock ?? null,
                         };
+                        log.info("Computer use fallback enriched product", {
+                          phase: "extract",
+                          url: candidate.url,
+                          category,
+                          filledPrice: typeof v.price === "number",
+                          filledDimensions: Boolean(product.dimensions),
+                        });
+                      } catch (cuErr) {
+                        log.warn("Computer use fallback failed", {
+                          phase: "extract",
+                          url: candidate.url,
+                          error: cuErr instanceof Error ? cuErr.message : String(cuErr),
+                        });
                       }
-                      if (v.materials.length && !product.materials?.length) product.materials = v.materials;
-                      if (v.available_colors.length && !product.colors?.length) product.colors = v.available_colors;
-                      product.metadata = {
-                        ...(product.metadata ?? {}),
-                        cu_fallback: true,
-                        cu_turns: verifyResult.turns,
-                        in_stock: v.in_stock ?? null,
-                      };
-                      log.info("Computer use fallback enriched product", {
-                        phase: "extract",
-                        url: candidate.url,
-                        category,
-                        filledPrice: typeof v.price === "number",
-                        filledDimensions: Boolean(product.dimensions),
-                      });
-                    } catch (cuErr) {
-                      log.warn("Computer use fallback failed", {
-                        phase: "extract",
-                        url: candidate.url,
-                        error: cuErr instanceof Error ? cuErr.message : String(cuErr),
-                      });
-                    }
-                  });
+                    })
+                  );
                 }
 
                 extractedByCategory[category][tier].push(product);
@@ -697,6 +706,13 @@ export async function runAgenticSearch(
     }
 
     await Promise.all(extractPromises);
+
+    // Wait for any detached CU fallback sessions to complete so deep-score
+    // sees the enriched price/dimensions rather than the text-only defaults.
+    if (cuPromises.length > 0) {
+      log.info("Awaiting detached CU fallbacks", { count: cuPromises.length });
+      await Promise.all(cuPromises);
+    }
 
     // ── Price-tier reclassification ─────────────────────────────
     // Products often land in the wrong tier because search queries
@@ -1038,6 +1054,22 @@ export async function runAgenticSearch(
             return (scoreB - scoreA) || tiebreakProduct(a, b);
           });
           if (products.length === 0) continue;
+
+          // Early termination: if the top-3 deep scores are well-separated
+          // (each gap > 1.5 points), pairwise won't change the order — skip
+          // the LLM call and use the deep-score ordering directly.
+          if (products.length >= 3) {
+            const s0 = evaluations.get(products[0].id)?.final_item_score || 0;
+            const s1 = evaluations.get(products[1].id)?.final_item_score || 0;
+            const s2 = evaluations.get(products[2].id)?.final_item_score || 0;
+            if (s0 - s1 > 1.5 && s1 - s2 > 1.5) {
+              pairwiseRerankedByCategory[category][tier] = products;
+              log.debug("Skipping pairwise (high score separation)", {
+                category, tier, topScores: [s0, s1, s2],
+              });
+              continue;
+            }
+          }
 
           pairwisePromises.push(
             (async () => {
