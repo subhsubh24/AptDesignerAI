@@ -45,7 +45,13 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Supabase unreachable — treat as unauthenticated but don't crash
+  }
 
   const isPublicPath = PUBLIC_PATHS.has(request.nextUrl.pathname);
   const isAuthCallback = request.nextUrl.pathname.startsWith("/api/auth");

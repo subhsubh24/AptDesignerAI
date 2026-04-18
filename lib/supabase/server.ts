@@ -72,6 +72,10 @@ export async function getCurrentUserId(): Promise<string> {
     },
   });
 
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? "00000000-0000-0000-0000-000000000001";
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? "00000000-0000-0000-0000-000000000001";
+  } catch {
+    return "00000000-0000-0000-0000-000000000001";
+  }
 }
