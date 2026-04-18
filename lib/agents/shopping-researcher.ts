@@ -13,6 +13,7 @@ import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DesignDirection } from "@/lib/types/database";
 import type { AIContentBlock } from "@/lib/ai/provider";
+import { getCachedQuery, cacheQuery, getCachedScreen, cacheScreen } from "./search-cache";
 
 /**
  * Max number of room photos to attach to researcher/reranker/extractor calls.
@@ -405,6 +406,11 @@ export async function searchProducts(
   category?: string,
   roomImageUrls?: string[]
 ): Promise<AgentResult<SearchCandidate[]>> {
+  const cached = getCachedQuery(query, tier, category, maxResults);
+  if (cached) {
+    return { success: true, data: cached, tokensUsed: 0 };
+  }
+
   const domains = tier
     ? TIER_DOMAINS[tier]
     : [...TIER_DOMAINS.budget, ...TIER_DOMAINS.balanced, ...TIER_DOMAINS.high_end];
@@ -498,6 +504,7 @@ Return ONLY a valid JSON object — no text before or after:
         snippet: r.snippet.slice(0, 500),
         source: r.source,
       }));
+      cacheQuery(query, tier, category, maxResults, candidates);
       return { success: true, data: candidates, tokensUsed };
     } catch {
       const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -514,6 +521,7 @@ Return ONLY a valid JSON object — no text before or after:
             }
             return { title: s.title, url: s.uri, snippet: "", source };
           });
+        cacheQuery(query, tier, category, maxResults, candidates);
         return { success: true, data: candidates, tokensUsed };
       }
       return { success: true, data: [], tokensUsed };
@@ -577,6 +585,11 @@ export async function quickScreenCandidates(
   // Process batches in parallel
   const batchResults = await Promise.all(
     batches.map(async (batch, batchIdx) => {
+      const cachedPassed = getCachedScreen(batch, category, tier, requirements, designDirection);
+      if (cachedPassed) {
+        return { passed: cachedPassed, tokensUsed: 0 };
+      }
+
       // Use 0-based local indices per batch (simpler, avoids global↔local conversion bugs)
       const candidateList = batch
         .map((c, i) => `[${i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 120)}`)
@@ -636,6 +649,7 @@ Return JSON:
             }
           }
         }
+        cacheScreen(batch, category, tier, requirements, designDirection, passed);
         return { passed, tokensUsed };
       } catch (err) {
         log.warn(`Quick-screen batch ${batchIdx} failed, returning empty`, { phase: "quick_screen", error: err instanceof Error ? err.message : String(err) });
