@@ -78,6 +78,7 @@ export default function DashboardPage() {
   const [roomImages, setRoomImages] = useState<Record<string, UploadedImage[]>>({});
   const [projectId, setProjectId] = useState<string | null>(null);
   const [roomIds, setRoomIds] = useState<Record<string, string>>({});
+  const [roomStatuses, setRoomStatuses] = useState<Record<string, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzePhase, setAnalyzePhase] = useState<"building" | "photos" | "done">("building");
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- setter used, value consumed in future iteration
@@ -128,8 +129,10 @@ export default function DashboardPage() {
             const images: Record<string, UploadedImage[]> = {};
             let hasAnalysis = false;
 
+            const statuses: Record<string, string> = {};
             for (const room of rooms) {
               ids[room.room_type] = room.id;
+              statuses[room.room_type] = room.status ?? "setup";
               const imgRes = await fetch(`/api/rooms/${room.id}/images`);
               if (imgRes.ok) {
                 const imgs = await imgRes.json();
@@ -144,6 +147,7 @@ export default function DashboardPage() {
               }
             }
             setRoomIds(ids);
+            setRoomStatuses(statuses);
             setRoomImages(images);
 
             if (hasAnalysis) {
@@ -888,6 +892,9 @@ export default function DashboardPage() {
             const hasImages = (roomImages[section.key]?.length || 0) > 0;
             const firstImage = roomImages[section.key]?.[0];
             const isSelected = selectedRoom === section.key;
+            const roomStatus = roomStatuses[section.key] ?? "setup";
+            const isDone = ["diagnosed", "sourcing", "completed"].includes(roomStatus);
+            const isOutstanding = hasImages && !isDone;
 
             if (!hasImages) return null;
 
@@ -895,6 +902,8 @@ export default function DashboardPage() {
               <button
                 key={section.key}
                 onClick={() => setSelectedRoom(isSelected ? null : section.key)}
+                aria-pressed={isSelected}
+                aria-label={`${section.label} — ${isDone ? "done" : "outstanding"}`}
                 className={cn(
                   "group relative overflow-hidden rounded-2xl border-2 bg-card transition-all duration-300 text-left",
                   isSelected
@@ -917,6 +926,19 @@ export default function DashboardPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                   </div>
                 )}
+
+                {/* Status badge — top-left */}
+                <div className="absolute top-3 left-3">
+                  {isDone ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[10px] font-semibold shadow">
+                      <CheckCircle2 className="h-3 w-3" /> Done
+                    </span>
+                  ) : isOutstanding ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-semibold shadow">
+                      Outstanding
+                    </span>
+                  ) : null}
+                </div>
 
                 {/* Selected indicator */}
                 {isSelected && (

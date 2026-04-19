@@ -20,10 +20,14 @@ interface Mockup {
   generation_provider: string | null;
 }
 
-const GENERATION_STEPS = [
-  { label: "Composing scene...", delay: 0 },
-  { label: "Rendering design...", delay: 3000 },
-  { label: "Enhancing details...", delay: 6000 },
+// Honest status labels that cycle while generation runs. The /api/mockups
+// endpoint is a single POST with no progress stream, so timed "done" ticks
+// lie to users when phases take longer than expected. We rotate descriptors
+// without claiming completion until the response arrives.
+const GENERATION_ROTATION_LABELS = [
+  "Composing scene…",
+  "Rendering design…",
+  "Enhancing details…",
 ];
 
 export default function MockupsPage() {
@@ -34,8 +38,17 @@ export default function MockupsPage() {
   const [mockups, setMockups] = useState<Mockup[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [generationStep, setGenerationStep] = useState(0);
+  const [rotationIndex, setRotationIndex] = useState(0);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // Cycle the rotating generation status label while generating.
+  useEffect(() => {
+    if (!generating) return;
+    const id = setInterval(() => {
+      setRotationIndex((i) => (i + 1) % GENERATION_ROTATION_LABELS.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [generating]);
 
   useEffect(() => {
     async function load() {
@@ -48,12 +61,7 @@ export default function MockupsPage() {
 
   const handleGenerate = async () => {
     setGenerating(true);
-    setGenerationStep(0);
-
-    // Simulate generation steps
-    const stepTimers = GENERATION_STEPS.map((_, i) =>
-      setTimeout(() => setGenerationStep(i), GENERATION_STEPS[i].delay)
-    );
+    setRotationIndex(0);
 
     try {
       const productsRes = await fetch(`/api/products?room_id=${roomId}`);
@@ -77,7 +85,6 @@ export default function MockupsPage() {
         setMockups((prev) => [data, ...prev]);
       }
     } finally {
-      stepTimers.forEach(clearTimeout);
       setGenerating(false);
     }
   };
@@ -132,19 +139,12 @@ export default function MockupsPage() {
                 <Sparkles className="h-8 w-8 text-accent-warm" />
               </div>
               <div className="space-y-2 text-center">
-                {GENERATION_STEPS.map((step, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "text-sm transition-all duration-300",
-                      i <= generationStep ? "text-foreground font-medium" : "text-muted-foreground/40",
-                      i === generationStep && "text-accent-warm"
-                    )}
-                  >
-                    {i < generationStep ? "✓ " : i === generationStep ? "⟳ " : ""}
-                    {step.label}
-                  </div>
-                ))}
+                <div className="text-sm font-medium text-accent-warm">
+                  {GENERATION_ROTATION_LABELS[rotationIndex]}
+                </div>
+                <div className="text-xs text-muted-foreground/70">
+                  Image generation usually takes 30–60 seconds.
+                </div>
               </div>
             </div>
           </CardContent>
@@ -244,23 +244,58 @@ export default function MockupsPage() {
       {/* Fullscreen Lightbox */}
       <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
         <DialogContent className="max-w-5xl p-0 bg-black/95 border-none">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 z-10 text-white hover:bg-white/20"
-            onClick={() => setLightboxUrl(null)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
           {lightboxUrl && (
-            <img
-              src={lightboxUrl}
-              alt="Room mockup"
-              className="w-full h-auto max-h-[90vh] object-contain"
-            />
+            <LightboxImage url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Click-to-zoom lightbox. Defaults to fit-in-viewport; clicking the image
+// toggles a 2x zoom anchored at the click point so users can inspect
+// renderings at detail. Esc (handled by Dialog) or the close button exits.
+function LightboxImage({ url, onClose }: { url: string; onClose: () => void }) {
+  const [zoomed, setZoomed] = useState(false);
+  const [origin, setOrigin] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
+
+  const handleClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (zoomed) {
+      setZoomed(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setOrigin({ x, y });
+    setZoomed(true);
+  };
+
+  return (
+    <div className="relative overflow-hidden max-h-[90vh]">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-4 right-4 z-10 text-white hover:bg-white/20"
+        onClick={onClose}
+        aria-label="Close fullscreen view"
+      >
+        <X className="h-5 w-5" />
+      </Button>
+      <img
+        src={url}
+        alt="Room mockup (click to zoom)"
+        className={cn(
+          "w-full h-auto max-h-[90vh] object-contain transition-transform duration-300",
+          zoomed ? "cursor-zoom-out scale-[2]" : "cursor-zoom-in"
+        )}
+        style={zoomed ? { transformOrigin: `${origin.x}% ${origin.y}%` } : undefined}
+        onClick={handleClick}
+      />
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/60 bg-black/50 px-3 py-1 rounded-full pointer-events-none">
+        {zoomed ? "Click to zoom out" : "Click to zoom in"}
+      </div>
     </div>
   );
 }

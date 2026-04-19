@@ -302,6 +302,19 @@ export const DiagnosisDataSchema = z.object({
   spatial_gaps: stringArray.default([]),
   lighting_issues: stringArray,
   clutter_editing_issues: stringArray,
+  /**
+   * Room type verification. Inferred room type from photos; flagged when it
+   * doesn't match the user-declared room_type so the caller can warn/block
+   * before running downstream expensive passes on the wrong room.
+   */
+  room_type_confirmation: z
+    .object({
+      inferred_room_type: z.string().default(""),
+      matches_declared: z.boolean().default(true),
+      confidence: z.enum(["high", "medium", "low"]).default("high"),
+      note: z.string().default(""),
+    })
+    .optional(),
 });
 
 export const DesignDirectionSchema = z.object({

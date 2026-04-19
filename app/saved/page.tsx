@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft } from "lucide-react";
+import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download } from "lucide-react";
 
 interface SavedDesignItem {
   id: string;
@@ -32,6 +32,27 @@ export default function SavedDesignsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const handleExportCsv = () => {
+    if (!designs.length) return;
+    const header = ["Title", "Room Type", "Stage", "Date", "Project ID", "Room ID"];
+    const rows = designs.map((d) => [
+      `"${(d.title ?? "").replace(/"/g, '""')}"`,
+      d.room_type ?? "",
+      d.stage,
+      new Date(d.updated_at).toLocaleDateString("en-US"),
+      d.project_id ?? "",
+      d.room_id ?? "",
+    ]);
+    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `my-designs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDelete = async (id: string) => {
     setDeleting(id);
     const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
@@ -55,7 +76,11 @@ export default function SavedDesignsPage() {
             <p className="text-sm text-muted-foreground">Your saved room assessments and product selections</p>
           </div>
         </div>
-        <Bookmark className="h-6 w-6 text-muted-foreground" />
+        {designs.length > 0 && (
+          <Button variant="outline" size="sm" onClick={handleExportCsv} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+        )}
       </div>
 
       {loading ? (

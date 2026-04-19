@@ -598,18 +598,13 @@ export default function FocusPage() {
       {step === "analyzing" && (
         <Card>
           <CardContent className="py-12">
-            <div className="flex flex-col items-center mb-8">
+            <div className="flex flex-col items-center mb-6">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
               <h3 className="text-lg font-semibold">Studying this room</h3>
-              <p className="text-sm text-muted-foreground mt-1">Usually 2-3 minutes</p>
+              <p className="text-sm text-muted-foreground mt-1">Usually 2–3 minutes</p>
             </div>
-            <div className="max-w-sm mx-auto space-y-2">
-              <AnalysisSubstep label="Reading room photos" delay={0} doneDelay={4000} />
-              <AnalysisSubstep label="Checking building finishes" delay={3000} doneDelay={7000} />
-              <AnalysisSubstep label="Cross-referencing other rooms" delay={6000} doneDelay={12000} />
-              <AnalysisSubstep label="Forming design assessment" delay={10000} doneDelay={25000} />
-              <AnalysisSubstep label="Scoring spatial fit & clearances" delay={22000} doneDelay={50000} />
-              <AnalysisSubstep label="Optimizing harmony across items" delay={45000} lastStep />
+            <div className="max-w-md mx-auto">
+              <AnalysisRotatingStatus />
             </div>
             <AnalysisElapsedTimer />
           </CardContent>
@@ -1123,13 +1118,19 @@ export default function FocusPage() {
             />
           )}
 
-          {/* Actions */}
-          <div className="flex gap-4 justify-center pt-4">
-            <Button variant="outline" onClick={() => setStep("analysis")}>Back to assessment</Button>
+          {/* Actions — primary CTA first, secondary inline, tertiary as link */}
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-center pt-4">
+            {/* Primary */}
+            <Button variant="warm" size="lg" onClick={handleSaveAndContinue} className="w-full sm:w-auto shadow-warm-sm">
+              <CheckCircle2 className="h-4 w-4 mr-2" /> Done — next room
+            </Button>
+            {/* Secondary */}
             <Button
-              variant={savedStage === "full" ? "outline" : "default"}
+              variant={savedStage === "full" ? "outline" : "outline"}
+              size="lg"
               onClick={() => handleSaveDesign("full")}
               disabled={saving || savedStage === "full"}
+              className="w-full sm:w-auto"
             >
               {savedStage === "full" ? (
                 <><BookmarkCheck className="h-4 w-4 mr-2 text-emerald-600" /> Saved</>
@@ -1139,9 +1140,14 @@ export default function FocusPage() {
                 <><Bookmark className="h-4 w-4 mr-2" /> {savedStage === "assessment" ? "Save with products" : "Save full design"}</>
               )}
             </Button>
-            <Button onClick={handleSaveAndContinue}>
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Done — next room
-            </Button>
+            {/* Tertiary */}
+            <button
+              type="button"
+              onClick={() => setStep("analysis")}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
+            >
+              Back to assessment
+            </button>
           </div>
         </>
       )}
@@ -1202,41 +1208,34 @@ export default function FocusPage() {
 
 // ─── Image Overlay ───────────────────────────────────────────────
 
-// ─── Analysis Substep (timed reveal) ────────────────────────────
+// ─── Analysis rotating status ───────────────────────────────────
+// The /api/area-analysis endpoint is a single POST, not SSE — so we cannot
+// render real per-step progress here. Instead of faking timed "done" ticks
+// (which misleads users when phases take longer than the hardcoded delays),
+// we rotate an honest set of descriptors that explain what's generally
+// happening. No claim of completion is made until the response arrives.
+const ANALYSIS_ROTATION_LABELS = [
+  "Reading room photos",
+  "Checking building finishes",
+  "Cross-referencing other rooms",
+  "Forming design assessment",
+  "Scoring spatial fit & clearances",
+  "Optimizing harmony across items",
+];
 
-function AnalysisSubstep({ label, delay, doneDelay, lastStep }: { label: string; delay: number; doneDelay?: number; lastStep?: boolean }) {
-  const [state, setState] = useState<"pending" | "active" | "done">("pending");
-
+function AnalysisRotatingStatus() {
+  const [index, setIndex] = useState(0);
   useEffect(() => {
-    const activateTimer = setTimeout(() => setState("active"), delay);
-    // Last step stays "active" (spinning) until the real response arrives
-    const doneTimer = !lastStep && doneDelay
-      ? setTimeout(() => setState("done"), doneDelay)
-      : undefined;
-    return () => { clearTimeout(activateTimer); if (doneTimer) clearTimeout(doneTimer); };
-  }, [delay, doneDelay, lastStep]);
-
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % ANALYSIS_ROTATION_LABELS.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, []);
   return (
-    <div className={cn(
-      "flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300",
-      state === "active" && "bg-accent/50",
-    )}>
-      <div className="w-5 flex justify-center">
-        {state === "done" ? (
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-        ) : state === "active" ? (
-          <Loader2 className="h-4 w-4 animate-spin text-accent-warm" />
-        ) : (
-          <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/20" />
-        )}
-      </div>
-      <span className={cn(
-        "text-sm transition-colors",
-        state === "done" && "text-emerald-700 font-medium",
-        state === "active" && "text-foreground font-medium",
-        state === "pending" && "text-muted-foreground/60",
-      )}>
-        {label}
+    <div className="flex items-center gap-3 justify-center px-3 py-2 rounded-xl bg-accent/30">
+      <Loader2 className="h-4 w-4 animate-spin text-accent-warm shrink-0" />
+      <span className="text-sm font-medium text-foreground">
+        {ANALYSIS_ROTATION_LABELS[index]}…
       </span>
     </div>
   );
@@ -1330,6 +1329,26 @@ function RecommendationTable({
 
   return (
     <div className="space-y-4">
+      {/* Tier totals summary — visible on all screen sizes so mobile users can compare budgets */}
+      <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-3">
+        {(["budget", "balanced", "high_end"] as PriceTier[]).map((tier) => (
+          <div key={tier} className="flex flex-col items-center gap-0.5">
+            <span className={cn("text-[10px] font-semibold uppercase tracking-wide",
+              tier === "budget" ? "text-emerald-700" :
+              tier === "balanced" ? "text-blue-700" : "text-purple-700"
+            )}>
+              {TIER_LABELS[tier]}
+            </span>
+            <span className={cn("text-base font-bold tabular-nums",
+              tier === "budget" ? "text-emerald-700" :
+              tier === "balanced" ? "text-blue-700" : "text-purple-700"
+            )}>
+              {tierTotals[tier] > 0 ? `$${tierTotals[tier].toLocaleString()}` : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {/* Desktop: Table view */}
       <div className="hidden md:block rounded-xl border overflow-hidden">
         <table className="w-full">
@@ -1413,7 +1432,7 @@ function RecommendationTable({
                 return (
                   <div key={tier} className="flex items-center gap-3 p-2 rounded-xl bg-muted/30">
                     {product.image_url && (
-                      <img src={product.image_url} alt="" className="h-12 w-12 rounded object-cover shrink-0" />
+                      <img src={product.image_url} alt={product.title || "Product image"} className="h-12 w-12 rounded object-cover shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -1483,7 +1502,7 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
     <td className="px-4 py-3">
       <div className="flex flex-col items-center gap-1 text-center">
         {product.image_url && (
-          <img src={product.image_url} alt="" className="h-10 w-10 rounded object-cover" />
+          <img src={product.image_url} alt={product.title || "Product image"} className="h-10 w-10 rounded object-cover" />
         )}
         <span className={cn("text-xs font-semibold", tierColorClass)}>
           {product.price ? `$${product.price}` : "—"}

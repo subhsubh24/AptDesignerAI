@@ -40,18 +40,26 @@ function normalize(s: string): string {
 
 /**
  * Check if a text string mentions any of the given terms (fuzzy match).
+ *
+ * Multi-word terms ("floor lamp") use substring match so "gold floor lamp" hits.
+ * Single-word short terms ("lamp", "rug") use WORD-BOUNDARY match so
+ * "lampshade" / "lamppost" / "carpet" don't spuriously trigger. Terms shorter
+ * than 3 chars are skipped entirely to avoid garbage matches on stopwords.
  */
 function mentionsAny(text: string, terms: string[]): string | null {
   const normalText = normalize(text);
+  const words = normalText.split(" ");
   for (const term of terms) {
     const normalTerm = normalize(term);
-    // Check for substring match — "curtains" matches "sheer linen curtains"
-    if (normalText.includes(normalTerm)) return term;
-    // Check individual words for short terms
-    if (normalTerm.split(" ").length === 1 && normalTerm.length >= 3) {
-      // Word boundary match
-      const words = normalText.split(" ");
-      if (words.some((w) => w === normalTerm)) return term;
+    if (normalTerm.length < 3) continue;
+    const isMultiWord = normalTerm.includes(" ");
+    if (isMultiWord) {
+      if (normalText.includes(normalTerm)) return term;
+    } else {
+      // Word-boundary match: require exact token equality OR the term as a
+      // prefix followed by a short suffix ("lamps"). Prevents "lamp" from
+      // matching "lampshade", "rug" from matching "rugby", etc.
+      if (words.some((w) => w === normalTerm || w === `${normalTerm}s`)) return term;
     }
   }
   return null;
@@ -95,11 +103,22 @@ function stripLocationContext(text: string): string {
     .trim();
 }
 
-const DECOR_CATEGORIES = new Set([
-  "vase", "candle", "candles", "tray", "books_styled", "decorative_objects",
-  "decorative_bowl", "decorative_bowls", "baskets", "greenery_small",
-  "centerpiece", "frames", "sculpture", "sculptures", "poufs",
-]);
+// Decor items that can coexist with a kept piece in the same category (e.g.
+// a vase on a kept coffee table). Values are stored NORMALIZED (normalize()
+// strips underscores) so lookups with .has(normalize(cat)) actually hit. The
+// original set stored "decorative_objects" style keys which never matched the
+// normalized lookup, silently disabling the decor whitelist.
+const DECOR_CATEGORIES = new Set(
+  [
+    "vase", "vases", "candle", "candles", "candleholder", "candle holder",
+    "tray", "trays", "books styled", "decorative objects", "decorative object",
+    "decorative bowl", "decorative bowls", "basket", "baskets",
+    "greenery small", "plants small", "small plant", "small plants",
+    "centerpiece", "frames", "picture frame", "picture frames",
+    "sculpture", "sculptures", "pouf", "poufs", "throw pillow", "throw pillows",
+    "throw blanket", "throw blankets",
+  ].map((c) => c.toLowerCase())
+);
 
 /**
  * Build keep-item category keywords for detecting replacement recommendations.

@@ -20,6 +20,55 @@ import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 
 const log = createLogger("room-diagnostician");
 
+/**
+ * Extract a rough style-direction label from the free-text style_notes +
+ * materials so the few-shot fetcher can pull examples from the matching
+ * direction bucket (see DIRECTION_BUCKETS in lib/db/diagnosis-examples.ts).
+ *
+ * Priority order:
+ *   1. Explicit named styles in style_notes (e.g. "mid-century modern", "japandi")
+ *   2. Material-driven heuristics (rattan + linen → coastal; walnut + brass → modern)
+ *
+ * Returns null when no confident label matches — the fetcher will fall back
+ * to same-room_type-any-direction examples.
+ */
+function inferStyleLabel(direction: DesignDirection): string | null {
+  const notes = (direction.style_notes ?? "").toLowerCase();
+  const materials = (direction.recommended_materials ?? []).join(" ").toLowerCase();
+  const haystack = `${notes} ${materials}`;
+
+  const namedStyles: Array<[string, RegExp]> = [
+    ["Japandi", /\bjapandi\b/],
+    ["Scandinavian", /\bscandi(navian)?\b/],
+    ["Minimalist", /\bminimalis[tm]\b/],
+    ["Mid-Century Modern", /\bmid[-\s]?century\b/],
+    ["Contemporary", /\bcontemporary\b/],
+    ["Modern", /\bmodern\b/],
+    ["Transitional", /\btransitional\b/],
+    ["Coastal", /\bcoastal\b/],
+    ["Farmhouse", /\bfarmhouse\b/],
+    ["Bohemian Coastal", /\bboho coastal\b|\bbohemian coastal\b/],
+    ["Bohemian", /\bboho\b|\bbohemian\b/],
+    ["Maximalist", /\bmaximalis[tm]\b/],
+    ["Eclectic", /\beclectic\b/],
+    ["Traditional", /\btraditional\b/],
+    ["Classic", /\bclassic\b/],
+    ["Art Deco", /\bart[-\s]?deco\b/],
+  ];
+
+  for (const [label, rx] of namedStyles) {
+    if (rx.test(haystack)) return label;
+  }
+
+  // Material-driven heuristics (rough but better than nothing)
+  const hasRattan = /\brattan\b|\bwicker\b/.test(haystack);
+  const hasLinen = /\blinen\b/.test(haystack);
+  const hasWhiteWashed = /\bwhite[-\s]?washed\b/.test(haystack);
+  if (hasRattan && (hasLinen || hasWhiteWashed)) return "Coastal";
+
+  return null;
+}
+
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
   design_direction: DesignDirection;
@@ -162,22 +211,31 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
       const judgePrompt = `You are a senior design critic comparing ${candidates.length} candidate analyses of the same room. Pick the ONE most useful candidate for driving a shopping list.
 
 Evaluation criteria (in order):
-1. **Palette–material–style coherence** — do the recommended colors, materials, textures, and style_notes describe a single consistent direction? A candidate that says "mid-century modern" with brass + walnut beats one that says "mid-century" with chrome + lacquer.
-2. **Concreteness** — specific colors ("warm walnut brown", "sage green") beat vague colors ("neutral tones"). Specific materials ("boucle", "solid oak") beat categories ("fabric", "wood").
-3. **Diagnostic honesty** — the "what doesn't work" list should name specific items, not platitudes. A candidate that says "sofa scale is off — it's swallowing the 12ft wall" beats "room feels crowded".
-4. **Missing-category completeness** — does it name enough categories (8+) across essential/standard/finishing tiers to support a full shopping list?
+1. **Photographic accuracy** — the winning candidate's observations (floor color, wall color, existing furniture, lighting direction) must match what is visibly in the room photos. Hallucinated specificity (e.g., "warm walnut floors" when the room has grey LVP) is DISQUALIFYING, even if the prose reads well. A plain-but-correct candidate beats a fluent-but-wrong one.
+2. **Palette–material–style coherence** — do the recommended colors, materials, textures, and style_notes describe a single consistent direction? A candidate that says "mid-century modern" with brass + walnut beats one that says "mid-century" with chrome + lacquer.
+3. **Concreteness** — specific colors ("warm walnut brown", "sage green") beat vague colors ("neutral tones"). Specific materials ("boucle", "solid oak") beat categories ("fabric", "wood").
+4. **Diagnostic honesty** — the "what doesn't work" list should name specific items, not platitudes. A candidate that says "sofa scale is off — it's swallowing the 12ft wall" beats "room feels crowded".
+5. **Missing-category completeness** — does it name enough categories (8+) across essential/standard/finishing tiers to support a full shopping list?
 
 ${summaries}
 
 Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}>, "reason": "<one sentence>"}`;
 
       try {
+        // Feed the judge the actual room images (via cacheScope so token cost
+        // is amortized). Without images the judge rewards fluent specificity
+        // over ACCURATE observation — hallucinated "warm walnut floors" in a
+        // room with grey LVP can beat a correct candidate because it reads
+        // better. Grounding on photos forces the judge to prefer accuracy.
         const resp = await geminiProvider.chat({
           model: judgeModel,
-          system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
+          system: "You are a design critic selecting the best of several candidate room analyses. Compare the text summaries against the actual photos — the best candidate's palette/materials/observations must match what is visibly in the room. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 2000,
           seed: DETERMINISTIC_SEED,
+          cacheScope: cacheableBlocks.length > 0
+            ? { sessionKey: roomSessionKey, content: cacheableBlocks }
+            : undefined,
         });
         const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };
         const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
@@ -218,15 +276,35 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
     missingInDiagnosis: analysis.diagnosis.missing_furniture_categories?.length ?? 0,
   });
 
+  // ─── Room type verification ────────────────────────────────
+  // The model's inferred room_type_confirmation is authoritative here — we
+  // surface mismatches so the caller (and the user) notice before downstream
+  // passes spend tokens designing the wrong room.
+  const rtc = analysis.diagnosis.room_type_confirmation;
+  if (rtc && (!rtc.matches_declared || rtc.confidence === "low")) {
+    log.warn("Room type mismatch or low-confidence room detection", {
+      roomId: ctx.roomId,
+      declared: ctx.roomType,
+      inferred: rtc.inferred_room_type,
+      confidence: rtc.confidence,
+      note: rtc.note,
+    });
+  }
+
   // ─── Pass 2: Plan (consumes Pass 1's analysis as text) ──────
   const analysisJson = JSON.stringify(analysis, null, 2);
 
   // Fetch DB-backed few-shot examples: top-N past action_lists from
   // diagnoses of the same room_type. Real accepted outputs calibrate
   // specificity and category coverage better than synthetic examples.
+  // D11: Extract a rough style label from Pass A's style_notes + materials so
+  //      we can pull examples from the same direction bucket (minimalist,
+  //      coastal, modern, traditional, eclectic). When nothing matches, the
+  //      fetcher falls back to any direction for the same room_type.
+  const inferredStyleLabel = inferStyleLabel(analysis.design_direction);
   const fewShotExamples = await fetchDiagnosisExamples(
     ctx.roomType,
-    null, // direction label not in schema yet — room_type match only
+    inferredStyleLabel,
   );
   const fewShotBlock = formatExamplesForPrompt(fewShotExamples);
   if (fewShotExamples.length > 0) {
@@ -258,6 +336,11 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           ? `${planPrompt}\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON with the exact structure specified.`
           : planPrompt;
 
+        // Re-attach the cached room images so Pass B can still ground its
+        // action_list placement strings ("against the north wall", "behind
+        // the sofa") in visible reality. Without images, Pass B writes
+        // confidently-wrong placements that the user catches later.
+        // cacheScope means we pay only cached-tier input cost.
         const response = await geminiProvider.chat({
           model,
           system,
@@ -265,6 +348,9 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           max_tokens: 4000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
+          cacheScope: cacheableBlocks.length > 0
+            ? { sessionKey: roomSessionKey, content: cacheableBlocks }
+            : undefined,
         });
 
         const raw = extractJsonObject(response.content);

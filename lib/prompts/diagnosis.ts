@@ -161,10 +161,10 @@ Based on the existing finishes (floors, walls, fixed elements) AND how the clien
   4. Explain how the design serves their actual daily life, not just how it looks
 
 ## ARRAY SIZE REQUIREMENTS
-- what_is_working: List **at least 5-8 items**. Every room has things working — find them all.
-- what_is_not_working: List **at least 5-8 issues**. Be thorough — don't stop at the obvious.
-- biggest_improvement_opportunities: List **5-7 changes** ranked by impact.
-- missing_furniture_categories: List **ALL missing categories** — aim for 8-15 items. Walk through ALL THREE TIERS:
+- what_is_working: List ONLY the specific items that are genuinely working. Do NOT manufacture items to hit a quota. If a room has 3 things working, list 3. If it has 8, list 8. NEVER pad.
+- what_is_not_working: List ONLY genuine issues. Do NOT invent problems. If the room is in great shape, list fewer items (even 1-2). The output count tracks actual issues, not a floor.
+- biggest_improvement_opportunities: List the real highest-impact changes — could be 2, could be 7. Rank by impact.
+- missing_furniture_categories: List ALL actually missing categories. Walk through ALL THREE TIERS:
   - ESSENTIAL: anchor furniture (sofa, bed, dining table), primary rug, primary lighting, main surfaces
   - STANDARD: accent seating, secondary lighting, textiles (curtains, throw pillows, blankets), wall art, storage
   - FINISHING: plants, decorative objects, vases, trays, candles, books/display items
@@ -207,23 +207,41 @@ Return a JSON object with this exact structure:
 {
   "diagnosis": {
     "current_vibe_summary": "string - 3-4 sentences describing the current feel, including dominant colors, materials, and style. Be specific.",
-    "what_is_working": ["at least 5-8 specific items with reasoning — name the item + material + color"],
-    "what_is_not_working": ["at least 5-8 specific issues with reasoning"],
-    "biggest_improvement_opportunities": ["5-7 highest-impact changes, ranked"],
-    "missing_furniture_categories": ["ALL missing categories — be thorough, typically 6-12 items"],
-    "color_issues": ["3-5 specific color/palette observations — name actual colors you see"],
-    "texture_material_issues": ["3-5 texture/material gaps or conflicts"],
-    "scale_proportion_issues": ["3-5 specific scale issues — reference actual item dimensions"],
-    "layout_issues": ["3-5 traffic flow, furniture arrangement, zoning issues"],
-    "spatial_gaps": ["3-5 empty corners, dead zones behind furniture, unused wall stretches, awkward gaps — with suggestions for what would fill each one"],
-    "lighting_issues": ["3-5 natural light, artificial light, evening ambience needs"],
-    "clutter_editing_issues": ["things that should be removed or edited — be specific"]
+    "what_is_working": ["ONLY items that are genuinely working — no quota, no padding"],
+    "what_is_not_working": ["ONLY genuine issues — if the room is great, keep this short"],
+    "biggest_improvement_opportunities": ["real ranked highest-impact changes — could be 2, could be 7"],
+    "missing_furniture_categories": ["all actually missing categories — be thorough but honest"],
+    "color_issues": ["specific color/palette observations naming actual colors — empty array if none"],
+    "texture_material_issues": ["texture/material gaps or conflicts — empty array if none"],
+    "scale_proportion_issues": ["specific scale issues referencing actual item dimensions — empty array if none"],
+    "layout_issues": ["traffic flow, furniture arrangement, zoning issues — empty array if none"],
+    "spatial_gaps": ["empty corners, dead zones, unused wall stretches, awkward gaps — with suggestions for each. Empty array if none"],
+    "lighting_issues": ["natural light, artificial light, evening ambience needs — empty array if none"],
+    "clutter_editing_issues": ["things that should be removed or edited — or empty array"],
+    "estimated_room_dimensions": "When no floor plan is available, estimate WxL in feet from visible anchors (sofa ~84\", door ~36\", ceiling ~8-9ft). State uncertainty. If a floor plan IS available, repeat the authoritative value.",
+    "lighting_temperature_observed": "Observed natural light quality: 'warm' (south/west-facing), 'neutral' (east/diffuse), or 'cool' (north-facing). Reference which window.",
+    "existing_inventory": [
+      {
+        "label": "the user-provided keep-item string, verbatim",
+        "type": "furniture category (sofa, rug, lamp, coffee_table, etc.) as inferred from photo + label",
+        "color": "specific color you observe (e.g. 'charcoal gray', 'warm walnut') or 'unknown'",
+        "material": "primary material (linen, leather, walnut, brass) or 'unknown'",
+        "approx_dimensions": "WxDxH in inches if visible (e.g. '84x36x32'), or 'unknown'"
+      }
+    ],
+    "room_type_confirmation": {
+      "inferred_room_type": "What the photos actually show — use the caller's vocabulary: 'living room', 'bedroom', 'kitchen', 'dining room', 'home office', 'bathroom', 'entryway', 'hallway'. If the declared room_type is correct, echo it verbatim.",
+      "matches_declared": "true if inferred_room_type matches the declared room_type (case-insensitive semantic match); false otherwise",
+      "confidence": "'high' (clear signal: kitchen cabinets + sink + stove), 'medium' (ambiguous: could be dining or living), 'low' (too empty/blurred/close-up to tell)",
+      "note": "One sentence explaining the call. Only non-empty when confidence<'high' or matches_declared=false. E.g. 'Photos show a kitchen (cabinets + range hood visible), not the declared living room — verify with the user before proceeding.'"
+    }
   },
   "design_direction": {
-    "recommended_palette": ["6-10 specific colors/tones — e.g. 'warm ivory', 'walnut brown', 'muted sage', not just 'neutral'"],
+    "recommended_palette": ["6-10 entries, each formatted as 'name (#HEX) — role (ratio%)' — e.g. 'warm ivory (#F3ECE0) — dominant (50%)', 'walnut brown (#5A3E2B) — supporting (30%)', 'muted sage (#9AA88F) — accent (10%)'. Roles: dominant/supporting/accent. Ratios should sum to ~100%. HEX MUST be a real 3- or 6-digit hex code that matches the named color — downstream math relies on it."],
     "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen', 'bouclé', 'brushed brass', 'marble'"],
     "recommended_textures": ["4-6 textures to introduce — e.g. 'high-low pile wool', 'ribbed knit', 'woven rattan'"],
     "recommended_furniture_types": ["list every needed furniture type with specific notes — e.g. 'Area rug — at least 8x10, wool or wool-blend, warm neutral with subtle texture'"],
+    "lighting_temperature": "Single value: 'warm' (2700-3000K), 'neutral' (3500-4000K), or 'cool' (4500-5000K+). Must reconcile with natural light direction observed in photos and the recommended palette.",
     "style_notes": "string - 3-4 sentences on overall style direction. MUST reference the client's specific identity and lifestyle (age, personality, hosting habits, aesthetic sensibility) and explain how the design serves THEIR life specifically. Connect material/style choices to who they are as a person."
   },
   "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", etc.],
@@ -238,14 +256,14 @@ Return a JSON object with this exact structure:
 }
 
 ## FINAL CHECKLIST before returning:
-- Did I list at least 5 items in what_is_working?
-- Did I list at least 5 items in what_is_not_working?
+- Did I ground every array entry in a SPECIFIC visible item (not a padded generic)?
 - Did I reference specific items by name, material, and color in every array?
-- Did I list AT LEAST 8 missing categories (covering ALL three tiers: essential, standard, finishing)?
+- Did I list every ACTUAL missing category across all three tiers (essential, standard, finishing)?
 - Did I include finishing touches: plants, art, decorative objects, trays, candles — not just furniture?
-- Did I list ALL missing furniture categories (usually 8-15)?
-- Did I provide specific color names (not just "neutral" or "warm")?
-- Did I include 6+ recommended_palette colors, 5+ materials, 4+ textures?
+- Did I provide SPECIFIC color names + REAL hex codes in recommended_palette (not just "neutral")?
+- Did I include roles + ratios in recommended_palette entries?
+- Did I emit a lighting_temperature that reconciles with the observed natural light direction?
+- Did I provide estimated_room_dimensions when no floor plan was given?
 - ⚠️ Did I CHECK that NONE of my recommendations conflict with the client's EXCLUSIONS?
 - ⚠️ Did I CHECK that NONE of my recommendations replace an item the client wants to KEEP?
 - ⚠️ Did I include ALL items the client EXPLICITLY REQUESTED?
@@ -301,8 +319,9 @@ For each photo:
 - Windows: count, size, light direction, treatments
 - Ceiling: height estimate, features (molding, beams, recessed lights)
 - Every piece of furniture: name, material, color, condition, approximate size
-- Lighting: existing fixtures, dark corners, natural light quality
+- Lighting: existing fixtures, dark corners, natural light quality — AND explicit temperature observation ('warm'/'neutral'/'cool' tied to which window/time-of-day)
 - Personal items: culturally significant or personal items (art, statues, collections)
+- Room scale: If no floor plan is provided, ESTIMATE room dimensions (WxL in feet) by triangulating from standard anchors — sofa ~84", door ~36", ceiling ~8-9ft, dining chair seat ~18". State uncertainty openly.
 
 **Step 2: ASSESS what's working** — explain WHY each kept/working item works
 
@@ -318,12 +337,12 @@ For each photo:
 - Style direction (3-4 sentences) MUST reference the client's specific identity, personality, building finishes, and how design serves their daily life
 </reasoning_process>
 
-## ARRAY SIZE REQUIREMENTS
-- what_is_working: **5-8 items**. Every room has things working — find them all.
-- what_is_not_working: **5-8 issues**. Be thorough.
-- biggest_improvement_opportunities: **5-7 changes** ranked by impact.
-- missing_furniture_categories: **ALL missing categories** (8-15 items across essential/standard/finishing tiers). This is part of the DIAGNOSIS — the top-level \`missing_categories\` + \`action_list\` come from pass 2.
-- color_issues / texture_material_issues / scale_proportion_issues / layout_issues / spatial_gaps / lighting_issues: **3-5 observations each**
+## ARRAY SIZE GUIDANCE (NO QUOTAS)
+- what_is_working: the actual items that are working — could be 2, could be 8. Do NOT manufacture entries.
+- what_is_not_working: actual genuine issues only. If the room is great, this can be short (even 1-2).
+- biggest_improvement_opportunities: real high-impact changes, ranked. No floor.
+- missing_furniture_categories: ALL actually missing categories across essential/standard/finishing. The top-level \`missing_categories\` + \`action_list\` come from pass 2.
+- color_issues / texture_material_issues / scale_proportion_issues / layout_issues / spatial_gaps / lighting_issues: observations only for things that are actually a problem. Empty arrays are valid when none exist.
 - clutter_editing_issues: can be 0 if room is clean
 
 <output_contract>
@@ -332,23 +351,41 @@ JSON only. No prose, no markdown fences. Do NOT include missing_categories or ac
 {
   "diagnosis": {
     "current_vibe_summary": "3-4 sentences with dominant colors/materials/style",
-    "what_is_working": ["5-8 specific items with item name + material + color"],
-    "what_is_not_working": ["5-8 specific issues with item name + problem + why"],
-    "biggest_improvement_opportunities": ["5-7 ranked changes"],
-    "missing_furniture_categories": ["8-15 items across essential/standard/finishing tiers"],
-    "color_issues": ["3-5 specific observations naming actual colors"],
-    "texture_material_issues": ["3-5 observations"],
-    "scale_proportion_issues": ["3-5 observations referencing actual item dimensions"],
-    "layout_issues": ["3-5 observations noting traffic paths and dead zones"],
-    "spatial_gaps": ["3-5 empty corners/dead zones with suggestions for each"],
-    "lighting_issues": ["3-5 observations on natural light direction and artificial gaps"],
-    "clutter_editing_issues": ["specific items to remove, or empty array"]
+    "what_is_working": ["specific items that are genuinely working — no quota, no padding"],
+    "what_is_not_working": ["specific issues only — no manufactured problems"],
+    "biggest_improvement_opportunities": ["ranked real changes — could be 2, could be 7"],
+    "missing_furniture_categories": ["all actually missing categories across essential/standard/finishing"],
+    "color_issues": ["specific observations naming actual colors — empty array if none"],
+    "texture_material_issues": ["observations — empty array if none"],
+    "scale_proportion_issues": ["observations referencing actual item dimensions — empty array if none"],
+    "layout_issues": ["observations noting traffic paths and dead zones — empty array if none"],
+    "spatial_gaps": ["empty corners/dead zones with suggestions for each — empty array if none"],
+    "lighting_issues": ["observations on natural light direction and artificial gaps — empty array if none"],
+    "clutter_editing_issues": ["specific items to remove, or empty array"],
+    "estimated_room_dimensions": "When no floor plan is available, estimate WxL in feet from visible anchors (standard sofa ~84\" wide, door ~36\", ceiling ~8-9ft) and return 'approximately 12x14 ft (estimated from sofa scale)'. If a floor plan IS available, repeat the authoritative value. Include uncertainty when estimating.",
+    "lighting_temperature_observed": "Observed natural light quality: 'warm' (south/west-facing, golden), 'neutral' (east/diffuse), or 'cool' (north-facing, blue-shifted). Reference which photo/window.",
+    "existing_inventory": [
+      {
+        "label": "verbatim user-provided keep-item string",
+        "type": "furniture category inferred from photo + label",
+        "color": "specific observed color or 'unknown'",
+        "material": "primary material or 'unknown'",
+        "approx_dimensions": "WxDxH inches if visible, or 'unknown'"
+      }
+    ],
+    "room_type_confirmation": {
+      "inferred_room_type": "What the photos actually show using the same vocabulary as the declared room_type. If correct, echo verbatim.",
+      "matches_declared": "true if inferred_room_type matches the declared room_type (case-insensitive semantic match); false otherwise",
+      "confidence": "'high' | 'medium' | 'low' — how certain are you from the photos?",
+      "note": "One sentence explaining the call. Only non-empty when confidence<'high' or matches_declared=false."
+    }
   },
   "design_direction": {
-    "recommended_palette": ["6-10 specific named colors — e.g. 'warm ivory', 'walnut brown', 'muted sage'"],
+    "recommended_palette": ["6-10 entries as 'name (#HEX) — role (ratio%)' — e.g. 'warm ivory (#F3ECE0) — dominant (50%)', 'walnut brown (#5A3E2B) — supporting (30%)', 'muted sage (#9AA88F) — accent (10%)'. Roles: dominant/supporting/accent. Ratios sum to ~100%. HEX must match the named color."],
     "recommended_materials": ["5-8 specific materials — e.g. 'solid walnut', 'linen', 'brushed brass'"],
     "recommended_textures": ["4-6 textures — e.g. 'high-low pile wool', 'ribbed knit', 'woven rattan'"],
     "recommended_furniture_types": ["every needed furniture type with specific notes"],
+    "lighting_temperature": "Single value: 'warm' (2700-3000K), 'neutral' (3500-4000K), or 'cool' (4500-5000K+). Must reconcile with lighting_temperature_observed.",
     "style_notes": "3-4 sentences referencing client's specific identity, lifestyle, building finishes, and how design serves their daily life"
   }
 }

@@ -327,8 +327,54 @@ export const COOL_METALS = new Set([
  * Fuzzy-match a color name against the lookup table.
  * Returns HSL if found, null otherwise.
  */
+/** Parse a `#RGB`, `#RRGGBB`, or `rgb(r,g,b)` string into HSL. */
+function hexToHsl(input: string): HSL | null {
+  const s = input.trim().toLowerCase();
+  let r = 0, g = 0, b = 0;
+  const hexMatch = s.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (hexMatch) {
+    const hx = hexMatch[1];
+    const full = hx.length === 3 ? hx.split("").map((c) => c + c).join("") : hx;
+    r = parseInt(full.slice(0, 2), 16);
+    g = parseInt(full.slice(2, 4), 16);
+    b = parseInt(full.slice(4, 6), 16);
+  } else {
+    const rgbMatch = s.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+    if (!rgbMatch) return null;
+    r = parseInt(rgbMatch[1], 10);
+    g = parseInt(rgbMatch[2], 10);
+    b = parseInt(rgbMatch[3], 10);
+  }
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  let h = 0, sat = 0;
+  if (max !== min) {
+    const d = max - min;
+    sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break;
+      case gn: h = (bn - rn) / d + 2; break;
+      case bn: h = (rn - gn) / d + 4; break;
+    }
+    h *= 60;
+  }
+  return { h: Math.round(h), s: Math.round(sat * 100), l: Math.round(l * 100) };
+}
+
 export function lookupColor(name: string): HSL | null {
-  const normalized = name.toLowerCase().trim();
+  const raw = name.trim();
+
+  // 1. If the model emitted a hex or rgb code (either standalone or inside
+  //    parens, e.g. "warm ivory (#F3ECE0)"), parse that directly. Avoids the
+  //    palette_fit → 0.5 floor when the name isn't in the table.
+  const hexInside = raw.match(/#[0-9a-fA-F]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/);
+  if (hexInside) {
+    const parsed = hexToHsl(hexInside[0]);
+    if (parsed) return parsed;
+  }
+
+  const normalized = raw.toLowerCase();
 
   // Exact match
   if (COLOR_HSL_MAP[normalized]) return COLOR_HSL_MAP[normalized];

@@ -309,6 +309,17 @@ export interface DiagnosisData {
    * downstream readers MUST treat it as optional.
    */
   identified_products?: IdentifiedProduct[];
+  /**
+   * Room type verification — inferred from photos and compared against the
+   * user-declared room_type. Logged/surfaced when mismatched so the caller
+   * can warn before downstream passes run on the wrong room category.
+   */
+  room_type_confirmation?: {
+    inferred_room_type: string;
+    matches_declared: boolean;
+    confidence: "high" | "medium" | "low";
+    note: string;
+  };
 }
 
 export interface DesignDirection {

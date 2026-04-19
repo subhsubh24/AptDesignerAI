@@ -5,7 +5,18 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
+import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
+import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
+import { inferUserPreferences } from "@/lib/design-context/infer-preferences";
+import {
+  runFullDiagnosisExpansion,
+  type DiagnosisExpansionResult,
+} from "@/lib/agents/diagnosis-expansion-pipeline";
+import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext } from "@/lib/agents/types";
+import type { DiagnosisData } from "@/lib/types/database";
+
+const log = createLogger("diagnosis-stream-route");
 
 /**
  * SSE streaming diagnosis endpoint.
@@ -81,6 +92,24 @@ export async function POST(request: Request) {
 
         const profile = buildDesignProfile(project);
 
+        // Infer user preferences (parity with non-stream route).
+        const inferredPreferences = await inferUserPreferences(
+          supabase,
+          room.project_id,
+          room_id,
+        ).catch(() => null);
+        if (profile && inferredPreferences) {
+          profile.inferredPreferences = inferredPreferences;
+        }
+
+        // Extract floor plan data so the diagnosis prompt and expansion both
+        // ground on the same spatial truth.
+        const br = project?.building_research as Record<string, unknown> | undefined;
+        const floorPlanImageUrl = br?.floor_plan_image_url as string | undefined;
+        const extractedFloorPlan = br?.extracted_floor_plan as
+          | import("@/lib/types/database").ExtractedFloorPlan
+          | undefined;
+
         // Sanitize user context
         const rawUserContext = room.user_context || undefined;
         const sanitized = rawUserContext ? sanitizeUserContext(rawUserContext) : null;
@@ -131,6 +160,8 @@ export async function POST(request: Request) {
           imageUrls,
           userContext: sanitized?.sanitized || rawUserContext,
           otherRoomsContext,
+          floorPlanImageUrl,
+          extractedFloorPlan,
         };
 
         // Step 3: Running AI diagnosis
@@ -166,18 +197,78 @@ export async function POST(request: Request) {
           sendEvent("step", { step: "Validating recommendations", status: "done" });
         }
 
-        // Step 5: Saving results
+        // Step 5a: Identified products (opt-in, best-effort)
+        let identifiedProductsTokens = 0;
+        let diagnosisJsonToSave: DiagnosisData = diagnosisData.diagnosis;
+        if (process.env.IDENTIFY_PRODUCTS === "1") {
+          sendEvent("step", { step: "Identifying products in photos", status: "running" });
+          try {
+            const dd = diagnosisData.design_direction as {
+              recommended_palette?: string[];
+              recommended_materials?: string[];
+              style_notes?: string;
+            } | undefined;
+            const hintParts: string[] = [];
+            if (dd?.style_notes) hintParts.push(dd.style_notes);
+            if (dd?.recommended_palette?.length) hintParts.push(`palette: ${dd.recommended_palette.slice(0, 6).join(", ")}`);
+            if (dd?.recommended_materials?.length) hintParts.push(`materials: ${dd.recommended_materials.slice(0, 6).join(", ")}`);
+            const aestheticHint = hintParts.length ? hintParts.join(" | ") : undefined;
+            const identRoom = getRoomFromFloorPlan(ctx.extractedFloorPlan, ctx.roomType);
+            const identResult = await runIdentifiedProductsPipeline({
+              supabase,
+              imageUrls,
+              roomType: ctx.roomType,
+              aestheticHint,
+              budgetMode: ctx.budgetMode,
+              roomDimensions: identRoom?.dimensions_text
+                ?? (identRoom?.sqft ? `~${identRoom.sqft} sqft` : undefined),
+            });
+            if (identResult.success && identResult.data) {
+              diagnosisJsonToSave = {
+                ...diagnosisData.diagnosis,
+                identified_products: identResult.data.identified_products,
+              };
+              identifiedProductsTokens = identResult.tokensUsed ?? 0;
+            }
+          } catch (err) {
+            log.warn("identified-products pipeline threw — continuing", { room_id, error: err instanceof Error ? err.message : String(err) });
+          }
+          sendEvent("step", { step: "Identifying products in photos", status: "done" });
+        }
+
+        // Step 5b: Greedy expansion (parity with non-stream route)
+        sendEvent("step", { step: "Expanding action list", status: "running" });
+        const expansion = await runFullDiagnosisExpansion({
+          supabase,
+          roomId: room_id,
+          projectId: room.project_id,
+          roomType: ctx.roomType,
+          budgetMode: ctx.budgetMode as import("@/lib/types/database").BudgetMode,
+          priorities: ctx.priorities,
+          baselineActionList: diagnosisData.action_list ?? [],
+          designDirection: diagnosisData.design_direction ?? null,
+          roomPhotos: imageUrls,
+          floorPlanImageUrl: ctx.floorPlanImageUrl ?? null,
+          extractedFloorPlan: ctx.extractedFloorPlan,
+          preferences: inferredPreferences,
+        });
+        sendEvent("step", { step: "Expanding action list", status: "done", detail: `Added ${expansion.expandedActionList.length - (diagnosisData.action_list?.length ?? 0)} item(s)` });
+
+        // Step 6: Saving results
         sendEvent("step", { step: "Saving diagnosis", status: "running" });
 
         const { data: diagnosis, error: saveError } = await supabase
           .from("room_diagnoses")
           .insert({
             room_id,
-            diagnosis_json: diagnosisData.diagnosis,
+            diagnosis_json: diagnosisJsonToSave,
             design_direction_json: diagnosisData.design_direction,
-            missing_categories: diagnosisData.missing_categories,
-            action_list: diagnosisData.action_list,
+            missing_categories: [...new Set(expansion.expandedActionList.map((i) => i.category))],
+            action_list: expansion.expandedActionList,
             model_used: result.model,
+            expansion_log: expansion.expansionLog,
+            room_type: room.room_type ?? null,
+            action_list_count: expansion.expandedActionList.length,
           })
           .select()
           .single();
@@ -199,7 +290,7 @@ export async function POST(request: Request) {
             ...diagnosisData as unknown as Record<string, unknown>,
             _validation: { issues: validation.issues, wasModified: validation.wasModified },
           },
-          tokens_used: result.tokensUsed,
+          tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens,
         });
 
         sendEvent("step", { step: "Saving diagnosis", status: "done" });

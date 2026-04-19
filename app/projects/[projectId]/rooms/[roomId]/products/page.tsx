@@ -20,8 +20,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
 
@@ -77,6 +78,7 @@ export default function ProductsPage() {
   const [ingesting, setIngesting] = useState(false);
   const [evaluating, setEvaluating] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithEval | null>(null);
 
   // Filters
@@ -171,13 +173,32 @@ export default function ProductsPage() {
 
   const handleAgenticSearch = async () => {
     setSearching(true);
+    setSearchError(null);
     try {
-      await fetch("/api/search", {
+      const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId }),
       });
-      loadProducts();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Search failed" }));
+        const message = body?.error || `Search failed (HTTP ${res.status})`;
+        setSearchError(message);
+        toast.error("Search failed", message);
+        return;
+      }
+      const result = await res.json().catch(() => null);
+      await loadProducts();
+      // Surface the case where the search succeeded at the HTTP level but
+      // returned no products — silently loading an empty list leaves the
+      // user wondering if anything happened.
+      if (Array.isArray(result?.products) && result.products.length === 0) {
+        setSearchError("The search finished but returned no products for this room. Try adjusting keep/replace items or the budget tier, then retry.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Network error — could not reach the search service.";
+      setSearchError(message);
+      toast.error("Search failed", message);
     } finally {
       setSearching(false);
     }
@@ -230,6 +251,23 @@ export default function ProductsPage() {
             )}
             {searching ? "Searching..." : "AI Search for Products"}
           </Button>
+          {searchError && (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">Search failed</p>
+                <p className="text-xs mt-0.5 opacity-80">{searchError}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 h-7 text-xs"
+                onClick={() => { setSearchError(null); handleAgenticSearch(); }}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" /> Retry
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

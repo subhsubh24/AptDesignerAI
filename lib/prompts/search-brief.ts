@@ -137,7 +137,8 @@ export function getSearchBriefPrompt(
   windowDoorPositions?: string,
   outletPositions?: string,
   identifiedContext?: string,
-  designProfile?: DynamicDesignProfile
+  designProfile?: DynamicDesignProfile,
+  otherRoomsContext?: string
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -240,6 +241,12 @@ export function getSearchBriefPrompt(
     ? `\n\n${identifiedContext}\nANTI-QUERY: do NOT generate search queries for a REPLACEMENT of any identified piece above. Your queries must target complementary items ONLY. Use the canonical dimensions as scale guardrails — e.g. if a 110" KIVIK sectional is identified, the rug query should specify "at least 9x12" and the coffee table query should specify "48-60 inch length to match a 110" sectional".`
     : "";
 
+  // Cross-room coherence — anchor product queries to sibling-room palettes/materials
+  // so the apartment reads as one home, not a mosaic of disconnected rooms.
+  const crossRoomSection = otherRoomsContext
+    ? `\n\n## CROSS-ROOM COHERENCE (other rooms in this apartment)\n${otherRoomsContext}\nIMPORTANT: Queries must surface products that COMPLEMENT the sibling rooms' palettes and materials. Reuse accent colors and repeat one or two signature materials (e.g. walnut, brass, boucle) across rooms — avoid introducing a wholly new palette or wood tone unless the design direction explicitly calls for contrast. Do NOT copy sibling rooms verbatim; the goal is a single cohesive home, not identical rooms.`
+    : "";
+
   return `<role>
 You are a furniture search strategist generating Google search queries to find real, buyable products for a specific client's room. Your queries will be executed verbatim — they must return actual product pages, not category browse pages or generic lists.
 </role>
@@ -251,7 +258,7 @@ For each missing category, generate exactly 3 targeted search queries per price 
 ## CONTEXT
 - Room type: ${roomType}
 - Default budget mode: ${budgetMode}
-- Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}
+- Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}${crossRoomSection}
 
 <reasoning_process>
 For each category, think through:

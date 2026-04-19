@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -55,22 +55,44 @@ export default function DiagnosisPage() {
   const [steps, setSteps] = useState<DiagnosisStep[]>([]);
   const [showCelebration, setShowCelebration] = useState(false);
 
+  // Load existing diagnosis when the room has already been diagnosed — prevents
+  // users from re-running an expensive pipeline they already paid for. They can
+  // still explicitly re-run via the "Re-analyze" button.
   useEffect(() => {
     async function loadExisting() {
-      const res = await fetch(`/api/rooms/${roomId}`);
-      if (res.ok) {
-        const room = await res.json();
-        if (room.status !== "setup") {
-          // Room already diagnosed
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/diagnosis`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.diagnosis) {
+          setDiagnosis({
+            diagnosis_json: data.diagnosis.diagnosis_json,
+            design_direction_json: data.diagnosis.design_direction_json,
+            action_list: data.diagnosis.action_list ?? [],
+            missing_categories: data.diagnosis.missing_categories ?? [],
+          });
         }
+      } catch {
+        // Silent fallback — user can still trigger a fresh diagnosis.
       }
     }
     loadExisting();
   }, [roomId]);
 
+  // Progress math: the stream emits 6–7 distinct step events in a fixed order.
+  // Using (completedSteps / steps.length) causes the bar to jump backwards
+  // whenever a new step arrives before the previous one is marked done —
+  // numerator stays, denominator grows. Lock the denominator to the known
+  // expected total and use a ref to enforce monotonic progress.
+  const EXPECTED_STEP_COUNT = 7;
   const completedSteps = steps.filter((s) => s.status === "done").length;
-  const totalSteps = Math.max(steps.length, 1);
-  const progressPercent = loading ? (completedSteps / totalSteps) * 100 : 0;
+  const maxProgressRef = useRef(0);
+  const rawPercent = loading
+    ? (completedSteps / Math.max(steps.length, EXPECTED_STEP_COUNT)) * 100
+    : 0;
+  if (!loading) maxProgressRef.current = 0;
+  else if (rawPercent > maxProgressRef.current) maxProgressRef.current = rawPercent;
+  const progressPercent = maxProgressRef.current;
 
   const handleRunDiagnosis = async () => {
     setLoading(true);
@@ -379,19 +401,26 @@ export default function DiagnosisPage() {
 
             {/* Issues Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-stagger-children">
-              {[
-                { title: "Color Issues", items: d.color_issues, severity: "amber" },
-                { title: "Texture & Material", items: d.texture_material_issues, severity: "amber" },
-                { title: "Scale & Proportion", items: d.scale_proportion_issues, severity: "rose" },
-                { title: "Layout", items: d.layout_issues, severity: "rose" },
-                { title: "Lighting", items: d.lighting_issues, severity: "amber" },
-                { title: "Clutter & Editing", items: d.clutter_editing_issues, severity: "amber" },
-              ].map((section) => {
+              {([
+                { title: "Color Issues", items: d.color_issues, severity: "amber" as const },
+                { title: "Texture & Material", items: d.texture_material_issues, severity: "amber" as const },
+                { title: "Scale & Proportion", items: d.scale_proportion_issues, severity: "rose" as const },
+                { title: "Layout", items: d.layout_issues, severity: "rose" as const },
+                { title: "Lighting", items: d.lighting_issues, severity: "amber" as const },
+                { title: "Clutter & Editing", items: d.clutter_editing_issues, severity: "amber" as const },
+              ]).map((section) => {
+                // Static class map so Tailwind's JIT actually emits these utilities.
+                // Do not use `border-l-${severity}-400` template strings — the JIT
+                // scanner cannot see dynamic class names and will purge them.
+                const BORDER_CLASS: Record<"amber" | "rose", { light: string; strong: string }> = {
+                  amber: { light: "border-l-amber-400", strong: "border-l-amber-500" },
+                  rose: { light: "border-l-rose-400", strong: "border-l-rose-500" },
+                };
                 const borderColor = section.items.length === 0
                   ? "border-l-emerald-400"
                   : section.items.length <= 2
-                  ? `border-l-${section.severity}-400`
-                  : `border-l-${section.severity}-500`;
+                  ? BORDER_CLASS[section.severity].light
+                  : BORDER_CLASS[section.severity].strong;
 
                 return (
                   <Card key={section.title} className={cn("border-l-4 animate-fade-in-up", borderColor)}>
