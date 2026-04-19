@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, ChevronRight, Menu, X, LayoutDashboard, HelpCircle, FileText, Bookmark } from "lucide-react";
+import { LogOut, ChevronRight, Menu, X, LayoutDashboard, HelpCircle, FileText, Bookmark, Star } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils/cn";
@@ -185,6 +185,12 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
+                  <Link href="/picks">
+                    <Star className="mr-2 h-4 w-4" />
+                    My Picks
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/faq">
                     <HelpCircle className="mr-2 h-4 w-4" />
                     Help & FAQ
@@ -280,6 +286,14 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           >
             <Bookmark className="h-5 w-5 text-muted-foreground" />
             My Designs
+          </Link>
+          <Link
+            href="/picks"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+          >
+            <Star className="h-5 w-5 text-muted-foreground" />
+            My Picks
           </Link>
           <Link
             href="/faq"

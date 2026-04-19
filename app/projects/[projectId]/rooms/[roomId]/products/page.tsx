@@ -217,10 +217,19 @@ export default function ProductsPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Room
         </Link>
-        <h1 className="text-headline">Products</h1>
-        <p className="text-muted-foreground mt-1">
-          Find, evaluate, and compare furniture and decor
-        </p>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-headline">Products</h1>
+            <p className="text-muted-foreground mt-1">
+              Find, evaluate, and compare furniture and decor
+            </p>
+          </div>
+          <Link href={`/projects/${projectId}/rooms/${roomId}/focus`}>
+            <Button variant="warm" size="sm" className="gap-1.5 shadow-warm-sm">
+              <Sparkles className="h-3.5 w-3.5" /> Open Design Studio
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Add Product + AI Search */}
