@@ -372,3 +372,140 @@ JSON only. No prose, no markdown fences.
 }
 </output_contract>`;
 }
+
+/**
+ * Combined single-pass prompt: all 8 dimensions in one call.
+ * Replaces the two parallel calls (aesthetic + functional) — saves one LLM
+ * call per product scored (~120 calls / run on a 5-category × 3-tier config).
+ */
+export function getCombinedEvalPrompt(args: EvalContextArgs & { includeFitNotes?: boolean }): string {
+  const { budgetMode } = args;
+  const assembledContext = buildEvalContext(args);
+  const includeFitNotes = args.includeFitNotes ?? false;
+
+  return `<role>
+You are a world-class interior designer evaluating a specific product for a client's room. Score all 8 fit dimensions: 4 aesthetic (style/palette/material/cohesion) and 4 functional (scale/function/value/confidence). Provide detailed reasoning for the aesthetic dimensions.
+</role>
+
+<task>
+Score 8 dimensions${includeFitNotes ? ", write area and apartment fit notes," : ""} and provide specific reasoning for aesthetic dimensions. Every score must be grounded in evidence from the product image, room photos, and design context.
+</task>
+
+${assembledContext}
+
+<reasoning_process>
+For each aesthetic dimension:
+1. What specific evidence (product image + room photos) supports a HIGH score?
+2. What specific evidence supports a LOW score?
+3. What is the honest score based on the balance of evidence?
+
+For each functional dimension:
+1. What dimensions/specs support a HIGH scale/function score?
+2. What gaps in data lower the confidence score?
+3. Does the price match the quality signals visible in photos?
+</reasoning_process>
+
+<scoring_calibration>
+Read ALL anchors before scoring. Use the FULL 0-10 range.
+
+**AESTHETIC DIMENSIONS:**
+
+style_fit_score:
+- 8: Warm modern room + walnut shelf with tapered legs → every design tag aligns
+- 5: Warm modern room + blonde Scandi shelf — adjacent style, not wrong but warm undertone missing
+- 3: Warm modern room + black industrial pipe shelf → completely different vocabulary
+
+palette_fit_score:
+- 8: Room with warm oak + cream linen + brushed brass; product has warm walnut + natural linen → shares warm undertone
+- 5: Room with warm oak floors + product has cool gray upholstery → undertones fight
+- 3: Room built on warm neutrals + product is saturated navy velvet — no echo anywhere
+
+material_fit_score:
+- 8: High-traffic family room + performance velvet + metal frame → durability matches use
+- 5: Low-humidity apartment + linen sofa — linen works in dry climates, slightly risky
+- 3: Household with two dogs + white boucle chair → maintenance disaster
+
+cohesion_fit_score:
+- 8: Every visible room element shares the same warm-organic vocabulary as this product
+- 5: Product works with most of the room but one anchor piece creates a minor clash
+- 3: Product belongs to a different era than the rest of the room
+
+**FUNCTIONAL DIMENSIONS:**
+
+scale_fit_score:
+- 8: 8×10 rug anchors a 7-piece seating group; 18" extension beyond sofa; coffee table ≈ ⅔ sofa width
+- 5: 6×9 rug mostly covers seating group — undersized but functional
+- 3: 5×7 rug in 12×16 living room with L-sectional — wrong by two size classes
+
+function_fit_score:
+- 8: Floor lamp between sofa + chair, within 3' of outlet, solves "dark corner" diagnosis directly
+- 5: Lamp goes in reasonable spot but outlet not confirmed and issue only partially addressed
+- 3: Dining table for 4 when diagnosis noted "needs seating for 6-8"
+
+value_fit_score (budget mode: ${budgetMode}):
+${budgetMode === "budget" ? "- 8: Under $300, solid construction\n- 5: $450 for what should be $200 — over-tier\n- 2: $800+ in a budget search — wrong tier" : budgetMode === "best_possible" ? "- 8: Premium brand, quality justified by craftsmanship\n- 5: Good quality but mid-tier without premium justification\n- 3: Mid-tier quality at luxury price" : "- 8: Quality matches price cleanly\n- 5: Reasonable but not notable value\n- 3: Clearly over-priced or clearly low quality"}
+
+confidence_score:
+- 9-10: title + price + materials + all dimensions + multiple clear images + lifestyle photo
+- 7-8: mostly complete, missing one field
+- 5-6: title + maybe price, but materials/dimensions unclear
+- 3-4: only title and retailer — no specs
+- 1-2: almost no reliable data
+
+CRITICAL: Use the FULL 0-10 range. Do NOT cluster scores in 6-8. A genuinely mediocre fit is a 5, not a 7.
+</scoring_calibration>
+
+<scoring_dimensions>
+**AESTHETIC (vision + taste):**
+
+1. **style_fit_score**: Does it match the design direction? Reference ACTUAL style notes — name specific style tags this product carries or lacks.
+
+2. **palette_fit_score**: Does it complement the apartment's actual palette? Check undertones (warm/cool/neutral) against building finishes visible in room photos.
+
+3. **material_fit_score**: Does the material work with existing finishes AND the lifestyle?
+   - White boucle + pets = 3 regardless of style fit
+   - Material must complement existing finishes visible in room photos
+
+4. **cohesion_fit_score**: Does it work with what's ALREADY IN THE ROOM? Base this on what you SEE in photos, not what should theoretically be there.
+
+**FUNCTIONAL (objective):**
+
+5. **scale_fit_score**: Will it physically fit and be correctly proportioned?
+   - Check dimensions against available space and intended placement
+   - Rugs too small for seating area: heavily penalize
+   - If no dimensions listed, score 5 (neutral)
+
+6. **function_fit_score**: Does it solve a real problem AND work in its intended position?
+   - Seating/dining capacity; storage; task lighting placement; traffic flow
+   - Outlet proximity: lamps, powered items — is there a likely outlet nearby?
+
+7. **value_fit_score**: Price vs. quality/impact. ${budgetMode === "budget" ? "Weight HEAVILY. Over-tier products → score 3 or below." : budgetMode === "best_possible" ? "Weight less — quality over price." : "Balance quality and price."}
+   - If price is missing, score 5 (neutral) — do NOT assume good value
+
+8. **confidence_score**: How reliable is the product data? (see calibration above)
+</scoring_dimensions>
+
+<output_contract>
+JSON only. No prose, no markdown fences.
+
+{
+  "scores": {
+    "style_fit_score": number,
+    "palette_fit_score": number,
+    "material_fit_score": number,
+    "cohesion_fit_score": number,
+    "scale_fit_score": number,
+    "function_fit_score": number,
+    "value_fit_score": number,
+    "confidence_score": number
+  },
+  "reasoning": {
+    "top_reasons": ["3-5 strongest reasons — reference actual product attributes and specific room elements"],
+    "risks": ["2-4 specific risks — e.g. 'brass legs may clash with chrome kitchen fixtures visible in photo'"],
+    "suggestions": ["1-3 actionable alternatives or modifications"]
+  }${includeFitNotes ? `,
+  "area_fit_note": "2-3 sentences on how this product works with OTHER pieces in the same area — reference specific existing furniture",
+  "apartment_fit_note": "1-2 sentences on apartment-wide coherence — does it match building finishes and other rooms?"` : ""}
+}
+</output_contract>`;
+}

@@ -44,8 +44,8 @@ export const ProductEvalResponseSchema = z.object({
   apartment_fit_note: z.string().optional().default(""),
 });
 
-// Split-pass sub-schemas (scoreProduct runs two focused calls in parallel).
-// The final response merges these into ProductEvalResponseSchema shape.
+// Split-pass sub-schemas — kept for backward-compat with manual-path routes.
+// scoreProduct now uses the merged CombinedEvalResponseSchema (single call).
 
 /** Aesthetic-pass scores: style/palette/material/cohesion (vision + taste). */
 export const AestheticScoresSchema = z.object({
@@ -72,6 +72,17 @@ export const FunctionalScoresSchema = z.object({
 
 export const FunctionalEvalResponseSchema = z.object({
   scores: FunctionalScoresSchema,
+});
+
+/**
+ * Combined single-pass response: all 8 dimensions + reasoning + optional notes.
+ * Replaces the two-pass Promise.all — one LLM call instead of two per product.
+ */
+export const CombinedEvalResponseSchema = z.object({
+  scores: ProductScoresSchema,
+  reasoning: ProductEvalReasoningSchema,
+  area_fit_note: z.string().optional().default(""),
+  apartment_fit_note: z.string().optional().default(""),
 });
 
 // ─── Quick Score ──────────────────────────────────────────────

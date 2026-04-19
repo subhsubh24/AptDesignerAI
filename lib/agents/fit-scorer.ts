@@ -2,14 +2,12 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
-  getAestheticEvalPrompt,
-  getFunctionalEvalPrompt,
+  getCombinedEvalPrompt,
   type EvalContextArgs,
 } from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict, groundConfidence } from "@/lib/scoring/product-scorer";
 import {
-  AestheticEvalResponseSchema,
-  FunctionalEvalResponseSchema,
+  CombinedEvalResponseSchema,
   QuickScoreResponseSchema,
 } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
@@ -105,16 +103,10 @@ Before scoring, calibrate against these reference examples. Read ALL of them fir
 CRITICAL: Use the FULL range. If a product is just okay, score it 5-6. If it has real problems, score it 3-4. Do NOT give everything 6-8 out of politeness.`;
 
 /**
- * Score a single product via two parallel focused calls:
- *   1. Aesthetic pass — style / palette / material / cohesion + reasoning + notes
- *   2. Functional pass — scale / function / value + confidence
- *
- * Splitting prevents the 8-dim monolith from trading one dimension off against
- * another within a single token budget. Both passes see identical context
- * (room, diagnosis, design direction, product images) so their scores are
- * rooted in the same evidence — they just focus on different questions.
- *
- * Math veto (scale / palette / material) and calibration anchors are preserved.
+ * Score a single product in one focused LLM call (all 8 dimensions).
+ * Previously used two parallel calls (aesthetic + functional); merged into one
+ * to halve deep-score token count (~120 fewer calls per run on a 5-cat × 3-tier
+ * config). Context, math veto, and calibration anchors are all preserved.
  */
 export async function scoreProduct(
   product: CandidateProduct,
@@ -144,8 +136,7 @@ export async function scoreProduct(
     identifiedContext: scoringCtx.identifiedContext,
     anchorSpecs: scoringCtx.anchorSpecs,
   };
-  const aestheticPrompt = getAestheticEvalPrompt({ ...evalCtx, includeFitNotes: scoringCtx.includeFitNotes ?? true });
-  const functionalPrompt = getFunctionalEvalPrompt(evalCtx);
+  const combinedPrompt = getCombinedEvalPrompt({ ...evalCtx, includeFitNotes: scoringCtx.includeFitNotes ?? true });
 
   // Extract visual metadata from product metadata
   const meta = product.metadata as Record<string, unknown> | null;
@@ -218,40 +209,27 @@ export async function scoreProduct(
 
   const productTextTail = `\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images — not just the text description. If a lifestyle image is included, use it to assess real-world scale and setting.`;
 
-  const aestheticContent: AIContentBlock[] = [
+  const combinedContent: AIContentBlock[] = [
     ...productImages,
-    { type: "text", text: `${aestheticPrompt}${productTextTail}` },
-  ];
-  // Functional pass (scale/value/function) is text-based — dimensions,
-  // price, and description are sufficient. Dropping product images here
-  // halves image-token cost for ~half the deep-score calls.
-  const functionalContent: AIContentBlock[] = [
-    { type: "text", text: `${functionalPrompt}${productTextTail}` },
+    { type: "text", text: `${combinedPrompt}${productTextTail}` },
   ];
 
-  // Run a single pass with retry, then merge. Failures in either pass bubble up
-  // to the shared retry wrapper — but since we Promise.all, one failing retries
-  // don't block the other's success.
-  const runPass = async <T>(
-    passName: "aesthetic" | "functional",
-    content: AIContentBlock[],
-    parse: (raw: unknown) => T,
-  ): Promise<{ data: T; tokens: number; model: string }> => {
-    let lastError: string | undefined;
-    let attempt = 0;
-    return await withRetry(
+  let lastError: string | undefined;
+  let attempt = 0;
+
+  try {
+    const combinedRes = await withRetry(
       async () => {
         attempt++;
         const retryContent = attempt > 1 && lastError
-          ? [...content, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
-          : content;
+          ? [...combinedContent, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above.` }]
+          : combinedContent;
 
         const response = await geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          // Aesthetic pass carries the reasoning + notes; functional is pure scores.
-          max_tokens: passName === "aesthetic" ? 8000 : 4000,
+          max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           mediaResolution: "ultra_high",
@@ -262,7 +240,7 @@ export async function scoreProduct(
         });
 
         const raw = extractJsonObject(response.content);
-        const data = parse(raw);
+        const data = CombinedEvalResponseSchema.parse(raw);
         const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
         return { data, tokens, model: response.model };
       },
@@ -277,8 +255,8 @@ export async function scoreProduct(
           return false;
         },
         onRetry: (retryAttempt, delayMs, error) => {
-          lastError = error instanceof Error ? error.message : `${passName} scoring failed`;
-          log.warn(`Retry ${retryAttempt} for ${passName} pass on "${product.title}"`, {
+          lastError = error instanceof Error ? error.message : "scoring failed";
+          log.warn(`Retry ${retryAttempt} for scoring "${product.title}"`, {
             productId: product.id,
             durationMs: delayMs,
             error: lastError,
@@ -286,26 +264,8 @@ export async function scoreProduct(
         },
       }
     );
-  };
 
-  try {
-    const [aestheticRes, functionalRes] = await Promise.all([
-      runPass("aesthetic", aestheticContent, (raw) => AestheticEvalResponseSchema.parse(raw)),
-      runPass("functional", functionalContent, (raw) => FunctionalEvalResponseSchema.parse(raw)),
-    ]);
-
-    // Merge into the legacy 8-dim ProductScores shape. The two passes agree on
-    // product image + room image; their outputs compose without double-counting.
-    const scores = {
-      style_fit_score: aestheticRes.data.scores.style_fit_score,
-      palette_fit_score: aestheticRes.data.scores.palette_fit_score,
-      material_fit_score: aestheticRes.data.scores.material_fit_score,
-      cohesion_fit_score: aestheticRes.data.scores.cohesion_fit_score,
-      scale_fit_score: functionalRes.data.scores.scale_fit_score,
-      function_fit_score: functionalRes.data.scores.function_fit_score,
-      value_fit_score: functionalRes.data.scores.value_fit_score,
-      confidence_score: functionalRes.data.scores.confidence_score,
-    };
+    const scores = { ...combinedRes.data.scores };
 
     // Math veto: cap AI dimension scores where deterministic math found violations.
     const VETO_THRESHOLD = MATH_VETO.threshold;
@@ -344,13 +304,10 @@ export async function scoreProduct(
       [`${categoryKey}_final_item_score`]: finalScore,
     });
 
-    const totalTokens = aestheticRes.tokens + functionalRes.tokens;
-    log.info("Product scored (split pass)", {
+    log.info("Product scored (combined pass)", {
       productId: product.id,
-      model: aestheticRes.model,
-      tokens: { total: totalTokens },
-      aestheticTokens: aestheticRes.tokens,
-      functionalTokens: functionalRes.tokens,
+      model: combinedRes.model,
+      tokens: { total: combinedRes.tokens },
       finalScore,
       verdict,
       category: product.category || "unknown",
@@ -362,12 +319,12 @@ export async function scoreProduct(
         scores,
         final_item_score: finalScore,
         verdict,
-        reasoning: aestheticRes.data.reasoning,
-        area_fit_note: aestheticRes.data.area_fit_note,
-        apartment_fit_note: aestheticRes.data.apartment_fit_note,
+        reasoning: combinedRes.data.reasoning,
+        area_fit_note: combinedRes.data.area_fit_note,
+        apartment_fit_note: combinedRes.data.apartment_fit_note,
       },
-      tokensUsed: totalTokens,
-      model: aestheticRes.model,
+      tokensUsed: combinedRes.tokens,
+      model: combinedRes.model,
     };
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Scoring failed after retries";
