@@ -51,6 +51,7 @@ interface AreaAnalysis {
   }>;
   what_works: string[];
   what_should_go: string[];
+  style_name?: string;
   design_direction: string;
   validation?: {
     isValid: boolean;
@@ -749,7 +750,14 @@ export default function FocusPage() {
               </div>
 
               <div className="p-3 rounded-xl border bg-primary/5">
-                <h3 className="font-semibold text-sm mb-1">Design Direction</h3>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-semibold text-sm">Design Direction</h3>
+                  {areaAnalysis.style_name && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-warm/15 text-accent-warm border border-accent-warm/20">
+                      {areaAnalysis.style_name}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">{areaAnalysis.design_direction}</p>
               </div>
 

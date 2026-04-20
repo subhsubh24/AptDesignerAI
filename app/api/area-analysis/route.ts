@@ -350,7 +350,8 @@ Step 4: Capture spatial & environmental context (layout, lighting, windows/doors
   "summary": "3-4 sentence assessment — dominant colors, materials, what's working, what's broken",
   "what_works": ["5-8 specific items that should stay — material + color + current position"],
   "what_should_go": ["specific items to replace/remove — name each and why"],
-  "design_direction": "4-6 sentences describing color strategy, material mixing, texture layering, and the feeling. Reference apartment finishes.",
+  "style_name": "2-3 word evocative label derived from the room's actual physical cues. Draw from the REAL materials and atmosphere you see. GOOD examples: 'Industrial Warmth' (dark sectional + metal bookshelf + need for warmth), 'Nordic Warmth' (light oak + linen undertones), 'West Coast Modern' (concrete + leather + wood grain), 'Cognac and Charcoal' (specific palette-led name). BAD (too generic — never use): 'Tech Minimalism', 'Contemporary Modern', 'Refined Minimalism', 'Clean Lines', 'Urban Chic'. The name must be specific enough that a different room couldn't have the same name.",
+  "design_direction": "4-6 sentences describing the [style_name] direction — color strategy, material mixing, texture layering, and the feeling it creates. Reference specific apartment finishes by name. Explain how the direction serves this specific client's identity and lifestyle.",
   "recommended_palette": ["4-8 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
   "recommended_materials": ["4-6 materials — e.g. 'solid walnut', 'linen', 'brushed brass', 'natural wool'"],
   "recommended_textures": ["3-5 textures — e.g. 'bouclé', 'woven rattan', 'matte ceramic', 'raw linen'"],
@@ -548,6 +549,13 @@ Essential categories: ${tiersForRoom.essential.join(", ")}
 Standard categories: ${tiersForRoom.standard.join(", ")}
 
 MULTI-FUNCTION ROOMS: if the room serves multiple functions (e.g. combined living/dining), include items for ALL zones — don't limit to primary function. A living/dining combo typically needs 8-15 items across both.
+
+## MATERIAL COMMITMENT — BE BOLD
+The design direction from Pass 1 has a specific material story. Commit to it fully in your item choices. Do NOT hedge with safe neutral alternatives when the direction calls for something specific:
+- If Pass 1 says "cognac leather" as a supporting material → spec cognac leather (not "warm-toned upholstery")
+- If Pass 1 says "solid walnut" → spec solid walnut (not "wood-toned surface")
+- If Pass 1 says "matte black" → spec matte black (not "dark finish")
+A design-forward choice that commits to the material story beats a safe choice that hedges. The harmony loop will catch true clashes — don't pre-censor yourself.
 
 ## SEARCH TITLE FORMAT — CRITICAL
 Each search_title must include: material + color/finish + size + style + product type.
