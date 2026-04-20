@@ -603,10 +603,49 @@ export async function quickScreenCandidates(
     return { success: true, data: [] };
   }
 
+  // Deterministic junk filter — drops obvious non-furniture before LLM screening.
+  // Each title is cheap to check, and kills off the classic offenders from prior
+  // runs (books titled "The Punishment of Gaza", Beatles T-shirt amazon listings,
+  // paperback novel entries) before they eat screening tokens or — worse — slip
+  // through to extraction.
+  const JUNK_TITLE_PATTERNS = [
+    /\bpaperback\b/i, /\bhardcover\b/i, /\bebook\b/i, /\bkindle\b/i, /\bISBN\b/i,
+    /\bnovel\b/i, /\bmemoir\b/i, /\bbiography\b/i, /\bpenguin books\b/i,
+    /\bt-?shirt\b/i, /\bhoodie\b/i, /\bsweatshirt\b/i, /\bsneakers?\b/i, /\bjacket\b/i,
+    /\bDVD\b/i, /\bBlu-?ray\b/i, /\bCD album\b/i, /\bvinyl record\b/i,
+    /\bBeatles\b/i, /\bpunishment of\b/i,
+  ];
+  const JUNK_URL_PATTERNS = [
+    /goodreads\.com/i, /barnesandnoble\.com\/w\//i,
+    /penguinrandomhouse\.com/i, /bookshop\.org/i,
+    /amazon\.com\/[^/]*\/dp\/[^/]+\/?.*[?&]ref=[^&]*books/i,
+  ];
+  const prefiltered: SearchCandidate[] = [];
+  let junkDropped = 0;
+  for (const c of candidates) {
+    const t = c.title || "";
+    const u = c.url || "";
+    const isJunk = JUNK_TITLE_PATTERNS.some((re) => re.test(t)) ||
+                   JUNK_URL_PATTERNS.some((re) => re.test(u));
+    if (isJunk) {
+      junkDropped++;
+      continue;
+    }
+    prefiltered.push(c);
+  }
+  if (junkDropped > 0) {
+    log.info("Quick-screen junk prefilter dropped candidates", {
+      phase: "quick_screen", category, tier, dropped: junkDropped,
+    });
+  }
+  if (prefiltered.length === 0) {
+    return { success: true, data: [], tokensUsed: 0 };
+  }
+
   const BATCH_SIZE = 30;
   const batches: SearchCandidate[][] = [];
-  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-    batches.push(candidates.slice(i, i + BATCH_SIZE));
+  for (let i = 0; i < prefiltered.length; i += BATCH_SIZE) {
+    batches.push(prefiltered.slice(i, i + BATCH_SIZE));
   }
 
   const allPassed: SearchCandidate[] = [];
@@ -635,6 +674,17 @@ Requirements: ${requirements.join(", ")}${styleContext}
 ## CANDIDATES
 ${candidateList}
 
+## STEP 0: HARD REJECT (rate 1 immediately — do NOT pass)
+These are never valid furniture/decor product pages:
+- Books, ebooks, paperbacks, hardcovers (amazon.com/dp/ pointing to a book, Barnes & Noble, Goodreads, Penguin, Random House)
+- Apparel, clothing, footwear: t-shirts, hoodies, sneakers, dresses, jackets, hats
+- Music, movies, video games, software
+- Food, supplements, beverages, groceries
+- Political/news content, memoirs, biographies
+- Toys, pet products (unless the category explicitly asks for a pet bed/crate)
+- Auto parts, tools, industrial hardware
+If the title mentions any of: "Beatles", "Gaza", "Punishment of", "Novel", "Memoir", "T-Shirt", "Hoodie", "Sneakers", "ISBN", "Paperback" — rate 1 regardless of URL.
+
 ## STEP 1: CHECK THE URL STRUCTURE
 Before rating, examine each URL:
 - If URL contains /collections, /categories, /browse, /shop-all, /search, /blog, /magazine, /reviews, /inspiration, /ideas → rate 1-2 (these are listing/content pages, NOT product pages)
@@ -647,7 +697,7 @@ Before rating, examine each URL:
 - 4: URL looks like a product page + title matches ${category}, snippet is somewhat relevant
 - 3: Uncertain — could be a product page or a targeted subcategory listing. Title seems relevant.
 - 2: Probably a category listing, blog post, roundup article, or wrong product type
-- 1: Definitely not relevant — review article, unrelated product, broken URL
+- 1: Definitely not relevant — review article, unrelated product, book/apparel/media, broken URL
 
 Return JSON:
 {

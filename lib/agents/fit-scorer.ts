@@ -77,6 +77,13 @@ export interface ScoringContext {
    */
   anchorSpecs?: Record<string, string>;
   /**
+   * Room-wide harmony neighbors: top pick per category across the whole room
+   * (not limited to anchor categories). Gives the scorer cross-category
+   * context so material clashes (e.g. walnut sofa + rubberwood side table)
+   * get caught at scoring time instead of after validation.
+   */
+  harmonyNeighbors?: Array<{ category: string; spec: string }>;
+  /**
    * When true, the aesthetic prompt requests area_fit_note / apartment_fit_note.
    * Agentic search path sets false (not rendered in focus UI); manual-sourcing
    * evaluate routes leave default (true) because ManualScorecardView displays them.
@@ -135,6 +142,7 @@ export async function scoreProduct(
     replaceItems: scoringCtx.replaceItems,
     identifiedContext: scoringCtx.identifiedContext,
     anchorSpecs: scoringCtx.anchorSpecs,
+    harmonyNeighbors: scoringCtx.harmonyNeighbors,
   };
   const combinedPrompt = getCombinedEvalPrompt({ ...evalCtx, includeFitNotes: scoringCtx.includeFitNotes ?? true });
 

@@ -9,7 +9,7 @@ import {
 import { extractFromUrl } from "./product-extractor";
 import { runProductVerifier } from "./computer-use/product-verifier";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
-import { evaluateBundle, generateBundleVibe } from "./bundle-optimizer";
+import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
@@ -460,9 +460,13 @@ export async function runAgenticSearch(
 
     // Hard cap on screened candidates per (category, tier) before extraction.
     // Extraction is the most expensive phase (URL Context + CU fallback) and
-    // quality plateaus after ~4 products per tier — beyond that we pay token
-    // cost for products that won't survive deep-score. Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "4");
+    // quality plateaus after ~6 products per tier — beyond that we pay token
+    // cost for products that won't survive deep-score. Cap was 4 but that
+    // triggered heavy backfill thrash (weak tier → re-extract → re-score) on
+    // catalogs where the top-4 post-screen didn't make it through deep-score;
+    // 6 gives enough headroom to avoid the backfill loop in most runs.
+    // Override via env.
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "6");
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -914,9 +918,11 @@ export async function runAgenticSearch(
     ]);
 
     const anchorSpecs: Record<string, string> = {};
+    // Room-wide harmony neighbors: top pick per category (all categories,
+    // not just anchors) so deep-score can factor cross-category clashes.
+    const harmonyNeighbors: Array<{ category: string; spec: string }> = [];
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
-      if (!ANCHOR_CATEGORIES.has(category)) continue;
-      // Find the highest quick-scored product across all tiers for this anchor
+      // Find the highest quick-scored product across all tiers for this category
       let bestProduct: CandidateProduct | null = null;
       let bestScore = -1;
       for (const tier of PRICE_TIERS) {
@@ -937,7 +943,13 @@ export async function runAgenticSearch(
         : "dimensions unknown";
       const matStr = bestProduct.materials?.join(", ") || "material unknown";
       const colStr = bestProduct.colors?.join(", ") || "colors unknown";
-      anchorSpecs[category] = `${bestProduct.title || category} | dimensions: ${dimStr} | material: ${matStr} | colors: ${colStr}`;
+      const spec = `${bestProduct.title || category} | dimensions: ${dimStr} | material: ${matStr} | colors: ${colStr}`;
+      // Compact neighbor summary (no title) to keep prompt tokens low
+      const neighborSpec = `material: ${matStr} | colors: ${colStr}`;
+      harmonyNeighbors.push({ category, spec: neighborSpec });
+      if (ANCHOR_CATEGORIES.has(category)) {
+        anchorSpecs[category] = spec;
+      }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1020,6 +1032,9 @@ export async function runAgenticSearch(
                 anchorSpecs: DEPENDENT_CATEGORIES.has(productCategory) && Object.keys(anchorSpecs).length > 0
                   ? anchorSpecs
                   : undefined,
+                // Room-wide harmony neighbors (exclude self-category so the
+                // product isn't compared against itself).
+                harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== productCategory),
                 includeFitNotes: false,
               });
               if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
@@ -1376,6 +1391,17 @@ export async function runAgenticSearch(
         combos = combos.slice(0, 27);
       }
 
+      // Deterministic pre-filter (math + retailer dominance) runs before LLM eval.
+      // Skips ~50% of combos at zero token cost.
+      const prefiltered = prefilterBundleCombos(combos, bundleCtx);
+      if (prefiltered.dropped > 0) {
+        log.info("Bundle prefilter dropped combos", {
+          tier, before: combos.length, after: prefiltered.kept.length,
+          dropped: prefiltered.dropped, reasons: prefiltered.reasons,
+        });
+      }
+      combos = prefiltered.kept;
+
       // Evaluate all combos with concurrency limit. Vibe is narrative-only
       // and doesn't affect final_bundle_score, so we skip it here and run it
       // just for the winning combo below.
@@ -1597,6 +1623,8 @@ export async function runAgenticSearch(
               anchorSpecs: DEPENDENT_CATEGORIES.has(cat) && Object.keys(anchorSpecs).length > 0
                 ? anchorSpecs
                 : undefined,
+              // Harmony neighbors across all categories (exclude self).
+              harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
               includeFitNotes: false,
             });
             if (scoreResult.success && scoreResult.data) {
@@ -1653,6 +1681,16 @@ export async function runAgenticSearch(
             });
             combos = combos.slice(0, 27);
           }
+
+          // Deterministic pre-filter (math + retailer dominance) before LLM eval.
+          const prefiltered2 = prefilterBundleCombos(combos, bundleCtx);
+          if (prefiltered2.dropped > 0) {
+            log.info("Backfill bundle prefilter dropped combos", {
+              tier, before: combos.length, after: prefiltered2.kept.length,
+              dropped: prefiltered2.dropped, reasons: prefiltered2.reasons,
+            });
+          }
+          combos = prefiltered2.kept;
 
           const bundleEvalLimit2 = pLimit(3);
           const comboResults = await Promise.all(

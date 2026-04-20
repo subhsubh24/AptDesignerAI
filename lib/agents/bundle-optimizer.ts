@@ -67,6 +67,102 @@ export interface BundleContext {
 }
 
 /**
+ * Deterministic pre-filter that drops obviously bad combos BEFORE the 15K-token
+ * LLM evaluation call. Three cheap signals:
+ *   1. Math overall score (palette + material + scale + spatial + completeness + price)
+ *   2. Same-retailer dominance (one retailer contributing > maxSameRetailerRatio)
+ *   3. Wood-species or warm/cool-metal clashes (already inside material_balance)
+ *
+ * The filter is *permissive*: we always keep at least `minKept` combos (sorted
+ * by math.overall desc) so that even a noisy catalog still produces a winner.
+ * Target: drop 50–70% of the 27 combos, saving ~400–500K tokens per tier.
+ */
+export interface BundlePrefilterResult {
+  kept: CandidateProduct[][];
+  dropped: number;
+  reasons: Record<string, number>;
+}
+
+export function prefilterBundleCombos(
+  combos: CandidateProduct[][],
+  bundleCtx: BundleContext,
+  opts: { minKept?: number; mathFloor?: number; maxSameRetailerRatio?: number } = {},
+): BundlePrefilterResult {
+  const minKept = opts.minKept ?? 6;
+  const mathFloor = opts.mathFloor ?? 0.45;
+  const maxSameRetailerRatio = opts.maxSameRetailerRatio ?? 0.75;
+
+  if (combos.length <= minKept) {
+    return { kept: combos, dropped: 0, reasons: {} };
+  }
+
+  const scored = combos.map((combo) => {
+    const math = computeBundleMathScores(
+      combo.map((p) => ({
+        title: p.title || undefined,
+        category: p.category || undefined,
+        price: p.price || undefined,
+        materials: p.materials || undefined,
+        colors: p.colors || undefined,
+        dimensions: p.dimensions || undefined,
+      })),
+      {
+        roomType: bundleCtx.roomType,
+        recommendedPalette: bundleCtx.designDirection?.recommended_palette,
+        recommendedMaterials: bundleCtx.designDirection?.recommended_materials,
+        floorPlan: bundleCtx.floorPlan,
+        placementMap: bundleCtx.placementMap,
+        existingItems: bundleCtx.existingItems,
+      },
+    );
+
+    // Retailer dominance check
+    const retailerCounts = new Map<string, number>();
+    for (const p of combo) {
+      const r = (p.retailer || "unknown").toLowerCase();
+      retailerCounts.set(r, (retailerCounts.get(r) || 0) + 1);
+    }
+    const topRetailerCount = Math.max(...retailerCounts.values(), 0);
+    const retailerDominance = combo.length > 0 ? topRetailerCount / combo.length : 0;
+
+    return { combo, math, retailerDominance };
+  });
+
+  const reasons: Record<string, number> = {};
+  const surviving: typeof scored = [];
+  for (const s of scored) {
+    if (s.math.overall < mathFloor) {
+      reasons.math_floor = (reasons.math_floor || 0) + 1;
+      continue;
+    }
+    if (s.retailerDominance > maxSameRetailerRatio && s.combo.length >= 3) {
+      reasons.retailer_dominance = (reasons.retailer_dominance || 0) + 1;
+      continue;
+    }
+    surviving.push(s);
+  }
+
+  // Sort by math.overall desc so the best combos survive
+  surviving.sort((a, b) => b.math.overall - a.math.overall);
+
+  // Guarantee minKept: if filter was too aggressive, fall back to top-N by math.overall
+  if (surviving.length < minKept) {
+    scored.sort((a, b) => b.math.overall - a.math.overall);
+    return {
+      kept: scored.slice(0, Math.min(combos.length, Math.max(minKept, surviving.length))).map((s) => s.combo),
+      dropped: combos.length - Math.min(combos.length, Math.max(minKept, surviving.length)),
+      reasons: { fallback_topN: 1 },
+    };
+  }
+
+  return {
+    kept: surviving.map((s) => s.combo),
+    dropped: combos.length - surviving.length,
+    reasons,
+  };
+}
+
+/**
  * Evaluate a bundle via two focused calls:
  *   A (scoring): 7 dimension scores + verdict + analysis
  *   B (vibe):    room_vibe narrative (depends on A's verdict for tone)

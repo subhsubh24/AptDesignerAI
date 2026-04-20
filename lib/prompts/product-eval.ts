@@ -35,6 +35,18 @@ export interface EvalContextArgs {
    * the actual found anchor, not abstract requirements.
    */
   anchorSpecs?: Record<string, string>;
+  /**
+   * Short summary of every other top-scored product across the room (all
+   * categories, not just anchors). Used to catch cross-category material
+   * clashes at scoring time — e.g. if sofa is walnut, side-table candidates
+   * in rubberwood should score lower on material_fit than they would in
+   * isolation. Each entry is a brief spec string.
+   *
+   * This is Plan item #7 (harmony context in deep-score) as a thin pass:
+   * give the scorer room-wide awareness without waiting for a separate
+   * validation call to surface the clash after the fact.
+   */
+  harmonyNeighbors?: Array<{ category: string; spec: string }>;
 }
 
 /**
@@ -64,6 +76,7 @@ function buildEvalContext(args: EvalContextArgs): string {
     replaceItems,
     identifiedContext,
     anchorSpecs,
+    harmonyNeighbors,
   } = args;
 
   const paletteInfo = designDirection?.recommended_palette?.length
@@ -190,6 +203,29 @@ ${replaceItems?.length ? `\n## ITEMS BEING REPLACED OR REMOVED\n${replaceItems.m
       key: "anchor_specs",
       priority: 1,
       content: `## ANCHOR PIECES ALREADY CONFIRMED FOR THIS ROOM\nThese are the top-scored products found during this search session for their categories. Treat them as the real items that will share the room with the product you're scoring.\n${anchorLines}\nFor scale scoring: the product being evaluated must be PROPORTIONAL to these anchors (e.g., a coffee table should be ~⅔ the sofa width; a rug should extend 12-18" beyond the sofa on each side). For material/palette scoring: it must COMPLEMENT these pieces — not match them identically, but harmonize.`,
+    });
+  }
+
+  if (harmonyNeighbors && harmonyNeighbors.length > 0) {
+    const neighborLines = harmonyNeighbors
+      .slice(0, 10)
+      .map((n) => `- **${n.category}**: ${n.spec}`)
+      .join("\n");
+    sections.push({
+      key: "harmony_neighbors",
+      priority: 2,
+      content: `## ROOM-WIDE HARMONY CONTEXT (other top picks under consideration)
+These are the leading candidates from other categories in the same search. The product you're scoring will share the room with these — factor cross-category harmony into material_fit_score and palette_fit_score.
+${neighborLines}
+
+**Material harmony rules**:
+- 3+ different wood species across the room = penalize material_fit (score ≤5)
+- Warm metals (brass, gold, copper) mixed with cool metals (chrome, nickel) across the room = penalize material_fit
+- Dominant material family should repeat (e.g. if 2 neighbors are walnut, prefer walnut/warm-wood harmonies over rubberwood/ash)
+
+**Palette harmony rules**:
+- Saturated accent color clashing with the neighbors' palette = penalize palette_fit
+- Cold undertones against established warm neighbors (or vice versa) = penalize palette_fit`,
     });
   }
 
@@ -452,7 +488,18 @@ confidence_score:
 - 3-4: only title and retailer — no specs
 - 1-2: almost no reliable data
 
-CRITICAL: Use the FULL 0-10 range. Do NOT cluster scores in 6-8. A genuinely mediocre fit is a 5, not a 7.
+CRITICAL: Use the FULL 0-10 range. Do NOT cluster scores in 6-8.
+
+**BAND DISCIPLINE — enforce this before writing any score:**
+- Reserve **9-10** for exceptional matches that check EVERY anchor above — specific evidence on all three bullets for that dimension. If a dimension has even ONE weakness, it cannot score 9+.
+- **7-8** is strong-but-not-perfect: matches most anchors, has a minor qualifier.
+- **5-6** is the default band for "works but is unremarkable" — this is where the average product lands. If nothing specific jumps out as outstanding, score 5-6, NOT 7.
+- **3-4** is "noticeably off" — one anchor clearly fails.
+- **0-2** is "wrong" — fundamental mismatch.
+
+Self-check before finalizing each score: Can you name *three specific pieces of evidence* supporting a 9? If not, the score is NOT a 9. A "nice modern shelf in a modern room" is a 6, not an 8. Do not inflate because the product is competently photographed or reasonably styled.
+
+Anti-pattern to avoid: giving 8/9 across all dimensions to "safe" products. If every score is 8+ the distribution is wrong — real products have specific strengths and specific weaknesses.
 </scoring_calibration>
 
 <scoring_dimensions>
