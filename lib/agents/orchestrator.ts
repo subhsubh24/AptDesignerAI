@@ -18,6 +18,7 @@ import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
 import { productMatchesCategory } from "@/lib/validation/category-match";
+import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext, AgentResult } from "./types";
@@ -782,8 +783,29 @@ export async function runAgenticSearch(
 
     // ── Price-tier reclassification ─────────────────────────────
     // Products often land in the wrong tier because search queries
-    // are approximate. After extraction we know the actual price —
-    // move products to their correct tier instead of dropping them.
+    // are approximate (budget search surfaces a $700 item; luxury search
+    // surfaces a $200 item). After extraction we know the ACTUAL price —
+    // reclassify each product into the tier whose price range best
+    // matches it. Previous logic required the price to be both inside
+    // the candidate tier's range AND outside 0.5-1.5x of the origin
+    // tier's range, which let many misclassified products slip through
+    // and produced inverted totals (budget > luxury).
+    //
+    // New logic: for each product, score every tier by how well its
+    // range contains the price. Best-fit tier wins. A product stays
+    // in its origin tier only if no other tier is a strictly better fit.
+    const tierFitScore = (price: number, range?: { min: number; max: number }): number => {
+      if (!range) return -Infinity;
+      // Perfect: inside the range → 1.0
+      if (price >= range.min && price <= range.max) return 1.0;
+      // Partial: within ±40% of the range → inverse distance (0..1)
+      if (price >= range.min * 0.6 && price <= range.max * 1.4) {
+        if (price < range.min) return 1.0 - (range.min - price) / (range.min * 0.4);
+        return 1.0 - (price - range.max) / (range.max * 0.4);
+      }
+      return -Infinity;
+    };
+
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       const catBriefForTier = brief.categories.find((c) => c.category === category);
       if (!catBriefForTier) continue;
@@ -794,17 +816,17 @@ export async function runAgenticSearch(
         const products = tierResults[fromTier];
         for (const product of products) {
           if (!product.price) continue;
-          // Find the correct tier based on actual price
+
+          // Score every tier's fit, pick the best.
+          let bestTier: PriceTier = fromTier;
+          let bestScore = tierFitScore(product.price, catBriefForTier.tiers[fromTier]?.price_range);
           for (const candidateTier of PRICE_TIERS) {
-            if (candidateTier === fromTier) continue;
-            const range = catBriefForTier.tiers[candidateTier]?.price_range;
-            if (range && product.price >= range.min * 0.6 && product.price <= range.max * 1.4) {
-              const origRange = catBriefForTier.tiers[fromTier]?.price_range;
-              if (origRange && (product.price > origRange.max * 1.5 || product.price < origRange.min * 0.5)) {
-                toMove.push({ product, fromTier, toTier: candidateTier });
-                break;
-              }
-            }
+            const score = tierFitScore(product.price, catBriefForTier.tiers[candidateTier]?.price_range);
+            if (score > bestScore) { bestScore = score; bestTier = candidateTier; }
+          }
+
+          if (bestTier !== fromTier) {
+            toMove.push({ product, fromTier, toTier: bestTier });
           }
         }
       }
@@ -1804,6 +1826,75 @@ export async function runAgenticSearch(
 
     // Log per-phase token breakdown for cost analysis
     log.info("Token usage by phase", { phase: "stats", tokensPerPhase: stats.tokensPerPhase, totalTokens: stats.tokensUsed });
+
+    // ═══════════════════════════════════════════════════════════
+    // Live confidence — deterministic math over current picks.
+    // Replaces the AI validation agent's confidence (which converges
+    // at 8.5-9.2 regardless of actual picks) with a reproducible
+    // score and issues that reference THIS bundle's actual state.
+    // ═══════════════════════════════════════════════════════════
+    try {
+      const topPicks: CandidateProduct[] = [];
+      for (const products of Object.values(candidatesByCategory)) {
+        const sorted = [...products].sort((a, b) => {
+          const sA = evaluations.get(a.id)?.final_item_score || 0;
+          const sB = evaluations.get(b.id)?.final_item_score || 0;
+          return (sB - sA) || tiebreakProduct(a, b);
+        });
+        if (sorted.length > 0) topPicks.push(sorted[0]);
+      }
+
+      if (topPicks.length > 0) {
+        const mathScores = computeBundleMathScores(
+          topPicks.map((p) => ({
+            title: p.title || undefined,
+            category: p.category || undefined,
+            price: p.price || undefined,
+            materials: p.materials || undefined,
+            colors: p.colors || undefined,
+            dimensions: p.dimensions || undefined,
+          })),
+          {
+            roomType: ctx.roomType,
+            recommendedPalette: ctx.designDirection?.recommended_palette,
+            recommendedMaterials: ctx.designDirection?.recommended_materials,
+            floorPlan: ctx.floorPlan as Record<string, unknown> | undefined,
+            placementMap: ctx.placementMap as Record<string, string> | undefined,
+            existingItems: ctx.keepItems,
+          }
+        );
+
+        const liveConfidence = Math.round(mathScores.overall * 100) / 10; // 0-10, 1 decimal
+        const liveIssues = mathScores.issues.slice(0, 6);
+        const priorFlags = validationResult.success && validationResult.data?.product_flags
+          ? validationResult.data.product_flags
+              .filter((f) => f.harmony_score <= 5)
+              .filter((f) => topPicks.some((p) => p.title?.toLowerCase() === f.title.toLowerCase()))
+              .map((f) => `${f.title}: ${f.reason}`)
+          : [];
+
+        const mergedIssues = [...liveIssues, ...priorFlags].slice(0, 8);
+
+        validationData = {
+          isValid: liveConfidence >= 7 && mergedIssues.length === 0,
+          confidence: liveConfidence,
+          issues: mergedIssues,
+        };
+
+        log.info("Live confidence computed from bundle math", {
+          phase: "validation",
+          confidence: liveConfidence,
+          picks: topPicks.length,
+          issueCount: mergedIssues.length,
+          overall: mathScores.overall,
+        });
+      }
+    } catch (err) {
+      log.warn("Live confidence computation failed — keeping AI validation value", {
+        phase: "validation",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     return {
       success: true,

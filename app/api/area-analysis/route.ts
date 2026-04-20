@@ -1086,8 +1086,14 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
 
       totalRoundsCompleted = round;
 
+      // Deterministic confidence — blend math (source of truth) with AI assessment.
+      // Without this, the AI converges at ~8.5-9.2 regardless of real state.
+      const roundMathConfidence = latestMathResult ? Math.round(latestMathResult.overall * 100) / 10 : undefined;
+      const roundBlendedConfidence = roundMathConfidence !== undefined
+        ? Math.round((roundMathConfidence * 0.7 + harmony.confidence * 0.3) * 10) / 10
+        : harmony.confidence;
       validation = {
-        confidence: harmony.confidence,
+        confidence: roundBlendedConfidence,
         overall_cohesion: harmony.overall_cohesion,
         palette_coherence: harmony.palette_coherence,
         material_coherence: harmony.material_coherence,
@@ -1261,8 +1267,14 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       // Apply per-dimension math caps to each final score (same logic as main loop).
       // The AI prompt instructs the AI to respect math scores but we enforce it here too.
       const finalPairwise = final.pairwise_conflicts || [];
+      // Deterministic confidence — blend math (source of truth) with AI assessment.
+      // Without this, the AI prompt converges at ~8.5-9.2 regardless of actual state.
+      const mathConfidence = latestMathResult ? Math.round(latestMathResult.overall * 100) / 10 : undefined;
+      const blendedConfidence = mathConfidence !== undefined
+        ? Math.round((mathConfidence * 0.7 + final.confidence * 0.3) * 10) / 10
+        : final.confidence;
       validation = {
-        confidence: final.confidence,
+        confidence: blendedConfidence,
         overall_cohesion: final.overall_cohesion,
         palette_coherence: final.palette_coherence,
         material_coherence: final.material_coherence,

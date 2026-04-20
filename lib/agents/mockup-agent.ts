@@ -66,6 +66,16 @@ export interface MockupImageOptions {
    * (e.g. "West Elm Harmony sofa", "Japandi oak dining table").
    */
   groundingReferences?: string[];
+  /**
+   * Visual references for the actual products that should appear in the
+   * mockup. Each entry is a URL to a product image (PDP hero shot) plus
+   * a short caption naming the category and title. When provided, these
+   * are attached as image blocks to the image-generation call so Nano
+   * Banana renders the actual picks — not a generic room. Text-only
+   * grounding (titles/retailers) is insufficient; the model needs to
+   * SEE each product to match silhouette, color, and material.
+   */
+  productReferences?: Array<{ imageUrl: string; caption: string }>;
 }
 
 export interface MockupContext {
@@ -413,6 +423,25 @@ on the CORRECT walls — not mirrored versions of them.`,
 ${options.groundingReferences.map((r, i) => `${i + 1}. ${r}`).join("\n")}
 Use these real-world references to render furniture and materials accurately (correct proportions, current colorways, actual silhouettes). Do not copy the reference photos 1:1 — adapt them to this specific room.`,
       });
+    }
+
+    // Product reference images: attach each selected product's hero photo so
+    // the image model renders THESE items, not a stylistic approximation.
+    // This is the difference between "a mid-century sofa" and "THIS sofa with
+    // these specific tapered legs, cognac leather, and 84" silhouette".
+    if (options.productReferences && options.productReferences.length > 0) {
+      content.push({
+        type: "text",
+        text: `SELECTED PRODUCTS — these are the EXACT items that must appear in the rendered room. Each caption below is paired with its product photo. Render each item matching its photo: same silhouette, same material, same color, same proportions. Do NOT substitute generic lookalikes.`,
+      });
+      for (const ref of options.productReferences.slice(0, 10)) {
+        content.push({ type: "text", text: ref.caption });
+        try {
+          content.push(await resolveImageBlock(ref.imageUrl, { preferFilesApi: true }));
+        } catch {
+          // Skip unresolvable image refs — the caption still guides the model.
+        }
+      }
     }
 
     content.push({

@@ -494,6 +494,24 @@ RULES:
   // Seed grounding refs with product titles + retailers so Image Search
   // Grounding pulls real product photos during rendering. Caller-provided
   // refs (if any) take precedence.
+  //
+  // Also attach each product's actual image as a visual reference so the
+  // image model renders THESE items (not a generic stylistic match). Text
+  // grounding alone gave us mockups unrelated to the selected tier.
+  const productReferences = products
+    .filter((p: { image_url?: string | null }) => !!p.image_url)
+    .map((p: { image_url?: string | null; title?: string; category?: string; colors?: string[]; materials?: string[]; price?: number; retailer?: string }) => {
+      const captionParts = [
+        p.category ? `[${p.category}]` : "",
+        p.title || "",
+        p.materials?.length ? `materials: ${p.materials.join(", ")}` : "",
+        p.colors?.length ? `colors: ${p.colors.join(", ")}` : "",
+        p.retailer ? `(${p.retailer})` : "",
+      ].filter(Boolean);
+      return { imageUrl: p.image_url as string, caption: captionParts.join(" ") };
+    })
+    .slice(0, 10);
+
   const stdImageOptions: MockupImageOptions = {
     ...imageOptions,
     groundingReferences:
@@ -506,6 +524,7 @@ RULES:
             })
             .filter((s: string) => s.length > 0)
             .slice(0, 8),
+    productReferences,
   };
 
   // Generate image — pass room photos and floor plan for visual reference
