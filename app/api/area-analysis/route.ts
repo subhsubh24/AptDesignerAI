@@ -19,6 +19,8 @@ import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
 export async function GET(request: NextRequest) {
@@ -63,8 +65,19 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const limit = checkRateLimit(`area-analysis:${user.id}`, RATE_LIMITS.areaAnalysis);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many area-analysis requests. Please wait a few minutes." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+
   const { room_id, project_id } = await request.json();
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // If another request for the same room is already running, wait for it.
   // Key includes user.id so concurrent requests from different users never share
@@ -277,13 +290,23 @@ These photos show the REST of the apartment. Study them to understand:
 ⚠️ Your ENTIRE analysis must be about the ${room.name} above — these photos are CONTEXT ONLY.`,
     });
 
+    // 90-day freshness window — palette/direction from older sibling
+    // diagnoses reflects a previous user preference that has likely evolved.
+    // Falling back to stale summaries makes the current room drift toward
+    // an outdated direction.
+    const staleCutoffMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const otherRoom of otherRooms as any[]) {
       const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; created_at?: string }> | undefined;
-      // Sort descending by created_at so we always use the most recent diagnosis.
-      const sortedDiagnoses = diagnoses?.slice().sort((a, b) =>
-        (b.created_at ?? "").localeCompare(a.created_at ?? "")
-      );
+      // Filter to fresh entries, then sort descending so we use the most recent.
+      const sortedDiagnoses = diagnoses
+        ?.filter((d) => {
+          if (!d.created_at) return false;
+          const t = Date.parse(d.created_at);
+          return Number.isFinite(t) && t >= staleCutoffMs;
+        })
+        .slice()
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
       const otherDiagnosis = sortedDiagnoses?.[0];
       const djson = otherDiagnosis?.diagnosis_json;
       const summary = djson?.summary as string | undefined;
@@ -485,11 +508,22 @@ ${summaries}
 Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}>, "reason": "<one sentence>"}`;
 
       try {
+        // Feed the judge the same room/apartment photos the generators saw
+        // (via cacheScope so token cost is amortized). Without images, the
+        // judge rewards fluent specificity over ACCURATE observation — e.g.
+        // a hallucinated "warm walnut floors" on a grey-LVP room can win
+        // because it reads better. Grounding the judge on the actual photos
+        // forces it to prefer accuracy.
         const resp = await geminiProvider.chat({
           model,
-          system: "You are a design critic selecting the best of several candidate room analyses. Be decisive, terse, and return only the required JSON.",
+          system:
+            "You are a design critic selecting the best of several candidate room analyses. Compare the text summaries against the actual photos — the best candidate's palette/materials/observations must match what is visibly in the room. Be decisive, terse, and return only the required JSON.",
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 2000,
+          cacheScope:
+            contentBlocks.length > 0
+              ? { sessionKey: areaSessionKey, content: contentBlocks }
+              : undefined,
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
         const parsed = extractJsonObject<any>(resp.content);

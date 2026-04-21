@@ -20,10 +20,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Step 1: Get place details with photos field
-    const detailsUrl = `https://places.googleapis.com/v1/places/${placeId}?fields=photos&key=${apiKey}`;
+    // Step 1: Get place details with photos field. Auth via header so the
+    // key never appears in URLs / access logs / Referer headers.
+    const detailsUrl = `https://places.googleapis.com/v1/places/${placeId}?fields=photos`;
     const detailsRes = await fetch(detailsUrl, {
-      headers: { "X-Goog-FieldMask": "photos" },
+      headers: {
+        "X-Goog-FieldMask": "photos",
+        "X-Goog-Api-Key": apiKey,
+      },
     });
 
     if (!detailsRes.ok) {
@@ -41,9 +45,12 @@ export async function GET(req: NextRequest) {
     const photo = details.photos[0];
     const attributions = (photo.authorAttributions ?? []).map((a) => a.displayName);
 
-    // Step 2: Get photo media URL
-    const mediaUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=480&maxWidthPx=640&key=${apiKey}`;
-    const mediaRes = await fetch(mediaUrl, { redirect: "follow" });
+    // Step 2: Get photo media URL (header-auth)
+    const mediaUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=480&maxWidthPx=640`;
+    const mediaRes = await fetch(mediaUrl, {
+      redirect: "follow",
+      headers: { "X-Goog-Api-Key": apiKey },
+    });
 
     if (!mediaRes.ok) {
       return NextResponse.json({ photoUrl: null, attributions: [] });

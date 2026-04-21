@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,21 +175,33 @@ export default function DashboardPage() {
     loadExisting();
   }, []);
 
-  // Ensure project exists
+  // Ensure project exists. Guards against concurrent callers (two "Save"
+  // triggers in flight at once) double-creating a project by sharing a
+  // single in-flight promise keyed off the ref.
+  const ensureProjectInFlight = useRef<Promise<string> | null>(null);
   const ensureProject = useCallback(async (): Promise<string> => {
     if (projectId) return projectId;
+    if (ensureProjectInFlight.current) return ensureProjectInFlight.current;
 
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "My Apartment",
-        description: `${bedrooms}BD/${bathrooms}BA${city ? ` in ${city}` : ""}`,
-      }),
-    });
-    const project = await res.json();
-    setProjectId(project.id);
-    return project.id;
+    const p = (async () => {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "My Apartment",
+          description: `${bedrooms}BD/${bathrooms}BA${city ? ` in ${city}` : ""}`,
+        }),
+      });
+      const project = await res.json();
+      setProjectId(project.id);
+      return project.id as string;
+    })();
+    ensureProjectInFlight.current = p;
+    try {
+      return await p;
+    } finally {
+      ensureProjectInFlight.current = null;
+    }
   }, [projectId, bedrooms, bathrooms, city]);
 
   // Save project metadata

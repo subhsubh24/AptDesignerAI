@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/supabase/server";
+import { parsePagination } from "@/lib/utils/pagination";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+
+  const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 500 });
 
   const { data, error } = await supabase
     .from("saved_designs")
     .select("id, title, room_type, stage, thumbnail_url, created_at, updated_at, project_id, room_id")
     .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .range(offset, rangeEnd);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);

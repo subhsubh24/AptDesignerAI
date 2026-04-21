@@ -290,6 +290,24 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       note: rtc.note,
     });
   }
+  // Hard gate: if the model is HIGH-confidence that the declared room type is
+  // wrong (e.g. declared=kitchen but photos clearly show a bedroom), bail
+  // before Pass 2. Continuing would produce a specific-but-wrong action list
+  // for the user-declared room type, costing tokens and confusing the user.
+  // We keep the generated Pass-A analysis on the result so the caller can
+  // surface the mismatch (inferred type, reason) without re-running.
+  if (
+    rtc
+    && rtc.matches_declared === false
+    && rtc.confidence === "high"
+    && rtc.inferred_room_type
+    && rtc.inferred_room_type !== ctx.roomType
+  ) {
+    return {
+      success: false,
+      error: `Room type mismatch: photos look like "${rtc.inferred_room_type}" but this room is labeled "${ctx.roomType}".${rtc.note ? ` ${rtc.note}` : ""} Confirm the room type before running diagnosis.`,
+    };
+  }
 
   // ─── Pass 2: Plan (consumes Pass 1's analysis as text) ──────
   const analysisJson = JSON.stringify(analysis, null, 2);

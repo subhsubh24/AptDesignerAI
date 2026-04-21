@@ -38,7 +38,23 @@ export interface CachedFile {
 // Key is the source URL (Supabase, http(s), or /uploads/...) — dedupes both
 // concurrent lookups (returns the in-flight promise) and subsequent lookups
 // (returns the resolved cache entry).
+//
+// Bounded LRU — long-running serverless containers can see thousands of
+// distinct source URLs; without eviction the map grows unbounded. We keep
+// the most recently touched `MAX_ENTRIES` and drop the oldest. TTL still
+// applies independently via `expiresAtMs`.
+const MAX_ENTRIES = 500;
 const cache = new Map<string, Promise<CachedFile | null>>();
+
+function touch(key: string, value: Promise<CachedFile | null>): void {
+  cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > MAX_ENTRIES) {
+    const next = cache.keys().next();
+    if (next.done || next.value === undefined) break;
+    cache.delete(next.value);
+  }
+}
 
 let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
@@ -100,6 +116,8 @@ export async function getOrUploadFile(sourceUrl: string): Promise<CachedFile | n
   if (existing) {
     const resolved = await existing;
     if (resolved && resolved.expiresAtMs > Date.now()) {
+      // Bump LRU recency.
+      touch(sourceUrl, existing);
       return resolved;
     }
     // Stale — fall through to re-upload.
@@ -115,7 +133,7 @@ export async function getOrUploadFile(sourceUrl: string): Promise<CachedFile | n
     });
     return null;
   });
-  cache.set(sourceUrl, promise);
+  touch(sourceUrl, promise);
   return promise;
 }
 

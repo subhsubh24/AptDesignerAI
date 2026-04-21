@@ -3,17 +3,30 @@ import { createClient } from "@/lib/supabase/server";
 import { extractFromUrl, extractFromImage } from "@/lib/agents/product-extractor";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const limit = checkRateLimit(`products-ingest:${user.id}`, RATE_LIMITS.productsIngest);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many ingest requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+
   const body = await request.json();
   const { room_id, url, image_url, source_type } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!url && !image_url) return NextResponse.json({ error: "url or image_url required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Fetch room → project for design context. Pull room photos so the
   // extractor always has the target room as visual context (never forgets

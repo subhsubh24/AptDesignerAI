@@ -42,7 +42,22 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    // Drop any client-cached data tied to this session before the redirect.
+    // Storage is the only non-cookie surface we persist to today (theme is
+    // preserved — it's not user-scoped).
+    if (typeof window !== "undefined") {
+      try {
+        const preserve = new Map<string, string | null>();
+        preserve.set("theme", window.localStorage.getItem("theme"));
+        window.sessionStorage.clear();
+        window.localStorage.clear();
+        for (const [k, v] of preserve) if (v !== null) window.localStorage.setItem(k, v);
+      } catch {
+        // Some privacy modes block storage writes — redirect anyway.
+      }
+    }
     router.push("/login");
+    router.refresh();
   };
 
   const name = user?.user_metadata?.full_name || user?.email || "User";

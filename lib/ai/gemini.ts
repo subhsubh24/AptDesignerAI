@@ -27,6 +27,17 @@ import type {
 
 const log = createLogger("gemini");
 
+/**
+ * Hard per-call timeout (ms). The SDK's fetch has no built-in upper bound,
+ * so a partial/silently-stalled response could hang a request forever. This
+ * caps every generateContent call; transport retries are already layered on
+ * top so a timeout looks like a single transport error to callers.
+ *
+ * Set intentionally generous: image+long-context prompts can legitimately
+ * take 60–90s on Pro tier. Real stalls are orders of magnitude longer.
+ */
+const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_CALL_TIMEOUT_MS) || 180_000;
+
 let client: GoogleGenAI | null = null;
 
 /**
@@ -489,11 +500,25 @@ export const geminiProvider: AIProvider = {
     const maxTransportAttempts = 3;
     for (let attempt = 1; ; attempt++) {
       try {
-        response = await ai.models.generateContent({
-          model,
-          contents,
-          config,
-        });
+        response = await Promise.race([
+          ai.models.generateContent({
+            model,
+            contents,
+            config,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  Object.assign(new Error(`Gemini call timed out after ${GEMINI_CALL_TIMEOUT_MS}ms`), {
+                    name: "GeminiTimeoutError",
+                    cause: { code: "UND_ERR_CONNECT_TIMEOUT" },
+                  }),
+                ),
+              GEMINI_CALL_TIMEOUT_MS,
+            ),
+          ),
+        ]);
         break;
       } catch (err) {
         const e = err as Record<string, unknown>;

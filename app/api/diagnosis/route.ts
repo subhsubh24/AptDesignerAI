@@ -136,10 +136,16 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       .eq("project_id", room.project_id)
       .neq("id", room_id);
     if (otherRooms && otherRooms.length > 0) {
+      // 90-day freshness window — palette/material choices older than that
+      // reflect a prior user preference that has likely evolved. Falling back
+      // to stale sibling context pulls the current room toward a direction
+      // the user no longer wants.
+      const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: otherDiagnoses } = await supabase
         .from("room_diagnoses")
-        .select("room_id, design_direction_json")
-        .in("room_id", otherRooms.map((r: { id: string }) => r.id));
+        .select("room_id, design_direction_json, created_at")
+        .in("room_id", otherRooms.map((r: { id: string }) => r.id))
+        .gte("created_at", staleCutoff);
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(

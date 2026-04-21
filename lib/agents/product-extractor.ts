@@ -27,15 +27,19 @@ function getCachedExtraction(url: string): ExtractedProduct | null {
     extractionCache.delete(url);
     return null;
   }
+  // LRU bump: move to recent end so frequently-read URLs survive eviction.
+  extractionCache.delete(url);
+  extractionCache.set(url, entry);
   return entry.data;
 }
 
 function cacheExtraction(url: string, data: ExtractedProduct) {
+  extractionCache.delete(url);
   extractionCache.set(url, { data, timestamp: Date.now() });
-  // Prevent unbounded growth — evict oldest entries over 500
-  if (extractionCache.size > 500) {
-    const oldest = extractionCache.keys().next().value;
-    if (oldest) extractionCache.delete(oldest);
+  while (extractionCache.size > 500) {
+    const next = extractionCache.keys().next();
+    if (next.done || next.value === undefined) break;
+    extractionCache.delete(next.value);
   }
 }
 

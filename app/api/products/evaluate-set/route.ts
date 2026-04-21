@@ -68,15 +68,24 @@ export async function POST(request: Request) {
   let otherRoomsContext: string | undefined;
   const { data: otherRooms } = await supabase
     .from("rooms")
-    .select("name, room_type, room_diagnoses(diagnosis_json)")
+    .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
     .eq("project_id", room.project_id)
     .neq("id", room_id);
 
   if (otherRooms?.length) {
+    // 90-day freshness window — stale sibling diagnoses bias the set-level
+    // coherence pass toward palettes/materials the user has since moved on
+    // from.
+    const staleCutoffMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
     otherRoomsContext = otherRooms
       .map((r: Record<string, unknown>) => {
-        const diags = r.room_diagnoses as Array<{ diagnosis_json: Record<string, string> }> | undefined;
-        const diag = diags?.[diags.length - 1];
+        const diags = r.room_diagnoses as Array<{ diagnosis_json: Record<string, string>; created_at?: string }> | undefined;
+        const recent = (diags ?? []).filter((d) => {
+          if (!d.created_at) return false;
+          const t = Date.parse(d.created_at);
+          return Number.isFinite(t) && t >= staleCutoffMs;
+        });
+        const diag = recent[recent.length - 1];
         const summary = diag ? diag.diagnosis_json?.summary || "analyzed" : "not analyzed";
         return `- ${r.name} (${r.room_type}): ${summary}`;
       })

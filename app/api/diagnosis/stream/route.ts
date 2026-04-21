@@ -119,13 +119,19 @@ export async function POST(request: Request) {
         if (project) {
           const { data: otherRooms } = await supabase
             .from("rooms")
-            .select("name, room_type")
+            .select("id, name, room_type")
             .eq("project_id", room.project_id)
             .neq("id", room_id);
           if (otherRooms && otherRooms.length > 0) {
+            // 90-day freshness window — stale sibling palettes from months ago
+            // pull the current direction toward preferences the user has since
+            // evolved past.
+            const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
             const { data: otherDiagnoses } = await supabase
               .from("room_diagnoses")
-              .select("room_id, design_direction_json");
+              .select("room_id, design_direction_json, created_at")
+              .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
+              .gte("created_at", staleCutoff);
             const otherRoomSummaries: string[] = [];
             for (const otherRoom of otherRooms) {
               const otherDiag = otherDiagnoses?.find(

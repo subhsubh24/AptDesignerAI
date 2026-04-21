@@ -25,6 +25,7 @@ import { runProductVerifier } from "./product-verifier";
 import { embedImage } from "@/lib/ai/embeddings";
 import { topKSimilar } from "@/lib/store/embedding-index";
 import { createLogger } from "@/lib/logging/logger";
+import { pLimit } from "@/lib/utils/p-limit";
 import type { MemoryClient } from "@/lib/store/memory-store";
 import type { IdentifiedProductEnriched, RetrievalPrior } from "@/lib/types/schemas";
 import type { AgentResult } from "./types";
@@ -94,26 +95,7 @@ export async function runIdentifiedProductsPipeline(
   const enrichedResults: IdentifiedProductEnriched[] = [];
   let verifyCallsMade = 0;
 
-  // Inline concurrency limiter — matches orchestrator.ts pattern.
-  function pLimitFn(concurrency: number) {
-    let active = 0;
-    const queue: Array<() => void> = [];
-    function next() {
-      if (queue.length > 0 && active < concurrency) {
-        active++;
-        const run = queue.shift()!;
-        run();
-      }
-    }
-    return function <T>(fn: () => Promise<T>): Promise<T> {
-      return new Promise<T>((resolve, reject) => {
-        queue.push(() => { fn().then(resolve, reject).finally(() => { active--; next(); }); });
-        next();
-      });
-    };
-  }
-
-  const identifyLimit = pLimitFn(4);
+  const identifyLimit = pLimit(4);
 
   type IdentifyResult = {
     crop: typeof cropperOut.crops[number];
@@ -237,8 +219,12 @@ export async function runIdentifiedProductsPipeline(
 }
 
 /**
- * Keep the highest-confidence entry per (brand, model) key. This is a common
- * case — a sofa photographed from two angles produces two identical candidates.
+ * Keep the highest-confidence entry per (brand, model, variant) key. This is
+ * a common case — a sofa photographed from two angles produces two identical
+ * candidates. Variant is included so legitimate siblings like
+ * "West Elm Harmony" (sofa) + "West Elm Harmony" (sectional) stay as distinct
+ * identified products instead of silently collapsing into one row.
+ *
  * We don't merge evidence because the higher-confidence entry's evidence is
  * usually from the clearer angle, which is what the UI wants to surface.
  */
@@ -247,7 +233,8 @@ function dedupByBrandModel(
 ): IdentifiedProductEnriched[] {
   const byKey = new Map<string, IdentifiedProductEnriched>();
   for (const item of items) {
-    const key = `${item.brand.toLowerCase().trim()}::${item.model.toLowerCase().trim()}`;
+    const variantKey = (item.variant ?? "").toLowerCase().trim();
+    const key = `${item.brand.toLowerCase().trim()}::${item.model.toLowerCase().trim()}::${variantKey}`;
     const existing = byKey.get(key);
     if (!existing || item.confidence > existing.confidence) {
       byKey.set(key, item);

@@ -442,23 +442,28 @@ export function computeSpatialConstraints(
       // More than 2 items in one zone is suspicious
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
-          // Some pairs are OK (side table + sofa, nightstand + bed)
-          const pair = `${items[i]}|${items[j]}`.toLowerCase();
-          const naturalPairs = [
-            "sofa|side_table", "side_table|sofa",
-            "bed|nightstand", "nightstand|bed",
-            "desk|desk_chair", "desk_chair|desk",
-            "dining_table|dining_chair", "dining_chair|dining_table",
+          // Some pairs are OK (side table + sofa, nightstand + bed).
+          // Exact category match (not substring) — `side_table_lamp` must not
+          // be mistaken for `side_table`, `bed` must not match `headboard`.
+          const a = items[i].toLowerCase();
+          const b = items[j].toLowerCase();
+          const naturalPairSet = new Set<string>([
+            "sofa|side_table",
+            "bed|nightstand",
+            "desk|desk_chair",
+            "dining_table|dining_chair",
             // Area rug naturally co-locates with seating area furniture
-            "area_rug|coffee_table", "coffee_table|area_rug",
-            "area_rug|sofa", "sofa|area_rug",
+            "area_rug|coffee_table",
+            "area_rug|sofa",
             // Tray sits on coffee table
-            "tray|coffee_table", "coffee_table|tray",
+            "tray|coffee_table",
             // Vase/decor sits on tables
-            "vase|dining_table", "dining_table|vase",
-            "vase|coffee_table", "coffee_table|vase",
-          ];
-          if (!naturalPairs.some((np) => pair.includes(np.split("|")[0]) && pair.includes(np.split("|")[1]))) {
+            "vase|dining_table",
+            "vase|coffee_table",
+          ]);
+          const key1 = `${a}|${b}`;
+          const key2 = `${b}|${a}`;
+          if (!naturalPairSet.has(key1) && !naturalPairSet.has(key2)) {
             placementConflicts.push({ item1: items[i], item2: items[j], zone });
           }
         }

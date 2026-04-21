@@ -13,6 +13,8 @@ import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
+import { parsePagination } from "@/lib/utils/pagination";
 
 /**
  * Canonical JSON stringify — keys sorted recursively. Used for building
@@ -111,12 +113,18 @@ export async function GET(request: NextRequest) {
 
   const roomId = request.nextUrl.searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 300 });
 
   const { data, error } = await supabase
     .from("mockup_jobs")
     .select("*")
     .eq("room_id", roomId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, rangeEnd);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -141,6 +149,9 @@ export async function POST(request: Request) {
   const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description, iteration_notes } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Resolve optional Nano Banana 2 image generation options (resolution,
   // aspect ratio, Image Search Grounding). Accepts body fields:

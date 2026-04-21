@@ -16,6 +16,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let _client: SupabaseClient | null = null;
 
 export function getAdminClient(): SupabaseClient | null {
+  if (typeof window !== "undefined") {
+    throw new Error(
+      "getAdminClient() must never be called in a browser context — service-role key would be exposed.",
+    );
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;

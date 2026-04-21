@@ -21,6 +21,7 @@ import { productMatchesCategory } from "@/lib/validation/category-match";
 import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
+import { pLimit } from "@/lib/utils/p-limit";
 import type { AgentContext, AgentResult } from "./types";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
@@ -84,33 +85,6 @@ const TIER_LABELS: Record<PriceTier, string> = {
   balanced: "Balanced",
   high_end: "High End",
 };
-
-// ─── Concurrency Limiter ───────────────────────────────────────
-
-function pLimit(concurrency: number) {
-  let active = 0;
-  const queue: Array<() => void> = [];
-
-  function next() {
-    if (queue.length > 0 && active < concurrency) {
-      active++;
-      const run = queue.shift()!;
-      run();
-    }
-  }
-
-  return function <T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      queue.push(() => {
-        fn().then(resolve, reject).finally(() => {
-          active--;
-          next();
-        });
-      });
-      next();
-    });
-  };
-}
 
 // ─── Cartesian Product ────────────────────────────────────────
 

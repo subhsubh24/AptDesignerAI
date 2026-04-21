@@ -100,11 +100,16 @@ export default function DiagnosisPage() {
     setSteps([]);
     setShowCelebration(false);
 
+    // Cap the diagnosis SSE at 10min — diagnosis is far faster than search.
+    const diagAbort = new AbortController();
+    const diagTimeoutId = window.setTimeout(() => diagAbort.abort(), 10 * 60 * 1000);
+
     try {
       const res = await fetch("/api/diagnosis/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId }),
+        signal: diagAbort.signal,
       });
 
       if (!res.ok) {
@@ -164,10 +169,16 @@ export default function DiagnosisPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      const aborted = (err as { name?: string })?.name === "AbortError";
+      const message = aborted
+        ? "Diagnosis timed out — please try again."
+        : err instanceof Error
+          ? err.message
+          : "Something went wrong";
       setError(message);
       toast.error("Diagnosis failed", message);
     } finally {
+      window.clearTimeout(diagTimeoutId);
       setLoading(false);
     }
   };

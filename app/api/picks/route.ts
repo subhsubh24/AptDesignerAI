@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { parsePagination } from "@/lib/utils/pagination";
 
 /**
  * GET /api/picks
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("project_id");
+  const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 200, maxLimit: 1000 });
 
   // Fetch rooms owned by this user
   let roomsQuery = supabase
@@ -41,7 +43,8 @@ export async function GET(request: Request) {
     .select("*, product_evaluations(*)")
     .in("room_id", roomIds)
     .in("status", ["shortlisted", "accepted"])
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, rangeEnd);
 
   if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
 

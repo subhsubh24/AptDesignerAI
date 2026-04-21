@@ -114,9 +114,13 @@ export async function embedImage({ image, text }: EmbedImageInput): Promise<numb
     throw new Error("embedContent returned no embedding values");
   }
   if (values.length !== EMBEDDING_DIM) {
-    // Not fatal — but we key the index on a specific dim. Log loudly so we
-    // notice if the model is swapped out.
-    log.warn("Unexpected embedding dim", { expected: EMBEDDING_DIM, got: values.length });
+    // Fatal — our index is keyed on EMBEDDING_DIM and mixing dims silently
+    // causes `cosineSimilarity` to throw deep inside retrieval or (worse)
+    // poisons the index with un-queryable rows if we stored the mismatch.
+    // Fail fast so the caller (e.g. identified-products pipeline) can skip
+    // or surface the provider-side change.
+    log.error("Embedding dim mismatch", { expected: EMBEDDING_DIM, got: values.length });
+    throw new Error(`embedContent returned ${values.length}-dim vector; expected ${EMBEDDING_DIM}`);
   }
   return values;
 }

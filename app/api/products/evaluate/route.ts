@@ -57,15 +57,24 @@ export async function POST(request: Request) {
   let otherRoomsContext: string | undefined;
   const { data: otherRooms } = await supabase
     .from("rooms")
-    .select("name, room_type, room_diagnoses(diagnosis_json)")
+    .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
     .eq("project_id", room.project_id)
     .neq("id", room_id);
 
   if (otherRooms && otherRooms.length > 0) {
+    // 90-day freshness window — filter out stale sibling diagnoses before
+    // piping them into cross-room coherence. Older palettes reflect prior
+    // preferences that likely no longer hold.
+    const staleCutoffMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
     otherRoomsContext = otherRooms
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase join result
       .map((r: any) => {
-        const diag = r.room_diagnoses?.[r.room_diagnoses.length - 1];
+        const recent = (r.room_diagnoses ?? []).filter((d: { created_at?: string }) => {
+          if (!d.created_at) return false;
+          const t = Date.parse(d.created_at);
+          return Number.isFinite(t) && t >= staleCutoffMs;
+        });
+        const diag = recent[recent.length - 1];
         const summary = diag
           ? (diag.diagnosis_json as Record<string, string>).summary || "analyzed"
           : "not analyzed";

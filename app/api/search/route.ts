@@ -8,16 +8,29 @@ import type { AgentContext } from "@/lib/agents/types";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import type { IdentifiedProduct } from "@/lib/types/database";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const limit = checkRateLimit(`search:${user.id}`, RATE_LIMITS.search);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many search requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+
   const body = await request.json();
   const { room_id, categories } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Fetch room with images
   const { data: room } = await supabase
@@ -134,13 +147,18 @@ export async function POST(request: Request) {
   if (project) {
     const { data: otherRooms } = await supabase
       .from("rooms")
-      .select("name, room_type")
+      .select("id, name, room_type")
       .eq("project_id", room.project_id)
       .neq("id", room_id);
     if (otherRooms && otherRooms.length > 0) {
+      // 90-day freshness window — stale sibling palettes from months ago pull
+      // the current search brief toward preferences the user no longer holds.
+      const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: otherDiagnoses } = await supabase
         .from("room_diagnoses")
-        .select("room_id, design_direction_json");
+        .select("room_id, design_direction_json, created_at")
+        .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
+        .gte("created_at", staleCutoff);
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(

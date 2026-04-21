@@ -15,6 +15,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { createLogger } from "@/lib/logging/logger";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { quoteForPrompt } from "@/lib/utils/sanitize-prompt";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -1262,7 +1263,7 @@ export async function validateProductSet(
     roomContext.lightingConditions && `Lighting: ${roomContext.lightingConditions}`,
     roomContext.windowDoorPositions && `Windows/doors: ${roomContext.windowDoorPositions}`,
     roomContext.outletPositions && `Outlets: ${roomContext.outletPositions}`,
-    roomContext.priorities?.length && `Client priorities: ${roomContext.priorities.join(", ")}`,
+    roomContext.priorities?.length && `Client priorities: ${roomContext.priorities.map(quoteForPrompt).join(", ")}`,
     roomContext.placementMap && Object.keys(roomContext.placementMap).length > 0 &&
       `Intended placements:\n${Object.entries(roomContext.placementMap).map(([cat, pl]) => `  ${cat}: ${pl}`).join("\n")}`,
   ].filter(Boolean).join("\n");

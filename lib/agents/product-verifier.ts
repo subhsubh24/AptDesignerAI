@@ -174,8 +174,14 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
       model: candidate.model,
       variant: candidate.variant ?? null,
       category: candidate.category,
+      // Once the verifier has actually inspected the source, its match_score
+      // is the authoritative signal — the prior identifier confidence was a
+      // guess. Previously we took the max of the two, which meant a lucky
+      // high prior could override a moderate verifier result and leave us
+      // over-confident on borderline matches. When the verifier disagrees
+      // (verified=false), take the lower of the two to bias toward caution.
       confidence: parsed.verified
-        ? Math.max(candidate.confidence, parsed.match_score)
+        ? parsed.match_score
         : Math.min(candidate.confidence, parsed.match_score),
       verified: parsed.verified && parsed.match_score >= MATCH_THRESHOLD,
       user_confirmed: null,

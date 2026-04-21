@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 
 export async function GET(
   _request: Request,
@@ -9,6 +10,9 @@ export async function GET(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const { data, error } = await supabase
     .from("room_images")
@@ -28,6 +32,9 @@ export async function POST(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const body = await request.json();
   const { image_url, image_type, storage_path, caption } = body;
@@ -60,6 +67,9 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const body = await request.json();
   const { image_id } = body;

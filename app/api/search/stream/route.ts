@@ -4,6 +4,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
       JSON.stringify({ error: "Too many search requests. Please wait a moment." }),
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
+  }
+
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
   }
 
   // Fetch room
@@ -141,14 +146,19 @@ export async function POST(request: Request) {
   if (project) {
     const { data: otherRooms } = await supabase
       .from("rooms")
-      .select("name, room_type")
+      .select("id, name, room_type")
       .eq("project_id", room.project_id)
       .neq("id", room_id);
     if (otherRooms && otherRooms.length > 0) {
-      // Get diagnoses for other rooms that have been analyzed
+      // Get diagnoses for other rooms that have been analyzed within the
+      // last 90 days — older palette/material choices reflect preferences the
+      // user has since evolved past.
+      const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: otherDiagnoses } = await supabase
         .from("room_diagnoses")
-        .select("room_id, design_direction_json");
+        .select("room_id, design_direction_json, created_at")
+        .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
+        .gte("created_at", staleCutoff);
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(

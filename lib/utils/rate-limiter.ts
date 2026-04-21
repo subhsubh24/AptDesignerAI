@@ -98,4 +98,10 @@ export const RATE_LIMITS = {
   mockup: { maxRequests: 5, windowMs: 60_000 },
   /** Upload: 20 per minute per user */
   upload: { maxRequests: 20, windowMs: 60_000 },
+  /** Area analysis — slow, heavy. 3 per 5 minutes per user */
+  areaAnalysis: { maxRequests: 3, windowMs: 5 * 60_000 },
+  /** Area analysis refine — cheap follow-up. 10 per minute */
+  areaAnalysisRefine: { maxRequests: 10, windowMs: 60_000 },
+  /** Products ingest — 20 per minute */
+  productsIngest: { maxRequests: 20, windowMs: 60_000 },
 } as const;

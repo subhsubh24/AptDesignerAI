@@ -443,11 +443,17 @@ export default function FocusPage() {
       specs: n.specs,
     }));
 
+    // Hard cap on the SSE stream — server pipelines target under 15 min,
+    // anything past 25 is certainly a stall (proxy timeout, dead backend, etc.)
+    const streamAbort = new AbortController();
+    const streamTimeoutId = window.setTimeout(() => streamAbort.abort(), 25 * 60 * 1000);
+
     try {
       const res = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId, categories }),
+        signal: streamAbort.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -524,7 +530,16 @@ export default function FocusPage() {
       }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(e instanceof Error ? e.message : "Search failed — please try again");
+      const aborted = (e as { name?: string })?.name === "AbortError";
+      setSearchError(
+        aborted
+          ? "Search timed out — please try again."
+          : e instanceof Error
+            ? e.message
+            : "Search failed — please try again",
+      );
+    } finally {
+      window.clearTimeout(streamTimeoutId);
     }
     setSearching(false);
     setSearchStartTime(null);

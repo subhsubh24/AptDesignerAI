@@ -178,3 +178,30 @@ export function sanitizeUserContext(raw: string): {
     piiCategories,
   };
 }
+
+/**
+ * Inline-safe escape for user-supplied text inserted into a prompt line.
+ *
+ * Returns a JSON-quoted string (double-quoted, with embedded quotes/backticks/
+ * newlines escaped), keeping the content visible to the model while stripping
+ * any template-structure it could otherwise impersonate.
+ *
+ * Prefer this over raw `${value}` interpolation for any free-form field
+ * (user_context, keep_items, replace_items, priorities, style_notes, etc.)
+ * flowing into an LLM prompt.
+ */
+export function quoteForPrompt(raw: string | null | undefined): string {
+  if (!raw) return '""';
+  const trimmed = String(raw).trim();
+  if (!trimmed) return '""';
+  return JSON.stringify(trimmed.slice(0, MAX_USER_CONTEXT_LENGTH));
+}
+
+/**
+ * Bullet list where each item is quoteForPrompt-escaped.
+ */
+export function quoteListForPrompt(items: readonly string[]): string {
+  return items
+    .map((item) => `- ${quoteForPrompt(item)}`)
+    .join("\n");
+}

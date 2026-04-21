@@ -368,7 +368,12 @@ export function lookupColor(name: string): HSL | null {
   // 1. If the model emitted a hex or rgb code (either standalone or inside
   //    parens, e.g. "warm ivory (#F3ECE0)"), parse that directly. Avoids the
   //    palette_fit → 0.5 floor when the name isn't in the table.
-  const hexInside = raw.match(/#[0-9a-fA-F]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/);
+  //    Anchor the hex length to EXACTLY 3 or 6 chars via a negative lookahead
+  //    — `{3,6}` greedily truncates malformed 7+ char sequences (e.g.
+  //    `#ABCDEF12` → `#ABCDEF`) and silently accepts a wrong color.
+  const hexInside = raw.match(
+    /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-fA-F])|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/,
+  );
   if (hexInside) {
     const parsed = hexToHsl(hexInside[0]);
     if (parsed) return parsed;

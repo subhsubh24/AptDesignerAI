@@ -404,6 +404,9 @@ export async function generateBundleVibe(
   const cacheKey = vibeCacheKey(products, bundleCtx, verdict);
   const cached = vibeCache.get(cacheKey);
   if (cached) {
+    // LRU bump
+    vibeCache.delete(cacheKey);
+    vibeCache.set(cacheKey, cached);
     return { success: true, data: cached, tokensUsed: 0 };
   }
 

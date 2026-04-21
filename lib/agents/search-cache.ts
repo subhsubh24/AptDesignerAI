@@ -16,10 +16,15 @@ interface Entry<T> {
 }
 
 function lruSet<T>(cache: Map<string, Entry<T>>, key: string, data: T) {
+  // JS Maps iterate in insertion order, so delete+set moves the key to the
+  // back of the iteration order. Eviction drops the first key, which is now
+  // guaranteed to be the least-recently-accessed entry.
+  cache.delete(key);
   cache.set(key, { data, timestamp: Date.now() });
-  if (cache.size > MAX_ENTRIES) {
-    const oldest = cache.keys().next().value;
-    if (oldest) cache.delete(oldest);
+  while (cache.size > MAX_ENTRIES) {
+    const next = cache.keys().next();
+    if (next.done || next.value === undefined) break;
+    cache.delete(next.value);
   }
 }
 
@@ -31,6 +36,10 @@ function lruGet<T>(cache: Map<string, Entry<T>>, key: string): T | null {
     cache.delete(key);
     return null;
   }
+  // Bump recency: delete + re-insert without touching timestamp so TTL
+  // still measures age-since-creation, not age-since-last-access.
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.data;
 }
 

@@ -25,6 +25,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logging/logger";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbedding } from "@/lib/store/embedding-index";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 
 const log = createLogger("identified-products-confirm");
@@ -59,6 +60,9 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const body = await request.json().catch(() => null);
   if (!isConfirmBody(body)) {
