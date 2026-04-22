@@ -187,8 +187,10 @@ export const IMAGE_GENERATION_CONFIG = {
     "1:4", "4:1", "1:8", "8:1",
   ] as const,
 
-  /** Default grounding behavior for mockup/vision renders. */
-  imageSearchGroundingDefault: true,
+  /** Default grounding behavior for mockup/vision renders.
+   * Disabled: product images are already attached as visual blocks, and web
+   * search introduces non-determinism that conflicts with room photos. */
+  imageSearchGroundingDefault: false,
 } as const;
 
 // ─── Media Resolution Policy ──────────────────────────────────

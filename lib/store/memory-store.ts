@@ -278,8 +278,12 @@ class QueryBuilder {
     while ((match = relationPattern.exec(selectStr)) !== null) {
       const relTable = match[1];
       if (tables[relTable]) {
-        // Find FK column: try room_id, project_id, bundle_id, product_id
+        // Derive FK from the PARENT table name first — e.g. when querying
+        // candidate_products and joining product_evaluations, the correct FK
+        // is product_id (not room_id which also exists on product_evaluations).
+        const parentDerived = `${this.table.replace(/s$/, "").replace(/^candidate_/, "")}_id`;
         const fkCandidates = [
+          { fk: parentDerived, pk: "id" },
           { fk: "room_id", pk: "id" },
           { fk: "project_id", pk: "id" },
           { fk: "bundle_id", pk: "id" },

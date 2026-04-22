@@ -1623,8 +1623,10 @@ export async function runAgenticSearch(
               harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
               includeFitNotes: false,
             });
+            if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
             if (scoreResult.success && scoreResult.data) {
               evaluations.set(product.id, scoreResult.data);
+              stats.totalDeepScored++;
               if (scoreResult.data.final_item_score >= 6) {
                 candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
                 candidatesByCategory[wt.category].push(product);

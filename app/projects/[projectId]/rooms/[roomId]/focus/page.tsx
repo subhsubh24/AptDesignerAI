@@ -597,6 +597,22 @@ export default function FocusPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "completed" }),
     });
+
+    // Find the next incomplete room in this project
+    try {
+      const res = await fetch(`/api/rooms?project_id=${projectId}`);
+      if (res.ok) {
+        const rooms = await res.json();
+        const next = rooms.find(
+          (r: { id: string; status: string }) => r.id !== roomId && r.status !== "completed",
+        );
+        if (next) {
+          router.push(`/projects/${projectId}/rooms/${next.id}/focus`);
+          return;
+        }
+      }
+    } catch { /* fall through to dashboard */ }
+
     router.push("/dashboard");
   };
 

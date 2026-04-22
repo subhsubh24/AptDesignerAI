@@ -905,8 +905,9 @@ export default function DashboardPage() {
             const firstImage = roomImages[section.key]?.[0];
             const isSelected = selectedRoom === section.key;
             const roomStatus = roomStatuses[section.key] ?? "setup";
-            const isDone = ["diagnosed", "sourcing", "completed"].includes(roomStatus);
-            const isOutstanding = hasImages && !isDone;
+            const isDone = roomStatus === "completed";
+            const isInProgress = ["diagnosed", "sourcing", "bundled"].includes(roomStatus);
+            const isOutstanding = hasImages && !isDone && !isInProgress;
 
             if (!hasImages) return null;
 
@@ -915,7 +916,7 @@ export default function DashboardPage() {
                 key={section.key}
                 onClick={() => setSelectedRoom(isSelected ? null : section.key)}
                 aria-pressed={isSelected}
-                aria-label={`${section.label} — ${isDone ? "done" : "outstanding"}`}
+                aria-label={`${section.label} — ${isDone ? "done" : isInProgress ? "in progress" : "outstanding"}`}
                 className={cn(
                   "group relative overflow-hidden rounded-2xl border-2 bg-card transition-all duration-300 text-left",
                   isSelected
@@ -944,6 +945,10 @@ export default function DashboardPage() {
                   {isDone ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[10px] font-semibold shadow">
                       <CheckCircle2 className="h-3 w-3" /> Done
+                    </span>
+                  ) : isInProgress ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/90 text-white text-[10px] font-semibold shadow">
+                      In Progress
                     </span>
                   ) : isOutstanding ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-semibold shadow">
