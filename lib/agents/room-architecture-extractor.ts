@@ -156,6 +156,10 @@ export async function extractRoomArchitecture(
       max_tokens: 3000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      tools: [
+        { googleSearch: {} as Record<string, never> },
+        { codeExecution: {} as Record<string, never> },
+      ],
     });
 
     const parsed = extractJsonObject<RoomArchitecture>(response.content);

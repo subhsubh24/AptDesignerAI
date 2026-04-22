@@ -162,6 +162,10 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             cacheScope: cacheableBlocks.length > 0
               ? { sessionKey: roomSessionKey, content: cacheableBlocks }
               : undefined,
+            tools: [
+              { googleSearch: {} as Record<string, never> },
+              { codeExecution: {} as Record<string, never> },
+            ],
           });
 
           const raw = extractJsonObject(response.content);
@@ -229,13 +233,16 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
         // better. Grounding on photos forces the judge to prefer accuracy.
         const resp = await geminiProvider.chat({
           model: judgeModel,
-          system: "You are a design critic selecting the best of several candidate room analyses. Compare the text summaries against the actual photos — the best candidate's palette/materials/observations must match what is visibly in the room. Be decisive, terse, and return only the required JSON.",
+          system: getSystemPrompt(),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 2000,
           seed: DETERMINISTIC_SEED,
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
             : undefined,
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
         const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };
         const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
@@ -369,6 +376,10 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
             : undefined,
+          tools: [
+            { googleSearch: {} as Record<string, never> },
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
 
         const raw = extractJsonObject(response.content);

@@ -104,6 +104,15 @@ export const ORCHESTRATOR = {
   enablePostSearchCoordinator:
     process.env.ENABLE_POST_SEARCH_COORDINATOR !== "0" &&
     process.env.ENABLE_POST_SEARCH_COORDINATOR !== "false",
+
+  /**
+   * When ON (default), the DesignCoordinator agent orchestrates the
+   * area-analysis pipeline using native function calling. When OFF,
+   * the hardcoded Pass A → Pass B → enrich → harmony flow runs.
+   */
+  enableDesignCoordinator:
+    process.env.ENABLE_DESIGN_COORDINATOR !== "0" &&
+    process.env.ENABLE_DESIGN_COORDINATOR !== "false",
 } as const;
 
 // ─── Bundle Math ──────────────────────────────────────────────

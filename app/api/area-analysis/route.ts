@@ -15,7 +15,8 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
-import { ROOM_FURNISHING_TIERS } from "@/lib/config/pipeline";
+import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
+import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
@@ -384,6 +385,33 @@ Step 4: Capture spatial & environmental context (layout, lighting, windows/doors
   "outlet_positions": "best-guess outlet locations from photos + typical layouts — note spots where lamps/media would need extension cords"
 }
 
+Use Google Search to verify current design trend terminology and material availability when needed. Use Code Execution for any spatial calculations (proportions, clearances, area coverage).
+
+## FEW-SHOT EXAMPLE (good Pass A output)
+{
+  "summary": "A 450-sqft studio with grey LVP flooring, white walls, south-facing windows providing strong natural light. The charcoal Kivik sectional anchors the living zone. The space lacks warmth — no textiles, no accent lighting, bare walls. The kitchen's white quartz counters and brushed nickel hardware establish a cool-neutral base.",
+  "what_works": [
+    "IKEA Kivik sectional in Hillared anthracite — good scale for the space, low-profile, positioned correctly against the west wall",
+    "Grey LVP flooring — neutral base, durable, consistent throughout",
+    "South-facing windows — excellent natural light, no glare concerns from current angle",
+    "White oak-look floating shelves above the desk — warm tone balances the grey floor"
+  ],
+  "what_should_go": [
+    "Black metal folding TV tray used as coffee table — undersized (18x12 inch), wrong material family, visually harsh",
+    "Single overhead boob light — flat wash, no layering, no ambience control",
+    "Blue plastic storage bins visible under desk — visual clutter, wrong material story"
+  ],
+  "style_name": "Nordic Charcoal",
+  "design_direction": "Build on the charcoal sectional + grey LVP + white walls as a cool-neutral canvas, then inject warmth through natural oak, warm cream textiles, and brass accents. The 60-30-10 ratio: 60% cool greys/whites (existing), 30% warm wood + cream (new pieces), 10% matte brass + sage green (accents). This creates a Scandinavian-inspired space that feels intentional rather than unfinished.",
+  "recommended_palette": ["charcoal grey", "warm cream", "natural oak", "matte brass", "sage green", "soft white"],
+  "recommended_materials": ["solid oak", "linen", "brushed brass", "natural wool", "matte ceramic"],
+  "recommended_textures": ["bouclé", "ribbed knit", "raw linen weave", "matte ceramic"],
+  "spatial_layout": "The sectional defines a clear living zone against the west wall. Traffic flows from the entry (north) past the kitchen peninsula to the living zone. A 5ft clearance between the sectional and the south windows allows a reading nook. The TV wall (east) has 8ft of unbroken wall space for a media console + art. The desk zone (northeast corner) is separated by a 3ft gap.",
+  "lighting_conditions": "South-facing windows deliver strong direct light from 10am-4pm; the west wall gets warm indirect light in late afternoon. The northeast desk corner is the darkest zone — needs task lighting. No existing floor or table lamps. Current ceiling light is a single warm-white dome.",
+  "window_door_positions": "South wall: two 4ft-wide windows centered, sills at 30 inch, 6ft between them. Entry door: north wall, left side, swings inward 90° (24 inch clearance needed). No other doors.",
+  "outlet_positions": "South wall: one outlet between windows (ideal for lamp). West wall: one outlet behind sectional (accessible). East wall: one outlet center-low (TV/media). North wall: one outlet near entry (desk area). Northeast corner: no visible outlet — extension cord likely needed for desk lamp."
+}
+
 Be extremely specific. Name exact colors, materials, dimensions. Do NOT include what_it_needs or any shopping recommendations.${identifiedPiecesBlock ? `\n\n${identifiedPiecesBlock}` : ""}`;
 
   const agentRun = await createAgentRun(supabase, {
@@ -445,6 +473,10 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           cacheScope: contentBlocks.length > 0
             ? { sessionKey: areaSessionKey, content: contentBlocks }
             : undefined,
+          tools: [
+            { googleSearch: {} as Record<string, never> },
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
         if (response.truncated) {
           console.warn("[area-analysis] Pass A sample truncated — discarding");
@@ -516,14 +548,16 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
         // forces it to prefer accuracy.
         const resp = await geminiProvider.chat({
           model,
-          system:
-            "You are a design critic selecting the best of several candidate room analyses. Compare the text summaries against the actual photos — the best candidate's palette/materials/observations must match what is visibly in the room. Be decisive, terse, and return only the required JSON.",
+          system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 2000,
           cacheScope:
             contentBlocks.length > 0
               ? { sessionKey: areaSessionKey, content: contentBlocks }
               : undefined,
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
         const parsed = extractJsonObject<any>(resp.content);
@@ -616,7 +650,9 @@ Reference Pass 1's \`spatial_layout\`, \`window_door_positions\`, and \`outlet_p
   ]
 }
 
-At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all three tiers.`;
+At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all three tiers.
+
+Use Google Search to verify current pricing and material availability when needed. Use Code Execution for spatial calculations (clearances, rug sizing, table proportions relative to room dimensions).`;
 
     const passBResponse = await geminiProvider.chat({
       model,
@@ -625,6 +661,10 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       max_tokens: 12000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      tools: [
+        { googleSearch: {} as Record<string, never> },
+        { codeExecution: {} as Record<string, never> },
+      ],
     });
     if (passBResponse.truncated) {
       throw new Error("AI response was truncated during Pass B (furnishing). The item list was too long.");
@@ -871,6 +911,13 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
       identifiedContext: identifiedPiecesBlock || undefined,
     };
+
+    // ── Design Coordinator (agentic) vs. Hardcoded Harmony Loop ──────
+    // When the DesignCoordinator is enabled (default ON), an agent with
+    // native function calling orchestrates the harmony/validation phase.
+    // It decides how many rounds to run, when to re-search trends, when
+    // to finalize — all based on objective score signals. The hardcoded
+    // loop remains as a fallback (ENABLE_DESIGN_COORDINATOR=0).
 
     // Harmony loop runs until convergence: stops when ALL items reach
     // TARGET_SCORE OR no items improved last round (early-exit on plateau)
@@ -1392,6 +1439,139 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       }
     } else {
       console.warn(`[area-analysis] Final assessment failed (${finalResult.error}) — using iterative-round validation`);
+    }
+
+    // ── Design Coordinator: post-harmony agentic review ──────────────
+    // When enabled, the coordinator agent reviews the full pipeline output
+    // using function calling + Google Search + Code Execution. It can
+    // trigger additional harmony rounds or re-generation if the design
+    // has fundamental issues that the deterministic loop missed.
+    if (ORCHESTRATOR.enableDesignCoordinator) {
+      const coordState: DesignCoordinatorState = {
+        passAComplete: true,
+        passBComplete: true,
+        enrichmentComplete: true,
+        harmonyRoundsCompleted: totalRoundsCompleted,
+        finalAssessmentComplete: !!validation,
+        itemCount: (analysis.what_it_needs as unknown[])?.length || 0,
+        categories: ((analysis.what_it_needs as Array<{ category: string }>) || []).map((i) => i.category),
+        latestScores: validation?.item_scores
+          ? (validation.item_scores as Array<{ category: string; harmony_score: number }>).map((s) => ({
+              category: s.category,
+              score: s.harmony_score,
+              stabilized: stabilizedItems.has(s.category),
+            }))
+          : undefined,
+        convergenceVelocity: undefined,
+        stabilizedCount: stabilizedItems.size,
+        totalItems: (analysis.what_it_needs as unknown[])?.length || 0,
+        overallCohesion: (validation as Record<string, unknown> | null)?.overall_cohesion as number | undefined,
+        confidence: (validation as Record<string, unknown> | null)?.confidence as number | undefined,
+      };
+
+      const coordResult = await runDesignCoordinator(
+        () => coordState,
+        async (toolName: DesignCoordinatorTool, args: Record<string, unknown>) => {
+          switch (toolName) {
+            case "run_harmony_round": {
+              const mathCtx = {
+                roomType: room.room_type,
+                floorPlan,
+                otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+                buildingResearch: br,
+                designDirection: currentRoomDirection,
+              };
+              latestMathResult = computeHarmonyScores(analysis, mathCtx);
+              const mathScoresText = formatMathScoresForPrompt(latestMathResult);
+              const harmonyResult = await validateRoomHarmony(analysis, { ...harmonyCtx, mathScoresText });
+              if (!harmonyResult.success || !harmonyResult.data) {
+                return { error: harmonyResult.error || "Harmony validation failed" };
+              }
+              const scores = harmonyResult.data.item_scores.map((s) => ({
+                category: s.category,
+                score: s.harmony_score,
+                needsRevision: s.harmony_score < 8.5,
+              }));
+              const avgScore = scores.reduce((a, s) => a + s.score, 0) / scores.length;
+              coordState.harmonyRoundsCompleted++;
+              coordState.latestScores = scores.map((s) => ({ ...s, stabilized: false }));
+              coordState.overallCohesion = harmonyResult.data.overall_cohesion;
+              coordState.confidence = harmonyResult.data.confidence;
+              return { avgScore, scores, cohesion: harmonyResult.data.overall_cohesion };
+            }
+            case "run_final_assessment": {
+              const fMathCtx = {
+                roomType: room.room_type,
+                floorPlan,
+                otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
+                buildingResearch: br,
+                designDirection: currentRoomDirection,
+              };
+              latestMathResult = computeHarmonyScores(analysis, fMathCtx);
+              const fMathText = formatMathScoresForPrompt(latestMathResult);
+              const revHistObj: Record<string, Array<{ round: number; score: number; specs?: string; searchTitle?: string; rootCause?: string }>> = {};
+              for (const [cat, entries] of revisionHistory) {
+                revHistObj[cat] = entries;
+              }
+              const finalResult = await performFinalAssessment(analysis, {
+                ...harmonyCtx,
+                mathScoresText: fMathText,
+                revisionHistory: revHistObj,
+                stabilizedItems: Array.from(stabilizedItems),
+                roundsCompleted: totalRoundsCompleted,
+              });
+              if (finalResult.success && finalResult.data) {
+                coordState.finalAssessmentComplete = true;
+                coordState.finalAssessmentResult = {
+                  needsMoreRounds: finalResult.data.needs_more_rounds,
+                  roundBudget: finalResult.data.round_budget,
+                };
+                return {
+                  needsMoreRounds: finalResult.data.needs_more_rounds,
+                  roundBudget: finalResult.data.round_budget,
+                  confidence: finalResult.data.confidence,
+                  cohesion: finalResult.data.overall_cohesion,
+                };
+              }
+              return { error: finalResult.error || "Final assessment failed" };
+            }
+            case "search_design_trends": {
+              const query = args.query as string;
+              try {
+                const searchResp = await geminiProvider.chat({
+                  model: selectModel("validation"),
+                  system: getSystemPrompt(profile),
+                  messages: [{
+                    role: "user",
+                    content: [{
+                      type: "text",
+                      text: `Search for and summarize: ${query}\n\nReturn a concise summary of findings relevant to interior design recommendations.`,
+                    }],
+                  }],
+                  max_tokens: 2000,
+                  tools: [{ googleSearch: {} as Record<string, never> }],
+                });
+                coordState.designTrendSearches = [
+                  ...(coordState.designTrendSearches || []),
+                  query,
+                ];
+                return { query, summary: searchResp.content.slice(0, 1000) };
+              } catch {
+                return { query, error: "Search failed" };
+              }
+            }
+            case "finalize":
+              return { reason: (args.reason as string) || "Coordinator finalized" };
+            default:
+              return { error: `Unknown tool: ${toolName}` };
+          }
+        },
+        { roomName: room.name, roomType: room.room_type, budgetMode: budgetMode || undefined },
+      );
+
+      if (coordResult.success) {
+        console.log(`[area-analysis] Design coordinator: ${coordResult.data?.reason || "finalized"} (${coordResult.tokensUsed || 0} tokens)`);
+      }
     }
 
     // ── Post-harmony re-validation: re-enforce user constraints ──────

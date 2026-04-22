@@ -9,6 +9,7 @@
 // in a single batch call, grounded in the Pass 1 design brief.
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { getSystemPrompt } from "@/lib/prompts/system";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
@@ -153,11 +154,15 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
   try {
     const response = await geminiProvider.chat({
       model: selectModel("search"),
-      system: "You are a precise product specification writer for an interior design tool. Always return valid JSON.",
+      system: getSystemPrompt(),
       messages: [{ role: "user", content: prompt }],
       max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      tools: [
+        { googleSearch: {} as Record<string, never> },
+        { codeExecution: {} as Record<string, never> },
+      ],
     });
 
     const enriched = extractJsonObject<Array<{ index: number; category: string; search_title: string; specs: string }>>(

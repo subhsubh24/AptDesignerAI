@@ -254,6 +254,10 @@ export async function runDiagnosisExpansion(
         messages: [{ role: "user", content }],
         max_tokens: 1500,
         seed: DETERMINISTIC_SEED + i,
+        tools: [
+          { googleSearch: {} as Record<string, never> },
+          { codeExecution: {} as Record<string, never> },
+        ],
       });
       parsed = parseExpansionResponse(response.content);
     } catch (err) {
@@ -317,6 +321,10 @@ export async function runDiagnosisExpansion(
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 1500,
           seed: DETERMINISTIC_SEED + i,
+          tools: [
+            { googleSearch: {} as Record<string, never> },
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
         retryParsed = parseExpansionResponse(retryResponse.content);
       } catch {
@@ -514,6 +522,9 @@ async function runCritiquePass(args: {
       messages: [{ role: "user", content }],
       max_tokens: 2000,
       seed: DETERMINISTIC_SEED,
+      tools: [
+        { codeExecution: {} as Record<string, never> },
+      ],
     });
   } catch (err) {
     log.warn("Critique LLM call failed", { error: String(err) });

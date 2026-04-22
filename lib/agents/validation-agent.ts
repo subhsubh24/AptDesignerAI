@@ -365,6 +365,27 @@ true if harmony_score ≤ 3 OR the user explicitly excluded the category / asked
 ### rationale (REQUIRED, chain-of-thought)
 For every item, walk through all 6 dims + overall in 7 steps.
 
+Use Code Execution for precise spatial calculations (clearances, rug coverage area, proportion ratios) rather than estimating.
+
+## FEW-SHOT EXAMPLE (one item_score entry)
+{
+  "category": "area_rug",
+  "harmony_score": 6.8,
+  "sub_scores": {
+    "color_fit": 8.5, "spatial_fit": 4.2, "material_fit": 8.0,
+    "style_coherence": 8.8, "cross_room_fit": 7.5, "functional_fit": 7.0
+  },
+  "keeps_well_with": ["coffee_table", "accent_chair"],
+  "clashes_with": ["sofa — 5x7 rug too small for 84-inch sofa, front legs don't reach"],
+  "revised_search_title": "Large 8x10 hand-knotted wool area rug in warm cream with subtle geometric texture",
+  "revised_specs": "96x120 inch (8x10 ft), hand-knotted wool, warm cream/ivory base, ~$800-1200",
+  "revised_placement": "Centered under the coffee table, extending 18 inch beyond sofa front legs on all sides",
+  "drop": false,
+  "root_cause": "spatial_fit: 5x7 rug undersized for 84-inch sofa — front legs hang off, creating visual disconnect. Upgrade to 8x10.",
+  "reason": "Wool and cream tone work with Nordic Charcoal direction but the 5x7 is too small. 8x10 anchors the seating zone properly.",
+  "rationale": "COLOR: warm cream complements charcoal sofa + oak accents = 8.5. SPATIAL: 5x7 (60x84) under 84-inch sofa leaves 0 inch overhang — front legs off rug, visually floating = 4.2. MATERIAL: wool matches linen/natural material story = 8.0. STYLE: geometric texture fits Nordic direction = 8.8. CROSS-ROOM: cream ties to kitchen's white counters = 7.5. FUNCTIONAL: wool is durable but 5x7 creates tripping edge near sofa = 7.0. OVERALL: spatial_fit tanks the composite despite strong color/style → 6.8."
+}
+
 ## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
   "item_scores": [
@@ -420,6 +441,9 @@ For every item, walk through all 6 dims + overall in 7 steps.
           responseMimeType: "application/json",
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
 
         if (response.truncated) {
@@ -595,6 +619,9 @@ ${itemScoresJson}
             responseMimeType: "application/json",
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
+            tools: [
+              { codeExecution: {} as Record<string, never> },
+            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -908,6 +935,9 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           responseMimeType: "application/json",
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
 
         if (response.truncated) {
@@ -1066,6 +1096,9 @@ ${itemScoresJson}
             responseMimeType: "application/json",
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
+            tools: [
+              { codeExecution: {} as Record<string, never> },
+            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1148,6 +1181,9 @@ ${convergenceCtx}
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
+            tools: [
+              { codeExecution: {} as Record<string, never> },
+            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1417,6 +1453,9 @@ Return JSON:
           responseMimeType: "application/json",
           responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
 
         const raw = extractJsonObject(response.content);

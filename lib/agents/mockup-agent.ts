@@ -314,6 +314,10 @@ export async function generateMockupPrompt(
       max_tokens: 6000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      tools: [
+        { googleSearch: {} as Record<string, never> },
+        { codeExecution: {} as Record<string, never> },
+      ],
       cacheScope: cacheableBlocks.length > 0
         ? { sessionKey: mockupSessionKey, content: cacheableBlocks }
         : undefined,
