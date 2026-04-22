@@ -372,8 +372,8 @@ Step 4: Capture spatial & environmental context (layout, lighting, windows/doors
 ## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
 {
   "summary": "3-4 sentence assessment — dominant colors, materials, what's working, what's broken",
-  "what_works": ["5-8 specific items that should stay — material + color + current position"],
-  "what_should_go": ["specific items to replace/remove — name each and why"],
+  "what_works": ["FURNITURE AND ITEMS the client should keep — each entry: item name + material + color + position. Start with any items the client explicitly asked to keep. Then add other furniture/decor visible in photos that works. Do NOT list architectural features (windows, flooring, walls, layout) here — those go in spatial_layout/lighting_conditions."],
+  "what_should_go": ["PHYSICAL ITEMS visible in the room to remove/replace — each entry: item name + why it doesn't work. Must be actual objects the client can remove. NEVER list absences ('lack of X'), architectural features ('bare flooring'), or things tenants can't change."],
   "style_name": "2-3 word evocative label derived from the room's actual physical cues. Draw from the REAL materials and atmosphere you see. GOOD examples: 'Industrial Warmth' (dark sectional + metal bookshelf + need for warmth), 'Nordic Warmth' (light oak + linen undertones), 'West Coast Modern' (concrete + leather + wood grain), 'Cognac and Charcoal' (specific palette-led name). BAD (too generic — never use): 'Tech Minimalism', 'Contemporary Modern', 'Refined Minimalism', 'Clean Lines', 'Urban Chic'. The name must be specific enough that a different room couldn't have the same name.",
   "design_direction": "4-6 sentences describing the [style_name] direction — color strategy, material mixing, texture layering, and the feeling it creates. Reference specific apartment finishes by name. Explain how the direction serves this specific client's identity and lifestyle.",
   "recommended_palette": ["4-8 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
@@ -392,14 +392,14 @@ Use Google Search to verify current design trend terminology and material availa
   "summary": "A 450-sqft studio with grey LVP flooring, white walls, south-facing windows providing strong natural light. The charcoal Kivik sectional anchors the living zone. The space lacks warmth — no textiles, no accent lighting, bare walls. The kitchen's white quartz counters and brushed nickel hardware establish a cool-neutral base.",
   "what_works": [
     "IKEA Kivik sectional in Hillared anthracite — good scale for the space, low-profile, positioned correctly against the west wall",
-    "Grey LVP flooring — neutral base, durable, consistent throughout",
-    "South-facing windows — excellent natural light, no glare concerns from current angle",
-    "White oak-look floating shelves above the desk — warm tone balances the grey floor"
+    "White oak-look floating shelves above the desk — warm tone balances the grey floor, well-mounted",
+    "Black metal desk lamp on the corner desk — functional, fits the industrial accent story",
+    "Woven jute basket by the bookshelf — adds organic texture, practical storage"
   ],
   "what_should_go": [
     "Black metal folding TV tray used as coffee table — undersized (18x12 inch), wrong material family, visually harsh",
-    "Single overhead boob light — flat wash, no layering, no ambience control",
-    "Blue plastic storage bins visible under desk — visual clutter, wrong material story"
+    "Blue plastic storage bins visible under desk — visual clutter, wrong material story, cheap look",
+    "Mismatched throw pillows on sectional — competing patterns, no color cohesion"
   ],
   "style_name": "Nordic Charcoal",
   "design_direction": "Build on the charcoal sectional + grey LVP + white walls as a cool-neutral canvas, then inject warmth through natural oak, warm cream textiles, and brass accents. The 60-30-10 ratio: 60% cool greys/whites (existing), 30% warm wood + cream (new pieces), 10% matte brass + sage green (accents). This creates a Scandinavian-inspired space that feels intentional rather than unfinished.",
