@@ -19,6 +19,11 @@ import {
   type CoordinatorState,
   type CoordinatorTool,
 } from "./post-search-coordinator";
+import {
+  getStrongProductThreshold,
+  getBackfillThreshold,
+  getDeepScoreKeepFloor,
+} from "@/lib/scoring/dynamic-thresholds";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
@@ -386,7 +391,13 @@ async function reSearchCategoryForCorrection(
     if (scoreRes.success && scoreRes.data) {
       evaluations.set(product.id, scoreRes.data);
       stats.totalDeepScored++;
-      if (scoreRes.data.final_item_score >= 6) {
+      // Dynamic keep floor from current evaluations distribution.
+      const allScores: number[] = [];
+      for (const ev of evaluations.values()) {
+        if (ev.final_item_score !== undefined) allScores.push(ev.final_item_score);
+      }
+      const keepFloor = getDeepScoreKeepFloor(allScores);
+      if (scoreRes.data.final_item_score >= keepFloor) {
         addedCount++;
         keptProducts.push(product);
       }
@@ -1785,18 +1796,36 @@ export async function runAgenticSearch(
     // Backfill weak tiers
     // ═══════════════════════════════════════════════════════════
     const weakTiers: Array<{ category: string; tier: PriceTier }> = [];
+    // Dynamic backfill trigger — derived from this run's score distribution.
+    // Replaces hardcoded `score >= 7` and `< 2 strong` with values that
+    // adapt to the scoring model's actual behavior this run.
+    const allDeepScores: number[] = [];
+    for (const products of Object.values(candidatesByCategory)) {
+      for (const p of products) {
+        const s = evaluations.get(p.id)?.final_item_score;
+        if (s !== undefined) allDeepScores.push(s);
+      }
+    }
+    const dynamicStrongThreshold = getStrongProductThreshold(allDeepScores);
+    log.info("Dynamic strong-product threshold", {
+      phase: "backfill",
+      threshold: dynamicStrongThreshold,
+      sampleSize: allDeepScores.length,
+    });
+
     for (const [category, products] of Object.entries(candidatesByCategory)) {
       for (const tier of PRICE_TIERS) {
         const tierProducts = products.filter(
           (p) => (p.metadata as { price_tier: string })?.price_tier === tier
         );
         const strongProducts = tierProducts.filter(
-          (p) => (evaluations.get(p.id)?.final_item_score || 0) >= 7
+          (p) => (evaluations.get(p.id)?.final_item_score || 0) >= dynamicStrongThreshold
         );
-        // Short-circuit: if we already have 2+ strong products, skip backfill.
-        // Previous threshold (<3) triggered an expensive extract+deep-score pass
-        // for marginal gains; <2 still preserves a safety net for sparse tiers.
-        if (strongProducts.length < 2) {
+        // Required count is also distribution-derived: scales with how many
+        // products this category has overall (sparse categories need fewer
+        // strong picks to call it done).
+        const requiredStrong = getBackfillThreshold(products.length);
+        if (strongProducts.length < requiredStrong) {
           weakTiers.push({ category, tier });
         }
       }
@@ -1948,7 +1977,10 @@ export async function runAgenticSearch(
             if (scoreResult.success && scoreResult.data) {
               evaluations.set(product.id, scoreResult.data);
               stats.totalDeepScored++;
-              if (scoreResult.data.final_item_score >= 6) {
+              // Dynamic keep floor — derived from this run's score distribution
+              // (the same `allDeepScores` collected before backfill triggered).
+              const dynamicKeepFloor = getDeepScoreKeepFloor(allDeepScores);
+              if (scoreResult.data.final_item_score >= dynamicKeepFloor) {
                 candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
                 candidatesByCategory[wt.category].push(product);
                 stats.totalFinal++;
