@@ -2098,7 +2098,7 @@ export async function runAgenticSearch(
       triedQueriesByCategory[catBrief.category] = qs.filter(Boolean);
     }
 
-    const runAudit = async (): Promise<RequirementValidationResult | undefined> => {
+    const runAudit = async (withGrounding = false): Promise<RequirementValidationResult | undefined> => {
       if (tokenBudget.exceeded || missingCategories.length === 0) return undefined;
 
       const topPicksByCategory: Record<string, CandidateProduct> = {};
@@ -2121,6 +2121,7 @@ export async function runAgenticSearch(
         designDirection: ctx.designDirection,
         designProfile: ctx.designProfile,
         roomImageUrls: ctx.imageUrls,
+        enableGoogleSearch: withGrounding,
       });
 
       if (auditResult.tokensUsed) {
@@ -2323,7 +2324,10 @@ export async function runAgenticSearch(
       if (!plan.iterate_again && correctionIteration < MAX_CORRECTION_ITERATIONS) break;
 
       reportStep({ step: "Re-auditing after correction", status: "running" });
-      const newAudit = await runAudit();
+      // Enable Google Search grounding on the re-audit so the agent can
+      // verify spec matches against live retailer data — more accurate
+      // than reading the extracted product JSON alone.
+      const newAudit = await runAudit(true);
       if (newAudit) {
         const gained = newAudit.overall_alignment - requirementAudit.overall_alignment;
         log.info("Re-audit after correction", {

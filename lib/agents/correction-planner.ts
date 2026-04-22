@@ -97,6 +97,15 @@ export interface CorrectionPlannerInput {
   /** Current iteration count so the agent knows when to stop. */
   iteration: number;
   maxIterations: number;
+  /**
+   * Enable Google Search + URL Context tools so the planner can
+   * (a) check what retailers are actually selling for the categories it
+   *     wants to re-search, and
+   * (b) read specific retailer pages to ground its query suggestions in
+   *     real product listings.
+   * Default true — this agent benefits a lot from real-world grounding.
+   */
+  enableTools?: boolean;
 }
 
 export async function planCorrections(
@@ -222,20 +231,44 @@ If alignment is already ≥ 8.5 and no concrete gaps remain, output a single "ac
 
 Set \`iterate_again: true\` only if you believe a SECOND correction pass after this one would meaningfully improve the set. Default false.
 
-Return JSON matching the schema. Keep \`diagnosis\` concrete (reference specific categories and gap types).`;
+Return JSON matching the schema. Keep \`diagnosis\` concrete (reference specific categories and gap types).${input.enableTools !== false ? `
+
+## GROUNDING — YOU HAVE GOOGLE SEARCH + URL CONTEXT
+Use Google Search to verify what retailers are actually selling before generating queries. If the audit says "rug is 6x9 but spec calls for 8x10 at $400", search for "8x10 area rug $400" to see what the market offers — then write queries that reference what's actually available (e.g., "rugs.com 8x10 wool area rug ivory" rather than a generic "8x10 rug"). If the audit flags a retailer page as mismatched, use URL Context to read that page and understand the actual product — then generate queries that avoid the same type of product.
+
+Search before writing queries. Queries grounded in real product listings perform ~2x better than queries invented from the design assessment alone.` : ""}`;
+
+  const useTools = input.enableTools !== false;
 
   try {
     const response = await withRetry(
-      () =>
-        geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-          max_tokens: 8000,
-          seed: DETERMINISTIC_SEED,
-          responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
-          responseMimeType: "application/json",
-        }),
+      async () => {
+        try {
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            max_tokens: 8000,
+            seed: DETERMINISTIC_SEED,
+            responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
+            responseMimeType: "application/json",
+            ...(useTools ? { tools: [{ googleSearch: {} as Record<string, never> }, { urlContext: {} as Record<string, never> }] } : {}),
+          });
+        } catch (err) {
+          if (!useTools) throw err;
+          log.warn("Grounded+structured plan call rejected — falling back to grounded-only", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            max_tokens: 8000,
+            seed: DETERMINISTIC_SEED,
+            tools: [{ googleSearch: {} as Record<string, never> }, { urlContext: {} as Record<string, never> }],
+          });
+        }
+      },
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );
 

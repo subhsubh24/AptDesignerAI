@@ -75,6 +75,13 @@ export interface RequirementValidatorInput {
   designDirection?: { style_notes?: string; recommended_palette?: string[]; recommended_materials?: string[] };
   designProfile?: DynamicDesignProfile;
   roomImageUrls?: string[];
+  /**
+   * When true, enable Google Search grounding so the agent can verify real
+   * product availability (e.g., "does an 8x10 wool rug in cognac exist at
+   * West Elm for $400?"). Costs more tokens but improves spec-fit judgments.
+   * Default false (enable per-call when the caller wants live verification).
+   */
+  enableGoogleSearch?: boolean;
 }
 
 function formatProduct(p: CandidateProduct | undefined): string {
@@ -184,7 +191,17 @@ Be specific — list which problems are addressed vs unaddressed.
 ## OUTPUT
 Return JSON matching the schema exactly. Keep reasoning tight (1-2 sentences per field). Issues are user-facing — write them as concrete, actionable statements (e.g., "The rug is 6x9 but should be 8x10 per the assessment" not "size mismatch"). Suggestions should be specific fixes (e.g., "Search for a larger rug in the 8x10 range for the balanced tier").
 
-Overall alignment score: how well does this set deliver on the assessment? Target ≥ 8.0. Below 7.0 means significant rework needed.`;
+Overall alignment score: how well does this set deliver on the assessment? Target ≥ 8.0. Below 7.0 means significant rework needed.${input.enableGoogleSearch ? `
+
+## GROUNDING — YOU HAVE GOOGLE SEARCH
+Use Google Search to verify your spec-match judgments. Before penalizing a product for "wrong size" or "wrong material", search the retailer's site for what the product actually offers. Before flagging a category as "unachievable in budget", search for alternatives at the target tier. Cite what you found in the reasoning field.
+
+Examples of when to search:
+- A spec says "8x10 wool rug ~$500" but top pick is smaller: search "8x10 wool rug under $500" to check if the stated requirement is even realistic at that tier.
+- A product's materials field is empty: search the product URL or title to verify the material.
+- A category appears missing: search "${input.roomType} ${Object.keys(input.topPicksByCategory).join(", ")}" retailers to verify alternatives exist.
+
+Only search when the judgment is uncertain. Don't search for every product — use it as a verification tool for close calls.` : ""}`;
 
   const content: AIContentBlock[] = [];
   if (input.roomImageUrls?.length) {
@@ -196,16 +213,36 @@ Overall alignment score: how well does this set deliver on the assessment? Targe
 
   try {
     const response = await withRetry(
-      () =>
-        geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content }],
-          max_tokens: 6000,
-          seed: DETERMINISTIC_SEED,
-          responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
-          responseMimeType: "application/json",
-        }),
+      async () => {
+        // When Google Search is enabled, Gemini 3 models support combining
+        // it with responseSchema. Fall back to text parsing if the combined
+        // call is rejected (happens on some older model snapshots).
+        try {
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content }],
+            max_tokens: 6000,
+            seed: DETERMINISTIC_SEED,
+            responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
+            responseMimeType: "application/json",
+            ...(input.enableGoogleSearch ? { tools: [{ googleSearch: {} as Record<string, never> }] } : {}),
+          });
+        } catch (err) {
+          if (!input.enableGoogleSearch) throw err;
+          log.warn("Grounded+structured call rejected — falling back to grounded-only", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content }],
+            max_tokens: 6000,
+            seed: DETERMINISTIC_SEED,
+            tools: [{ googleSearch: {} as Record<string, never> }],
+          });
+        }
+      },
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );
 
