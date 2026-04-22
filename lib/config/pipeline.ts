@@ -78,6 +78,18 @@ export const ORCHESTRATOR = {
   backfillStrongThreshold: 3,
   /** Minimum final_item_score for backfill products to be kept */
   backfillMinScore: 6,
+
+  /**
+   * When true, the post-search phase (validation/audit/correction/bundle/
+   * backfill/fill-tiers) is driven by an agentic function-calling
+   * coordinator. The coordinator decides which phases to run and in what
+   * order based on objective state signals. When false, the hardcoded
+   * phase order runs as before. Defaults to false until A/B-validated.
+   * Override per-environment via env: ENABLE_POST_SEARCH_COORDINATOR=1.
+   */
+  enablePostSearchCoordinator:
+    process.env.ENABLE_POST_SEARCH_COORDINATOR === "1" ||
+    process.env.ENABLE_POST_SEARCH_COORDINATOR === "true",
 } as const;
 
 // ─── Bundle Math ──────────────────────────────────────────────

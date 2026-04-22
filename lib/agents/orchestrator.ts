@@ -14,6 +14,11 @@ import { validateProductSet } from "./validation-agent";
 import { validateRequirements, type RequirementValidationResult } from "./requirement-validator";
 import { planCorrections, type CorrectionAction } from "./correction-planner";
 import { planCategories, type CategoryPlan } from "./category-planner";
+import {
+  runPostSearchCoordinator,
+  type CoordinatorState,
+  type CoordinatorTool,
+} from "./post-search-coordinator";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
@@ -2245,7 +2250,217 @@ export async function runAgenticSearch(
       reportStep({ step: "Auditing requirement alignment", status: "failed" });
     }
 
-    // Agentic correction loop — let the planner decide what to fix.
+    // ───────────────────────────────────────────────────────────
+    // Branch: coordinator (function-calling) vs. hardcoded correction loop.
+    // The coordinator drives corrections via Gemini function calling.
+    // The hardcoded loop uses the older planCorrections + manual loop.
+    // Both end up at the same downstream state.
+    // ───────────────────────────────────────────────────────────
+    if (ORCHESTRATOR.enablePostSearchCoordinator && requirementAudit) {
+      reportStep({ step: "Coordinator (agentic post-search)", status: "running" });
+
+      // Build a state-getter closure that re-reads orchestrator state on
+      // each turn. The coordinator sees objective signals only.
+      const buildState = (): CoordinatorState => {
+        const cats: CoordinatorState["categories"] = {};
+        for (const [cat, products] of Object.entries(candidatesByCategory)) {
+          if (products.length === 0) continue;
+          const scores = products
+            .map((p) => evaluations.get(p.id)?.final_item_score)
+            .filter((s): s is number => s !== undefined)
+            .sort((a, b) => a - b);
+          const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : undefined;
+          const sortedByScore = [...products].sort((a, b) => {
+            const sA = evaluations.get(a.id)?.final_item_score || 0;
+            const sB = evaluations.get(b.id)?.final_item_score || 0;
+            return sB - sA;
+          });
+          cats[cat] = {
+            productCount: products.length,
+            tiersCovered: Array.from(
+              new Set(products.map((p) => ((p.metadata as { price_tier?: string } | null)?.price_tier) || "balanced")),
+            ),
+            scoreMedian: median,
+            scoreMin: scores[0],
+            scoreMax: scores[scores.length - 1],
+            topPickTitle: sortedByScore[0]?.title || undefined,
+            topPickPrice: sortedByScore[0]?.price || undefined,
+          };
+        }
+
+        return {
+          budgetUsed: tokenBudget.used,
+          budgetCap: tokenBudget.cap,
+          budgetRemainingPct: ((tokenBudget.cap - tokenBudget.used) / tokenBudget.cap) * 100,
+          categories: cats,
+          requiredCategories: missingCategories,
+          missingCategories: missingCategories.filter((c) => !cats[c]),
+          reSearchCount: Object.fromEntries(
+            Object.entries(triedQueriesByCategory).map(([cat, qs]) => {
+              // Each re-search adds ~12 queries (4 per tier × 3 tiers); divide
+              // to estimate iteration count from query history length.
+              const initialQs = brief.categories.find((b) => b.category === cat);
+              const initialCount = initialQs
+                ? Object.values(initialQs.tiers).reduce((s, t) => s + (t?.search_queries?.length || 0), 0)
+                : 0;
+              const reSearches = Math.floor((qs.length - initialCount) / 6);
+              return [cat, Math.max(0, reSearches)];
+            }),
+          ),
+          triedQueries: triedQueriesByCategory,
+          droppedCategories: Array.from(droppedCategories),
+          validationRun: validationResult.success === true,
+          bundlesGenerated: bundles.length > 0,
+          backfillRun: weakTiers.length > 0,
+          tiersFilledRun: ctx.fillAllTiers !== false,
+          lastAuditAlignment: requirementAudit?.overall_alignment,
+          lastAuditCoverage: requirementAudit?.coverage.score,
+          lastAuditDiagnosisSolving: requirementAudit?.diagnosis_solving.score,
+          lastAuditIssues: requirementAudit?.issues,
+          lastAuditUsedGrounding: false,
+          auditRunCount: requirementAudit ? 1 : 0,
+        };
+      };
+
+      let coordinatorAuditRunCount = requirementAudit ? 1 : 0;
+      let coordinatorLastUsedGrounding = false;
+
+      // Tool handler dispatches to existing helpers / inline logic.
+      const handle = async (
+        toolName: CoordinatorTool,
+        args: Record<string, unknown>,
+      ): Promise<{ status: "ok" | "skipped" | "error"; message: string; metrics?: Record<string, unknown> }> => {
+        if (tokenBudget.exceeded) {
+          return { status: "skipped", message: "token budget exceeded" };
+        }
+
+        switch (toolName) {
+          case "run_audit": {
+            const withGrounding = !!args.with_grounding;
+            const newAudit = await runAudit(withGrounding);
+            if (!newAudit) return { status: "error", message: "Audit failed" };
+            const before = requirementAudit?.overall_alignment ?? 0;
+            requirementAudit = newAudit;
+            requirementIssues.length = 0;
+            requirementIssues.push(...newAudit.issues);
+            coordinatorAuditRunCount++;
+            coordinatorLastUsedGrounding = withGrounding;
+            return {
+              status: "ok",
+              message: `Audit: alignment ${newAudit.overall_alignment.toFixed(1)}/10 (was ${before.toFixed(1)})`,
+              metrics: {
+                alignment: newAudit.overall_alignment,
+                coverage: newAudit.coverage.score,
+                diagnosis_solving: newAudit.diagnosis_solving.score,
+                issue_count: newAudit.issues.length,
+                missing_categories: newAudit.coverage.missing_categories,
+                spec_failures: newAudit.spec_matches.filter((s) => !s.matches).map((s) => s.category),
+                grounded: withGrounding,
+              },
+            };
+          }
+
+          case "re_search_category": {
+            const category = args.category as string;
+            if (!category) return { status: "error", message: "Missing category" };
+            const queries = {
+              budget: (args.queries_budget as string[]) || [],
+              balanced: (args.queries_balanced as string[]) || [],
+              high_end: (args.queries_high_end as string[]) || [],
+            };
+            const totalQueries = queries.budget.length + queries.balanced.length + queries.high_end.length;
+            if (totalQueries === 0) return { status: "error", message: "No queries provided" };
+
+            const result = await reSearchCategoryForCorrection({
+              category,
+              queriesByTier: queries,
+              ctx,
+              brief,
+              tokenBudget,
+              stats,
+              tracer,
+              anchorSpecs,
+              harmonyNeighbors,
+              evaluations,
+            });
+            candidatesByCategory[category] = candidatesByCategory[category] || [];
+            candidatesByCategory[category].push(...result.products);
+            stats.totalFinal += result.added;
+            const allQueries = [...queries.budget, ...queries.balanced, ...queries.high_end];
+            triedQueriesByCategory[category] = [
+              ...(triedQueriesByCategory[category] || []),
+              ...allQueries,
+            ];
+            return {
+              status: "ok",
+              message: `Re-searched ${category}: added ${result.added} new products`,
+              metrics: {
+                added: result.added,
+                category_total_now: candidatesByCategory[category].length,
+              },
+            };
+          }
+
+          case "drop_category": {
+            const category = args.category as string;
+            if (!category || !candidatesByCategory[category]) {
+              return { status: "skipped", message: `Category ${category} not present` };
+            }
+            droppedCategories.add(category);
+            delete candidatesByCategory[category];
+            return {
+              status: "ok",
+              message: `Dropped ${category}`,
+              metrics: { reason: args.reason },
+            };
+          }
+
+          case "finalize":
+            // Handled in the coordinator loop itself
+            return { status: "ok", message: "finalize" };
+
+          default:
+            // run_validation, run_bundle_generation, run_backfill, fill_empty_tiers
+            // are no-ops in this integration — those phases already ran linearly
+            // before the coordinator started. Returning "skipped" lets the agent
+            // know not to call them again.
+            return {
+              status: "skipped",
+              message: `${toolName} already ran in the linear pre-coordinator phase — skipping`,
+            };
+        }
+      };
+
+      const coordResult = await runPostSearchCoordinator({
+        roomType: ctx.roomType,
+        budgetMode: ctx.budgetMode,
+        state: buildState,
+        handle,
+        onTurn: (turn, action, status) => {
+          reportStep({
+            step: `Coordinator turn ${turn}: ${action}`,
+            status: status === "ok" ? "completed" : status === "error" ? "failed" : "running",
+          });
+        },
+      });
+
+      if (coordResult.tokensUsed) {
+        tokenBudget.add(coordResult.tokensUsed);
+        stats.tokensUsed += coordResult.tokensUsed;
+        stats.tokensPerPhase.validation += coordResult.tokensUsed;
+      }
+
+      // Bookkeeping for state used elsewhere
+      void coordinatorAuditRunCount;
+      void coordinatorLastUsedGrounding;
+
+      reportStep({
+        step: "Coordinator (agentic post-search)",
+        status: "completed",
+        data: coordResult.success ? coordResult.data : { error: coordResult.error },
+      });
+    } else {
+    // Hardcoded correction loop — the original Phase 1 implementation.
     let correctionIteration = 0;
     while (
       requirementAudit &&
@@ -2426,6 +2641,7 @@ export async function runAgenticSearch(
       }
       reportStep({ step: "Re-auditing after correction", status: "completed" });
     }
+    } // end of (else / hardcoded correction loop) branch
 
     // ═══════════════════════════════════════════════════════════
     // Pipeline conversion metrics + score drift check

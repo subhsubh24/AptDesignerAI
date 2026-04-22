@@ -10,7 +10,7 @@ export interface AIMessage {
 }
 
 export interface AIContentBlock {
-  type: "text" | "image" | "file";
+  type: "text" | "image" | "file" | "function_call" | "function_response";
   text?: string;
   source?: {
     type: "base64" | "url" | "file_uri";
@@ -24,6 +24,27 @@ export interface AIContentBlock {
      * instead of base64-inlining the bytes.
      */
     uri?: string;
+  };
+  /**
+   * For type="function_call": the model's request to invoke a tool.
+   * Returned in assistant messages echoed back to the model in multi-turn
+   * function-calling loops. Gemini 3 mandates the `thoughtSignature` from
+   * the original response be preserved here, or the next call will 400.
+   */
+  functionCall?: {
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+    thoughtSignature?: string;
+  };
+  /**
+   * For type="function_response": the tool's result, paired by `id` to the
+   * function_call. The model uses this to plan the next step.
+   */
+  functionResponse?: {
+    id: string;
+    name: string;
+    response: Record<string, unknown>;
   };
 }
 
@@ -59,6 +80,21 @@ export interface AIResponse {
    * See: https://ai.google.dev/gemini-api/docs/thought-signatures
    */
   thoughtSignatures?: string[];
+  /**
+   * Function calls the model wants to invoke (Gemini function-calling).
+   * Empty when the model returned only text. When present, the caller is
+   * responsible for executing the named tool with the provided args and
+   * sending back a function_response message containing the result. The
+   * optional `thoughtSignature` is mandatory to echo back on Gemini 3 in
+   * the same Part where it was received — otherwise the next request will
+   * 400 with "missing a thought_signature".
+   */
+  functionCalls?: Array<{
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+    thoughtSignature?: string;
+  }>;
 }
 
 export interface GoogleMapsToolConfig {

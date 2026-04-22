@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { createLogger } from "@/lib/logging/logger";
@@ -221,6 +222,29 @@ async function convertMessages(
           }
         } else if (block.type === "text" && block.text) {
           parts.push({ text: block.text });
+        } else if (block.type === "function_call" && block.functionCall) {
+          // Echo the model's function call back when continuing a multi-turn
+          // tool-use conversation. Gemini 3 mandates the thoughtSignature
+          // be preserved on the same Part — re-attaching it here.
+          const fcPart: Record<string, unknown> = {
+            functionCall: {
+              id: block.functionCall.id,
+              name: block.functionCall.name,
+              args: block.functionCall.args,
+            },
+          };
+          if (block.functionCall.thoughtSignature) {
+            fcPart.thoughtSignature = block.functionCall.thoughtSignature;
+          }
+          parts.push(fcPart);
+        } else if (block.type === "function_response" && block.functionResponse) {
+          parts.push({
+            functionResponse: {
+              id: block.functionResponse.id,
+              name: block.functionResponse.name,
+              response: block.functionResponse.response,
+            },
+          });
         }
       }
     }
@@ -564,6 +588,12 @@ export const geminiProvider: AIProvider = {
     let content = "";
     let imageData: { mimeType: string; data: string } | undefined;
     const thoughtSignatures: string[] = [];
+    const functionCalls: Array<{
+      id: string;
+      name: string;
+      args: Record<string, unknown>;
+      thoughtSignature?: string;
+    }> = [];
 
     if (response.candidates && response.candidates.length > 0) {
       const candidate = response.candidates[0];
@@ -580,7 +610,21 @@ export const geminiProvider: AIProvider = {
               data: inline.data,
             };
           }
-          if (typeof p.thoughtSignature === "string" && p.thoughtSignature.length > 0) {
+          // Gemini function-calling: extract any functionCall parts so the
+          // caller can dispatch them. The thoughtSignature on this same
+          // Part must be echoed back on the next call (Gemini 3 mandate).
+          if (p.functionCall) {
+            const fc = p.functionCall as { id?: string; name?: string; args?: Record<string, unknown> };
+            const sig = typeof p.thoughtSignature === "string" && p.thoughtSignature.length > 0
+              ? p.thoughtSignature
+              : undefined;
+            functionCalls.push({
+              id: fc.id || crypto.randomUUID(),
+              name: fc.name || "",
+              args: fc.args || {},
+              thoughtSignature: sig,
+            });
+          } else if (typeof p.thoughtSignature === "string" && p.thoughtSignature.length > 0) {
             thoughtSignatures.push(p.thoughtSignature);
           }
         }
@@ -637,6 +681,7 @@ export const geminiProvider: AIProvider = {
       groundingMetadata,
       imageData,
       thoughtSignatures: thoughtSignatures.length > 0 ? thoughtSignatures : undefined,
+      functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
     };
   },
 };
