@@ -111,7 +111,7 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
     "dining table": ["dining_table", "dining table"],
     "bookshelf": ["bookshelf", "shelving", "bookcase"],
     "tv console": ["media_console", "tv console", "media console", "tv stand", "entertainment center"],
-    "light": ["table_lamp", "table lamp", "light", "lamp", "light stand", "sconce", "wall light", "accent light"],
+    "light": ["table_lamp", "table lamp", "lamp", "light stand", "sconce", "wall light", "accent light"],
   };
 
   return keepItems.map((item) => {
@@ -316,11 +316,11 @@ export function validateAreaAnalysis(
           if (!categoryExists) {
             patched.what_it_needs.push({
               category: detectedCategory,
-              search_title: `${request.item} — style and specs to be determined by design direction`,
-              description: `Client explicitly requested: "${request.item}". The harmony loop should refine this into a specific product recommendation that fits the room's design direction.`,
+              search_title: request.item,
+              description: `User explicitly requested this item.`,
               priority: "high",
-              specs: "To be determined during harmony validation",
-              placement: "To be determined based on room layout",
+              specs: "",
+              placement: "",
               _injected_by_validator: true,
             });
             issues.push({

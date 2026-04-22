@@ -161,7 +161,6 @@ Emit one entry per photo, in order. Index must match the photo number you were s
       max_tokens: 4000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      tools: [{ codeExecution: {} as Record<string, never> }],
     });
 
     const parsed = extractJsonObject<AnalyzerRawResponse>(response.content);

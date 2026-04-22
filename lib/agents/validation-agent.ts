@@ -450,9 +450,6 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
           responseMimeType: "application/json",
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
-          tools: [
-            { codeExecution: {} as Record<string, never> },
-          ],
         });
 
         if (response.truncated) {
@@ -642,9 +639,6 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
             responseMimeType: "application/json",
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
-            tools: [
-              { codeExecution: {} as Record<string, never> },
-            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -959,9 +953,6 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           responseMimeType: "application/json",
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
-          tools: [
-            { codeExecution: {} as Record<string, never> },
-          ],
         });
 
         if (response.truncated) {
@@ -1120,9 +1111,6 @@ Based on the room context and per-item final scores above, your task is: holisti
             responseMimeType: "application/json",
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
-            tools: [
-              { codeExecution: {} as Record<string, never> },
-            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1205,9 +1193,6 @@ Based on the scoring and holistic assessment above, decide: keep iterating, or s
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
-            tools: [
-              { codeExecution: {} as Record<string, never> },
-            ],
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1477,9 +1462,6 @@ Return JSON:
           responseMimeType: "application/json",
           responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
-          tools: [
-            { codeExecution: {} as Record<string, never> },
-          ],
         });
 
         const raw = extractJsonObject(response.content);

@@ -155,9 +155,6 @@ Issues: brief, user-facing descriptions of gaps. Max 5.`;
           seed: DETERMINISTIC_SEED,
           responseSchema: MOCKUP_PROMPT_VALIDATION_GEMINI_SCHEMA,
           responseMimeType: "application/json",
-          tools: [
-            { codeExecution: {} as Record<string, never> },
-          ],
         }),
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );
