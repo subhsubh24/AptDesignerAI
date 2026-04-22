@@ -231,7 +231,39 @@ If alignment is already ≥ 8.5 and no concrete gaps remain, output a single "ac
 
 Set \`iterate_again: true\` only if you believe a SECOND correction pass after this one would meaningfully improve the set. Default false.
 
-Return JSON matching the schema. Keep \`diagnosis\` concrete (reference specific categories and gap types).${input.enableTools !== false ? `
+Return JSON matching the schema. Keep \`diagnosis\` concrete (reference specific categories and gap types).
+
+## EXAMPLES OF GOOD CORRECTION ACTIONS
+
+Example 1 — audit said "[area_rug] match=false, gaps: ['size 6x9 vs spec 8x10']":
+  → action: re_search_category
+  → category: "area_rug"
+  → reason: "Top pick is 6x9; assessment requires 8x10 to extend ~24in beyond seating per spec"
+  → queries_balanced: ["8x10 wool area rug ivory cream", "8x10 jute natural area rug", "8x10 vintage style area rug warm tones"]
+  → priority: high
+
+Example 2 — audit said "Missing categories: pendant_light":
+  → action: re_search_category
+  → category: "pendant_light"
+  → reason: "Coverage gap: pendant_light not in result set; diagnosis flagged dining area as 'underlit at night'"
+  → queries_balanced: ["modern brass pendant light dining table", "linen drum pendant light large", "globe pendant light brushed brass 24 inch"]
+
+Example 3 — audit said "Diagnosis-solving: lighting unaddressed; floor_lamp top pick is 'tiny accent lamp'":
+  → action: re_search_category (NOT drop — the issue is wrong size, not unavailability)
+  → category: "floor_lamp"
+  → reason: "Top pick is 24in accent lamp; diagnosis needs floor-spanning ambient light (60in+)"
+  → queries_balanced: ["arc floor lamp 65 inch brass", "tripod floor lamp linen shade tall", "task floor lamp 60 inch reading height"]
+
+Example 4 — audit said "[outdoor_table] match_score=2; no high-end outdoor furniture below \$400":
+  → action: drop_category
+  → category: "outdoor_table"
+  → reason: "Two re-searches at this tier returned no products; high-end outdoor furniture starts at \$600 — unreachable in current budget"
+
+Example 5 — audit alignment 8.7, no concrete gaps:
+  → action: accept
+  → reason: "Alignment 8.7 exceeds 8.0 target; remaining issues are minor stylistic preferences not actionable via re-search"
+
+Notice the pattern: every re-search has 3-4 SPECIFIC queries that address the GAP, not generic queries.${input.enableTools !== false ? `
 
 ## GROUNDING — YOU HAVE GOOGLE SEARCH + URL CONTEXT
 Use Google Search to verify what retailers are actually selling before generating queries. If the audit says "rug is 6x9 but spec calls for 8x10 at $400", search for "8x10 area rug $400" to see what the market offers — then write queries that reference what's actually available (e.g., "rugs.com 8x10 wool area rug ivory" rather than a generic "8x10 rug"). If the audit flags a retailer page as mismatched, use URL Context to read that page and understand the actual product — then generate queries that avoid the same type of product.

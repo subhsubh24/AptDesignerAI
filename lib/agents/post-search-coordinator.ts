@@ -324,7 +324,9 @@ Avoid:
 - Calling re_search_category without first running an audit (you have no signal of what's broken)
 - Calling finalize before bundles/tiers — the user sees nothing useful
 
-Only call ONE function per turn. Reason briefly before each call. Be decisive — if the state is good enough, finalize.`;
+Parallel function calling: when multiple INDEPENDENT actions are needed in the same turn (e.g., re-searching THREE different categories that don't depend on each other), call all of them in parallel in the same turn. Gemini supports parallel function calling — use it when actions are independent, since it cuts iteration latency. Serialize when actions DO depend on each other (e.g., re-search category A → audit → re-search category B based on new audit).
+
+Reason briefly before each call. Be decisive — if the state is good enough, finalize.`;
 
 export async function runPostSearchCoordinator(
   input: CoordinatorRunInput

@@ -29,6 +29,7 @@ import { z } from "zod";
 import type { AgentResult, DiagnosisItem } from "./types";
 import type { DiagnosisData, DesignDirection } from "@/lib/types/database";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
+import type { GeminiTool } from "@/lib/ai/provider";
 
 const log = createLogger("category-planner");
 
@@ -183,20 +184,67 @@ Think step-by-step:
 
 Keep the final list focused — 6-12 categories is typical. More than 15 dilutes search budget.
 
-Return JSON matching the schema. \`agent_added: true\` for any category NOT in the baseline missing_categories list. Populate \`dropped_from_missing\` for any baseline category you removed, with clear reason.`;
+Return JSON matching the schema. \`agent_added: true\` for any category NOT in the baseline missing_categories list. Populate \`dropped_from_missing\` for any baseline category you removed, with clear reason.
+
+## EXAMPLES OF AGENTIC ADDITIONS (showing the reasoning style we want)
+
+Example 1 — diagnosis flagged "room feels cold and one-note":
+  → Add "area_rug" (priority: high) — Reason: "Diagnosis: 'cold and one-note' indicates missing soft texture; an area rug is the largest soft surface a room can add for warmth and acoustic dampening."
+  → Add "throw_pillow" (priority: medium) — Reason: "Reinforces the soft-texture solution at lower investment than a rug; lets palette accents from design direction land in the seating area."
+
+Example 2 — diagnosis flagged "dead corner near the window":
+  → Add "floor_lamp" (priority: high) — Reason: "Spatial gap: 'dead corner near the window'. A floor lamp activates the corner without crowding it and adds layered evening light."
+  → Add "accent_chair" (priority: medium) — Reason: "Pairs with the floor lamp to convert the dead corner into a reading nook."
+
+Example 3 — baseline included "dining_table" but user keep_items lists "vintage farmhouse table":
+  → Drop "dining_table" — Reason: "User explicitly kept their vintage farmhouse table; recommending a replacement would violate the keep constraint."
+
+Example 4 — design direction calls for "warm earth tones, oak, linen" but baseline has only sofa+rug+coffee_table:
+  → Add "wall_art" (priority: low) — Reason: "Design direction commits to a specific material/color story; without art the wall plane stays empty and the palette has nowhere to land vertically."
+
+These examples show the pattern: each addition or drop must cite a SPECIFIC source signal (diagnosis quote, design direction commitment, or user constraint).
+
+## TOOLS AVAILABLE
+You have Google Search. Use it to verify whether the categories you're proposing are realistically available at the user's budget tier and room type. For example, before adding "wall_sconce" to a high-end living room plan, search "wall sconces high-end" to confirm the category exists at meaningful price points. You have Code Execution for any math (budget allocation, count vs. minimum).`;
 
   try {
+    // Tools: Google Search verifies retailer/category availability at the
+    // user's budget tier; Code Execution handles any budget allocation
+    // or count math precisely. Compose with structured output (Gemini 3
+    // supports the combination); fall back to text parsing if the
+    // model snapshot rejects it.
+    const tools: GeminiTool[] = [
+      { googleSearch: {} as Record<string, never> },
+      { codeExecution: {} as Record<string, never> },
+    ];
+
     const response = await withRetry(
-      () =>
-        geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-          max_tokens: 6000,
-          seed: DETERMINISTIC_SEED,
-          responseSchema: CATEGORY_PLAN_GEMINI_SCHEMA,
-          responseMimeType: "application/json",
-        }),
+      async () => {
+        try {
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            max_tokens: 6000,
+            seed: DETERMINISTIC_SEED,
+            responseSchema: CATEGORY_PLAN_GEMINI_SCHEMA,
+            responseMimeType: "application/json",
+            tools,
+          });
+        } catch (err) {
+          log.warn("Tools+structured rejected — falling back to tools-only", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return await geminiProvider.chat({
+            model,
+            system,
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+            max_tokens: 6000,
+            seed: DETERMINISTIC_SEED,
+            tools,
+          });
+        }
+      },
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );
 

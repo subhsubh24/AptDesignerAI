@@ -130,6 +130,10 @@ Return JSON. Be conservative — when in doubt, delta: 0.`;
           seed: DETERMINISTIC_SEED,
           responseSchema: THRESHOLD_ADVISOR_GEMINI_SCHEMA,
           responseMimeType: "application/json",
+          // Code Execution lets the advisor compute precise statistics
+          // (percentiles, z-scores, MAD) over the distribution rather
+          // than estimating. The math here is the agent's whole job.
+          tools: [{ codeExecution: {} as Record<string, never> }],
         }),
       { isRetryable: isRetryableError, maxAttempts: 2 },
     );
