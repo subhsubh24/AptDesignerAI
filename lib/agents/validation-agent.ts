@@ -243,7 +243,9 @@ export async function validateRoomHarmony(
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPromptCore(context.designProfile);
+  // Agentic prompt — these validators reason holistically across multiple
+  // dimensions and benefit from the full reasoning template.
+  const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
   const whatShouldGo = (analysis.what_should_go as string[]) || [];
@@ -718,7 +720,9 @@ export async function performFinalAssessment(
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
   const model = selectModel("validation");
-  const system = getSystemPromptCore(context.designProfile);
+  // Agentic prompt — these validators reason holistically across multiple
+  // dimensions and benefit from the full reasoning template.
+  const system = getSystemPrompt(context.designProfile);
 
   const whatWorks = (analysis.what_works as string[]) || [];
   const whatShouldGo = (analysis.what_should_go as string[]) || [];

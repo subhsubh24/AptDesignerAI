@@ -226,7 +226,16 @@ Only search when the judgment is uncertain. Don't search for every product — u
             seed: DETERMINISTIC_SEED,
             responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
             responseMimeType: "application/json",
-            ...(input.enableGoogleSearch ? { tools: [{ googleSearch: {} as Record<string, never> }] } : {}),
+            // Tools: when grounding enabled, give the agent Google Search
+            // (verify retailer availability) + Code Execution (compute
+            // dimension math, area coverage, budget allocations precisely
+            // instead of estimating).
+            ...(input.enableGoogleSearch ? {
+              tools: [
+                { googleSearch: {} as Record<string, never> },
+                { codeExecution: {} as Record<string, never> },
+              ],
+            } : {}),
           });
         } catch (err) {
           if (!input.enableGoogleSearch) throw err;

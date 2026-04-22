@@ -585,6 +585,7 @@ export const geminiProvider: AIProvider = {
     let content = "";
     let imageData: { mimeType: string; data: string } | undefined;
     const thoughtSignatures: string[] = [];
+    const thoughtSummaries: string[] = [];
     const functionCalls: Array<{
       id: string;
       name: string;
@@ -597,6 +598,13 @@ export const geminiProvider: AIProvider = {
       if (candidate.content?.parts) {
         for (const part of candidate.content.parts) {
           const p = part as Record<string, unknown>;
+          // Thought summaries are text parts marked thought=true; final
+          // answer text parts have no `thought` flag (or thought=false).
+          if (p.text && p.thought) {
+            thoughtSummaries.push(p.text as string);
+            // Don't add thought text to `content` — it's not the answer.
+            continue;
+          }
           if (p.text) {
             content += p.text as string;
           }
@@ -678,6 +686,7 @@ export const geminiProvider: AIProvider = {
       groundingMetadata,
       imageData,
       thoughtSignatures: thoughtSignatures.length > 0 ? thoughtSignatures : undefined,
+      thoughtSummaries: thoughtSummaries.length > 0 ? thoughtSummaries : undefined,
       functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
     };
   },

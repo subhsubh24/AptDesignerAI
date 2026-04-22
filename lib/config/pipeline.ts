@@ -94,13 +94,16 @@ export const ORCHESTRATOR = {
    * When true, the post-search phase (validation/audit/correction/bundle/
    * backfill/fill-tiers) is driven by an agentic function-calling
    * coordinator. The coordinator decides which phases to run and in what
-   * order based on objective state signals. When false, the hardcoded
-   * phase order runs as before. Defaults to false until A/B-validated.
-   * Override per-environment via env: ENABLE_POST_SEARCH_COORDINATOR=1.
+   * order based on objective state signals.
+   *
+   * Default ON. Set ENABLE_POST_SEARCH_COORDINATOR=0 to fall back to the
+   * hardcoded linear flow. Default-ON is the maximally-agentic posture:
+   * Gemini 3 makes the post-search decisions, with the linear flow as
+   * a manual override.
    */
   enablePostSearchCoordinator:
-    process.env.ENABLE_POST_SEARCH_COORDINATOR === "1" ||
-    process.env.ENABLE_POST_SEARCH_COORDINATOR === "true",
+    process.env.ENABLE_POST_SEARCH_COORDINATOR !== "0" &&
+    process.env.ENABLE_POST_SEARCH_COORDINATOR !== "false",
 } as const;
 
 // ─── Bundle Math ──────────────────────────────────────────────

@@ -216,7 +216,13 @@ export interface CoordinatorRunInput {
   state: () => CoordinatorState;
   handle: CoordinatorToolHandler;
   /** Called on each turn so the orchestrator can stream progress. */
-  onTurn?: (turn: number, action: string, status: string) => void;
+  /**
+   * Called on each turn so the orchestrator can stream progress.
+   * `thoughtSummary` is the agent's reasoning for this turn (when
+   * thinking summaries are enabled), useful for showing the user
+   * WHY the agent picked this action.
+   */
+  onTurn?: (turn: number, action: string, status: string, thoughtSummary?: string) => void;
 }
 
 export interface CoordinatorRunResult {
@@ -356,16 +362,21 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           messages,
           max_tokens: 4000,
           seed: DETERMINISTIC_SEED,
+          // includeThoughts: surface the agent's reasoning so the SSE
+          // stream can show the user WHY each tool was called (transparency).
+          thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
           // Combine the coordinator's custom tools with built-in Google
-          // Search + URL Context so the agent can directly verify state
-          // signals against live retailer data (e.g., "does this price
-          // point exist at IKEA?") before deciding to re-search or drop.
-          // Gemini 3 supports mixing built-in + function-call tools in
-          // the same call (tool context circulation).
+          // Search + URL Context + Code Execution so the agent can verify
+          // state signals against live retailer data (e.g., "does this
+          // price point exist at IKEA?") AND compute precise math
+          // (alignment deltas, budget allocations, coverage ratios)
+          // instead of estimating. Gemini 3 supports mixing built-in +
+          // function-call tools in one call (tool context circulation).
           tools: [
             { functionDeclarations: COORDINATOR_TOOLS },
             { googleSearch: {} as Record<string, never> },
             { urlContext: {} as Record<string, never> },
+            { codeExecution: {} as Record<string, never> },
           ],
         });
       } catch (err) {
@@ -409,6 +420,10 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
       }
       messages.push({ role: "assistant", content: modelParts });
 
+      // Concatenated thought summary for this turn — surfaced via onTurn
+      // so the SSE stream can show the user the agent's reasoning.
+      const turnThoughts = response.thoughtSummaries?.join("\n\n");
+
       // Dispatch each call (Gemini may return parallel calls; we serialize)
       const responseParts: AIContentBlock[] = [];
       for (const call of calls) {
@@ -416,7 +431,7 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           finalized = true;
           finalizeReason = (call.args.reason as string) || "Agent finalized";
           history.push({ turn, tool: "finalize", status: "ok" });
-          input.onTurn?.(turn, "finalize", "ok");
+          input.onTurn?.(turn, "finalize", "ok", turnThoughts);
           // Still need to echo a function_response for the call — Gemini
           // expects every functionCall to be paired with a functionResponse.
           responseParts.push({
@@ -430,10 +445,10 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           continue;
         }
 
-        input.onTurn?.(turn, call.name, "running");
+        input.onTurn?.(turn, call.name, "running", turnThoughts);
         const result = await input.handle(call.name as CoordinatorTool, call.args);
         history.push({ turn, tool: call.name, status: result.status });
-        input.onTurn?.(turn, call.name, result.status);
+        input.onTurn?.(turn, call.name, result.status, turnThoughts);
 
         responseParts.push({
           type: "function_response",

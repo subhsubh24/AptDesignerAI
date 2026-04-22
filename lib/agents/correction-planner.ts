@@ -252,7 +252,16 @@ Search before writing queries. Queries grounded in real product listings perform
             seed: DETERMINISTIC_SEED,
             responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
             responseMimeType: "application/json",
-            ...(useTools ? { tools: [{ googleSearch: {} as Record<string, never> }, { urlContext: {} as Record<string, never> }] } : {}),
+            // Tools: Google Search to verify what retailers actually sell,
+            // URL Context to read flagged retailer pages, Code Execution
+            // to compute precise dimension math and budget allocations.
+            ...(useTools ? {
+              tools: [
+                { googleSearch: {} as Record<string, never> },
+                { urlContext: {} as Record<string, never> },
+                { codeExecution: {} as Record<string, never> },
+              ],
+            } : {}),
           });
         } catch (err) {
           if (!useTools) throw err;

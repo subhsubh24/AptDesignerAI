@@ -21,7 +21,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPromptCore } from "@/lib/prompts/system";
+import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -79,7 +79,7 @@ export async function adviseThreshold(
   input: ThresholdAdvisorInput,
 ): Promise<AgentResult<ThresholdAdjustment>> {
   const model = selectModel("validation");
-  const system = getSystemPromptCore();
+  const system = getSystemPrompt();
 
   const distSummary = `count=${input.distribution.count}, min=${input.distribution.min.toFixed(2)}, max=${input.distribution.max.toFixed(2)}, median=${input.distribution.median.toFixed(2)}, mean=${input.distribution.mean.toFixed(2)}, stdev=${input.distribution.stdev.toFixed(2)}, p25=${input.distribution.p25.toFixed(2)}, p60=${input.distribution.p60.toFixed(2)}, p75=${input.distribution.p75.toFixed(2)}`;
 

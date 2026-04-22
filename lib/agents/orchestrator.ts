@@ -2472,10 +2472,11 @@ export async function runAgenticSearch(
         budgetMode: ctx.budgetMode,
         state: buildState,
         handle,
-        onTurn: (turn, action, status) => {
+        onTurn: (turn, action, status, thoughtSummary) => {
           reportStep({
             step: `Coordinator turn ${turn}: ${action}`,
             status: status === "ok" ? "completed" : status === "error" ? "failed" : "running",
+            data: thoughtSummary ? { reasoning: thoughtSummary } : undefined,
           });
         },
       });

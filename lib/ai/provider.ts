@@ -81,6 +81,13 @@ export interface AIResponse {
    */
   thoughtSignatures?: string[];
   /**
+   * Thought summaries — natural-language snapshots of the model's
+   * reasoning process. Populated only when `thinkingConfig.includeThoughts`
+   * was set on the request. Useful for surfacing the agent's "why" to
+   * users without exposing raw chain-of-thought.
+   */
+  thoughtSummaries?: string[];
+  /**
    * Function calls the model wants to invoke (Gemini function-calling).
    * Empty when the model returned only text. When present, the caller is
    * responsible for executing the named tool with the provided args and
@@ -142,6 +149,7 @@ export type GeminiTool =
   | { urlContext: Record<string, never> }
   | { googleMaps: Record<string, never> | GoogleMapsToolConfig }
   | { computerUse: ComputerUseToolConfig }
+  | { codeExecution: Record<string, never> }
   | { functionDeclarations: FunctionDeclaration[] };
 
 export interface FunctionDeclaration {
@@ -196,7 +204,16 @@ export interface AIProvider {
     tools?: GeminiTool[];
     responseSchema?: Record<string, unknown>;
     responseMimeType?: string;
-    thinkingConfig?: { thinkingLevel?: "minimal" | "low" | "medium" | "high" };
+    thinkingConfig?: {
+      thinkingLevel?: "minimal" | "low" | "medium" | "high";
+      /**
+       * When true, the model returns thought summaries — distilled
+       * snapshots of its reasoning process — interleaved with the final
+       * response. Surfaced in `AIResponse.thoughtSummaries`. Useful for
+       * transparency in agent loops; small extra output cost.
+       */
+      includeThoughts?: boolean;
+    };
     responseModalities?: string[];
     mediaResolution?: "low" | "medium" | "high" | "ultra_high";
     /**
