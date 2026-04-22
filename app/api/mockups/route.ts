@@ -502,6 +502,25 @@ RULES:
     return NextResponse.json({ error: promptResult.error }, { status: 500 });
   }
 
+  // Validate mockup prompt references all selected products
+  {
+    const promptLower = promptResult.data.prompt.toLowerCase();
+    const missingProducts: string[] = [];
+    for (const p of products) {
+      const cat = (p.category || "").toLowerCase();
+      const title = (p.title || "").toLowerCase();
+      const titleWords = title.split(/\s+/).filter((w: string) => w.length > 3).slice(0, 3);
+      const mentioned = (cat && promptLower.includes(cat))
+        || titleWords.some((w: string) => promptLower.includes(w));
+      if (!mentioned) {
+        missingProducts.push(p.title || p.category || "unknown");
+      }
+    }
+    if (missingProducts.length > 0) {
+      console.warn(`[mockup] Prompt missing ${missingProducts.length} product(s): ${missingProducts.join(", ")} — image may not render all selected items`);
+    }
+  }
+
   // Seed grounding refs with product titles + retailers so Image Search
   // Grounding pulls real product photos during rendering. Caller-provided
   // refs (if any) take precedence.

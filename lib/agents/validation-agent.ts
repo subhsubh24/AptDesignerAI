@@ -1250,6 +1250,7 @@ export async function validateProductSet(
     whatShouldGo?: string[];
     identifiedContext?: string;
     diagnosis?: DiagnosisData;
+    whatItNeeds?: Array<{ category: string; search_title?: string; specs?: string; placement?: string; priority?: string }>;
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
@@ -1323,7 +1324,10 @@ ${envContext ? `\n## SPATIAL & ENVIRONMENTAL CONTEXT\n${envContext}` : ""}${room
   const gaps = (d as DiagnosisData & { spatial_gaps?: string[] }).spatial_gaps;
   if (gaps?.length) lines.push(`Dead zones: ${gaps.join("; ")}`);
   return lines.length ? `\n\n## DIAGNOSIS (problem statement this set must solve)\n${lines.join("\n")}\nThe set must actually solve the "Not working" items and activate dead zones. Penalize sets that leave these unaddressed.` : "";
-})() : ""}
+})() : ""}${roomContext.whatItNeeds?.length ? `\n\n## ORIGINAL REQUIREMENTS (from design assessment)
+Each product should match its category's required specs. Flag mismatches in issues.
+${roomContext.whatItNeeds.map((n) => `- **${n.category}**: ${n.search_title || ""}${n.specs ? ` | Specs: ${n.specs}` : ""}${n.placement ? ` | Placement: ${n.placement}` : ""}`).join("\n")}
+IMPORTANT: Check that products match their category's SPECS (dimensions, materials, color range). A product that's in the right category but wrong size/material should get a lower functional_fit score.` : ""}
 
 ## PRODUCTS TO VALIDATE
 ${/* eslint-disable-next-line @typescript-eslint/no-unused-vars */

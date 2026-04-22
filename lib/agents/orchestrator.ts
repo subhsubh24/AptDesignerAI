@@ -23,7 +23,7 @@ import { ORCHESTRATOR } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
 import { pLimit } from "@/lib/utils/p-limit";
 import type { AgentContext, AgentResult } from "./types";
-import type { CandidateProduct } from "@/lib/types/database";
+import type { CandidateProduct, DiagnosisData } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 
@@ -1268,6 +1268,7 @@ export async function runAgenticSearch(
         whatShouldGo: ctx.whatShouldGo,
         identifiedContext: ctx.identifiedContext,
         diagnosis: ctx.diagnosis,
+        whatItNeeds: ctx.whatItNeeds,
       }
     );
 
@@ -1851,6 +1852,106 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
+    // Post-search requirement validation (deterministic, zero LLM cost)
+    // ═══════════════════════════════════════════════════════════
+    const requirementIssues: string[] = [];
+
+    // (a) Category coverage: every requested category should have products
+    {
+      const coveredCategories = new Set(Object.keys(candidatesByCategory));
+      const uncoveredCategories = missingCategories.filter(
+        (cat) => !coveredCategories.has(cat) || (candidatesByCategory[cat]?.length || 0) === 0
+      );
+      if (uncoveredCategories.length > 0) {
+        const msg = `Missing categories (${uncoveredCategories.length}/${missingCategories.length}): ${uncoveredCategories.join(", ")}`;
+        requirementIssues.push(msg);
+        log.warn(msg, { phase: "requirement_validation", uncoveredCategories });
+      }
+    }
+
+    // (b) Spec adherence: for each what_it_needs item, verify the top product
+    //     matches key specs (dimensions, materials) from the assessment
+    if (ctx.whatItNeeds && ctx.whatItNeeds.length > 0) {
+      for (const need of ctx.whatItNeeds) {
+        const products = candidatesByCategory[need.category];
+        if (!products || products.length === 0) continue;
+        const specs = need.specs?.toLowerCase() || "";
+        if (!specs) continue;
+
+        const topProduct = [...products].sort((a, b) => {
+          const sA = evaluations.get(a.id)?.final_item_score || 0;
+          const sB = evaluations.get(b.id)?.final_item_score || 0;
+          return (sB - sA) || tiebreakProduct(a, b);
+        })[0];
+        if (!topProduct) continue;
+
+        const productText = [
+          topProduct.title,
+          topProduct.description,
+          topProduct.materials?.join(" "),
+          topProduct.dimensions ? `${topProduct.dimensions.width || ""}x${topProduct.dimensions.depth || ""}x${topProduct.dimensions.height || ""}` : "",
+        ].filter(Boolean).join(" ").toLowerCase();
+
+        // Extract dimension specs like "8x10", "60 inch", "72 wide"
+        const dimPatterns = specs.match(/\b(\d+)\s*[x×]\s*(\d+)/g);
+        const sizePatterns = specs.match(/\b(\d{2,})\s*(?:inch|in|"|cm|mm|wide|long|tall|deep)\b/g);
+        const specDims = [...(dimPatterns || []), ...(sizePatterns || [])];
+
+        if (specDims.length > 0) {
+          const hasMatch = specDims.some((dim) => productText.includes(dim.replace(/×/g, "x")));
+          if (!hasMatch) {
+            requirementIssues.push(
+              `${need.category}: top product may not match spec dimensions (need: ${specDims.join(", ")})`
+            );
+          }
+        }
+      }
+    }
+
+    // (c) Diagnosis-solving: verify the set addresses what_is_not_working items
+    {
+      const diagnosis = ctx.diagnosis as DiagnosisData | undefined;
+      const problems = diagnosis?.what_is_not_working || [];
+      if (problems.length > 0) {
+        const allProductText = Object.values(candidatesByCategory)
+          .flat()
+          .map((p) => [p.title, p.description, p.category, p.materials?.join(" ")].filter(Boolean).join(" "))
+          .join(" ")
+          .toLowerCase();
+
+        const lightingProblems = problems.filter((p) =>
+          /dark|dim|light|lamp|shadow|gloomy/i.test(p)
+        );
+        if (lightingProblems.length > 0) {
+          const hasLighting = Object.keys(candidatesByCategory).some(
+            (cat) => /lamp|light|sconce|pendant|chandelier/i.test(cat)
+          ) || /lamp|light|sconce|pendant|chandelier/i.test(allProductText);
+          if (!hasLighting) {
+            requirementIssues.push(
+              `Diagnosis flagged lighting issues but no lighting products in set: "${lightingProblems[0]}"`
+            );
+          }
+        }
+
+        const textureProblems = problems.filter((p) =>
+          /hard|cold|sterile|echo|acoustic/i.test(p)
+        );
+        if (textureProblems.length > 0) {
+          const hasSoftMaterials = /rug|curtain|throw|pillow|cushion|upholster|fabric|textile|wool|linen|velvet|boucle/i.test(allProductText);
+          if (!hasSoftMaterials) {
+            requirementIssues.push(
+              `Diagnosis flagged texture/acoustic issues but no soft materials in set: "${textureProblems[0]}"`
+            );
+          }
+        }
+      }
+    }
+
+    if (requirementIssues.length > 0) {
+      log.warn("Requirement validation issues", { phase: "requirement_validation", issues: requirementIssues });
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // Pipeline conversion metrics + score drift check
     // ═══════════════════════════════════════════════════════════
     const conversionRates = {
@@ -1876,6 +1977,8 @@ export async function runAgenticSearch(
     if (stats.totalFinal === 0 && stats.totalRawUrls > 20) {
       bottlenecks.push(`Zero final products from ${stats.totalRawUrls} URLs — search queries may not match available products`);
     }
+    // Merge requirement validation issues into bottlenecks
+    bottlenecks.push(...requirementIssues);
     if (bottlenecks.length > 0) {
       log.warn("Pipeline bottlenecks detected", { phase: "stats", bottlenecks });
     }
@@ -1940,11 +2043,13 @@ export async function runAgenticSearch(
               .map((f) => `${f.title}: ${f.reason}`)
           : [];
 
-        const mergedIssues = [...liveIssues, ...priorFlags].slice(0, 8);
+        const mergedIssues = [...requirementIssues, ...liveIssues, ...priorFlags].slice(0, 10);
 
         validationData = {
-          isValid: liveConfidence >= 7 && mergedIssues.length === 0,
-          confidence: liveConfidence,
+          isValid: liveConfidence >= 7 && requirementIssues.length === 0 && mergedIssues.length === 0,
+          confidence: requirementIssues.length > 0
+            ? Math.min(liveConfidence, Math.max(5.0, liveConfidence - requirementIssues.length * 0.5))
+            : liveConfidence,
           issues: mergedIssues,
         };
 
