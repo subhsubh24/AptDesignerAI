@@ -56,6 +56,7 @@ class QueryBuilder {
   private orderCol: string | null = null;
   private orderAsc = true;
   private limitCount: number | null = null;
+  private offsetCount: number | null = null;
   private singleMode = false;
   private maybeSingleMode = false;
   private returnSelect = false;
@@ -84,6 +85,16 @@ class QueryBuilder {
     return this;
   }
 
+  gte(column: string, value: unknown) {
+    this.filters.push({ column, op: "gte", value });
+    return this;
+  }
+
+  lte(column: string, value: unknown) {
+    this.filters.push({ column, op: "lte", value });
+    return this;
+  }
+
   order(column: string, opts?: { ascending?: boolean }) {
     this.orderCol = column;
     this.orderAsc = opts?.ascending ?? true;
@@ -92,6 +103,12 @@ class QueryBuilder {
 
   limit(count: number) {
     this.limitCount = count;
+    return this;
+  }
+
+  range(from: number, to: number) {
+    this.offsetCount = from;
+    this.limitCount = to - from + 1;
     return this;
   }
 
@@ -205,7 +222,10 @@ class QueryBuilder {
       });
     }
 
-    // Limit
+    // Offset + Limit
+    if (this.offsetCount != null) {
+      rows = rows.slice(this.offsetCount);
+    }
     if (this.limitCount != null) {
       rows = rows.slice(0, this.limitCount);
     }
@@ -241,6 +261,8 @@ class QueryBuilder {
         if (op === "eq") return actual === value;
         if (op === "neq") return actual !== value;
         if (op === "in") return (value as unknown[]).includes(actual);
+        if (op === "gte") return (actual as string) >= (value as string);
+        if (op === "lte") return (actual as string) <= (value as string);
         return true;
       });
     });
