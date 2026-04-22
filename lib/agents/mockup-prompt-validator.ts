@@ -20,7 +20,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPromptCore } from "@/lib/prompts/system";
+import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -90,7 +90,7 @@ export async function validateMockupPrompt(
   input: MockupPromptValidatorInput
 ): Promise<AgentResult<MockupPromptValidationResult>> {
   const model = selectModel("mockup_prompt");
-  const system = getSystemPromptCore();
+  const system = getSystemPrompt();
 
   const productList = input.products.map((p, i) => `${i + 1}. ${formatProduct(p)}`).join("\n");
   const placementBlock = input.placementMap && Object.keys(input.placementMap).length > 0

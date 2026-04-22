@@ -1,6 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPromptCore } from "@/lib/prompts/system";
+import { getSystemPromptCore, getSystemPrompt } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
   HarmonyGlobalResponseSchema,
@@ -1254,7 +1254,10 @@ export async function validateProductSet(
   }
 ): Promise<AgentResult<ValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPromptCore(roomContext.designProfile);
+  // Use the agentic system prompt here — validateProductSet makes holistic,
+  // multi-dimensional judgments where step-by-step reasoning matters
+  // (e.g., weighing harmony vs. spec fit vs. pairwise conflicts).
+  const system = getSystemPrompt(roomContext.designProfile);
 
   // Build environmental context section
   const envContext = [

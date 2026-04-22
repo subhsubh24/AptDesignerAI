@@ -17,7 +17,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPromptCore } from "@/lib/prompts/system";
+import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -96,7 +96,9 @@ export async function validateRequirements(
   input: RequirementValidatorInput
 ): Promise<AgentResult<RequirementValidationResult>> {
   const model = selectModel("validation");
-  const system = getSystemPromptCore(input.designProfile);
+  // Agentic prompt — this agent reasons about coverage, spec adherence, and
+  // diagnosis-solving across multiple categories. Step-by-step reasoning helps.
+  const system = getSystemPrompt(input.designProfile);
 
   const whatItNeeds = input.whatItNeeds || [];
   const diagnosis = input.diagnosis;

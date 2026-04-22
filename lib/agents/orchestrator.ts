@@ -12,6 +12,7 @@ import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { validateRequirements, type RequirementValidationResult } from "./requirement-validator";
+import { planCorrections, type CorrectionAction } from "./correction-planner";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
@@ -170,6 +171,221 @@ function isLikelyProductUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ─── Correction Re-Search Helper ───────────────────────────────
+// Runs a targeted mini-pipeline (search → extract → quick-score →
+// deep-score) for ONE category with a specific set of queries.
+// Used by the agentic self-correction loop.
+
+interface ReSearchCategoryInput {
+  category: string;
+  queriesByTier: { budget: string[]; balanced: string[]; high_end: string[] };
+  ctx: AgentContext;
+  brief: SearchBrief;
+  tokenBudget: TokenBudget;
+  stats: {
+    tokensUsed: number;
+    totalDeepScored: number;
+    totalFinal: number;
+    tokensPerPhase: Record<string, number>;
+    [k: string]: unknown;
+  };
+  tracer: PipelineTracer;
+  anchorSpecs: Record<string, string>;
+  harmonyNeighbors: Array<{ category: string; spec: string }>;
+  evaluations: Map<string, ProductEvaluationResult>;
+}
+
+const DEPENDENT_CATEGORIES_SET = new Set([
+  "side_table", "coffee_table", "accent_chair", "floor_lamp", "table_lamp",
+  "area_rug", "ottoman", "nightstand", "dresser", "throw_pillow", "throw_blanket",
+  "wall_art", "mirror", "plant", "vase",
+]);
+
+async function reSearchCategoryForCorrection(
+  input: ReSearchCategoryInput
+): Promise<{ added: number; products: CandidateProduct[] }> {
+  const { category, queriesByTier, ctx, brief, tokenBudget, stats, tracer, anchorSpecs, harmonyNeighbors, evaluations } = input;
+
+  if (tokenBudget.exceeded) return { added: 0, products: [] };
+
+  const correctionCategory = category;
+  const catBrief = brief.categories.find((c) => c.category === correctionCategory);
+
+  let addedCount = 0;
+  const newCandidates: CandidateProduct[] = [];
+
+  // Phase 1: search every new query, per tier
+  for (const tier of PRICE_TIERS) {
+    const queries = queriesByTier[tier] || [];
+    if (queries.length === 0) continue;
+    if (tokenBudget.exceeded) break;
+
+    const allRawCandidates: Array<{ url: string; title: string; snippet: string; tier: PriceTier }> = [];
+
+    for (const query of queries) {
+      if (tokenBudget.exceeded) break;
+      const searchRes = await searchProducts(query, 8, tier, correctionCategory, ctx.imageUrls);
+      if (searchRes.tokensUsed) {
+        tokenBudget.add(searchRes.tokensUsed);
+        stats.tokensUsed += searchRes.tokensUsed;
+        stats.tokensPerPhase.search = (stats.tokensPerPhase.search || 0) + searchRes.tokensUsed;
+      }
+      if (searchRes.success && searchRes.data) {
+        for (const c of searchRes.data) {
+          if (!isLikelyProductUrl(c.url)) continue;
+          if (isDomainBlocked(c.url)) continue;
+          allRawCandidates.push({ url: c.url, title: c.title, snippet: c.snippet, tier });
+        }
+      }
+    }
+
+    // Dedupe URLs
+    const seen = new Set<string>();
+    const uniqueCandidates = allRawCandidates.filter((c) => {
+      if (seen.has(c.url)) return false;
+      seen.add(c.url);
+      return true;
+    });
+
+    // Cap per tier to prevent runaway cost
+    const topCandidates = uniqueCandidates.slice(0, 8);
+
+    // Phase 2: extract
+    for (const cand of topCandidates) {
+      if (tokenBudget.exceeded) break;
+      if (tokenBudget.used / tokenBudget.cap > 0.85) {
+        tracer.traceFilter("correction_extract", "", cand.url, "budget > 85%");
+        break;
+      }
+
+      const extractRes = await extractFromUrl(cand.url, ctx.designProfile, ctx.imageUrls);
+      if (extractRes.tokensUsed) {
+        tokenBudget.add(extractRes.tokensUsed);
+        stats.tokensUsed += extractRes.tokensUsed;
+        stats.tokensPerPhase.extract = (stats.tokensPerPhase.extract || 0) + extractRes.tokensUsed;
+      }
+      if (!extractRes.success || !extractRes.data) continue;
+      const title = extractRes.data.title || "";
+      if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") continue;
+
+      const catCheck = productMatchesCategory(correctionCategory, extractRes.data.category, title);
+      if (!catCheck.ok) continue;
+
+      const priceRange = catBrief?.tiers[tier]?.price_range;
+      if (priceRange && extractRes.data.price) {
+        if (extractRes.data.price > priceRange.max * 1.75) continue;
+        if (extractRes.data.price < priceRange.min * 0.4) continue;
+      }
+
+      const id = crypto.randomUUID();
+      const product: CandidateProduct = {
+        id,
+        room_id: ctx.roomId,
+        search_session_id: null,
+        title,
+        product_url: cand.url,
+        image_url: extractRes.data.image_url || null,
+        local_image_path: null,
+        price: extractRes.data.price || null,
+        retailer: extractRes.data.retailer || null,
+        category: extractRes.data.category || correctionCategory,
+        description: extractRes.data.description || null,
+        colors: extractRes.data.colors || null,
+        materials: extractRes.data.materials || null,
+        dimensions: extractRes.data.dimensions || null,
+        source_type: "agentic_search",
+        metadata: {
+          price_tier: tier,
+          correction_search: true,
+          source_query: queries.join(" | "),
+        },
+        status: "pending",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      newCandidates.push(product);
+    }
+  }
+
+  if (newCandidates.length === 0) return { added: 0, products: [] };
+
+  // Phase 3: quick-score (batch)
+  const quickRes = await quickScoreProducts(
+    newCandidates,
+    correctionCategory,
+    ctx.roomType,
+    ctx.budgetMode,
+    ctx.designDirection,
+    ctx.placementMap?.[correctionCategory],
+    ctx.floorPlan,
+    ctx.diagnosis as Record<string, unknown> | undefined,
+    ctx.priorities,
+    ctx.keepItems,
+  );
+  if (quickRes.tokensUsed) {
+    tokenBudget.add(quickRes.tokensUsed);
+    stats.tokensUsed += quickRes.tokensUsed;
+    stats.tokensPerPhase.quick_score = (stats.tokensPerPhase.quick_score || 0) + quickRes.tokensUsed;
+  }
+  const quickScoreByProductId = new Map<string, number>();
+  if (quickRes.success && quickRes.data) {
+    for (const entry of quickRes.data) {
+      quickScoreByProductId.set(entry.productId, entry.quickScore);
+    }
+  }
+  const survivors = newCandidates.filter((p) => {
+    const qs = quickScoreByProductId.get(p.id);
+    return qs === undefined || qs >= 4.0;
+  });
+
+  // Phase 4: deep-score and collect products that pass threshold
+  const keptProducts: CandidateProduct[] = [];
+  for (const product of survivors) {
+    if (tokenBudget.exceeded) break;
+    const cat = product.category || correctionCategory;
+    const scoreRes = await scoreProduct(product, {
+      roomType: ctx.roomType,
+      budgetMode: ctx.budgetMode,
+      existingItems: ctx.keepItems,
+      roomImageUrls: ctx.imageUrls,
+      priorities: ctx.priorities,
+      otherRoomsContext: ctx.otherRoomsContext,
+      designProfile: ctx.designProfile,
+      diagnosis: ctx.diagnosis,
+      designDirection: ctx.designDirection,
+      userFeedbackContext: ctx.userFeedbackContext,
+      placement: ctx.placementMap?.[cat],
+      spatialLayout: ctx.spatialLayout,
+      floorPlan: ctx.floorPlan,
+      extractedFloorPlan: ctx.extractedFloorPlan,
+      lightingConditions: ctx.lightingConditions,
+      windowDoorPositions: ctx.windowDoorPositions,
+      outletPositions: ctx.outletPositions,
+      userContext: ctx.userContext,
+      replaceItems: ctx.replaceItems,
+      identifiedContext: ctx.identifiedContext,
+      anchorSpecs: DEPENDENT_CATEGORIES_SET.has(cat) && Object.keys(anchorSpecs).length > 0 ? anchorSpecs : undefined,
+      harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
+      includeFitNotes: false,
+    });
+    if (scoreRes.tokensUsed) {
+      tokenBudget.add(scoreRes.tokensUsed);
+      stats.tokensUsed += scoreRes.tokensUsed;
+      stats.tokensPerPhase.deep_score = (stats.tokensPerPhase.deep_score || 0) + scoreRes.tokensUsed;
+    }
+    if (scoreRes.success && scoreRes.data) {
+      evaluations.set(product.id, scoreRes.data);
+      stats.totalDeepScored++;
+      if (scoreRes.data.final_item_score >= 6) {
+        addedCount++;
+        keptProducts.push(product);
+      }
+    }
+  }
+
+  return { added: addedCount, products: keptProducts };
 }
 
 // ─── Main Orchestrator ─────────────────────────────────────────
@@ -1855,17 +2071,36 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Post-search requirement validation — LLM audit of coverage,
-    // spec adherence, and diagnosis-solving. Fails open if the agent
-    // errors or budget is exceeded.
+    // Post-search audit + agentic self-correction loop.
+    // 1. Run LLM audit of coverage, spec adherence, diagnosis-solving.
+    // 2. If alignment < 8 or gaps found, call CorrectionPlanner to
+    //    decide what to do (re-search specific categories with new
+    //    queries, drop unreachable categories, or accept).
+    // 3. Execute actions, re-audit, loop up to MAX_CORRECTION_ITERATIONS.
+    // Fails open at every step.
     // ═══════════════════════════════════════════════════════════
-    const requirementIssues: string[] = [];
-    let requirementAudit: RequirementValidationResult | undefined;
+    const MAX_CORRECTION_ITERATIONS = 2;
+    const ALIGNMENT_TARGET = 8.0;
+    const triedQueriesByCategory: Record<string, string[]> = {};
 
-    if (!tokenBudget.exceeded && missingCategories.length > 0) {
-      reportStep({ step: "Auditing requirement alignment", status: "running" });
+    // Seed tried queries from the initial brief so the correction planner
+    // doesn't just regenerate the same queries.
+    for (const catBrief of brief.categories) {
+      const qs: string[] = [];
+      for (const tier of PRICE_TIERS) {
+        const tierBrief = catBrief.tiers[tier];
+        if (tierBrief?.search_queries) {
+          for (const q of tierBrief.search_queries) {
+            qs.push(typeof q === "string" ? q : (q as { query?: string }).query || "");
+          }
+        }
+      }
+      triedQueriesByCategory[catBrief.category] = qs.filter(Boolean);
+    }
 
-      // Top pick per category (already scored + ranked)
+    const runAudit = async (): Promise<RequirementValidationResult | undefined> => {
+      if (tokenBudget.exceeded || missingCategories.length === 0) return undefined;
+
       const topPicksByCategory: Record<string, CandidateProduct> = {};
       for (const [category, products] of Object.entries(candidatesByCategory)) {
         const sorted = [...products].sort((a, b) => {
@@ -1894,31 +2129,214 @@ export async function runAgenticSearch(
         stats.tokensPerPhase.validation += auditResult.tokensUsed;
       }
 
-      if (auditResult.success && auditResult.data) {
-        requirementAudit = auditResult.data;
-        requirementIssues.push(...auditResult.data.issues);
-        log.info("Requirement audit complete", {
-          phase: "requirement_validation",
-          alignment: auditResult.data.overall_alignment,
-          coverage: auditResult.data.coverage.score,
-          diagnosisSolving: auditResult.data.diagnosis_solving.score,
-          issueCount: auditResult.data.issues.length,
+      return auditResult.success ? auditResult.data : undefined;
+    };
+
+    const requirementIssues: string[] = [];
+    let requirementAudit: RequirementValidationResult | undefined;
+    const droppedCategories = new Set<string>();
+
+    reportStep({ step: "Auditing requirement alignment", status: "running" });
+    requirementAudit = await runAudit();
+
+    if (requirementAudit) {
+      requirementIssues.push(...requirementAudit.issues);
+      log.info("Requirement audit complete", {
+        phase: "requirement_validation",
+        alignment: requirementAudit.overall_alignment,
+        coverage: requirementAudit.coverage.score,
+        diagnosisSolving: requirementAudit.diagnosis_solving.score,
+        issueCount: requirementAudit.issues.length,
+      });
+      reportStep({
+        step: "Auditing requirement alignment",
+        status: "completed",
+        data: {
+          alignment: requirementAudit.overall_alignment,
+          issues: requirementAudit.issues.length,
+        },
+      });
+    } else {
+      reportStep({ step: "Auditing requirement alignment", status: "failed" });
+    }
+
+    // Agentic correction loop — let the planner decide what to fix.
+    let correctionIteration = 0;
+    while (
+      requirementAudit &&
+      requirementAudit.overall_alignment < ALIGNMENT_TARGET &&
+      correctionIteration < MAX_CORRECTION_ITERATIONS &&
+      !tokenBudget.exceeded
+    ) {
+      reportStep({
+        step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+        status: "running",
+      });
+
+      const categoryState: Record<string, {
+        topPickTitle?: string;
+        topPickPrice?: number;
+        topPickScore?: number;
+        productCount: number;
+        tiersCovered: string[];
+      }> = {};
+      for (const [category, products] of Object.entries(candidatesByCategory)) {
+        const sorted = [...products].sort((a, b) => {
+          const sA = evaluations.get(a.id)?.final_item_score || 0;
+          const sB = evaluations.get(b.id)?.final_item_score || 0;
+          return sB - sA;
+        });
+        const tiersCovered = Array.from(
+          new Set(products.map((p) => ((p.metadata as { price_tier?: string } | null)?.price_tier) || "balanced"))
+        );
+        categoryState[category] = {
+          topPickTitle: sorted[0]?.title || undefined,
+          topPickPrice: sorted[0]?.price || undefined,
+          topPickScore: sorted[0] ? evaluations.get(sorted[0].id)?.final_item_score : undefined,
+          productCount: products.length,
+          tiersCovered,
+        };
+      }
+
+      const planResult = await planCorrections({
+        roomType: ctx.roomType,
+        budgetMode: ctx.budgetMode,
+        audit: requirementAudit,
+        categoryState,
+        diagnosis: ctx.diagnosis as DiagnosisData | undefined,
+        whatItNeeds: ctx.whatItNeeds,
+        designDirection: ctx.designDirection,
+        designProfile: ctx.designProfile,
+        triedQueries: triedQueriesByCategory,
+        iteration: correctionIteration,
+        maxIterations: MAX_CORRECTION_ITERATIONS,
+      });
+
+      if (planResult.tokensUsed) {
+        tokenBudget.add(planResult.tokensUsed);
+        stats.tokensUsed += planResult.tokensUsed;
+        stats.tokensPerPhase.validation += planResult.tokensUsed;
+      }
+
+      if (!planResult.success || !planResult.data) {
+        log.warn("Correction plan failed — accepting current state", { error: planResult.error });
+        reportStep({
+          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          status: "failed",
+        });
+        break;
+      }
+
+      const plan = planResult.data;
+      log.info("Correction plan", {
+        iteration: correctionIteration,
+        diagnosis: plan.diagnosis,
+        actionTypes: plan.actions.map((a) => a.type),
+        expectedGain: plan.expected_gain,
+      });
+
+      // Accept action = stop iterating
+      const acceptAction = plan.actions.find((a) => a.type === "accept");
+      if (acceptAction || plan.actions.length === 0) {
+        log.info("Planner accepted current state", { reason: (acceptAction as { reason?: string })?.reason });
+        reportStep({
+          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          status: "completed",
+          data: { action: "accept", reason: (acceptAction as { reason?: string })?.reason },
+        });
+        break;
+      }
+
+      // Drop categories
+      for (const action of plan.actions) {
+        if (action.type === "drop_category") {
+          droppedCategories.add(action.category);
+          delete candidatesByCategory[action.category];
+          log.info("Dropped category per correction plan", {
+            category: action.category,
+            reason: action.reason,
+          });
+        }
+      }
+
+      // Execute re_search actions
+      const reSearchActions = plan.actions.filter(
+        (a) => a.type === "re_search_category"
+      ) as Array<Extract<CorrectionAction, { type: "re_search_category" }>>;
+
+      if (reSearchActions.length > 0) {
+        const correctionResults = await Promise.all(
+          reSearchActions.map(async (action) => {
+            const result = await reSearchCategoryForCorrection({
+              category: action.category,
+              queriesByTier: action.queries_by_tier,
+              ctx,
+              brief,
+              tokenBudget,
+              stats,
+              tracer,
+              anchorSpecs,
+              harmonyNeighbors,
+              evaluations,
+            });
+            // Merge new products into the main candidate set
+            candidatesByCategory[action.category] = candidatesByCategory[action.category] || [];
+            candidatesByCategory[action.category].push(...result.products);
+            stats.totalFinal += result.added;
+            // Track queries so the planner doesn't repeat them next iteration
+            const allQueries = [
+              ...action.queries_by_tier.budget,
+              ...action.queries_by_tier.balanced,
+              ...action.queries_by_tier.high_end,
+            ];
+            triedQueriesByCategory[action.category] =
+              [...(triedQueriesByCategory[action.category] || []), ...allQueries];
+            return { category: action.category, added: result.added };
+          })
+        );
+
+        let totalAdded = 0;
+        for (const r of correctionResults) {
+          totalAdded += r.added;
+        }
+        log.info("Correction re-search complete", {
+          iteration: correctionIteration,
+          totalAdded,
+          perCategory: correctionResults,
         });
         reportStep({
-          step: "Auditing requirement alignment",
+          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
           status: "completed",
-          data: {
-            alignment: auditResult.data.overall_alignment,
-            issues: auditResult.data.issues.length,
-          },
+          data: { addedProducts: totalAdded },
         });
       } else {
-        log.warn("Requirement audit failed — continuing without it", {
-          phase: "requirement_validation",
-          error: auditResult.error,
+        reportStep({
+          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          status: "completed",
         });
-        reportStep({ step: "Auditing requirement alignment", status: "failed" });
       }
+
+      correctionIteration++;
+
+      // Re-audit if planner requested iteration OR if we still have budget.
+      // Let the planner's iterate_again flag control whether we loop again.
+      if (!plan.iterate_again && correctionIteration < MAX_CORRECTION_ITERATIONS) break;
+
+      reportStep({ step: "Re-auditing after correction", status: "running" });
+      const newAudit = await runAudit();
+      if (newAudit) {
+        const gained = newAudit.overall_alignment - requirementAudit.overall_alignment;
+        log.info("Re-audit after correction", {
+          iteration: correctionIteration,
+          alignmentBefore: requirementAudit.overall_alignment,
+          alignmentAfter: newAudit.overall_alignment,
+          gained,
+        });
+        requirementAudit = newAudit;
+        requirementIssues.length = 0;
+        requirementIssues.push(...newAudit.issues);
+      }
+      reportStep({ step: "Re-auditing after correction", status: "completed" });
     }
 
     // ═══════════════════════════════════════════════════════════
