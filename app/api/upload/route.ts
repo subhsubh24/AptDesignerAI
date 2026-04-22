@@ -17,9 +17,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
-  if (!ALLOWED_TYPES.has(file.type)) {
-    return NextResponse.json({ error: "Only image files (JPEG, PNG, WebP, HEIC) are allowed" }, { status: 400 });
+  const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+  const FLOOR_PLAN_TYPES = new Set([...IMAGE_TYPES, "application/pdf"]);
+  const allowedTypes = bucket === "floor-plans" ? FLOOR_PLAN_TYPES : IMAGE_TYPES;
+  if (!allowedTypes.has(file.type)) {
+    const allowedLabel = bucket === "floor-plans" ? "JPEG, PNG, WebP, HEIC, or PDF" : "JPEG, PNG, WebP, or HEIC";
+    return NextResponse.json({ error: `Only ${allowedLabel} files are allowed` }, { status: 400 });
   }
 
   const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
