@@ -367,7 +367,10 @@ For every item, walk through all 6 dims + overall in 7 steps.
 
 Use Code Execution for precise spatial calculations (clearances, rug coverage area, proportion ratios) rather than estimating.
 
-## FEW-SHOT EXAMPLE (one item_score entry)
+## FEW-SHOT EXAMPLES — calibration anchors
+Study these two entries. They define what 6.8 vs 9.6 look like so your sub-scores land on the same scale.
+
+### Example 1 — FAILING item (6.8 overall, needs revision)
 {
   "category": "area_rug",
   "harmony_score": 6.8,
@@ -384,6 +387,22 @@ Use Code Execution for precise spatial calculations (clearances, rug coverage ar
   "root_cause": "spatial_fit: 5x7 rug undersized for 84-inch sofa — front legs hang off, creating visual disconnect. Upgrade to 8x10.",
   "reason": "Wool and cream tone work with Nordic Charcoal direction but the 5x7 is too small. 8x10 anchors the seating zone properly.",
   "rationale": "COLOR: warm cream complements charcoal sofa + oak accents = 8.5. SPATIAL: 5x7 (60x84) under 84-inch sofa leaves 0 inch overhang — front legs off rug, visually floating = 4.2. MATERIAL: wool matches linen/natural material story = 8.0. STYLE: geometric texture fits Nordic direction = 8.8. CROSS-ROOM: cream ties to kitchen's white counters = 7.5. FUNCTIONAL: wool is durable but 5x7 creates tripping edge near sofa = 7.0. OVERALL: spatial_fit tanks the composite despite strong color/style → 6.8."
+}
+
+### Example 2 — PASSING item (9.6 overall, no revision needed)
+Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirely — do not return vague revisions just to fill the field.
+{
+  "category": "coffee_table",
+  "harmony_score": 9.6,
+  "sub_scores": {
+    "color_fit": 9.7, "spatial_fit": 9.8, "material_fit": 9.5,
+    "style_coherence": 9.6, "cross_room_fit": 9.5, "functional_fit": 9.7
+  },
+  "keeps_well_with": ["sofa", "area_rug", "accent_chair"],
+  "clashes_with": [],
+  "drop": false,
+  "reason": "Walnut top + matte black frame anchors the seating group without competing with the sofa, and the 48x26x17 proportions clear the sofa front by 14\" exactly as the layout plan calls for.",
+  "rationale": "COLOR: walnut warms the charcoal sofa and echoes the oak shelving = 9.7. SPATIAL: 48x26x17 sits 14\" off the sofa front per layout plan, centered on the 8x10 rug = 9.8. MATERIAL: one wood species (walnut) + one metal (matte black) keeps the count low per the ≤2 wood / coherent metal rule = 9.5. STYLE: clean rectangular silhouette reads Japandi-modern per the design direction = 9.6. CROSS-ROOM: walnut tone ties to the dining table in the adjacent room = 9.5. FUNCTIONAL: sturdy, kid-safe rounded corners per user lifestyle notes = 9.7. OVERALL: no weak dimension, composite lands at 9.6."
 }
 
 ## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
@@ -584,6 +603,21 @@ ${itemScoresJson}
 6. **issues**: cross-cutting problems not tied to a single item (e.g., "set lacks any soft material in an all-hard-surface room").
 7. **confidence** (0-10, decimal): how confident are you in the overall set after Pass 1's scoring + your global check?
 8. **revisedAnalysis**: null unless confidence < 7 AND you have a concrete alternative — then propose a revised analysis object.
+
+## FEW-SHOT EXAMPLE — a cohered-but-imperfect set (7.8 overall)
+Use this to calibrate: one real pairwise conflict (scale), one material issue, but the overall set still works. Match this level of specificity (real numbers, named dimensions) in your output.
+{
+  "confidence": 8.2,
+  "overall_cohesion": 7.8,
+  "palette_coherence": "Warm cream rug + walnut coffee table + charcoal sofa hold a consistent Japandi-modern warm-neutral palette; the brass floor lamp is the only hue outlier but reads intentional as a single metallic accent.",
+  "material_coherence": "Two wood species (walnut coffee table, oak shelving) sit at the ≤2 cap, all textiles are natural fiber (wool rug, linen sofa, boucle accent chair), and metals stay to one finish (matte black) except for the intentional brass lamp — one more wood species would tip the set into visual clutter.",
+  "spatial_flow": "The 8x10 rug anchors the seating zone with the sofa's front legs on it and the coffee table centered, leaving a 36\" walkway between the coffee table and the TV console per the layout plan. The accent chair reads slightly oversized for its corner — 32\" wide chair in a 38\" corner leaves only 3\" clearance on each side, which feels tight relative to the rest of the room's generous spacing.",
+  "pairwise_conflicts": [
+    { "item_a": "accent_chair", "item_b": "floor_lamp", "compatibility": 7.2, "conflict_type": "scale_conflict", "reason": "32\" wide accent chair + 60\" tall arched floor lamp in the same corner creates a crowded vignette; the lamp arc overhangs the chair seat by 8\" which will feel physically cramped when the chair is occupied." }
+  ],
+  "issues": ["set is slightly hard-surface-heavy in the dining zone — the bench seating has no textile softener and will feel acoustically bright"],
+  "revisedAnalysis": null
+}
 
 ## OUTPUT FORMAT (JSON only, no prose, no markdown fences)
 {
