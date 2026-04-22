@@ -11,6 +11,7 @@ import { runProductVerifier } from "./computer-use/product-verifier";
 import { scoreProduct, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
+import { validateRequirements, type RequirementValidationResult } from "./requirement-validator";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
@@ -62,6 +63,8 @@ export interface OrchestrationResult {
   bundles: unknown[];
   steps: OrchestrationStep[];
   validation?: { isValid: boolean; confidence: number; issues: string[] };
+  /** Requirement audit — LLM-graded coverage / spec / diagnosis alignment. */
+  requirementAudit?: RequirementValidationResult;
   stats: {
     totalSearchQueries: number;
     totalRawUrls: number;
@@ -1852,103 +1855,70 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Post-search requirement validation (deterministic, zero LLM cost)
+    // Post-search requirement validation — LLM audit of coverage,
+    // spec adherence, and diagnosis-solving. Fails open if the agent
+    // errors or budget is exceeded.
     // ═══════════════════════════════════════════════════════════
     const requirementIssues: string[] = [];
+    let requirementAudit: RequirementValidationResult | undefined;
 
-    // (a) Category coverage: every requested category should have products
-    {
-      const coveredCategories = new Set(Object.keys(candidatesByCategory));
-      const uncoveredCategories = missingCategories.filter(
-        (cat) => !coveredCategories.has(cat) || (candidatesByCategory[cat]?.length || 0) === 0
-      );
-      if (uncoveredCategories.length > 0) {
-        const msg = `Missing categories (${uncoveredCategories.length}/${missingCategories.length}): ${uncoveredCategories.join(", ")}`;
-        requirementIssues.push(msg);
-        log.warn(msg, { phase: "requirement_validation", uncoveredCategories });
-      }
-    }
+    if (!tokenBudget.exceeded && missingCategories.length > 0) {
+      reportStep({ step: "Auditing requirement alignment", status: "running" });
 
-    // (b) Spec adherence: for each what_it_needs item, verify the top product
-    //     matches key specs (dimensions, materials) from the assessment
-    if (ctx.whatItNeeds && ctx.whatItNeeds.length > 0) {
-      for (const need of ctx.whatItNeeds) {
-        const products = candidatesByCategory[need.category];
-        if (!products || products.length === 0) continue;
-        const specs = need.specs?.toLowerCase() || "";
-        if (!specs) continue;
-
-        const topProduct = [...products].sort((a, b) => {
+      // Top pick per category (already scored + ranked)
+      const topPicksByCategory: Record<string, CandidateProduct> = {};
+      for (const [category, products] of Object.entries(candidatesByCategory)) {
+        const sorted = [...products].sort((a, b) => {
           const sA = evaluations.get(a.id)?.final_item_score || 0;
           const sB = evaluations.get(b.id)?.final_item_score || 0;
           return (sB - sA) || tiebreakProduct(a, b);
-        })[0];
-        if (!topProduct) continue;
-
-        const productText = [
-          topProduct.title,
-          topProduct.description,
-          topProduct.materials?.join(" "),
-          topProduct.dimensions ? `${topProduct.dimensions.width || ""}x${topProduct.dimensions.depth || ""}x${topProduct.dimensions.height || ""}` : "",
-        ].filter(Boolean).join(" ").toLowerCase();
-
-        // Extract dimension specs like "8x10", "60 inch", "72 wide"
-        const dimPatterns = specs.match(/\b(\d+)\s*[x×]\s*(\d+)/g);
-        const sizePatterns = specs.match(/\b(\d{2,})\s*(?:inch|in|"|cm|mm|wide|long|tall|deep)\b/g);
-        const specDims = [...(dimPatterns || []), ...(sizePatterns || [])];
-
-        if (specDims.length > 0) {
-          const hasMatch = specDims.some((dim) => productText.includes(dim.replace(/×/g, "x")));
-          if (!hasMatch) {
-            requirementIssues.push(
-              `${need.category}: top product may not match spec dimensions (need: ${specDims.join(", ")})`
-            );
-          }
-        }
+        });
+        if (sorted[0]) topPicksByCategory[category] = sorted[0];
       }
-    }
 
-    // (c) Diagnosis-solving: verify the set addresses what_is_not_working items
-    {
-      const diagnosis = ctx.diagnosis as DiagnosisData | undefined;
-      const problems = diagnosis?.what_is_not_working || [];
-      if (problems.length > 0) {
-        const allProductText = Object.values(candidatesByCategory)
-          .flat()
-          .map((p) => [p.title, p.description, p.category, p.materials?.join(" ")].filter(Boolean).join(" "))
-          .join(" ")
-          .toLowerCase();
+      const auditResult = await validateRequirements({
+        roomType: ctx.roomType,
+        missingCategories,
+        whatItNeeds: ctx.whatItNeeds,
+        diagnosis: ctx.diagnosis as DiagnosisData | undefined,
+        topPicksByCategory,
+        candidatesByCategory,
+        designDirection: ctx.designDirection,
+        designProfile: ctx.designProfile,
+        roomImageUrls: ctx.imageUrls,
+      });
 
-        const lightingProblems = problems.filter((p) =>
-          /dark|dim|light|lamp|shadow|gloomy/i.test(p)
-        );
-        if (lightingProblems.length > 0) {
-          const hasLighting = Object.keys(candidatesByCategory).some(
-            (cat) => /lamp|light|sconce|pendant|chandelier/i.test(cat)
-          ) || /lamp|light|sconce|pendant|chandelier/i.test(allProductText);
-          if (!hasLighting) {
-            requirementIssues.push(
-              `Diagnosis flagged lighting issues but no lighting products in set: "${lightingProblems[0]}"`
-            );
-          }
-        }
-
-        const textureProblems = problems.filter((p) =>
-          /hard|cold|sterile|echo|acoustic/i.test(p)
-        );
-        if (textureProblems.length > 0) {
-          const hasSoftMaterials = /rug|curtain|throw|pillow|cushion|upholster|fabric|textile|wool|linen|velvet|boucle/i.test(allProductText);
-          if (!hasSoftMaterials) {
-            requirementIssues.push(
-              `Diagnosis flagged texture/acoustic issues but no soft materials in set: "${textureProblems[0]}"`
-            );
-          }
-        }
+      if (auditResult.tokensUsed) {
+        tokenBudget.add(auditResult.tokensUsed);
+        stats.tokensUsed += auditResult.tokensUsed;
+        stats.tokensPerPhase.validation += auditResult.tokensUsed;
       }
-    }
 
-    if (requirementIssues.length > 0) {
-      log.warn("Requirement validation issues", { phase: "requirement_validation", issues: requirementIssues });
+      if (auditResult.success && auditResult.data) {
+        requirementAudit = auditResult.data;
+        requirementIssues.push(...auditResult.data.issues);
+        log.info("Requirement audit complete", {
+          phase: "requirement_validation",
+          alignment: auditResult.data.overall_alignment,
+          coverage: auditResult.data.coverage.score,
+          diagnosisSolving: auditResult.data.diagnosis_solving.score,
+          issueCount: auditResult.data.issues.length,
+        });
+        reportStep({
+          step: "Auditing requirement alignment",
+          status: "completed",
+          data: {
+            alignment: auditResult.data.overall_alignment,
+            issues: auditResult.data.issues.length,
+          },
+        });
+      } else {
+        log.warn("Requirement audit failed — continuing without it", {
+          phase: "requirement_validation",
+          error: auditResult.error,
+        });
+        reportStep({ step: "Auditing requirement alignment", status: "failed" });
+      }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2045,11 +2015,18 @@ export async function runAgenticSearch(
 
         const mergedIssues = [...requirementIssues, ...liveIssues, ...priorFlags].slice(0, 10);
 
+        // Blend live bundle-math confidence with the requirement-audit
+        // alignment score. Both are 0-10; the audit reflects how well the
+        // picks satisfy the assessment, the math reflects internal cohesion.
+        // When the audit is available, average the two (audit weighted 60%
+        // because it's the externally-grounded signal).
+        const blendedConfidence = requirementAudit
+          ? Math.round((liveConfidence * 0.4 + requirementAudit.overall_alignment * 0.6) * 10) / 10
+          : liveConfidence;
+
         validationData = {
-          isValid: liveConfidence >= 7 && requirementIssues.length === 0 && mergedIssues.length === 0,
-          confidence: requirementIssues.length > 0
-            ? Math.min(liveConfidence, Math.max(5.0, liveConfidence - requirementIssues.length * 0.5))
-            : liveConfidence,
+          isValid: blendedConfidence >= 7 && mergedIssues.length === 0,
+          confidence: blendedConfidence,
           issues: mergedIssues,
         };
 
@@ -2078,6 +2055,7 @@ export async function runAgenticSearch(
         bundles,
         steps,
         validation: validationData,
+        requirementAudit,
         stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message) },
         trace: tracer.getTrace(),
       },

@@ -5,6 +5,7 @@ import path from "path";
 import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
+import { validateMockupPrompt } from "@/lib/agents/mockup-prompt-validator";
 import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
 import { extractRoomArchitecture, formatArchitectureForPrompt } from "@/lib/agents/room-architecture-extractor";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
@@ -502,23 +503,35 @@ RULES:
     return NextResponse.json({ error: promptResult.error }, { status: 500 });
   }
 
-  // Validate mockup prompt references all selected products
-  {
-    const promptLower = promptResult.data.prompt.toLowerCase();
-    const missingProducts: string[] = [];
-    for (const p of products) {
-      const cat = (p.category || "").toLowerCase();
-      const title = (p.title || "").toLowerCase();
-      const titleWords = title.split(/\s+/).filter((w: string) => w.length > 3).slice(0, 3);
-      const mentioned = (cat && promptLower.includes(cat))
-        || titleWords.some((w: string) => promptLower.includes(w));
-      if (!mentioned) {
-        missingProducts.push(p.title || p.category || "unknown");
+  // LLM audit of the generated prompt — completeness, spec fidelity,
+  // placement, architectural grounding. Fails open: if the audit agent
+  // errors, the original prompt is used unchanged. When the audit
+  // returns a revised prompt (prompt_score < 8 or a sub-score < 7),
+  // we feed the revised prompt into the image model instead.
+  let finalPrompt = promptResult.data.prompt;
+  try {
+    const auditResult = await validateMockupPrompt({
+      prompt: promptResult.data.prompt,
+      products: products as Array<{ category?: string | null; title?: string | null; materials?: string[] | null; colors?: string[] | null; dimensions?: string | Record<string, unknown> | null; description?: string | null }>,
+      placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
+      roomType: room.room_type,
+      designDirection: mockupCtx.designDirection,
+    });
+    if (auditResult.success && auditResult.data) {
+      const audit = auditResult.data;
+      console.log(
+        `[mockup] Prompt audit: score=${audit.prompt_score}/10, completeness=${audit.completeness.score}, fidelity=${audit.spec_fidelity.score}, placement=${audit.placement.score}, arch=${audit.architectural_grounding.score}, issues=${audit.issues.length}`,
+      );
+      if (audit.issues.length > 0) {
+        console.warn(`[mockup] Prompt audit issues: ${audit.issues.join("; ")}`);
+      }
+      if (audit.revised_prompt && audit.revised_prompt.length > 200) {
+        console.log(`[mockup] Using revised prompt from audit (original score ${audit.prompt_score}/10)`);
+        finalPrompt = audit.revised_prompt;
       }
     }
-    if (missingProducts.length > 0) {
-      console.warn(`[mockup] Prompt missing ${missingProducts.length} product(s): ${missingProducts.join(", ")} — image may not render all selected items`);
-    }
+  } catch (err) {
+    console.warn(`[mockup] Prompt audit threw — continuing with original prompt`, err);
   }
 
   // Seed grounding refs with product titles + retailers so Image Search
@@ -557,15 +570,17 @@ RULES:
     productReferences,
   };
 
-  // Generate image — pass room photos and floor plan for visual reference
-  const imageResult = await generateMockupImage(promptResult.data.prompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
+  // Generate image — pass room photos and floor plan for visual reference.
+  // finalPrompt is either the original mockup prompt or the audit-revised
+  // version when the audit flagged gaps.
+  const imageResult = await generateMockupImage(finalPrompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
 
   if (!imageResult.success || !imageResult.data) {
     await supabase
       .from("mockup_jobs")
       .update({
         status: "failed",
-        prompt: promptResult.data.prompt,
+        prompt: finalPrompt,
         error_message: imageResult.error,
       })
       .eq("id", mockupJob?.id);
@@ -585,7 +600,7 @@ RULES:
     .from("mockup_jobs")
     .update({
       status: "completed",
-      prompt: promptResult.data.prompt,
+      prompt: finalPrompt,
       result_image_url: finalImageUrl,
       generation_provider: imageResult.data.provider,
       completed_at: new Date().toISOString(),
@@ -601,7 +616,7 @@ RULES:
   return NextResponse.json({
     id: mockupJob?.id,
     image_url: finalImageUrl,
-    prompt: promptResult.data.prompt,
+    prompt: finalPrompt,
   });
 }
 
