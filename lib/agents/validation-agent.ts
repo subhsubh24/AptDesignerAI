@@ -339,9 +339,9 @@ harmony_score ≈ min(sub_scores) × 0.4 + mean(sub_scores) × 0.6. ONE bad dim 
 Provide revised_search_title, revised_specs, revised_placement that would bring ALL sub_scores to 9.5+, AND a root_cause naming the specific failing dimension and issue (e.g. "material_fit: oak legs clash with walnut — 3 wood species").
 
 ### REVISION SIZING REFERENCE
-Every revision must specify concrete numbers. Use this reference for standard sizes:
+Every revision must specify concrete numbers. Vague revisions like "larger rug" or "smaller sofa" cause the pipeline to loop without converging — always name the exact size. Use this reference for standard sizes:
 - **Rugs**: 5x7 (nooks), 6x9 (small seating), 8x10 (standard living), 9x12 (large/sectional), 10x14+ (great rooms), 2.5x8/10 (runners). Name previous AND new size when spatial_fit failed.
-- **Sofas/sectionals**: exact width in inches (e.g. "84-inch sofa", "112-inch right-facing sectional with 36-inch chaise depth")
+- **Sofas/sectionals**: exact width in inches — never say "smaller sofa" (e.g. "84-inch sofa", "112-inch right-facing sectional with 36-inch chaise depth")
 - **Dining tables**: length × width + seat count (e.g. "60x36 rectangular — seats 6")
 - **Beds**: mattress size (Twin/Full/Queen/King/Cal King) + frame dimensions if oversized headboard
 - **Lighting**: diameter + hang-height (e.g. "22-inch diameter, 32–36 inches above table top")
