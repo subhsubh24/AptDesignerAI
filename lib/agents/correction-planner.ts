@@ -209,7 +209,7 @@ ${triedQueriesBlock}
 ## CONSTRAINTS
 - Room type: ${input.roomType}
 - Budget mode: ${input.budgetMode}
-- This is iteration ${input.iteration + 1} of max ${input.maxIterations}.
+- This is iteration ${input.iteration + 1}. The loop has NO hard cap — it terminates when YOU set \`iterate_again: false\` or when the alignment target (8.0/10) is reached. Use \`iterate_again: true\` only when a follow-up correction pass would meaningfully improve outcomes; \`false\` when this round's actions are sufficient or further iterations have diminishing returns.
 - Re-searching costs 50-100K tokens per category per iteration. Only re-search when the audit shows a CONCRETE gap that new queries could plausibly close.
 
 ## YOUR DECISION

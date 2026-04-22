@@ -2197,10 +2197,14 @@ export async function runAgenticSearch(
     // 2. If alignment < 8 or gaps found, call CorrectionPlanner to
     //    decide what to do (re-search specific categories with new
     //    queries, drop unreachable categories, or accept).
-    // 3. Execute actions, re-audit, loop up to MAX_CORRECTION_ITERATIONS.
+    // 3. Execute actions, re-audit. NO artificial iteration cap — the
+    //    loop runs until the planner returns iterate_again=false, the
+    //    alignment target is met, or the token budget is exhausted.
+    //    A high SAFETY_CORRECTION_LIMIT exists only to prevent runaway
+    //    in case of a planner bug (effectively never the binding limit).
     // Fails open at every step.
     // ═══════════════════════════════════════════════════════════
-    const MAX_CORRECTION_ITERATIONS = 2;
+    const SAFETY_CORRECTION_LIMIT = 50;
     const ALIGNMENT_TARGET = 8.0;
     const triedQueriesByCategory: Record<string, string[]> = {};
 
@@ -2497,11 +2501,11 @@ export async function runAgenticSearch(
     while (
       requirementAudit &&
       requirementAudit.overall_alignment < ALIGNMENT_TARGET &&
-      correctionIteration < MAX_CORRECTION_ITERATIONS &&
+      correctionIteration < SAFETY_CORRECTION_LIMIT &&
       !tokenBudget.exceeded
     ) {
       reportStep({
-        step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+        step: `Self-correction pass ${correctionIteration + 1}`,
         status: "running",
       });
 
@@ -2541,7 +2545,7 @@ export async function runAgenticSearch(
         designProfile: ctx.designProfile,
         triedQueries: triedQueriesByCategory,
         iteration: correctionIteration,
-        maxIterations: MAX_CORRECTION_ITERATIONS,
+        maxIterations: SAFETY_CORRECTION_LIMIT,
       });
 
       if (planResult.tokensUsed) {
@@ -2553,7 +2557,7 @@ export async function runAgenticSearch(
       if (!planResult.success || !planResult.data) {
         log.warn("Correction plan failed — accepting current state", { error: planResult.error });
         reportStep({
-          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          step: `Self-correction pass ${correctionIteration + 1}`,
           status: "failed",
         });
         break;
@@ -2572,7 +2576,7 @@ export async function runAgenticSearch(
       if (acceptAction || plan.actions.length === 0) {
         log.info("Planner accepted current state", { reason: (acceptAction as { reason?: string })?.reason });
         reportStep({
-          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          step: `Self-correction pass ${correctionIteration + 1}`,
           status: "completed",
           data: { action: "accept", reason: (acceptAction as { reason?: string })?.reason },
         });
@@ -2637,22 +2641,24 @@ export async function runAgenticSearch(
           perCategory: correctionResults,
         });
         reportStep({
-          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          step: `Self-correction pass ${correctionIteration + 1}`,
           status: "completed",
           data: { addedProducts: totalAdded },
         });
       } else {
         reportStep({
-          step: `Self-correction pass ${correctionIteration + 1}/${MAX_CORRECTION_ITERATIONS}`,
+          step: `Self-correction pass ${correctionIteration + 1}`,
           status: "completed",
         });
       }
 
       correctionIteration++;
 
-      // Re-audit if planner requested iteration OR if we still have budget.
-      // Let the planner's iterate_again flag control whether we loop again.
-      if (!plan.iterate_again && correctionIteration < MAX_CORRECTION_ITERATIONS) break;
+      // Let the planner decide whether to loop again. No artificial cap;
+      // the while-loop also checks alignment target and token budget.
+      // SAFETY_CORRECTION_LIMIT only kicks in if both the planner and the
+      // alignment check fail to terminate (planner-bug scenario).
+      if (!plan.iterate_again) break;
 
       reportStep({ step: "Re-auditing after correction", status: "running" });
       // Enable Google Search grounding on the re-audit so the agent can

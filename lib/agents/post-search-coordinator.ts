@@ -22,7 +22,12 @@
  *   - finalize              — stop the loop
  *
  * Each tool returns objective metrics (counts, scores, deltas) that the
- * agent uses to plan its next step. Caps at MAX_TURNS to prevent runaway.
+ * agent uses to plan its next step.
+ *
+ * The loop has NO artificial turn cap — it runs until the model calls
+ * `finalize`, returns text without a tool call (implicit finalize), or
+ * the token budget is exhausted by upstream callers. Token budget is
+ * the only real ceiling; turns are conceptual.
  *
  * Behind feature flag ENABLE_POST_SEARCH_COORDINATOR. When off, the
  * orchestrator's existing hardcoded post-search flow runs instead.
@@ -38,7 +43,12 @@ import type { AIMessage, AIContentBlock, FunctionDeclaration } from "@/lib/ai/pr
 
 const log = createLogger("post-search-coordinator");
 
-const MAX_TURNS = 12;
+/**
+ * Soft safety limit — only triggers if the loop somehow runs forever
+ * without the agent finalizing AND without budget exhaustion. Set high
+ * so it's effectively never the binding constraint; budget is.
+ */
+const SAFETY_TURN_LIMIT = 100;
 
 /** Coordinator decisions — always operational, never subjective design judgments. */
 export type CoordinatorTool =
@@ -299,7 +309,8 @@ Stop conditions:
 - alignment >= 8 AND bundles generated AND tiers filled → finalize
 - budget < 15% remaining → finalize with what you have
 - Same audit alignment for 2 consecutive audits → no point iterating, finalize
-- 12 turns reached → loop will hard-stop
+- No artificial turn cap — keep iterating as long as each action is
+  measurably improving outcomes, OR the budget is exhausted upstream.
 
 Avoid:
 - Re-searching the same category twice without intermediate audit (wasteful)
@@ -335,7 +346,7 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
   let turn = 0;
 
   try {
-    while (turn < MAX_TURNS && !finalized) {
+    while (turn < SAFETY_TURN_LIMIT && !finalized) {
       turn++;
       let response;
       try {
@@ -345,7 +356,17 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           messages,
           max_tokens: 4000,
           seed: DETERMINISTIC_SEED,
-          tools: [{ functionDeclarations: COORDINATOR_TOOLS }],
+          // Combine the coordinator's custom tools with built-in Google
+          // Search + URL Context so the agent can directly verify state
+          // signals against live retailer data (e.g., "does this price
+          // point exist at IKEA?") before deciding to re-search or drop.
+          // Gemini 3 supports mixing built-in + function-call tools in
+          // the same call (tool context circulation).
+          tools: [
+            { functionDeclarations: COORDINATOR_TOOLS },
+            { googleSearch: {} as Record<string, never> },
+            { urlContext: {} as Record<string, never> },
+          ],
         });
       } catch (err) {
         log.warn("Coordinator chat call failed — falling back to default flow", {
@@ -440,9 +461,9 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
       if (finalized) break;
     }
 
-    if (turn >= MAX_TURNS && !finalized) {
-      log.warn("Coordinator hit MAX_TURNS without finalize — stopping", { turn });
-      finalizeReason = "Max turns reached";
+    if (turn >= SAFETY_TURN_LIMIT && !finalized) {
+      log.warn("Coordinator hit SAFETY_TURN_LIMIT without finalize — likely indicates a tool-loop bug", { turn });
+      finalizeReason = "Safety turn limit reached (this should not happen in normal operation)";
     }
 
     log.info("Coordinator complete", {

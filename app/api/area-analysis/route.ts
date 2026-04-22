@@ -872,11 +872,14 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       identifiedContext: identifiedPiecesBlock || undefined,
     };
 
-    // Target + round budget tuned after observing the AI converges at 8.5-9.2
-    // for soft categories (plants, art, rugs) within ~2 rounds. Chasing 9.5
-    // across 10 rounds burned ~420k tokens/run with no quality gain — items
-    // stabilized at the same "best" score they hit in round 2.
-    const MAX_HARMONY_ROUNDS = 3;
+    // Harmony loop runs until convergence: stops when ALL items reach
+    // TARGET_SCORE OR no items improved last round (early-exit on plateau)
+    // OR every item is stabilized/locked. NO artificial round cap — the
+    // existing convergence-velocity check (avg improvement < 0.2) handles
+    // the "stop chasing diminishing returns" case organically. A high
+    // SAFETY_HARMONY_LIMIT exists only to prevent infinite loops in the
+    // pathological case where convergence never triggers.
+    const SAFETY_HARMONY_LIMIT = 50;
     /** Target: items at or above this score are "locked in" and skip revision. */
     const TARGET_SCORE = 8.5;
     let validation = null;
@@ -896,7 +899,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
     let totalRoundsCompleted = 0;
 
     // ── Phase 1: Iterative refinement rounds — stop when ALL scores >= 9.5/10 ──
-    for (let round = 1; round <= MAX_HARMONY_ROUNDS; round++) {
+    for (let round = 1; round <= SAFETY_HARMONY_LIMIT; round++) {
       const mathCtx = {
         roomType: room.room_type,
         floorPlan,
@@ -1248,8 +1251,8 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
       }
 
       // ── Max rounds reached: restore best versions for each item ──
-      if (round === MAX_HARMONY_ROUNDS) {
-        console.log(`[area-analysis] Max harmony rounds (${MAX_HARMONY_ROUNDS}) reached — restoring best versions for each item`);
+      if (round === SAFETY_HARMONY_LIMIT) {
+        console.log(`[area-analysis] Max harmony rounds (${SAFETY_HARMONY_LIMIT}) reached — restoring best versions for each item`);
         const finalNeeds = analysis.what_it_needs as Array<Record<string, unknown>>;
         for (const item of finalNeeds) {
           const cat = item.category as string;
@@ -1261,7 +1264,7 @@ At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all th
             if (bestVersion.placement) item.placement = bestVersion.placement;
           }
         }
-        console.log(`[area-analysis] Best scores after ${MAX_HARMONY_ROUNDS} rounds: ${Array.from(bestScores.entries()).map(([cat, s]) => `${cat}=${s}`).join(", ")}`);
+        console.log(`[area-analysis] Best scores after ${SAFETY_HARMONY_LIMIT} rounds: ${Array.from(bestScores.entries()).map(([cat, s]) => `${cat}=${s}`).join(", ")}`);
       }
     }
 

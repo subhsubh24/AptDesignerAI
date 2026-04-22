@@ -479,16 +479,13 @@ export const geminiProvider: AIProvider = {
     }
 
     // Gemini 3.1 Flash Lite defaults to "minimal" thinking — too shallow for
-    // our reasoning-heavy tasks. We force every call to "high" unless:
-    //   (a) the caller explicitly passed a thinkingConfig, OR
-    //   (b) responseSchema is set — structured output mode is incompatible with
-    //       thinkingConfig on flash-lite, causing INVALID_ARGUMENT (400).
-    //   (c) urlContext tool is active — retrieval + thinking causes 400.
-    const effectiveThinkingConfig = thinkingConfig
-      ?? (responseSchema || hasUrlContext ? undefined : { thinkingLevel: "high" });
-    if (effectiveThinkingConfig) {
-      config.thinkingConfig = effectiveThinkingConfig;
-    }
+    // our reasoning-heavy tasks. Force every call to "high" unconditionally.
+    // Gemini 3.1 supports HIGH thinking + responseSchema + tools (including
+    // urlContext) all in the same call (verified April 2026). Older safe-
+    // guards that disabled thinking when responseSchema or urlContext were
+    // active are no longer needed and were limiting reasoning quality.
+    const effectiveThinkingConfig = thinkingConfig ?? { thinkingLevel: "high" };
+    config.thinkingConfig = effectiveThinkingConfig;
 
     if (responseModalities) {
       config.responseModalities = responseModalities;

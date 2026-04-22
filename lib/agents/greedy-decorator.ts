@@ -185,7 +185,11 @@ function buildActionItem(
 export async function runDiagnosisExpansion(
   ctx: ExpansionContext,
 ): Promise<ExpansionResult> {
-  const maxIterations = ctx.maxIterations ?? 20;
+  // No hard iteration cap — the loop self-terminates via consecutive
+  // rejections and saturation signals. SAFETY_LIMIT only prevents
+  // infinite loops in pathological cases (model returning same item
+  // repeatedly). Caller can override but defaults are non-binding.
+  const maxIterations = ctx.maxIterations ?? 200;
   const model = selectModel("diagnosis"); // same tier as Pass 2 — thoughtful reasoning
 
   let items: Array<ActionItem & { variant?: string; quantity?: number; source?: string }> =
