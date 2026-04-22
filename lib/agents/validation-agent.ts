@@ -309,12 +309,15 @@ ${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}`;
       ? `\n\n## ⚠️ PARALLEL SCORING ASSIGNMENT\nThis is a parallel scoring session. Score ONLY the ${assignedItems.length} items listed below. A separate parallel call scores the remaining items.\nYOUR ASSIGNED ITEMS TO SCORE:\n${assignedItems.map(item => `- [${item.category}] ${item.search_title}`).join("\n")}\n\nThe full item list above (in RECOMMENDED NEW ITEMS) is for cross-item palette/material/spatial conflict detection — reference it freely. But OUTPUT item_scores ONLY for your assigned items above.\n`
       : "";
 
-    return `You are a senior interior designer running PASS 1 of 2 on recommended items. Your ONLY job here: for ${isChunked ? "items in your SCORING ASSIGNMENT" : "EVERY recommended item"}, produce 6-dimensional sub-scores + rationale + revisions if needed. A separate pass handles global cohesion, pairwise conflicts, and narrative — do NOT produce those here.
+    return `${sharedHeader}${restriction}
 
-${sharedHeader}${restriction}
+Based on the room context, floor plan, design direction, and item list above, your task is: per-item harmony scoring (PASS 1 of 2). A separate pass handles global cohesion, pairwise conflicts, and narrative — do NOT produce those here.
+
 ## YOUR JOB — PER-ITEM SCORING (pass 1 of 2)
 
-For EACH ${isChunked ? "ASSIGNED" : "recommended"} item, evaluate against:
+For ${isChunked ? "items in your SCORING ASSIGNMENT" : "EVERY recommended item"}, produce 6-dimensional sub-scores + rationale + revisions if needed.
+
+Evaluate each item against:
 - Items to keep (palette/material/style harmony with existing pieces visible in the room photos)
 - Other recommendations (palette/material/style coherence as a SET)
 - Apartment-wide coherence (other rooms' palettes/materials/style)
@@ -335,29 +338,16 @@ harmony_score ≈ min(sub_scores) × 0.4 + mean(sub_scores) × 0.6. ONE bad dim 
 ### FOR ANY item where ANY sub_score < 9.5
 Provide revised_search_title, revised_specs, revised_placement that would bring ALL sub_scores to 9.5+, AND a root_cause naming the specific failing dimension and issue (e.g. "material_fit: oak legs clash with walnut — 3 wood species").
 
-### ANCHOR REVISIONS TO CONCRETE TARGETS (CRITICAL — avoid vague revisions that oscillate)
-Vague revisions ("larger rug", "compact sofa") cause the pipeline to loop without converging. Every revision MUST specify concrete numbers:
+### REVISION SIZING REFERENCE
+Every revision must specify concrete numbers. Use this reference for standard sizes:
+- **Rugs**: 5x7 (nooks), 6x9 (small seating), 8x10 (standard living), 9x12 (large/sectional), 10x14+ (great rooms), 2.5x8/10 (runners). Name previous AND new size when spatial_fit failed.
+- **Sofas/sectionals**: exact width in inches (e.g. "84-inch sofa", "112-inch right-facing sectional with 36-inch chaise depth")
+- **Dining tables**: length × width + seat count (e.g. "60x36 rectangular — seats 6")
+- **Beds**: mattress size (Twin/Full/Queen/King/Cal King) + frame dimensions if oversized headboard
+- **Lighting**: diameter + hang-height (e.g. "22-inch diameter, 32–36 inches above table top")
+- **Coffee/side tables**: L×W×H + clearance target (e.g. "48x28x17 — sits 14 inches off the sofa front")
 
-**Rugs (area_rug / runner / accent_rug)** — the #1 oscillator. Pick an EXACT standard size from this table based on room dimensions + seating footprint, and include it in BOTH revised_search_title AND revised_specs:
-  - Small bedrooms / reading nooks → **5x7** or **5x8**
-  - Mid bedrooms / small seating areas → **6x9**
-  - Standard living rooms / under a 72"–84" sofa → **8x10**
-  - Large living rooms / L-shaped sectional / open floor plans → **9x12**
-  - Great rooms / sectional + chairs group → **10x14** or **12x15**
-  - Hallways → **2.5x8** or **2.5x10** runner
-  - If spatial_fit failed: name the PREVIOUS size and the NEW size (e.g. "upgrade from 5x7 to 8x10 so the front legs of the sofa sit on the rug").
-
-**Sofas / sectionals** — revised_specs MUST include exact width in inches (e.g. "84" sofa", "112" right-facing sectional with 36" chaise depth"). Never say "smaller sofa".
-
-**Dining tables** — revised_specs MUST include length × width + seat count (e.g. "60"×36" rectangular — seats 6").
-
-**Beds** — revised_specs MUST include mattress size (Twin/Full/Queen/King/Cal King) AND frame dimensions if headboard is oversized.
-
-**Lighting (pendant / chandelier)** — revised_specs MUST include diameter + hang-height (e.g. "22" diameter, 32"–36" above table top").
-
-**Coffee tables / side tables** — revised_specs MUST include L×W×H in inches and the clearance target from the adjacent sofa (e.g. "48"×28"×17" — sits 14" off the sofa front").
-
-If you can't determine the concrete target from the photos + spatial layout, say so in root_cause ("need floor plan dimensions to pick rug size") rather than returning a vague revision.
+If you can't determine the concrete target from the photos + spatial layout, say so in root_cause rather than returning a vague revision.
 
 ### drop
 true if harmony_score ≤ 3 OR the user explicitly excluded the category / asked to keep a conflicting item.
@@ -585,13 +575,12 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
 
   // ─── Pass B: Global cohesion + pairwise + gaps ──────────────
   const itemScoresJson = JSON.stringify(itemScoresResult, null, 2);
-  const passBPrompt = `You are a senior interior designer running PASS 2 of 2 on a room's recommended items. Pass 1 produced per-item 6-dim sub-scores — below. Your job: step back to the whole set and assess global cohesion, pairwise conflicts, narrative coherence, and overall confidence.
+  const passBPrompt = `${sharedHeader}
 
-Do NOT re-score individual items; that's already done. Trust Pass 1's item_scores and build on them.
-
-${sharedHeader}
 ## PASS 1 ITEM SCORES (source of truth for per-item quality)
 ${itemScoresJson}
+
+Based on the room context and per-item scores above, your task is: global cohesion assessment (PASS 2 of 2). Do NOT re-score individual items — that's already done. Trust Pass 1's item_scores and build on them.
 
 ## YOUR JOB — GLOBAL ASSESSMENT
 
@@ -867,10 +856,11 @@ ${context.mathScoresText || ""}`;
       ? `\n\n## ⚠️ PARALLEL SCORING ASSIGNMENT\nThis is a parallel scoring session. Score ONLY the ${assignedItems.length} items listed below. A separate parallel call scores the remaining items.\nYOUR ASSIGNED ITEMS TO SCORE:\n${assignedItems.map(item => `- [${item.category}] ${item.search_title}`).join("\n")}\n\nThe full item list above (in CURRENT RECOMMENDED ITEMS) is for cross-item conflict detection — reference it freely. But OUTPUT item_scores ONLY for your assigned items above.\n`
       : "";
 
-    return `You are a LEAD INTERIOR DESIGNER doing the FINAL per-item quality review. This is PASS 1 of 3: produce DEFINITIVE 6-dim sub-scores + revisions for ${isChunked ? "items in your SCORING ASSIGNMENT" : "EACH item"}. Do NOT produce global narrative or convergence decisions — those are separate passes.
-
-${sharedHeader}
+    return `${sharedHeader}
 ${revisionHistoryText}${restriction}
+
+Based on the room context, design direction, revision history, and item list above, your task is: FINAL per-item quality review (PASS 1 of 3). Produce DEFINITIVE 6-dim sub-scores + revisions for ${isChunked ? "items in your SCORING ASSIGNMENT" : "EACH item"}. Do NOT produce global narrative or convergence decisions — those are separate passes.
+
 ## YOUR JOB — PER-ITEM FINAL SCORING
 
 For EACH ${isChunked ? "ASSIGNED" : ""} item, provide 6 sub-scores (USE DECIMALS):
@@ -1080,12 +1070,12 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
 
   // ─── Pass B: Holistic assessment ────────────────────────────
   const itemScoresJson = JSON.stringify(itemScores, null, 2);
-  const passBPrompt = `You are a LEAD INTERIOR DESIGNER doing the holistic final review. Pass 1 produced per-item sub-scores — below. Your job: assess the set as a WHOLE. Do NOT re-score items; trust Pass 1's scores. Do NOT decide whether more rounds are needed — that's Pass 3.
-
-${sharedHeader}
+  const passBPrompt = `${sharedHeader}
 
 ## PASS 1 ITEM SCORES
 ${itemScoresJson}
+
+Based on the room context and per-item final scores above, your task is: holistic assessment (PASS 2 of 3). Assess the set as a WHOLE. Do NOT re-score items; trust Pass 1's scores. Do NOT decide whether more rounds are needed — that's Pass 3.
 
 ## YOUR JOB — HOLISTIC ASSESSMENT
 
@@ -1177,10 +1167,10 @@ ${itemScoresJson}
     pairwise_conflict_count: holistic.pairwise_conflicts.length,
   }, null, 2);
 
-  const passCPrompt = `You are making a convergence decision for an iterative room-design pipeline. Pass 1 scored items, Pass 2 assessed the whole. Now decide: keep iterating, or stop?
-
-## INPUT
+  const passCPrompt = `## CONVERGENCE INPUT
 ${convergenceCtx}
+
+Based on the scoring and holistic assessment above, decide: keep iterating, or stop?
 
 ## DECISION RULES
 - needs_more_rounds = true if ANY item has a fixable root_cause AND rounds_completed < 8

@@ -667,12 +667,14 @@ export async function quickScreenCandidates(
         ? `\nDesign direction: ${designDirection.style_notes}. Palette: ${designDirection.recommended_palette?.join(", ") || "flexible"}. Materials: ${designDirection.recommended_materials?.join(", ") || "flexible"}.\nPenalize products that clearly clash with this direction (e.g. wrong style family).`
         : "";
 
-      const prompt = `Rate each URL candidate for relevance to finding a **${category}** product in the **${tier}** price tier.
-
+      const prompt = `## SEARCH CONTEXT
+Category: **${category}** | Price tier: **${tier}**
 Requirements: ${requirements.join(", ")}${styleContext}
 
 ## CANDIDATES
 ${candidateList}
+
+Based on the search context and candidates above, rate each URL for relevance to finding a **${category}** product page.
 
 ## STEP 0: HARD REJECT (rate 1 immediately — do NOT pass)
 These are never valid furniture/decor product pages:

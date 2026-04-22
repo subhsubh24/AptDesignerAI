@@ -215,7 +215,7 @@ export async function scoreProduct(
     ? `\n\n${scoringCtx.userFeedbackContext}`
     : "";
 
-  const productTextTail = `\n\n${CALIBRATION_ANCHORS}${feedbackSection}\n\n${mathSection}\n\n## PRODUCT INFORMATION\n${productInfo}\n\n**IMPORTANT**: Study the product images carefully. Score based on what you SEE in the images — not just the text description. If a lifestyle image is included, use it to assess real-world scale and setting.`;
+  const productTextTail = `\n\n## PRODUCT INFORMATION\n${productInfo}\n\n${mathSection}${feedbackSection}\n\nBased on the room context, design direction, and product information above, score this product using the calibration anchors below.\n\n${CALIBRATION_ANCHORS}\n\nStudy the product images carefully. Score based on what you SEE in the images — not just the text description. If a lifestyle image is included, use it to assess real-world scale and setting.`;
 
   const combinedContent: AIContentBlock[] = [
     ...productImages,

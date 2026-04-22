@@ -255,6 +255,8 @@ Score 4 aesthetic dimensions${includeFitNotes ? ", write area and apartment fit 
 
 ${assembledContext}
 
+Given the room context, design direction, and spatial layout above, evaluate the product using the reasoning process and calibration below.
+
 <reasoning_process>
 For each dimension:
 1. What specific evidence (product image + room photos) supports a HIGH score?
@@ -343,6 +345,8 @@ Score 4 functional dimensions. Every score must be grounded in specific evidence
 
 ${assembledContext}
 
+Given the room context, design direction, and spatial layout above, evaluate the product using the reasoning process and calibration below.
+
 <reasoning_process>
 For each dimension:
 1. What specific evidence (dimensions, placement, floor plan, room photos) supports a HIGH score?
@@ -429,6 +433,8 @@ Score 8 dimensions${includeFitNotes ? ", write area and apartment fit notes," : 
 </task>
 
 ${assembledContext}
+
+Given the room context, design direction, and spatial layout above, evaluate the product using the reasoning process and calibration below.
 
 <reasoning_process>
 For each aesthetic dimension:
