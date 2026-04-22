@@ -1177,7 +1177,7 @@ ${convergenceCtx}
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
-            max_tokens: 1500,
+            max_tokens: 6000,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,

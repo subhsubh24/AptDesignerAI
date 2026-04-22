@@ -237,7 +237,7 @@ export async function scoreProduct(
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 8000,
+          max_tokens: 10000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           mediaResolution: "ultra_high",
@@ -245,6 +245,9 @@ export async function scoreProduct(
             cachedRoomImages.length > 0
               ? { sessionKey: roomSessionKey, content: cachedRoomImages }
               : undefined,
+          tools: [
+            { codeExecution: {} as Record<string, never> },
+          ],
         });
 
         const raw = extractJsonObject(response.content);
@@ -495,7 +498,7 @@ Return JSON:
               model: selectModel("quick_score"),
               system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. If product images are provided, use them to verify style, color, and material claims. Return ONLY the JSON scores, no explanations.",
               messages: [{ role: "user", content: [...qsContent, { type: "text" as const, text: retryHint }] }],
-              max_tokens: 1500,
+              max_tokens: 10000,
               seed: DETERMINISTIC_SEED,
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
               mediaResolution: "ultra_high",

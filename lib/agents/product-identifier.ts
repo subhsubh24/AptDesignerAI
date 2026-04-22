@@ -99,7 +99,7 @@ export async function runProductIdentifier(
           ],
         },
       ],
-      max_tokens: 2500,
+      max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseSchema: IDENTIFIER_SCHEMA,
       mediaResolution: "ultra_high",

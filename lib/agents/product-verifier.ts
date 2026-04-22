@@ -126,7 +126,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
             ],
           },
         ],
-        max_tokens: 3000,
+        max_tokens: 10000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} as Record<string, never> }],
         responseMimeType: "application/json",
@@ -147,7 +147,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
             ],
           },
         ],
-        max_tokens: 3000,
+        max_tokens: 10000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} as Record<string, never> }],
       });

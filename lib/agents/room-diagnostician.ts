@@ -235,7 +235,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model: judgeModel,
           system: getSystemPrompt(),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 2000,
+          max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }

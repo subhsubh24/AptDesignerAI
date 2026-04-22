@@ -126,7 +126,7 @@ Return JSON. Be conservative — when in doubt, delta: 0.`;
           model,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-          max_tokens: 1500,
+          max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseSchema: THRESHOLD_ADVISOR_GEMINI_SCHEMA,
           responseMimeType: "application/json",

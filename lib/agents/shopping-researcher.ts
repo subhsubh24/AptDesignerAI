@@ -457,7 +457,7 @@ Return ONLY a valid JSON object — no text before or after:
         // Room images omitted from search calls — Google Search grounding is
         // text-only; inline images add ~7.5K tokens per call with no benefit.
         messages: [{ role: "user", content: searchPrompt }],
-        max_tokens: 2000,
+        max_tokens: 10000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
         responseSchema: SEARCH_PRODUCTS_GEMINI_SCHEMA,
@@ -488,7 +488,7 @@ Return ONLY a valid JSON object — no text before or after:
         model: selectModel("search"),
         system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
         messages: [{ role: "user", content: searchPrompt }],
-        max_tokens: 2000,
+        max_tokens: 10000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} }],
       });
@@ -711,7 +711,7 @@ Return JSON:
           model: selectModel("quick_screen"),
           system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category. Return ONLY the JSON ratings array.",
           messages: [{ role: "user", content: withRoomImages(prompt, roomImageUrls) }],
-          max_tokens: 2000,
+          max_tokens: 12000,
           seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
         });

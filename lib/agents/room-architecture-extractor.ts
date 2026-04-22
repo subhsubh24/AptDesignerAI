@@ -153,7 +153,7 @@ export async function extractRoomArchitecture(
       model,
       system: EXTRACTOR_SYSTEM,
       messages: [{ role: "user", content }],
-      max_tokens: 3000,
+      max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       tools: [

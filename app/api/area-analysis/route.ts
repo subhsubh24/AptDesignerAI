@@ -550,7 +550,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model,
           system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 2000,
+          max_tokens: 8000,
           cacheScope:
             contentBlocks.length > 0
               ? { sessionKey: areaSessionKey, content: contentBlocks }
@@ -652,7 +652,22 @@ Reference Pass 1's \`spatial_layout\`, \`window_door_positions\`, and \`outlet_p
 
 At least ${tiersForRoom.minItemCount} items. Do NOT return fewer. Include all three tiers.
 
-Use Google Search to verify current pricing and material availability when needed. Use Code Execution for spatial calculations (clearances, rug sizing, table proportions relative to room dimensions).`;
+## CRITICAL — FOUNDATIONAL FURNITURE IS MANDATORY
+Tier 1 essentials for ${room.room_type} MUST be present: [${tiersForRoom.essential.join(", ")}]. These are NON-NEGOTIABLE. A living room without a coffee table/media console/dining set is incomplete — the room cannot function without them.
+
+Exception: If the Pass 1 "what_works" list already contains one of these (e.g. "keep the existing coffee table"), then SKIP that category in what_it_needs. Otherwise, it MUST appear.
+
+Use Google Search to verify current pricing and material availability when needed. Use Code Execution for spatial calculations (clearances, rug sizing, table proportions relative to room dimensions).
+
+## FEW-SHOT EXAMPLE (one what_it_needs entry — follow this level of specificity)
+{
+  "category": "coffee_table",
+  "search_title": "Solid walnut round coffee table 42 inch diameter with tapered legs and lower shelf",
+  "description": "Solves Pass 1's diagnosis of a 'floating seating zone with no anchor between the sectional and TV wall'. The 42-inch round in warm walnut ties to the Pass 1 material story (solid oak + walnut + brass) while the round profile prevents sharp corners on the primary traffic path.",
+  "priority": "high",
+  "specs": "42 inch diameter × 17 inch tall, solid walnut top with tapered oak legs and lower metal-inlay shelf, warm walnut brown finish, ~$650-950 (mid-range tier)",
+  "placement": "Centered in front of the sectional's chaise, 14 inches off the sofa front (reachable from seated position), directly under the ceiling light to anchor the zone. Sits on the 8x10 rug with all legs on."
+}`;
 
     const passBResponse = await geminiProvider.chat({
       model,
@@ -1548,7 +1563,7 @@ Use Google Search to verify current pricing and material availability when neede
                       text: `Search for and summarize: ${query}\n\nReturn a concise summary of findings relevant to interior design recommendations.`,
                     }],
                   }],
-                  max_tokens: 2000,
+                  max_tokens: 8000,
                   tools: [{ googleSearch: {} as Record<string, never> }],
                 });
                 coordState.designTrendSearches = [

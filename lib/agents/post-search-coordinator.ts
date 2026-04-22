@@ -362,7 +362,7 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           model,
           system,
           messages,
-          max_tokens: 4000,
+          max_tokens: 12000,
           seed: DETERMINISTIC_SEED,
           // includeThoughts: surface the agent's reasoning so the SSE
           // stream can show the user WHY each tool was called (transparency).

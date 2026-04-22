@@ -288,8 +288,20 @@ function convertTools(tools?: GeminiTool[]): {
   const merged: Record<string, unknown> = {};
   let retrievalConfig: Record<string, unknown> | undefined;
 
+  let hasFunctionDeclarations = false;
+  let hasBuiltInTool = false;
+
   for (const tool of tools) {
     const entry = tool as Record<string, unknown>;
+    if ("functionDeclarations" in entry) hasFunctionDeclarations = true;
+    if (
+      "googleSearch" in entry ||
+      "urlContext" in entry ||
+      "googleMaps" in entry ||
+      "codeExecution" in entry
+    ) {
+      hasBuiltInTool = true;
+    }
     // Special-case googleMaps: its config may carry latLng / placeId which
     // actually belong in toolConfig.retrievalConfig, not inside the tool.
     if ("googleMaps" in entry) {
@@ -319,8 +331,21 @@ function convertTools(tools?: GeminiTool[]): {
     Object.assign(merged, entry);
   }
 
-  const toolConfig = retrievalConfig ? { retrievalConfig } : undefined;
-  return { tools: [merged], toolConfig };
+  // Gemini 3 requires `include_server_side_tool_invocations` when mixing
+  // function declarations (custom tools) with built-in tools (Google Search,
+  // URL Context, Code Execution, Maps). Without this flag, the API 400s
+  // with: "Please enable tool_config.include_server_side_tool_invocations
+  // to use Built-in tools with Function calling."
+  const toolConfig: Record<string, unknown> = {};
+  if (retrievalConfig) toolConfig.retrievalConfig = retrievalConfig;
+  if (hasFunctionDeclarations && hasBuiltInTool) {
+    toolConfig.includeServerSideToolInvocations = true;
+  }
+
+  return {
+    tools: [merged],
+    toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined,
+  };
 }
 
 export const geminiProvider: AIProvider = {
