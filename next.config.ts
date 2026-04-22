@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
@@ -11,11 +10,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    // Pin to the project directory so Next.js doesn't pick up an unrelated
-    // package-lock.json in a parent directory (e.g. the user's home folder).
-    root: path.resolve(__dirname),
-  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
