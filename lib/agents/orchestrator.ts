@@ -13,6 +13,7 @@ import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bun
 import { validateProductSet } from "./validation-agent";
 import { validateRequirements, type RequirementValidationResult } from "./requirement-validator";
 import { planCorrections, type CorrectionAction } from "./correction-planner";
+import { planCategories, type CategoryPlan } from "./category-planner";
 import { rerankCandidates } from "./reranker";
 import { PipelineTracer } from "./pipeline-trace";
 import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-monitor";
@@ -66,6 +67,8 @@ export interface OrchestrationResult {
   validation?: { isValid: boolean; confidence: number; issues: string[] };
   /** Requirement audit — LLM-graded coverage / spec / diagnosis alignment. */
   requirementAudit?: RequirementValidationResult;
+  /** Agentic category plan — what the planner decided to search for. */
+  categoryPlan?: CategoryPlan;
   stats: {
     totalSearchQueries: number;
     totalRawUrls: number;
@@ -448,6 +451,87 @@ export async function runAgenticSearch(
   }
 
   try {
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 0: Agentic category planning.
+    // Replaces the hardcoded `missing_furniture_categories` list with an
+    // agent that reasons over diagnosis + design direction + what_it_needs
+    // + constraints to decide the REAL shopping list. Adds categories the
+    // diagnosis missed (e.g., lighting for a dark room not flagged as
+    // missing_categories), drops categories that conflict with keep items.
+    // Falls back to baseline missingCategories if the planner fails.
+    // ═══════════════════════════════════════════════════════════
+    let agenticCategoryPlan: CategoryPlan | undefined;
+    let plannedCategories = missingCategories;
+    if (missingCategories.length > 0) {
+      reportStep({ step: "Planning categories agentically", status: "running" });
+      const planRes = await planCategories({
+        roomType: ctx.roomType,
+        budgetMode: ctx.budgetMode,
+        missingCategories,
+        whatItNeeds: ctx.whatItNeeds,
+        diagnosis: ctx.diagnosis as DiagnosisData | undefined,
+        designDirection: ctx.designDirection,
+        designProfile: ctx.designProfile,
+        keepItems: ctx.keepItems,
+        replaceItems: ctx.replaceItems,
+        priorities: ctx.priorities,
+        userContext: ctx.userContext,
+        floorPlan: ctx.floorPlan,
+        identifiedContext: ctx.identifiedContext,
+      });
+      if (planRes.tokensUsed) {
+        tokenBudget.add(planRes.tokensUsed);
+        stats.tokensUsed += planRes.tokensUsed;
+        stats.tokensPerPhase.search_brief += planRes.tokensUsed;
+      }
+      if (planRes.success && planRes.data) {
+        agenticCategoryPlan = planRes.data;
+        plannedCategories = planRes.data.categories.map((c) => c.category);
+        const added = planRes.data.categories.filter((c) => c.agent_added).map((c) => c.category);
+        const dropped = planRes.data.dropped_from_missing.map((d) => d.category);
+        reportStep({
+          step: "Planning categories agentically",
+          status: "completed",
+          data: {
+            total: plannedCategories.length,
+            added,
+            dropped,
+            reasoning: planRes.data.reasoning,
+          },
+        });
+        log.info("Agentic category plan", {
+          phase: "category_planning",
+          baseline: missingCategories,
+          planned: plannedCategories,
+          added,
+          dropped,
+        });
+      } else {
+        reportStep({
+          step: "Planning categories agentically",
+          status: "failed",
+          data: { fallback: "using baseline missing_categories" },
+        });
+      }
+    }
+
+    // From here on, treat plannedCategories as the canonical category list.
+    missingCategories = plannedCategories;
+
+    // Inject agent-added category priorities into categoryHints so the
+    // search brief generator emphasizes them per priority level.
+    if (agenticCategoryPlan) {
+      categoryHints = categoryHints || {};
+      for (const c of agenticCategoryPlan.categories) {
+        const existing = categoryHints[c.category] || "";
+        categoryHints[c.category] = [
+          existing,
+          c.search_title_hint || "",
+          `(priority: ${c.priority}) — ${c.reason}`,
+        ].filter(Boolean).join(" | ");
+      }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // PHASE 1: Generate search brief (5 queries × 3 tiers × N categories)
     // ═══════════════════════════════════════════════════════════
@@ -2478,6 +2562,7 @@ export async function runAgenticSearch(
         steps,
         validation: validationData,
         requirementAudit,
+        categoryPlan: agenticCategoryPlan,
         stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message) },
         trace: tracer.getTrace(),
       },
