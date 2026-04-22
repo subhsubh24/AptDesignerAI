@@ -3,11 +3,20 @@ import { createClient } from "@/lib/supabase/server";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`bundle-evaluate:${user.id}`, RATE_LIMITS.bundleEvaluate);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
 
   const body = await request.json();
   const { bundle_id } = body;

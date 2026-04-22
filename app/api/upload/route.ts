@@ -9,10 +9,22 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("file") as File;
-  const bucket = (formData.get("bucket") as string) || "room-images";
+  const ALLOWED_BUCKETS = new Set(["room-images", "floor-plans"]);
+  const rawBucket = (formData.get("bucket") as string) || "room-images";
+  const bucket = ALLOWED_BUCKETS.has(rawBucket) ? rawBucket : "room-images";
 
   if (!file) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  }
+
+  const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+  if (!ALLOWED_TYPES.has(file.type)) {
+    return NextResponse.json({ error: "Only image files (JPEG, PNG, WebP, HEIC) are allowed" }, { status: 400 });
+  }
+
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json({ error: "File size exceeds 20MB limit" }, { status: 400 });
   }
 
   const fileExt = file.name.split(".").pop();

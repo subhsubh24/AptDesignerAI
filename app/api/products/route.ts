@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -30,9 +31,31 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+  if (!body.room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  if (!(await userOwnsRoom(supabase, body.room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const row = {
+    room_id: body.room_id,
+    title: body.title,
+    category: body.category,
+    retailer: body.retailer,
+    product_url: body.product_url,
+    image_url: body.image_url,
+    price: body.price,
+    dimensions: body.dimensions,
+    materials: body.materials,
+    colors: body.colors,
+    description: body.description,
+    source_type: body.source_type,
+    metadata: body.metadata,
+    search_session_id: body.search_session_id,
+  };
+
   const { data, error } = await supabase
     .from("candidate_products")
-    .insert(body)
+    .insert(row)
     .select()
     .single();
 

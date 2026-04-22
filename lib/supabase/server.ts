@@ -53,6 +53,9 @@ export async function getCurrentUserId(): Promise<string> {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Supabase credentials are required in production");
+    }
     return "00000000-0000-0000-0000-000000000001";
   }
 

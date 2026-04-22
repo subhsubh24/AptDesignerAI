@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 const CACHE = new Map<string, { url: string; attributions: string[]; ts: number }>();
 const TTL = 24 * 60 * 60 * 1000; // 24h
 
 export async function GET(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`places-photo:${user.id}`, RATE_LIMITS.placesPhoto);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+
   const placeId = req.nextUrl.searchParams.get("place_id");
-  if (!placeId) {
-    return NextResponse.json({ error: "place_id required" }, { status: 400 });
+  if (!placeId || !/^[A-Za-z0-9_-]+$/.test(placeId)) {
+    return NextResponse.json({ error: "Valid place_id required" }, { status: 400 });
   }
 
   const cached = CACHE.get(placeId);

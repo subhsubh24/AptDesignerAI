@@ -5,6 +5,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { validateExternalUrl } from "@/lib/utils/url-validator";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -24,6 +25,20 @@ export async function POST(request: Request) {
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!url && !image_url) return NextResponse.json({ error: "url or image_url required" }, { status: 400 });
+
+  if (url) {
+    const validation = validateExternalUrl(url);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+  }
+  if (image_url) {
+    const validation = validateExternalUrl(image_url);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+  }
+
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

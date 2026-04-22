@@ -104,4 +104,10 @@ export const RATE_LIMITS = {
   areaAnalysisRefine: { maxRequests: 10, windowMs: 60_000 },
   /** Products ingest — 20 per minute */
   productsIngest: { maxRequests: 20, windowMs: 60_000 },
+  /** Places photo — 30 per minute */
+  placesPhoto: { maxRequests: 30, windowMs: 60_000 },
+  /** Bundle evaluate — 10 per minute */
+  bundleEvaluate: { maxRequests: 10, windowMs: 60_000 },
+  /** Product evaluate — 30 per minute */
+  productEvaluate: { maxRequests: 30, windowMs: 60_000 },
 } as const;
