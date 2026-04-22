@@ -1228,9 +1228,12 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     // PHASE 6: Validate + generate bundles
     // ═══════════════════════════════════════════════════════════
-    reportStep({ step: "Validating all recommendations", status: "running" });
-
     const allProducts = Object.values(candidatesByCategory).flat();
+    reportStep({
+      step: "Validating all recommendations",
+      status: "running",
+      data: { progress: 0, total: allProducts.length || 1 },
+    });
     const validationResult = await validateProductSet(
       allProducts.map((p) => {
         const pMeta = p.metadata as Record<string, unknown> | null;
@@ -1332,8 +1335,9 @@ export async function runAgenticSearch(
     }
 
     // Generate bundles for each tier — try multiple combinations, pick best
-    reportStep({ step: "Generating bundles", status: "running" });
+    reportStep({ step: "Generating bundles", status: "running", data: { progress: 0, total: PRICE_TIERS.length } });
     const bundles: unknown[] = [];
+    let bundleTiersCompleted = 0;
 
     const bundleCtx = {
       roomType: ctx.roomType,
@@ -1442,7 +1446,7 @@ export async function runAgenticSearch(
         if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
       }
 
-      return {
+      const result = {
         tier,
         scores: best.scores,
         final_bundle_score: best.final_bundle_score,
@@ -1452,6 +1456,14 @@ export async function runAgenticSearch(
         product_ids: best.products.map((p) => p.id),
         combos_evaluated: validResults.length,
       };
+
+      bundleTiersCompleted++;
+      reportStep({
+        step: "Generating bundles",
+        status: "running",
+        data: { progress: bundleTiersCompleted, total: PRICE_TIERS.length },
+      });
+      return result;
     });
 
     const bundleResults = await Promise.all(bundlePromises);
@@ -1756,6 +1768,85 @@ export async function runAgenticSearch(
         }
 
         reportStep({ step: "Re-evaluating bundles after backfill", status: "completed" });
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Phase 7b: Fill empty (category × tier) cells so the UI grid
+    // never has a dash. Opt-in via ctx.fillAllTiers (default true
+    // from the streaming route). Pulls from alsoConsidered first,
+    // then borrows from adjacent tiers. Marks borrowed picks so
+    // the UI can flag them as "best available" rather than an
+    // in-tier recommendation.
+    // ═══════════════════════════════════════════════════════════
+    if (ctx.fillAllTiers !== false) {
+      const PRICE_TIERS_LOCAL: PriceTier[] = ["budget", "balanced", "high_end"];
+      const adjacentTiers: Record<PriceTier, PriceTier[]> = {
+        budget: ["balanced", "high_end"],
+        balanced: ["budget", "high_end"],
+        high_end: ["balanced", "budget"],
+      };
+
+      let filledCount = 0;
+      for (const category of Object.keys(candidatesByCategory)) {
+        const products = candidatesByCategory[category] || [];
+        const byTier: Record<PriceTier, CandidateProduct[]> = {
+          budget: [], balanced: [], high_end: [],
+        };
+        for (const p of products) {
+          const tier = ((p.metadata as { price_tier?: string } | null)?.price_tier as PriceTier) || "balanced";
+          if (byTier[tier]) byTier[tier].push(p);
+        }
+
+        for (const tier of PRICE_TIERS_LOCAL) {
+          if (byTier[tier].length > 0) continue;
+
+          const pickBest = (pool: CandidateProduct[]): CandidateProduct | null => {
+            const scored = pool
+              .filter((p) => evaluations.has(p.id))
+              .sort((a, b) => {
+                const sa = evaluations.get(a.id)?.final_item_score || 0;
+                const sb = evaluations.get(b.id)?.final_item_score || 0;
+                return (sb - sa) || tiebreakProduct(a, b);
+              });
+            return scored[0] || null;
+          };
+
+          let fill: CandidateProduct | null = null;
+          let fillSource: "also_considered" | "adjacent_tier" | null = null;
+
+          const alsoInTier = (alsoConsidered[category] || []).filter(
+            (p) => ((p.metadata as { price_tier?: string } | null)?.price_tier || "balanced") === tier,
+          );
+          fill = pickBest(alsoInTier);
+          if (fill) fillSource = "also_considered";
+
+          if (!fill) {
+            for (const adj of adjacentTiers[tier]) {
+              const adjCandidates = [...byTier[adj], ...((alsoConsidered[category] || []).filter(
+                (p) => ((p.metadata as { price_tier?: string } | null)?.price_tier || "balanced") === adj,
+              ))];
+              const adjBest = pickBest(adjCandidates);
+              if (adjBest) {
+                fill = { ...adjBest, metadata: { ...(adjBest.metadata as Record<string, unknown> || {}), price_tier: tier, fill_source: "adjacent_tier", fill_origin_tier: adj } } as CandidateProduct;
+                fillSource = "adjacent_tier";
+                break;
+              }
+            }
+          }
+
+          if (fill) {
+            if (fillSource === "also_considered" && fill.metadata) {
+              fill = { ...fill, metadata: { ...(fill.metadata as Record<string, unknown>), fill_source: "also_considered" } } as CandidateProduct;
+            }
+            candidatesByCategory[category].push(fill);
+            filledCount++;
+          }
+        }
+      }
+
+      if (filledCount > 0) {
+        log.info("Filled empty category×tier cells", { phase: "fill_tiers", count: filledCount });
       }
     }
 

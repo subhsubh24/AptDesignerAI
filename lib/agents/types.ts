@@ -67,6 +67,12 @@ export interface AgentContext {
    * pre-feature shape. See `lib/prompts/product-identification.ts`.
    */
   identifiedContext?: string;
+
+  /** When true, after normal backfill every empty category×tier cell is
+   * filled with the best available product — first from that tier's
+   * alsoConsidered pool, else from adjacent tiers. Prioritizes UX over
+   * strict tier quality. Default true from the UI. */
+  fillAllTiers?: boolean;
 }
 
 export interface AgentResult<T = unknown> {

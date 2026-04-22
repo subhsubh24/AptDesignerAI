@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { room_id, categories } = body;
+  const { room_id, categories, fillAllTiers } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
@@ -204,6 +204,7 @@ export async function POST(request: Request) {
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,
     identifiedContext: identifiedContext || undefined,
+    fillAllTiers: fillAllTiers !== false,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

@@ -95,13 +95,15 @@ const TIER_LABELS: Record<PriceTier, string> = {
 // ─── Search phase labels for live progress ──────────────────────
 
 const SEARCH_PHASES = [
-  { key: "Generating intensive search brief", label: "Planning search strategy", weight: 5 },
-  { key: "Searching across all retailers", label: "Searching retailers", weight: 25 },
-  { key: "Quick-screening candidates", label: "Screening results", weight: 10 },
-  { key: "Extracting product details from websites", label: "Reading product pages", weight: 25 },
-  { key: "Quick-scoring all candidates", label: "Quick-scoring candidates", weight: 10 },
-  { key: "Deep-scoring top candidates", label: "Evaluating finalists", weight: 20 },
-  { key: "Validating all recommendations", label: "Final validation", weight: 5 },
+  { key: "Generating intensive search brief", label: "Planning search strategy", weight: 4 },
+  { key: "Searching across all retailers", label: "Searching retailers", weight: 20 },
+  { key: "Quick-screening candidates", label: "Screening results", weight: 8 },
+  { key: "Extracting product details from websites", label: "Reading product pages", weight: 20 },
+  { key: "Quick-scoring all candidates", label: "Quick-scoring candidates", weight: 8 },
+  { key: "Deep-scoring top candidates", label: "Evaluating finalists", weight: 18 },
+  { key: "Validating all recommendations", label: "Final validation", weight: 6 },
+  { key: "Generating bundles", label: "Composing bundles", weight: 12 },
+  { key: "Re-evaluating bundles after backfill", label: "Refining bundles", weight: 4 },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -144,6 +146,7 @@ export default function FocusPage() {
   const [searchStartTime, setSearchStartTime] = useState<number | null>(null);
   const [searchElapsed, setSearchElapsed] = useState(0);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [fillAllTiers, setFillAllTiers] = useState<boolean>(true);
 
   // Floor plan context
   const [floorPlan, setFloorPlan] = useState<{
@@ -452,7 +455,7 @@ export default function FocusPage() {
       const res = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room_id: roomId, categories }),
+        body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
         signal: streamAbort.signal,
       });
 
@@ -461,7 +464,7 @@ export default function FocusPage() {
         const batchRes = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room_id: roomId, categories }),
+          body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
         });
         if (batchRes.ok) {
           const data = await batchRes.json();
@@ -944,6 +947,20 @@ export default function FocusPage() {
               I&apos;ll find my own
             </Button>
           </div>
+
+          {/* Fill-all-tiers toggle */}
+          <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={fillAllTiers}
+              onChange={(e) => setFillAllTiers(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-border"
+            />
+            <span>
+              Fill every tier — borrow the best adjacent-tier pick when a category has no in-tier match.
+              Off: only show products that strictly matched the tier budget.
+            </span>
+          </label>
           <Button
             variant="ghost"
             size="sm"

@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { room_id, categories } = body;
+  const { room_id, categories, fillAllTiers } = body;
 
   if (!room_id) {
     return new Response(JSON.stringify({ error: "room_id required" }), { status: 400 });
@@ -201,6 +201,7 @@ export async function POST(request: Request) {
     lightingConditions: lightingConditions || undefined,
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,
+    fillAllTiers: fillAllTiers !== false,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }
