@@ -291,11 +291,20 @@ export function validateAreaAnalysis(
     "wall_art", "wall_art_small", "mirror_small",
   ]);
 
+  // Detect keep items where the user explicitly asks for decor/styling for the item.
+  // e.g. "keep the bookshelf but add decor for it" → allow decor items that mention bookshelf.
+  const DECOR_INTENT_PATTERN = /\b(?:decor|styling|style|accessori|decorat|ornament|display|arrange|organiz)/i;
+  const DECOR_TITLE_PATTERN = /\b(?:decor|styling|style|vase|sculpture|candle|ornament|display|tray|basket|ceramic|brass|set|arrangement)\b/i;
+
   if (allKeepItems.length > 0) {
     const keepCategories = extractKeepCategories(allKeepItems);
 
     for (const { item, keywords, location } of keepCategories) {
       if (keywords.length === 0) continue;
+
+      // If the user asked for decor/styling for this kept item, exempt items that are
+      // clearly decorative accessories (by title), even if they share the category keyword.
+      const userWantsDecorForItem = DECOR_INTENT_PATTERN.test(item);
 
       // Check if what_it_needs recommends a NEW item in the same category as a kept item
       if (Array.isArray(patched.what_it_needs)) {
@@ -305,6 +314,16 @@ export function validateAreaAnalysis(
           const recText = `${rec.category || ""} ${rec.search_title || ""}`;
           const match = mentionsAny(recText, keywords);
           if (match) {
+            // If the user explicitly asked for decor for this item and the proposed
+            // item's title indicates it's decorative (styling set, vase, etc.),
+            // it's an accessory FOR the kept item, not a replacement.
+            if (userWantsDecorForItem && DECOR_TITLE_PATTERN.test(rec.search_title || "")) {
+              log.info("Keep-item keyword match but user requested decor for it — allowing", {
+                keepItem: item,
+                proposed: rec.search_title || rec.category,
+              });
+              return true;
+            }
             // If the keep item has a known location (e.g. "next to the TV") and the
             // proposed item has a placement for a DIFFERENT location (e.g. "on the
             // coffee table"), it's not a conflict — it's a new item elsewhere.
