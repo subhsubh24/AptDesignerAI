@@ -198,6 +198,13 @@ export interface CoordinatorState {
   lastAuditIssues?: string[];
   lastAuditUsedGrounding?: boolean;
   auditRunCount: number;
+
+  /**
+   * Audit alignment over time. Each entry is one audit run.
+   * Lets the agent see trends: "stalled at 6.1 for 2 rounds → finalize"
+   * vs. "5.2 → 6.4 → 7.1 (improving, keep going)".
+   */
+  auditHistory?: Array<{ alignment: number; coverage: number; diagnosisSolving: number }>;
 }
 
 /** Tool handler — receives args, returns structured result for the agent to reason over. */
@@ -240,6 +247,25 @@ function formatStateForAgent(state: CoordinatorState): string {
 
   if (state.lastAuditAlignment !== undefined) {
     lines.push(`Last audit: alignment=${state.lastAuditAlignment.toFixed(1)}/10, coverage=${(state.lastAuditCoverage ?? 0).toFixed(1)}/10, diagnosis_solving=${(state.lastAuditDiagnosisSolving ?? 0).toFixed(1)}/10${state.lastAuditUsedGrounding ? " (grounded)" : ""}`);
+
+    // Audit trend — makes stalled convergence obvious.
+    if (state.auditHistory && state.auditHistory.length >= 2) {
+      const trend = state.auditHistory.map((a) => a.alignment.toFixed(1)).join(" → ");
+      const last = state.auditHistory.length - 1;
+      const delta = state.auditHistory[last].alignment - state.auditHistory[last - 1].alignment;
+      let verdict: string;
+      if (Math.abs(delta) < 0.3) {
+        verdict = "STALLED — further re-searches unlikely to help. Finalize unless critical gap remains.";
+      } else if (delta < 0) {
+        verdict = "REGRESSING — re-searches are making it worse. Finalize with current state.";
+      } else if (delta >= 1.0) {
+        verdict = "improving strongly — one more round may help";
+      } else {
+        verdict = "improving — one more round may help";
+      }
+      lines.push(`Alignment trend: ${trend} (${verdict})`);
+    }
+
     if (state.lastAuditIssues?.length) {
       lines.push("Audit issues:");
       for (const issue of state.lastAuditIssues.slice(0, 8)) {
@@ -269,6 +295,10 @@ function formatStateForAgent(state: CoordinatorState): string {
   }
   lines.push("");
 
+  // Mark saturated categories (plenty of strong picks) so the agent
+  // doesn't waste a re-search on them.
+  const SATURATED_COUNT = 3;
+  const SATURATED_SCORE = 7.0;
   lines.push("Per-category state (only categories with products):");
   for (const [cat, s] of Object.entries(state.categories)) {
     const parts = [`  [${cat}] count=${s.productCount}`];
@@ -276,16 +306,22 @@ function formatStateForAgent(state: CoordinatorState): string {
     if (s.scoreMedian !== undefined) parts.push(`score median=${s.scoreMedian.toFixed(1)} (range ${s.scoreMin?.toFixed(1)}-${s.scoreMax?.toFixed(1)})`);
     if (s.topPickTitle) parts.push(`top="${s.topPickTitle}"`);
     if (s.topPickPrice) parts.push(`$${s.topPickPrice}`);
-    if (state.reSearchCount[cat]) parts.push(`re-searched ${state.reSearchCount[cat]}x`);
+    if (state.reSearchCount[cat]) {
+      const rs = state.reSearchCount[cat];
+      parts.push(rs >= 2 ? `re-searched ${rs}x (diminishing returns — DO NOT re-search again)` : `re-searched ${rs}x`);
+    }
+    if (s.productCount >= SATURATED_COUNT && (s.scoreMax ?? 0) >= SATURATED_SCORE) {
+      parts.push("SATURATED (do not re-search)");
+    }
     lines.push(parts.join(" | "));
   }
 
   if (Object.values(state.triedQueries).some((q) => q.length > 0)) {
     lines.push("");
-    lines.push("Queries already tried (do not repeat):");
+    lines.push("Queries ALREADY TRIED — using any of these again is wasteful and forbidden:");
     for (const [cat, qs] of Object.entries(state.triedQueries)) {
       if (qs.length > 0) {
-        lines.push(`  [${cat}]: ${qs.slice(-6).map((q) => `"${q}"`).join(", ")}`);
+        lines.push(`  [${cat}]: ${qs.slice(-8).map((q) => `"${q}"`).join(", ")}`);
       }
     }
   }
@@ -311,18 +347,24 @@ Required outputs before finalize:
 Recommended sequence on a typical run:
   audit → (if alignment < 8) re_search_category for top 1-3 weak categories → audit again → run_validation → run_bundle_generation → fill_empty_tiers → finalize
 
-Stop conditions:
-- alignment >= 8 AND bundles generated AND tiers filled → finalize
-- budget < 15% remaining → finalize with what you have
-- Same audit alignment for 2 consecutive audits → no point iterating, finalize
-- No artificial turn cap — keep iterating as long as each action is
-  measurably improving outcomes, OR the budget is exhausted upstream.
+Stop conditions — if ANY of these are true, call finalize:
+- alignment >= 8 AND bundles generated AND tiers filled
+- budget < 15% remaining
+- Alignment trend is STALLED (the state summary labels it explicitly)
+- Alignment is REGRESSING (getting worse — stop making it worse)
+- Every remaining issue is in a SATURATED or "do not re-search again" category
+
+Re-search guardrails — refuse to re_search_category if ANY of these apply:
+- The category is marked SATURATED in the state
+- The category has already been re-searched 2+ times (diminishing returns)
+- Your planned queries overlap with queries already in "Queries ALREADY TRIED"
+- Alignment trend is stalled — re-searching will not help
 
 Avoid:
-- Re-searching the same category twice without intermediate audit (wasteful)
 - Running validation more than once (rare value)
 - Calling re_search_category without first running an audit (you have no signal of what's broken)
 - Calling finalize before bundles/tiers — the user sees nothing useful
+- Running an audit when the trend is already stalled — just finalize
 
 Parallel function calling: when multiple INDEPENDENT actions are needed in the same turn (e.g., re-searching THREE different categories that don't depend on each other), call all of them in parallel in the same turn. Gemini supports parallel function calling — use it when actions are independent, since it cuts iteration latency. Serialize when actions DO depend on each other (e.g., re-search category A → audit → re-search category B based on new audit).
 

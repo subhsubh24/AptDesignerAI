@@ -85,6 +85,24 @@ export const CombinedEvalResponseSchema = z.object({
   apartment_fit_note: z.string().optional().default(""),
 });
 
+/**
+ * Batch deep-score response: one entry per product in the batch.
+ * Products are identified by their 0-based index in the request.
+ * Lets scoreProducts() evaluate 2-4 products in a single LLM call,
+ * amortizing the room-image + context tokens across multiple products.
+ */
+export const BatchCombinedEvalEntrySchema = z.object({
+  index: z.coerce.number().int().min(0),
+  scores: ProductScoresSchema,
+  reasoning: ProductEvalReasoningSchema,
+  area_fit_note: z.string().optional().default(""),
+  apartment_fit_note: z.string().optional().default(""),
+});
+
+export const BatchCombinedEvalResponseSchema = z.object({
+  products: z.array(BatchCombinedEvalEntrySchema).min(1),
+});
+
 // ─── Quick Score ──────────────────────────────────────────────
 
 export const QuickScoreEntrySchema = z.object({

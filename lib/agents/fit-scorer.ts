@@ -7,6 +7,7 @@ import {
 } from "@/lib/prompts/product-eval";
 import { computeFinalItemScore, determineVerdict, groundConfidence } from "@/lib/scoring/product-scorer";
 import {
+  BatchCombinedEvalResponseSchema,
   CombinedEvalResponseSchema,
   QuickScoreResponseSchema,
 } from "@/lib/types/schemas";
@@ -245,9 +246,9 @@ export async function scoreProduct(
             cachedRoomImages.length > 0
               ? { sessionKey: roomSessionKey, content: cachedRoomImages }
               : undefined,
-          tools: [
-            { codeExecution: {} as Record<string, never> },
-          ],
+          // No tools — math is pre-computed and injected via mathSection.
+          // Dropping codeExecution lets Gemini cache the room images via
+          // cacheScope, saving ~7500 image tokens per scoring call.
         });
 
         const raw = extractJsonObject(response.content);
@@ -342,6 +343,351 @@ export async function scoreProduct(
     log.error(`Scoring failed for "${product.title}"`, { productId: product.id, error: errMsg });
     return { success: false, error: errMsg };
   }
+}
+
+/**
+ * Batch deep-score multiple products in a single LLM call.
+ *
+ * Works on products sharing the same ScoringContext — typically one
+ * (category, tier) cell at a time, where anchor specs, harmony
+ * neighbors, room images, and design context are identical.
+ *
+ * Tradeoff vs per-product: one call amortizes the context and room-image
+ * tokens across the batch (~2500 tokens saved per duplicated item), and
+ * cuts LLM round-trips 2-3x. The model may be slightly less focused per
+ * product, so we cap batch size at 3 and keep per-product product images
+ * side-by-side so each product still gets direct visual attention.
+ *
+ * Returns per-product results keyed by product.id. Math veto and
+ * confidence grounding are applied per-product after the LLM call,
+ * identical to scoreProduct.
+ */
+export async function scoreProducts(
+  products: CandidateProduct[],
+  scoringCtx: ScoringContext,
+  batchSize: number = 3,
+): Promise<{
+  results: Map<string, AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>>;
+  tokensUsed: number;
+}> {
+  const results = new Map<
+    string,
+    AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>
+  >();
+  let totalTokens = 0;
+
+  if (products.length === 0) return { results, tokensUsed: 0 };
+  if (products.length === 1) {
+    const r = await scoreProduct(products[0], scoringCtx);
+    results.set(products[0].id, r);
+    return { results, tokensUsed: r.tokensUsed ?? 0 };
+  }
+
+  const batches: CandidateProduct[][] = [];
+  for (let i = 0; i < products.length; i += batchSize) {
+    batches.push(products.slice(i, i + batchSize));
+  }
+
+  const model = selectModel("scoring");
+  const system = getSystemPromptCore(scoringCtx.designProfile);
+
+  const cachedRoomImages: AIContentBlock[] = scoringCtx.roomImageUrls
+    .slice(0, 3)
+    .map((url) => ({ type: "image" as const, source: { type: "url" as const, url } }));
+  const roomSessionKey = crypto
+    .createHash("sha256")
+    .update(`${scoringCtx.roomType}|${scoringCtx.roomImageUrls.slice(0, 3).join("|")}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  const lifestyleFlags = resolveLifestyleFlags(scoringCtx.designProfile?.lifestyle);
+
+  const batchResults = await Promise.all(
+    batches.map(async (batch) => {
+      // Build a single base eval prompt (room context, design direction,
+      // scoring calibration, etc.) — shared across all products in batch.
+      const evalCtx: EvalContextArgs = {
+        roomType: scoringCtx.roomType,
+        category: batch[0].category || "unknown",
+        existingItems: scoringCtx.existingItems,
+        budgetMode: scoringCtx.budgetMode,
+        otherRoomsContext: scoringCtx.otherRoomsContext,
+        priorities: scoringCtx.priorities,
+        diagnosis: scoringCtx.diagnosis,
+        designDirection: scoringCtx.designDirection,
+        placement: scoringCtx.placement,
+        spatialLayout: scoringCtx.spatialLayout,
+        floorPlan: scoringCtx.floorPlan,
+        extractedFloorPlan: scoringCtx.extractedFloorPlan,
+        lightingConditions: scoringCtx.lightingConditions,
+        windowDoorPositions: scoringCtx.windowDoorPositions,
+        outletPositions: scoringCtx.outletPositions,
+        userContext: scoringCtx.userContext,
+        replaceItems: scoringCtx.replaceItems,
+        identifiedContext: scoringCtx.identifiedContext,
+        anchorSpecs: scoringCtx.anchorSpecs,
+        harmonyNeighbors: scoringCtx.harmonyNeighbors,
+      };
+      const basePrompt = getCombinedEvalPrompt({
+        ...evalCtx,
+        includeFitNotes: scoringCtx.includeFitNotes ?? true,
+      });
+
+      // Build per-product blocks: each gets an index, its images, and
+      // its text info (title, price, materials, math section).
+      const perProductMath: ProductMathScores[] = [];
+      const productBlocks: AIContentBlock[] = [];
+      const productTextParts: string[] = [];
+
+      for (let idx = 0; idx < batch.length; idx++) {
+        const product = batch[idx];
+        const meta = product.metadata as Record<string, unknown> | null;
+        const visualTags = (meta?.visual_style_tags as string[]) || [];
+        const availableVariants = (meta?.available_variants as string[]) || [];
+        const lifestyleImageUrl = meta?.lifestyle_image_url as string | undefined;
+
+        const productInfo = [
+          product.title && `Title: ${product.title}`,
+          product.retailer && `Retailer: ${product.retailer}`,
+          product.price && `Price: $${product.price}`,
+          product.dimensions && `Dimensions: ${JSON.stringify(product.dimensions)}`,
+          product.materials?.length && `Materials: ${product.materials.join(", ")}`,
+          product.colors?.length && `Colors: ${product.colors.join(", ")}`,
+          visualTags.length > 0 && `Visual style: ${visualTags.join(", ")}`,
+          availableVariants.length > 0 && `Other options: ${availableVariants.join(", ")}`,
+          product.description && `Description: ${product.description}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        // Product images inserted as vision blocks before the text marker.
+        if (product.image_url && isGeminiCompatibleImageUrl(product.image_url)) {
+          productBlocks.push({ type: "image", source: { type: "url", url: product.image_url } });
+        }
+        if (lifestyleImageUrl && isGeminiCompatibleImageUrl(lifestyleImageUrl)) {
+          productBlocks.push({ type: "image", source: { type: "url", url: lifestyleImageUrl } });
+        }
+
+        const math: ProductMathScores = computeProductMathScores(
+          {
+            title: product.title || undefined,
+            category: product.category || undefined,
+            price: product.price || undefined,
+            materials: product.materials || undefined,
+            colors: product.colors || undefined,
+            dimensions: product.dimensions || undefined,
+            description: product.description || undefined,
+          },
+          {
+            roomType: scoringCtx.roomType,
+            budgetMode: scoringCtx.budgetMode,
+            recommendedPalette: scoringCtx.designDirection?.recommended_palette,
+            recommendedMaterials: scoringCtx.designDirection?.recommended_materials,
+            floorPlan: scoringCtx.floorPlan,
+            placement: scoringCtx.placement,
+            lifestyle: lifestyleFlags,
+          }
+        );
+        perProductMath.push(math);
+
+        productTextParts.push(
+          `### PRODUCT [${idx}]\n${productInfo}\n\n${formatProductMathForPrompt(math)}`,
+        );
+      }
+
+      const feedbackSection = scoringCtx.userFeedbackContext
+        ? `\n\n${scoringCtx.userFeedbackContext}`
+        : "";
+
+      const batchTail = `
+
+## PRODUCTS TO SCORE
+Score each of the ${batch.length} products below INDEPENDENTLY. Return one entry per product in the "products" array, with "index" matching the [N] tag. Use the calibration anchors — do NOT inflate scores or cluster them.
+
+${productTextParts.join("\n\n")}${feedbackSection}
+
+<output_contract>
+Return JSON ONLY matching this shape (no prose, no markdown fences):
+
+{
+  "products": [
+    {
+      "index": 0,
+      "scores": { "style_fit_score": n, "palette_fit_score": n, "material_fit_score": n, "cohesion_fit_score": n, "scale_fit_score": n, "function_fit_score": n, "value_fit_score": n, "confidence_score": n },
+      "reasoning": { "top_reasons": ["..."], "risks": ["..."], "suggestions": ["..."] }${scoringCtx.includeFitNotes ? `,
+      "area_fit_note": "...",
+      "apartment_fit_note": "..."` : ""}
+    }
+    // ... one entry per product, index 0..${batch.length - 1}
+  ]
+}
+</output_contract>`;
+
+      const messageContent: AIContentBlock[] = [
+        ...productBlocks,
+        { type: "text", text: `${basePrompt}${batchTail}` },
+      ];
+
+      let lastError: string | undefined;
+      let attempt = 0;
+
+      try {
+        const res = await withRetry(
+          async () => {
+            attempt++;
+            const retryContent = attempt > 1 && lastError
+              ? [...messageContent, { type: "text" as const, text: `\n\n**IMPORTANT**: Your previous response was invalid: "${lastError}". Return ONLY valid JSON matching the exact schema above, with exactly ${batch.length} entries in "products".` }]
+              : messageContent;
+
+            const response = await geminiProvider.chat({
+              model,
+              system,
+              messages: [{ role: "user", content: retryContent }],
+              max_tokens: 10000 + batch.length * 3000,
+              seed: DETERMINISTIC_SEED,
+              responseMimeType: "application/json",
+              mediaResolution: "ultra_high",
+              cacheScope:
+                cachedRoomImages.length > 0
+                  ? { sessionKey: roomSessionKey, content: cachedRoomImages }
+                  : undefined,
+              // No tools — math is pre-computed. Lets room images hit cache.
+            });
+
+            const raw = extractJsonObject(response.content);
+            const data = BatchCombinedEvalResponseSchema.parse(raw);
+            const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+            return { data, tokens, model: response.model };
+          },
+          {
+            maxAttempts: 3,
+            baseDelayMs: 1500,
+            maxDelayMs: 10000,
+            isRetryable: (error) => {
+              if (isRetryableError(error)) return true;
+              if (error instanceof SyntaxError) return true;
+              if (error instanceof Error && error.name === "ZodError") return true;
+              return false;
+            },
+            onRetry: (retryAttempt, delayMs, error) => {
+              lastError = error instanceof Error ? error.message : "batch scoring failed";
+              log.warn(`Retry ${retryAttempt} for batch scoring (${batch.length} products)`, {
+                durationMs: delayMs,
+                error: lastError,
+              });
+            },
+          }
+        );
+
+        return { res, batch, perProductMath };
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Batch scoring failed";
+        log.warn("Batch scoring failed — falling back to per-product", {
+          error: errMsg,
+          batchSize: batch.length,
+        });
+        return { res: null, batch, perProductMath, error: errMsg };
+      }
+    }),
+  );
+
+  // Post-process each batch: apply math veto, ground confidence, store
+  // per-product result. If the batch call failed, fall back to scoreProduct
+  // for each product in that batch so we don't lose coverage.
+  for (const br of batchResults) {
+    if (!br.res) {
+      for (const product of br.batch) {
+        const single = await scoreProduct(product, scoringCtx);
+        results.set(product.id, single);
+        if (single.tokensUsed) totalTokens += single.tokensUsed;
+      }
+      continue;
+    }
+
+    const { res, batch, perProductMath } = br;
+    totalTokens += res.tokens;
+
+    // Build index → entry map so we tolerate missing or reordered entries.
+    const entryByIdx = new Map<number, typeof res.data.products[number]>();
+    for (const entry of res.data.products) {
+      entryByIdx.set(entry.index, entry);
+    }
+
+    for (let idx = 0; idx < batch.length; idx++) {
+      const product = batch[idx];
+      const entry = entryByIdx.get(idx);
+      if (!entry) {
+        // Model skipped this product — fall back to per-product call.
+        log.warn("Batch missing product entry — falling back", {
+          productId: product.id,
+          expectedIndex: idx,
+        });
+        const single = await scoreProduct(product, scoringCtx);
+        results.set(product.id, single);
+        if (single.tokensUsed) totalTokens += single.tokensUsed;
+        continue;
+      }
+
+      const math = perProductMath[idx];
+      const scores = { ...entry.scores };
+
+      const VETO_THRESHOLD = MATH_VETO.threshold;
+      if (math.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
+        scores.scale_fit_score = Math.round(math.scale_fit * 10);
+      }
+      if (math.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
+        scores.palette_fit_score = Math.round(math.palette_fit * 10);
+      }
+      if (math.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
+        scores.material_fit_score = Math.round(math.material_fit * 10);
+      }
+
+      const finalScore = computeFinalItemScore(scores, product.category || undefined);
+      const hasProductImage =
+        !!(product.image_url && isGeminiCompatibleImageUrl(product.image_url));
+      const groundedConfidence = groundConfidence(scores.confidence_score, {
+        hasProductImage,
+        hasDimensions: !!(product.dimensions?.width || product.dimensions?.height || product.dimensions?.diameter),
+        hasMaterials: (product.materials?.length ?? 0) > 0,
+        hasPrice: !!product.price,
+        hasDescription: !!(product.description?.length),
+        hasRoomImages: scoringCtx.roomImageUrls.length > 0,
+        mathValidationRan: true,
+      });
+      scores.confidence_score = groundedConfidence;
+      const verdict = determineVerdict(finalScore, groundedConfidence);
+
+      const categoryKey = (product.category || "unknown").toLowerCase().replace(/[\s-]+/g, "_");
+      recordProductScores({
+        ...(scores as unknown as Record<string, number>),
+        final_item_score: finalScore,
+        [`${categoryKey}_final_item_score`]: finalScore,
+      });
+
+      results.set(product.id, {
+        success: true,
+        data: {
+          scores,
+          final_item_score: finalScore,
+          verdict,
+          reasoning: entry.reasoning,
+          area_fit_note: entry.area_fit_note,
+          apartment_fit_note: entry.apartment_fit_note,
+        },
+        tokensUsed: Math.round(res.tokens / batch.length),
+        model: res.model,
+      });
+    }
+
+    log.info("Batch scored", {
+      batchSize: batch.length,
+      model: res.model,
+      perProductTokens: Math.round(res.tokens / batch.length),
+      totalTokens: res.tokens,
+    });
+  }
+
+  return { results, tokensUsed: totalTokens };
 }
 
 export interface QuickScoreEntry {

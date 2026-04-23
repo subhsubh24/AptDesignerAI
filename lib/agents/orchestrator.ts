@@ -8,7 +8,7 @@ import {
 } from "./shopping-researcher";
 import { extractFromUrl } from "./product-extractor";
 import { runProductVerifier } from "./computer-use/product-verifier";
-import { scoreProduct, quickScoreProducts } from "./fit-scorer";
+import { scoreProducts, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bundle-optimizer";
 import { validateProductSet } from "./validation-agent";
 import { validateRequirements, type RequirementValidationResult } from "./requirement-validator";
@@ -162,7 +162,43 @@ function trackExtraction(url: string, isSentinel: boolean) {
   } catch { /* invalid URL */ }
 }
 
+// Known non-retailer domains that historically return blogs, listicles,
+// news articles, or forum discussions. Blocked proactively so we don't
+// burn extraction tokens on them. The reactive blocklist below still
+// catches retailers whose PDPs fail for other reasons.
+const PROACTIVE_DOMAIN_BLOCKLIST = new Set([
+  // News / magazines
+  "nytimes.com", "wsj.com", "washingtonpost.com", "theguardian.com",
+  "theverge.com", "techcrunch.com", "arstechnica.com", "cnn.com",
+  // Lifestyle / review sites (no direct PDP)
+  "wirecutter.com", "thewirecutter.com", "nymag.com", "strategist.com",
+  "nymag.com", "thespruce.com", "goodhousekeeping.com", "bhg.com",
+  "housebeautiful.com", "elledecor.com", "architecturaldigest.com",
+  "apartmenttherapy.com", "dwell.com", "dezeen.com",
+  "realsimple.com", "hgtv.com", "countryliving.com", "mydomaine.com",
+  "thekitchn.com", "domino.com", "onekingslane.com",
+  // Social / forum / UGC
+  "reddit.com", "quora.com", "pinterest.com", "pinterest.ca", "pinterest.co.uk",
+  "youtube.com", "youtu.be", "facebook.com", "instagram.com", "tiktok.com",
+  "medium.com", "substack.com", "wikipedia.org",
+  // Deal aggregators (thin content, redirects)
+  "slickdeals.net", "dealnews.com", "brad's deals.com",
+]);
+
+function isProactivelyBlockedDomain(url: string): boolean {
+  try {
+    const domain = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    if (PROACTIVE_DOMAIN_BLOCKLIST.has(domain)) return true;
+    // Also block subdomains of blocked hosts (e.g., blog.nytimes.com)
+    for (const blocked of PROACTIVE_DOMAIN_BLOCKLIST) {
+      if (domain.endsWith("." + blocked)) return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
 function isDomainBlocked(url: string): boolean {
+  if (isProactivelyBlockedDomain(url)) return true;
   try {
     const domain = new URL(url).hostname;
     const entry = domainSentinelStats.get(domain);
@@ -173,13 +209,26 @@ function isDomainBlocked(url: string): boolean {
 
 // ─── URL Filtering ─────────────────────────────────────────────
 
-const NON_PRODUCT_PATTERNS = /\/(collections|category|categories|all-|shop-all|browse|blog|magazine|inspiration|ideas|guides|reviews?)\b/i;
+// Non-PDP path patterns. Expanded beyond the original collections/blog
+// set to catch listicle / review / gift-guide / round-up URLs that
+// commonly appear in shopping search results but are never product pages.
+const NON_PRODUCT_PATTERNS = /\/(collections|category|categories|all-|shop-all|browse|blog|magazine|inspiration|ideas|guides|reviews?|listicle|round-?ups?|best-of|top-\d+|gift-guide|buying-guide|editorial|articles?|news|stories|posts?)\b/i;
+
+// Article-style URLs that start with a year (e.g., /2024/03/15/best-sofas)
+// or contain numeric review slugs.
+const ARTICLE_DATE_PATTERN = /\/(19|20)\d{2}\/\d{1,2}\//;
+
+// Common listicle title fragments in the URL slug.
+const LISTICLE_SLUG_PATTERN = /\b(?:best-|top-\d+|\d+-best|ultimate-guide|complete-guide|review-of|our-favorite|editor-?s-picks?|we-tested|we-tried)/i;
 
 function isLikelyProductUrl(url: string): boolean {
   try {
     const lower = url.toLowerCase();
     if (lower.endsWith(".pdf")) return false;
+    if (lower.endsWith(".html") && LISTICLE_SLUG_PATTERN.test(lower)) return false;
     if (NON_PRODUCT_PATTERNS.test(lower)) return false;
+    if (ARTICLE_DATE_PATTERN.test(lower)) return false;
+    if (LISTICLE_SLUG_PATTERN.test(lower)) return false;
     return true;
   } catch {
     return false;
@@ -353,12 +402,20 @@ async function reSearchCategoryForCorrection(
     return qs === undefined || qs >= 4.0;
   });
 
-  // Phase 4: deep-score and collect products that pass threshold
+  // Phase 4: deep-score and collect products that pass threshold.
+  // Batch-score by actual product category (most re-search survivors
+  // share the correction category, but a few may be reclassified).
   const keptProducts: CandidateProduct[] = [];
-  for (const product of survivors) {
+  const survivorsByCat = new Map<string, CandidateProduct[]>();
+  for (const p of survivors) {
+    const cat = p.category || correctionCategory;
+    if (!survivorsByCat.has(cat)) survivorsByCat.set(cat, []);
+    survivorsByCat.get(cat)!.push(p);
+  }
+
+  for (const [cat, catSurvivors] of survivorsByCat) {
     if (tokenBudget.exceeded) break;
-    const cat = product.category || correctionCategory;
-    const scoreRes = await scoreProduct(product, {
+    const { results: batchScores, tokensUsed } = await scoreProducts(catSurvivors, {
       roomType: ctx.roomType,
       budgetMode: ctx.budgetMode,
       existingItems: ctx.keepItems,
@@ -382,24 +439,26 @@ async function reSearchCategoryForCorrection(
       anchorSpecs: DEPENDENT_CATEGORIES_SET.has(cat) && Object.keys(anchorSpecs).length > 0 ? anchorSpecs : undefined,
       harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
       includeFitNotes: false,
-    });
-    if (scoreRes.tokensUsed) {
-      tokenBudget.add(scoreRes.tokensUsed);
-      stats.tokensUsed += scoreRes.tokensUsed;
-      stats.tokensPerPhase.deep_score = (stats.tokensPerPhase.deep_score || 0) + scoreRes.tokensUsed;
+    }, 3);
+    if (tokensUsed) {
+      tokenBudget.add(tokensUsed);
+      stats.tokensUsed += tokensUsed;
+      stats.tokensPerPhase.deep_score = (stats.tokensPerPhase.deep_score || 0) + tokensUsed;
     }
-    if (scoreRes.success && scoreRes.data) {
-      evaluations.set(product.id, scoreRes.data);
-      stats.totalDeepScored++;
-      // Dynamic keep floor from current evaluations distribution.
-      const allScores: number[] = [];
-      for (const ev of evaluations.values()) {
-        if (ev.final_item_score !== undefined) allScores.push(ev.final_item_score);
-      }
-      const keepFloor = getDeepScoreKeepFloor(allScores);
-      if (scoreRes.data.final_item_score >= keepFloor) {
-        addedCount++;
-        keptProducts.push(product);
+    for (const product of catSurvivors) {
+      const scoreRes = batchScores.get(product.id);
+      if (scoreRes?.success && scoreRes.data) {
+        evaluations.set(product.id, scoreRes.data);
+        stats.totalDeepScored++;
+        const allScores: number[] = [];
+        for (const ev of evaluations.values()) {
+          if (ev.final_item_score !== undefined) allScores.push(ev.final_item_score);
+        }
+        const keepFloor = getDeepScoreKeepFloor(allScores);
+        if (scoreRes.data.final_item_score >= keepFloor) {
+          addedCount++;
+          keptProducts.push(product);
+        }
       }
     }
   }
@@ -1313,59 +1372,71 @@ export async function runAgenticSearch(
         const toScore = passThreshold.length >= 3 ? passThreshold.slice(0, 5) : topN;
         totalToDeepScore += toScore.length;
 
-        for (const product of toScore) {
-          deepScorePromises.push(
-            deepScoreLimit(async () => {
-              if (tokenBudget.exceeded) {
-                tracer.traceFilter("deep_score", product.id, product.product_url || "", "token budget exceeded");
-                return;
+        // Batch all products in this (cat, tier) into a single LLM call
+        // (up to 3 per call). Products in the same (cat, tier) share
+        // identical context, room images, anchor specs, and harmony
+        // neighbors — so batching is safe and amortizes ~2500 tokens of
+        // shared context per additional product.
+        if (toScore.length === 0) continue;
+        const productCategory = toScore[0].category || "";
+        const batchCtx = {
+          roomType: ctx.roomType,
+          budgetMode: ctx.budgetMode,
+          existingItems: ctx.keepItems,
+          roomImageUrls: ctx.imageUrls,
+          priorities: ctx.priorities,
+          otherRoomsContext: ctx.otherRoomsContext,
+          designProfile: ctx.designProfile,
+          diagnosis: ctx.diagnosis,
+          designDirection: ctx.designDirection,
+          userFeedbackContext: ctx.userFeedbackContext,
+          placement: ctx.placementMap?.[productCategory],
+          spatialLayout: ctx.spatialLayout,
+          floorPlan: ctx.floorPlan,
+          extractedFloorPlan: ctx.extractedFloorPlan,
+          lightingConditions: ctx.lightingConditions,
+          windowDoorPositions: ctx.windowDoorPositions,
+          outletPositions: ctx.outletPositions,
+          userContext: ctx.userContext,
+          replaceItems: ctx.replaceItems,
+          identifiedContext: ctx.identifiedContext,
+          anchorSpecs: DEPENDENT_CATEGORIES.has(productCategory) && Object.keys(anchorSpecs).length > 0
+            ? anchorSpecs
+            : undefined,
+          harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== productCategory),
+          includeFitNotes: false,
+        };
+
+        deepScorePromises.push(
+          deepScoreLimit(async () => {
+            if (tokenBudget.exceeded) {
+              for (const p of toScore) {
+                tracer.traceFilter("deep_score", p.id, p.product_url || "", "token budget exceeded");
               }
-              const productCategory = product.category || "";
-              const scoreResult = await scoreProduct(product, {
-                roomType: ctx.roomType,
-                budgetMode: ctx.budgetMode,
-                existingItems: ctx.keepItems,
-                roomImageUrls: ctx.imageUrls,
-                priorities: ctx.priorities,
-                otherRoomsContext: ctx.otherRoomsContext,
-                designProfile: ctx.designProfile,
-                diagnosis: ctx.diagnosis,
-                designDirection: ctx.designDirection,
-                userFeedbackContext: ctx.userFeedbackContext,
-                placement: ctx.placementMap?.[productCategory],
-                spatialLayout: ctx.spatialLayout,
-                floorPlan: ctx.floorPlan,
-                extractedFloorPlan: ctx.extractedFloorPlan,
-                lightingConditions: ctx.lightingConditions,
-                windowDoorPositions: ctx.windowDoorPositions,
-                outletPositions: ctx.outletPositions,
-                userContext: ctx.userContext,
-                replaceItems: ctx.replaceItems,
-                identifiedContext: ctx.identifiedContext,
-                // Only pass anchor context to dependent categories so anchor
-                // categories themselves don't get confused by self-reference.
-                anchorSpecs: DEPENDENT_CATEGORIES.has(productCategory) && Object.keys(anchorSpecs).length > 0
-                  ? anchorSpecs
-                  : undefined,
-                // Room-wide harmony neighbors (exclude self-category so the
-                // product isn't compared against itself).
-                harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== productCategory),
-                includeFitNotes: false,
-              });
-              if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
-              if (scoreResult.success && scoreResult.data) {
+              return;
+            }
+
+            const { results: batchScores, tokensUsed } = await scoreProducts(toScore, batchCtx, 3);
+            if (tokensUsed) {
+              tokenBudget.add(tokensUsed);
+              stats.tokensUsed += tokensUsed;
+              stats.tokensPerPhase.deep_score += tokensUsed;
+            }
+            for (const product of toScore) {
+              const scoreResult = batchScores.get(product.id);
+              if (scoreResult?.success && scoreResult.data) {
                 evaluations.set(product.id, scoreResult.data);
                 stats.totalDeepScored++;
                 tracer.traceScore("deep_score", product.id, scoreResult.data.final_item_score, { verdict: scoreResult.data.verdict });
-                reportStep({
-                  step: "Deep-scoring top candidates",
-                  status: "running",
-                  data: { deepScored: stats.totalDeepScored, total: totalToDeepScore },
-                });
               }
-            })
-          );
-        }
+            }
+            reportStep({
+              step: "Deep-scoring top candidates",
+              status: "running",
+              data: { deepScored: stats.totalDeepScored, total: totalToDeepScore },
+            });
+          })
+        );
       }
     }
 
@@ -1942,10 +2013,12 @@ export async function runAgenticSearch(
             return qs === undefined || qs >= QUICK_SCORE_GATE;
           });
 
-          // Phase 3 — deep-score the survivors only.
-          for (const product of survivors) {
-            const cat = product.category || "";
-            const scoreResult = await scoreProduct(product, {
+          // Phase 3 — batch deep-score the survivors. All survivors in
+          // this backfill share the weak tier's category, so one scoring
+          // context works for the whole batch.
+          if (survivors.length > 0) {
+            const cat = wt.category;
+            const { results: batchScores, tokensUsed } = await scoreProducts(survivors, {
               roomType: ctx.roomType,
               budgetMode: ctx.budgetMode,
               existingItems: ctx.keepItems,
@@ -1969,22 +2042,26 @@ export async function runAgenticSearch(
               anchorSpecs: DEPENDENT_CATEGORIES.has(cat) && Object.keys(anchorSpecs).length > 0
                 ? anchorSpecs
                 : undefined,
-              // Harmony neighbors across all categories (exclude self).
               harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
               includeFitNotes: false,
-            });
-            if (scoreResult.tokensUsed) { tokenBudget.add(scoreResult.tokensUsed); stats.tokensUsed += scoreResult.tokensUsed; stats.tokensPerPhase.deep_score += scoreResult.tokensUsed; }
-            if (scoreResult.success && scoreResult.data) {
-              evaluations.set(product.id, scoreResult.data);
-              stats.totalDeepScored++;
-              // Dynamic keep floor — derived from this run's score distribution
-              // (the same `allDeepScores` collected before backfill triggered).
-              const dynamicKeepFloor = getDeepScoreKeepFloor(allDeepScores);
-              if (scoreResult.data.final_item_score >= dynamicKeepFloor) {
-                candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
-                candidatesByCategory[wt.category].push(product);
-                stats.totalFinal++;
-                tiersWithNewProducts.add(wt.tier);
+            }, 3);
+            if (tokensUsed) {
+              tokenBudget.add(tokensUsed);
+              stats.tokensUsed += tokensUsed;
+              stats.tokensPerPhase.deep_score += tokensUsed;
+            }
+            for (const product of survivors) {
+              const scoreResult = batchScores.get(product.id);
+              if (scoreResult?.success && scoreResult.data) {
+                evaluations.set(product.id, scoreResult.data);
+                stats.totalDeepScored++;
+                const dynamicKeepFloor = getDeepScoreKeepFloor(allDeepScores);
+                if (scoreResult.data.final_item_score >= dynamicKeepFloor) {
+                  candidatesByCategory[wt.category] = candidatesByCategory[wt.category] || [];
+                  candidatesByCategory[wt.category].push(product);
+                  stats.totalFinal++;
+                  tiersWithNewProducts.add(wt.tier);
+                }
               }
             }
           }
@@ -2295,6 +2372,17 @@ export async function runAgenticSearch(
     if (ORCHESTRATOR.enablePostSearchCoordinator && requirementAudit) {
       reportStep({ step: "Coordinator (agentic post-search)", status: "running" });
 
+      // Track the alignment trend across audit runs so the coordinator
+      // can detect stall/regression and stop iterating.
+      const auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }> = [];
+      if (requirementAudit) {
+        auditHistory.push({
+          alignment: requirementAudit.overall_alignment,
+          coverage: requirementAudit.coverage.score,
+          diagnosisSolving: requirementAudit.diagnosis_solving.score,
+        });
+      }
+
       // Build a state-getter closure that re-reads orchestrator state on
       // each turn. The coordinator sees objective signals only.
       const buildState = (): CoordinatorState => {
@@ -2353,8 +2441,9 @@ export async function runAgenticSearch(
           lastAuditCoverage: requirementAudit?.coverage.score,
           lastAuditDiagnosisSolving: requirementAudit?.diagnosis_solving.score,
           lastAuditIssues: requirementAudit?.issues,
-          lastAuditUsedGrounding: false,
-          auditRunCount: requirementAudit ? 1 : 0,
+          lastAuditUsedGrounding: coordinatorLastUsedGrounding,
+          auditRunCount: coordinatorAuditRunCount,
+          auditHistory: [...auditHistory],
         };
       };
 
@@ -2381,6 +2470,11 @@ export async function runAgenticSearch(
             requirementIssues.push(...newAudit.issues);
             coordinatorAuditRunCount++;
             coordinatorLastUsedGrounding = withGrounding;
+            auditHistory.push({
+              alignment: newAudit.overall_alignment,
+              coverage: newAudit.coverage.score,
+              diagnosisSolving: newAudit.diagnosis_solving.score,
+            });
             return {
               status: "ok",
               message: `Audit: alignment ${newAudit.overall_alignment.toFixed(1)}/10 (was ${before.toFixed(1)})`,
@@ -2399,13 +2493,40 @@ export async function runAgenticSearch(
           case "re_search_category": {
             const category = args.category as string;
             if (!category) return { status: "error", message: "Missing category" };
-            const queries = {
+            const rawQueries = {
               budget: (args.queries_budget as string[]) || [],
               balanced: (args.queries_balanced as string[]) || [],
               high_end: (args.queries_high_end as string[]) || [],
             };
+
+            // Server-side dedup: drop any query that's already been tried
+            // for this category (case-insensitive, whitespace-normalized).
+            // Prevents wasted re-searches even if the agent ignores the
+            // "do not repeat" instruction in the state summary.
+            const tried = new Set(
+              (triedQueriesByCategory[category] || []).map((q) => q.trim().toLowerCase()),
+            );
+            const filterNew = (qs: string[]) =>
+              qs.filter((q) => q && !tried.has(q.trim().toLowerCase()));
+            const queries = {
+              budget: filterNew(rawQueries.budget),
+              balanced: filterNew(rawQueries.balanced),
+              high_end: filterNew(rawQueries.high_end),
+            };
+            const droppedDupes =
+              (rawQueries.budget.length - queries.budget.length) +
+              (rawQueries.balanced.length - queries.balanced.length) +
+              (rawQueries.high_end.length - queries.high_end.length);
+
             const totalQueries = queries.budget.length + queries.balanced.length + queries.high_end.length;
-            if (totalQueries === 0) return { status: "error", message: "No queries provided" };
+            if (totalQueries === 0) {
+              return {
+                status: "skipped",
+                message: droppedDupes > 0
+                  ? `All ${droppedDupes} queries were already tried — nothing new to run. Pick different queries or finalize.`
+                  : "No queries provided",
+              };
+            }
 
             const result = await reSearchCategoryForCorrection({
               category,
@@ -2429,10 +2550,13 @@ export async function runAgenticSearch(
             ];
             return {
               status: "ok",
-              message: `Re-searched ${category}: added ${result.added} new products`,
+              message: droppedDupes > 0
+                ? `Re-searched ${category}: added ${result.added} new products (${droppedDupes} duplicate queries skipped)`
+                : `Re-searched ${category}: added ${result.added} new products`,
               metrics: {
                 added: result.added,
                 category_total_now: candidatesByCategory[category].length,
+                dropped_duplicate_queries: droppedDupes,
               },
             };
           }
