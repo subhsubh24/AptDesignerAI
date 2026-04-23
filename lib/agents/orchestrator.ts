@@ -458,16 +458,6 @@ export async function runAgenticSearch(
     } as Record<string, number>,
   };
 
-  // Wall-clock deadline: 18 minutes. The frontend SSE timeout is 25 min;
-  // this leaves 7 min of headroom for response serialization and network.
-  // When the deadline is hit, the pipeline returns whatever it has so far
-  // instead of timing out with nothing.
-  const PIPELINE_DEADLINE_MS = 18 * 60 * 1000;
-  const pipelineStart = Date.now();
-  function isPastDeadline(): boolean {
-    return Date.now() - pipelineStart > PIPELINE_DEADLINE_MS;
-  }
-
   function reportStep(step: OrchestrationStep) {
     // Attach running stats to every step event for real-time progress
     const enriched = { ...step, data: { ...(step.data as Record<string, unknown> || {}), stats: { ...stats } } };
@@ -900,9 +890,10 @@ export async function runAgenticSearch(
             extractLimit(async () => {
               try {
                 // Extraction budget gate: stop extracting once we've consumed
-                // 55% of the total budget or hit the wall-clock deadline.
-                if (tokenBudget.used / tokenBudget.cap > 0.55 || isPastDeadline()) {
-                  tracer.traceFilter("extract", "", candidate.url, isPastDeadline() ? "pipeline deadline" : "extraction budget gate (>55% used)");
+                // 55% of the total budget. This reserves headroom for deep-
+                // scoring, bundling, and validation downstream.
+                if (tokenBudget.used / tokenBudget.cap > 0.55) {
+                  tracer.traceFilter("extract", "", candidate.url, "extraction budget gate (>55% used)");
                   extractedSoFar++;
                   return;
                 }
@@ -1325,8 +1316,8 @@ export async function runAgenticSearch(
         for (const product of toScore) {
           deepScorePromises.push(
             deepScoreLimit(async () => {
-              if (tokenBudget.exceeded || isPastDeadline()) {
-                tracer.traceFilter("deep_score", product.id, product.product_url || "", tokenBudget.exceeded ? "token budget exceeded" : "pipeline deadline");
+              if (tokenBudget.exceeded) {
+                tracer.traceFilter("deep_score", product.id, product.product_url || "", "token budget exceeded");
                 return;
               }
               const productCategory = product.category || "";
@@ -1435,46 +1426,6 @@ export async function runAgenticSearch(
       status: "completed",
       data: { deepScored: stats.totalDeepScored },
     });
-
-    // Deadline gate: if we've already exceeded the wall-clock deadline
-    // after deep-score, return partial results now. Downstream phases
-    // (pairwise, bundle, validation, correction) add 5-15 min and
-    // would push past the frontend SSE timeout.
-    if (isPastDeadline()) {
-      const elapsed = Math.round((Date.now() - pipelineStart) / 1000);
-      log.warn("Pipeline deadline reached after deep-score — returning partial results", {
-        elapsedSec: elapsed, deepScored: stats.totalDeepScored,
-      });
-      reportStep({ step: `Pipeline deadline (${elapsed}s) — returning scored results`, status: "completed" });
-
-      for (const [category, tierResults] of Object.entries(extractedByCategory)) {
-        const kept: CandidateProduct[] = [];
-        for (const tier of PRICE_TIERS) {
-          const products = tierResults[tier].filter((p) => evaluations.has(p.id));
-          products.sort((a, b) => {
-            const scoreA = evaluations.get(a.id)?.final_item_score || 0;
-            const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-            return (scoreB - scoreA) || tiebreakProduct(a, b);
-          });
-          kept.push(...products.slice(0, 5));
-        }
-        if (kept.length > 0) candidatesByCategory[category] = kept;
-        stats.totalFinal += kept.length;
-      }
-
-      return {
-        success: true,
-        data: {
-          searchBrief: brief,
-          candidatesByCategory,
-          evaluations,
-          bundles: [],
-          steps,
-          stats: { ...stats, bottlenecks: [...((stats as Record<string, unknown>).bottlenecks as string[] || []), `Pipeline wall-clock deadline (${elapsed}s) — partial results`] },
-          trace: tracer.getTrace(),
-        },
-      };
-    }
 
     // ═══════════════════════════════════════════════════════════
     // Phase 5c: Pairwise re-rank top-scored products per category
@@ -1880,27 +1831,7 @@ export async function runAgenticSearch(
       }
     }
 
-    // Cap backfill to the 6 weakest tiers to bound wall-clock time.
-    // Sort by tier product count so the emptiest tiers get backfilled first.
-    const MAX_BACKFILL_TIERS = 6;
-    if (weakTiers.length > MAX_BACKFILL_TIERS) {
-      weakTiers.sort((a, b) => {
-        const countA = (candidatesByCategory[a.category] || []).filter(
-          (p) => ((p.metadata as { price_tier?: string })?.price_tier) === a.tier,
-        ).length;
-        const countB = (candidatesByCategory[b.category] || []).filter(
-          (p) => ((p.metadata as { price_tier?: string })?.price_tier) === b.tier,
-        ).length;
-        return countA - countB;
-      });
-      const trimmed = weakTiers.splice(MAX_BACKFILL_TIERS);
-      log.info("Capped backfill tiers", {
-        cap: MAX_BACKFILL_TIERS,
-        dropped: trimmed.map((t) => `${t.category}/${t.tier}`),
-      });
-    }
-
-    if (weakTiers.length > 0 && !tokenBudget.exceeded && !skipBackfill && !isPastDeadline()) {
+    if (weakTiers.length > 0 && !tokenBudget.exceeded && !skipBackfill) {
       reportStep({
         step: `Backfilling ${weakTiers.length} weak tier(s)`,
         status: "running",
@@ -2261,10 +2192,19 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Post-search audit + self-correction loop (max 3 iterations).
+    // Post-search audit + agentic self-correction loop.
+    // 1. Run LLM audit of coverage, spec adherence, diagnosis-solving.
+    // 2. If alignment < 8 or gaps found, call CorrectionPlanner to
+    //    decide what to do (re-search specific categories with new
+    //    queries, drop unreachable categories, or accept).
+    // 3. Execute actions, re-audit. NO artificial iteration cap — the
+    //    loop runs until the planner returns iterate_again=false, the
+    //    alignment target is met, or the token budget is exhausted.
+    //    A high SAFETY_CORRECTION_LIMIT exists only to prevent runaway
+    //    in case of a planner bug (effectively never the binding limit).
     // Fails open at every step.
     // ═══════════════════════════════════════════════════════════
-    const SAFETY_CORRECTION_LIMIT = 3;
+    const SAFETY_CORRECTION_LIMIT = 50;
     const ALIGNMENT_TARGET = 8.0;
     const triedQueriesByCategory: Record<string, string[]> = {};
 
@@ -2426,8 +2366,8 @@ export async function runAgenticSearch(
         toolName: CoordinatorTool,
         args: Record<string, unknown>,
       ): Promise<{ status: "ok" | "skipped" | "error"; message: string; metrics?: Record<string, unknown> }> => {
-        if (tokenBudget.exceeded || isPastDeadline()) {
-          return { status: "skipped", message: tokenBudget.exceeded ? "token budget exceeded" : "pipeline deadline reached" };
+        if (tokenBudget.exceeded) {
+          return { status: "skipped", message: "token budget exceeded" };
         }
 
         switch (toolName) {
@@ -2563,8 +2503,7 @@ export async function runAgenticSearch(
       requirementAudit &&
       requirementAudit.overall_alignment < ALIGNMENT_TARGET &&
       correctionIteration < SAFETY_CORRECTION_LIMIT &&
-      !tokenBudget.exceeded &&
-      !isPastDeadline()
+      !tokenBudget.exceeded
     ) {
       reportStep({
         step: `Self-correction pass ${correctionIteration + 1}`,
@@ -2716,6 +2655,10 @@ export async function runAgenticSearch(
 
       correctionIteration++;
 
+      // Let the planner decide whether to loop again. No artificial cap;
+      // the while-loop also checks alignment target and token budget.
+      // SAFETY_CORRECTION_LIMIT only kicks in if both the planner and the
+      // alignment check fail to terminate (planner-bug scenario).
       if (!plan.iterate_again) break;
 
       reportStep({ step: "Re-auditing after correction", status: "running" });

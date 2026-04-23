@@ -45,14 +45,18 @@ export const DRIFT_MONITOR = {
 
 export const ORCHESTRATOR = {
   /**
-   * Hard token cap per search run. Works in concert with the 18-min
-   * wall-clock deadline to bound both cost and latency. 3M tokens is
-   * enough for 10 categories × 3 tiers with deep-scoring, bundling,
-   * and 1-2 correction rounds. Override via SEARCH_TOKEN_CAP env var.
+   * Hard token cap per search run. Token budget is the ONLY real
+   * upper bound on the agentic pipeline (every iteration cap on
+   * turns / rounds / corrections has been removed in favor of
+   * letting agents run until convergence). Set high so reasoning
+   * isn't artificially constrained; raise via env to go higher.
+   *
+   * 10M tokens ≈ $20-30 on Gemini Flash Lite per run; well within
+   * the per-room cost envelope for a high-quality result.
    */
   defaultTokenCap: process.env.SEARCH_TOKEN_CAP
     ? parseInt(process.env.SEARCH_TOKEN_CAP, 10)
-    : 3_000_000,
+    : 10_000_000,
 
   /** Concurrency limits per phase */
   concurrency: {

@@ -262,45 +262,11 @@ You have Google Search. Use it to verify whether the categories you're proposing
       (response.usage?.output_tokens ?? 0) +
       (response.usage?.thinking_tokens ?? 0);
 
-    // Hard cap: max 10 total categories. If the planner returned more,
-    // keep baseline categories first (non-agent_added), then fill with
-    // agent-added sorted by priority. Also cap agent-added at 3 to
-    // prevent category explosion (13 categories × 3 tiers × 5 queries
-    // = 195 search tasks → 25+ minute pipeline).
-    const MAX_TOTAL_CATEGORIES = 10;
-    const MAX_AGENT_ADDED = 3;
-    let categories = validated.data.categories;
-    const baselineCategories = categories.filter((c) => !c.agent_added);
-    let agentAddedCategories = categories.filter((c) => c.agent_added);
-    if (agentAddedCategories.length > MAX_AGENT_ADDED) {
-      const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
-      agentAddedCategories.sort((a, b) =>
-        (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1)
-      );
-      const trimmed = agentAddedCategories.slice(MAX_AGENT_ADDED);
-      agentAddedCategories = agentAddedCategories.slice(0, MAX_AGENT_ADDED);
-      log.info("Trimmed agent-added categories to cap", {
-        cap: MAX_AGENT_ADDED,
-        kept: agentAddedCategories.map((c) => c.category),
-        dropped: trimmed.map((c) => c.category),
-      });
-    }
-    categories = [...baselineCategories, ...agentAddedCategories];
-    if (categories.length > MAX_TOTAL_CATEGORIES) {
-      const trimmed = categories.slice(MAX_TOTAL_CATEGORIES);
-      categories = categories.slice(0, MAX_TOTAL_CATEGORIES);
-      log.info("Trimmed total categories to cap", {
-        cap: MAX_TOTAL_CATEGORIES,
-        dropped: trimmed.map((c) => c.category),
-      });
-    }
-    validated.data.categories = categories;
-
-    const added = categories.filter((c) => c.agent_added).map((c) => c.category);
+    const added = validated.data.categories.filter((c) => c.agent_added).map((c) => c.category);
     const dropped = validated.data.dropped_from_missing.map((d) => d.category);
 
     log.info("Category plan generated", {
-      totalCategories: categories.length,
+      totalCategories: validated.data.categories.length,
       agentAdded: added,
       dropped,
       tokensUsed,

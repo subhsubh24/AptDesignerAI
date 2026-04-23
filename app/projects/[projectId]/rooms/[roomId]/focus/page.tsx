@@ -446,10 +446,10 @@ export default function FocusPage() {
       specs: n.specs,
     }));
 
-    // Hard cap on the SSE stream — server pipeline has an 18-min wall-clock
-    // deadline; 30 min gives headroom for network + response serialization.
+    // Hard cap on the SSE stream — server pipelines target under 15 min,
+    // anything past 25 is certainly a stall (proxy timeout, dead backend, etc.)
     const streamAbort = new AbortController();
-    const streamTimeoutId = window.setTimeout(() => streamAbort.abort(), 30 * 60 * 1000);
+    const streamTimeoutId = window.setTimeout(() => streamAbort.abort(), 25 * 60 * 1000);
 
     try {
       const res = await fetch("/api/search/stream", {

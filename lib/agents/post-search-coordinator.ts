@@ -24,8 +24,10 @@
  * Each tool returns objective metrics (counts, scores, deltas) that the
  * agent uses to plan its next step.
  *
- * The loop runs until the model calls `finalize`, returns text without
- * a tool call (implicit finalize), or hits the 8-turn hard cap.
+ * The loop has NO artificial turn cap — it runs until the model calls
+ * `finalize`, returns text without a tool call (implicit finalize), or
+ * the token budget is exhausted by upstream callers. Token budget is
+ * the only real ceiling; turns are conceptual.
  *
  * Behind feature flag ENABLE_POST_SEARCH_COORDINATOR. When off, the
  * orchestrator's existing hardcoded post-search flow runs instead.
@@ -42,12 +44,11 @@ import type { AIMessage, AIContentBlock, FunctionDeclaration } from "@/lib/ai/pr
 const log = createLogger("post-search-coordinator");
 
 /**
- * Hard turn limit — the coordinator must converge within this many turns.
- * Each turn involves an LLM call + tool dispatch, so 8 turns is already
- * ~2-3 minutes of wall-clock time. Beyond 8, diminishing returns kick in
- * and we risk blowing the 15-minute pipeline target.
+ * Soft safety limit — only triggers if the loop somehow runs forever
+ * without the agent finalizing AND without budget exhaustion. Set high
+ * so it's effectively never the binding constraint; budget is.
  */
-const SAFETY_TURN_LIMIT = 8;
+const SAFETY_TURN_LIMIT = 100;
 
 /** Coordinator decisions — always operational, never subjective design judgments. */
 export type CoordinatorTool =
@@ -467,15 +468,9 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
 
       // Add user message containing the function responses + a fresh state summary
       const updatedState = input.state();
-      const turnsRemaining = SAFETY_TURN_LIMIT - turn;
-      const urgency = turnsRemaining <= 2
-        ? `\n\n⚠️ ONLY ${turnsRemaining} turn(s) remaining. Call finalize NOW unless there is a critical gap.`
-        : turnsRemaining <= 4
-          ? `\n\nYou have ${turnsRemaining} turns left. Prioritize the single highest-impact action, then finalize.`
-          : "";
       const stateBlock: AIContentBlock = {
         type: "text",
-        text: `\nUpdated state after this turn:\n${formatStateForAgent(updatedState)}\n\nDecide the next tool. If the work is done, call finalize.${urgency}`,
+        text: `\nUpdated state after this turn:\n${formatStateForAgent(updatedState)}\n\nDecide the next tool. If the work is done, call finalize.`,
       };
 
       messages.push({ role: "user", content: [...responseParts, stateBlock] });
@@ -484,8 +479,8 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
     }
 
     if (turn >= SAFETY_TURN_LIMIT && !finalized) {
-      log.warn("Coordinator hit turn limit — auto-finalizing", { turn });
-      finalizeReason = "Turn limit reached — auto-finalized";
+      log.warn("Coordinator hit SAFETY_TURN_LIMIT without finalize — likely indicates a tool-loop bug", { turn });
+      finalizeReason = "Safety turn limit reached (this should not happen in normal operation)";
     }
 
     log.info("Coordinator complete", {
