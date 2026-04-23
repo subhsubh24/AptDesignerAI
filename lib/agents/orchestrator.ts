@@ -812,14 +812,12 @@ export async function runAgenticSearch(
     await Promise.all(screenPromises);
 
     // Hard cap on screened candidates per (category, tier) before extraction.
-    // Extraction is the most expensive phase (URL Context + CU fallback) and
-    // quality plateaus after ~6 products per tier — beyond that we pay token
-    // cost for products that won't survive deep-score. Cap was 4 but that
-    // triggered heavy backfill thrash (weak tier → re-extract → re-score) on
-    // catalogs where the top-4 post-screen didn't make it through deep-score;
-    // 6 gives enough headroom to avoid the backfill loop in most runs.
+    // Extraction is parallelized with 20 concurrent workers — we can afford to
+    // attempt many more URLs per tier since most of the wall-clock time is
+    // HTTP wait, not CPU. More candidates → more survive the 8 post-extraction
+    // filters (HTTP failures, sentinel titles, category mismatch, price range).
     // Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "6");
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "20");
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -914,7 +912,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(10);
+    const extractLimit = pLimit(20);
     // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
     // Gated on Browserbase credentials + package availability; becomes a no-op when absent.
     const cuFallbackLimit = pLimit(3);

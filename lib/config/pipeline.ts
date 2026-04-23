@@ -61,7 +61,7 @@ export const ORCHESTRATOR = {
   /** Concurrency limits per phase */
   concurrency: {
     search: 15,
-    extract: 10,
+    extract: 20,
     deepScore: 5,
     bundleEval: 3,
     backfillSearch: 10,
