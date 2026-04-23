@@ -66,6 +66,11 @@ function isTransportError(err: unknown): boolean {
   );
 }
 
+function isServerError(err: unknown): boolean {
+  const status = (err as Record<string, unknown>)?.status;
+  return typeof status === "number" && status >= 500 && status < 600;
+}
+
 function getClient(): GoogleGenAI {
   if (!client) {
     client = new GoogleGenAI({
@@ -569,7 +574,7 @@ export const geminiProvider: AIProvider = {
       } catch (err) {
         const e = err as Record<string, unknown>;
         const canRetry =
-          attempt < maxTransportAttempts && isTransportError(err);
+          attempt < maxTransportAttempts && (isTransportError(err) || isServerError(err));
         if (!canRetry) {
           const status = e.status as number;
           log.error("API error", {
@@ -593,8 +598,9 @@ export const geminiProvider: AIProvider = {
           }
           throw err;
         }
-        const delay = 500 * Math.pow(2, attempt - 1); // 500ms, 1000ms
-        log.warn("Transport error, retrying", {
+        const isServer = isServerError(err);
+        const delay = isServer ? 1000 * Math.pow(2, attempt - 1) : 500 * Math.pow(2, attempt - 1);
+        log.warn(isServer ? "Server error, retrying" : "Transport error, retrying", {
           model,
           attempt,
           delay,
