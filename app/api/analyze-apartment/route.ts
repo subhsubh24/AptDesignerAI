@@ -151,31 +151,33 @@ Summary: ${br.summary || ""}
         text: `Analyze this ${room.room_type} in detail. ${buildingContextText ? "Use the building research context to understand the apartment's finishes and architectural style." : ""}
 
 PROCESS:
-Step 1: Look at EVERY photo. Note floor material+color, wall color, existing furniture (name + material + color), lighting, windows.
-Step 2: Identify what's working and what isn't.
-Step 3: Score the current state and decide what to keep, replace, and add.
+Step 1: Look at EVERY photo carefully. List ONLY items you can literally see: floor material+color, wall color, each piece of furniture (name + material + color), lighting fixtures, windows. If the room is mostly empty, say so.
+Step 2: For each item you listed in Step 1, decide: keep or replace? Only items from Step 1 can appear in keep/replace.
+Step 3: Score the current state and decide what to add.
 
 ## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
 {
   "summary": "1-2 sentence assessment of this room — only reference what you see",
   "score": 1-10 current design score,
-  "keep": ["Specific items that should STAY — named with material+color+why it works"],
-  "replace": ["Specific items to REMOVE or REPLACE — what, why, what would be better"],
-  "add": ["Specific items to ADD following: [Material] [item type] in [color/finish], [size], [purpose]"],
+  "keep": ["Items visible in the photos that should STAY — named with material+color+why it works"],
+  "replace": ["Items visible in the photos to REPLACE — what you see, why it's wrong, what would be better"],
+  "add": ["Items to ADD: [Material] [item type] in [color/finish], [size], [purpose]"],
   "priority": 1-10 how urgently this room needs attention
 }
 
-CRITICAL RULES:
-- ONLY describe items you can SEE in the photos. Never invent.
+CRITICAL RULES — HALLUCINATION PREVENTION:
+- "keep" and "replace" MUST ONLY contain items that are physically VISIBLE in the photos.
+- If the room is empty or sparsely furnished, "keep" and "replace" should be SHORT or EMPTY arrays. An empty room might have 0 items to keep and 0 to replace — that is correct.
+- NEVER describe furniture, rugs, coffee tables, or decorative items that you cannot point to in a specific photo. If you are unsure whether something is there, leave it out.
+- Built-in elements (flooring, walls, windows, countertops) ARE visible and CAN be in keep/replace.
 - If a room area isn't visible, say so — don't guess.
-- Credibility depends on accuracy.
 
 FORMAT RULES:
-- keep: "Dark gray fabric L-shaped sectional — good scale, anchors the room" ✓ | "The couch is fine" ✗
-- replace: "Glass coffee table — drastically undersized for the sectional. Replace with a 48-54 inch solid wood table" ✓
+- keep: "Dark hardwood flooring — warm tone, good condition" ✓ | "Glass coffee table" when no coffee table is visible ✗
+- replace: "Builder-grade boob light on ceiling — swap for a modern flush-mount" ✓ | Inventing items not in photos ✗
 - add: "Large 8x10 textured wool area rug in warm ivory, to ground the seating area" ✓ | "Area rug" ✗
 
-Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases).`,
+Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases). The "add" list is where most recommendations go for sparsely furnished rooms.`,
       });
 
       const response = await geminiProvider.chat({
@@ -185,10 +187,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         max_tokens: 8000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
-        // Reduce thinking for structured JSON output — high thinking on a
-        // straightforward extraction task burns latency and occasionally
-        // returns empty content (model thinks but never emits the JSON).
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: { thinkingLevel: "medium" },
       });
 
       // Defensive parse: if the model returned empty/whitespace content
