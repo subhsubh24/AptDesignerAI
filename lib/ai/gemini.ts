@@ -709,6 +709,25 @@ export const geminiProvider: AIProvider = {
     const truncated = finishReason === "MAX_TOKENS";
     if (truncated) {
       log.warn("Response truncated (MAX_TOKENS)", { model });
+    } else if (finishReason && finishReason !== "STOP") {
+      // SAFETY, RECITATION, OTHER, etc. — these silently produce empty
+      // content unless we surface them. Callers seeing empty `content`
+      // can correlate with this log to diagnose.
+      log.warn("Non-STOP finish reason", {
+        model,
+        finishReason,
+        contentLength: content.length,
+        functionCallCount: functionCalls.length,
+      });
+    } else if (!content && functionCalls.length === 0 && !imageData) {
+      // STOP with no content, no function calls, no image — model
+      // produced no output despite finishing cleanly. Often indicates
+      // thinking exhausted budget without emitting answer text.
+      log.warn("Empty response with STOP finish reason", {
+        model,
+        thinkingTokens: (response.usageMetadata as Record<string, number> | undefined)?.thoughtsTokenCount || 0,
+        outputTokens: (response.usageMetadata as Record<string, number> | undefined)?.candidatesTokenCount || 0,
+      });
     }
 
     // Extract usage — include thinking tokens for accurate cost tracking

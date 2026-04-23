@@ -182,13 +182,46 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         model,
         system,
         messages: [{ role: "user", content: roomContent }],
-        max_tokens: 4000,
+        max_tokens: 8000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
+        // Reduce thinking for structured JSON output — high thinking on a
+        // straightforward extraction task burns latency and occasionally
+        // returns empty content (model thinks but never emits the JSON).
+        thinkingConfig: { thinkingLevel: "low" },
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-      const parsed = extractJsonObject<Record<string, any>>(response.content);
+      // Defensive parse: if the model returned empty/whitespace content
+      // (truncation, safety filter, or thinking exhaustion), return null
+      // for this room so the rest of the apartment still gets analyzed.
+      const trimmed = (response.content || "").trim();
+      if (!trimmed) {
+        console.warn(
+          `[analyze-apartment] Empty response for room "${room.room_type}" — skipping. ` +
+            `truncated=${response.truncated}, tokens=${JSON.stringify(response.usage)}`,
+        );
+        return {
+          room_type: room.room_type,
+          analysis: null,
+          tokensUsed: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+        };
+      }
+
+      let parsed: Record<string, unknown>;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        parsed = extractJsonObject<Record<string, any>>(trimmed);
+      } catch (err) {
+        console.warn(
+          `[analyze-apartment] JSON parse failed for room "${room.room_type}": ${err instanceof Error ? err.message : String(err)}. ` +
+            `Content preview: ${trimmed.slice(0, 200)}`,
+        );
+        return {
+          room_type: room.room_type,
+          analysis: null,
+          tokensUsed: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+        };
+      }
       return {
         room_type: room.room_type,
         analysis: parsed,
@@ -244,12 +277,29 @@ ${synthInput}
       model,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
-      max_tokens: 2000,
+      max_tokens: 4000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-    const synthParsed = extractJsonObject<Record<string, any>>(synthResponse.content);
+    let synthParsed: Record<string, any> = { overall: "" };
+    const synthTrimmed = (synthResponse.content || "").trim();
+    if (synthTrimmed) {
+      try {
+        synthParsed = extractJsonObject<Record<string, any>>(synthTrimmed);
+      } catch (err) {
+        console.warn(
+          `[analyze-apartment] Synthesis JSON parse failed: ${err instanceof Error ? err.message : String(err)}. ` +
+            `Content preview: ${synthTrimmed.slice(0, 200)}`,
+        );
+      }
+    } else {
+      console.warn(
+        `[analyze-apartment] Empty synthesis response — using empty overall. ` +
+          `truncated=${synthResponse.truncated}, tokens=${JSON.stringify(synthResponse.usage)}`,
+      );
+    }
     const synthTokens = (synthResponse.usage?.input_tokens || 0) + (synthResponse.usage?.output_tokens || 0);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- merged LLM response shape
