@@ -1126,12 +1126,57 @@ export async function runAgenticSearch(
 
     await Promise.all(extractPromises);
 
-    // Wait for any detached CU fallback sessions to complete so deep-score
-    // sees the enriched price/dimensions rather than the text-only defaults.
-    if (cuPromises.length > 0) {
-      log.info("Awaiting detached CU fallbacks", { count: cuPromises.length });
-      await Promise.all(cuPromises);
+    // CU fallback enriches price/dimensions on JS-heavy retailer pages.
+    // Quick-score doesn't consult price/dimensions (title + description + materials
+    // + colors only), so we kick it off in parallel with CU instead of
+    // serializing. Tier reclassification waits for CU because it DOES need
+    // final price. Deep-score waits for both via awaits further down.
+    const cuDonePromise = cuPromises.length > 0
+      ? (async () => {
+          log.info("Awaiting detached CU fallbacks", { count: cuPromises.length });
+          await Promise.all(cuPromises);
+        })()
+      : Promise.resolve();
+
+    // Kick off quick-score in parallel with CU. Group by category (not by
+    // cat/tier) — quick-score's output is keyed by product id and doesn't
+    // use tier, so combining tiers into one call amortizes shared context
+    // AND saves LLM calls when a category has < 8 products across tiers.
+    const quickScoresByProduct = new Map<string, number>();
+    const earlyQuickScorePromises: Promise<void>[] = [];
+    for (const [category, tierResults] of Object.entries(extractedByCategory)) {
+      const allProducts = [
+        ...tierResults.budget,
+        ...tierResults.balanced,
+        ...tierResults.high_end,
+      ];
+      if (allProducts.length === 0) continue;
+      earlyQuickScorePromises.push(
+        (async () => {
+          const result = await quickScoreProducts(
+            allProducts, category, ctx.roomType, ctx.budgetMode, ctx.designDirection,
+            ctx.placementMap?.[category], ctx.floorPlan,
+            ctx.diagnosis as Record<string, unknown> | undefined,
+            ctx.priorities, ctx.keepItems,
+          );
+          if (result.tokensUsed) {
+            tokenBudget.add(result.tokensUsed);
+            stats.tokensUsed += result.tokensUsed;
+            stats.tokensPerPhase.quick_score += result.tokensUsed;
+          }
+          if (result.success && result.data) {
+            for (const entry of result.data) {
+              quickScoresByProduct.set(entry.productId, entry.quickScore);
+              stats.totalQuickScored++;
+            }
+          }
+        })(),
+      );
     }
+
+    // Wait for CU before tier reclassification — reclassification uses the
+    // final price which CU may have filled.
+    await cuDonePromise;
 
     // ── Price-tier reclassification ─────────────────────────────
     // Products often land in the wrong tier because search queries
@@ -1239,37 +1284,55 @@ export async function runAgenticSearch(
 
     // ═══════════════════════════════════════════════════════════
     // PHASE 5a: Quick score with Flash (batch, no images)
+    //
+    // Quick-score promises were kicked off after extraction in parallel
+    // with CU fallback — dedup may have removed some products we scored,
+    // but the resulting `quickScoresByProduct` map is keyed by id so
+    // surviving entries are still valid. Products that survived dedup
+    // but weren't scored yet (extracted post-kickoff? impossible by
+    // construction) would be re-scored here — in practice the set is
+    // empty and this await is instant.
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Quick-scoring all candidates", status: "running" });
 
-    const quickScoresByProduct = new Map<string, number>();
-    const quickScorePromises: Promise<void>[] = [];
+    await Promise.all(earlyQuickScorePromises);
 
+    // Safety net: score any products that somehow weren't included
+    // (e.g., empty-at-kickoff categories that got backfilled). Normally
+    // a no-op.
+    const missingQuickScore: Record<string, CandidateProduct[]> = {};
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       for (const tier of PRICE_TIERS) {
-        const products = tierResults[tier];
-        if (products.length === 0) continue;
-
-        quickScorePromises.push(
-          (async () => {
-            const result = await quickScoreProducts(products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection, ctx.placementMap?.[category], ctx.floorPlan, ctx.diagnosis as Record<string, unknown> | undefined, ctx.priorities, ctx.keepItems);
-            if (result.tokensUsed) {
-              tokenBudget.add(result.tokensUsed);
-              stats.tokensUsed += result.tokensUsed;
-              stats.tokensPerPhase.quick_score += result.tokensUsed;
-            }
-            if (result.success && result.data) {
-              for (const entry of result.data) {
-                quickScoresByProduct.set(entry.productId, entry.quickScore);
-                stats.totalQuickScored++;
-              }
-            }
-          })()
-        );
+        for (const p of tierResults[tier]) {
+          if (!quickScoresByProduct.has(p.id)) {
+            (missingQuickScore[category] = missingQuickScore[category] || []).push(p);
+          }
+        }
       }
     }
-
-    await Promise.all(quickScorePromises);
+    if (Object.keys(missingQuickScore).length > 0) {
+      await Promise.all(
+        Object.entries(missingQuickScore).map(async ([category, products]) => {
+          const result = await quickScoreProducts(
+            products, category, ctx.roomType, ctx.budgetMode, ctx.designDirection,
+            ctx.placementMap?.[category], ctx.floorPlan,
+            ctx.diagnosis as Record<string, unknown> | undefined,
+            ctx.priorities, ctx.keepItems,
+          );
+          if (result.tokensUsed) {
+            tokenBudget.add(result.tokensUsed);
+            stats.tokensUsed += result.tokensUsed;
+            stats.tokensPerPhase.quick_score += result.tokensUsed;
+          }
+          if (result.success && result.data) {
+            for (const entry of result.data) {
+              quickScoresByProduct.set(entry.productId, entry.quickScore);
+              stats.totalQuickScored++;
+            }
+          }
+        }),
+      );
+    }
 
     reportStep({
       step: "Quick-scoring all candidates",
@@ -1616,7 +1679,14 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PHASE 6: Validate + generate bundles
+    // PHASE 6: Validate + generate bundles (in parallel)
+    //
+    // Validation returns harmony flags that drop or penalize products;
+    // bundle generation scores candidate combos. These are independent
+    // LLM calls — run them concurrently. After both settle, apply drops
+    // to the candidate set, filter bundle combos that reference dropped
+    // products, and pick winners from the surviving scored combos.
+    // Vibe narration only runs on the winning combo (sequential, cheap).
     // ═══════════════════════════════════════════════════════════
     const allProducts = Object.values(candidatesByCategory).flat();
     reportStep({
@@ -1624,7 +1694,9 @@ export async function runAgenticSearch(
       status: "running",
       data: { progress: 0, total: allProducts.length || 1 },
     });
-    const validationResult = await validateProductSet(
+    reportStep({ step: "Generating bundles", status: "running", data: { progress: 0, total: PRICE_TIERS.length } });
+
+    const validationPromise = validateProductSet(
       allProducts.map((p) => {
         const pMeta = p.metadata as Record<string, unknown> | null;
         return {
@@ -1662,71 +1734,6 @@ export async function runAgenticSearch(
       }
     );
 
-    if (validationResult.tokensUsed) {
-      tokenBudget.add(validationResult.tokensUsed);
-      stats.tokensUsed += validationResult.tokensUsed;
-      stats.tokensPerPhase.validation += validationResult.tokensUsed;
-    }
-
-    let validationData: { isValid: boolean; confidence: number; issues: string[] } | undefined;
-    if (validationResult.success && validationResult.data) {
-      validationData = {
-        isValid: validationResult.data.isValid,
-        confidence: validationResult.data.confidence,
-        issues: validationResult.data.issues,
-      };
-
-      // Act on per-product harmony flags — demote products that clash with the set
-      const flags = validationResult.data.product_flags;
-      if (flags && flags.length > 0) {
-        const clashingProducts = flags.filter((f) => f.harmony_score <= 3);
-        const weakProducts = flags.filter((f) => f.harmony_score >= 4 && f.harmony_score <= 5);
-
-        // Remove products that actively clash (score ≤ 3)
-        for (const flag of clashingProducts) {
-          for (const [category, products] of Object.entries(candidatesByCategory)) {
-            const idx = products.findIndex(
-              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
-            );
-            if (idx !== -1) {
-              log.info(`Removing "${flag.title}" — harmony ${flag.harmony_score}/10`, { phase: "validation", title: flag.title, harmonyScore: flag.harmony_score, reason: flag.reason });
-              tracer.traceFilter("validation", products[idx].id, products[idx].product_url || "", `harmony ${flag.harmony_score}/10: ${flag.reason}`);
-              candidatesByCategory[category].splice(idx, 1);
-              stats.totalFinal--;
-            }
-          }
-        }
-
-        // Penalize weak-fit products (score 4-5) by reducing their individual score
-        for (const flag of weakProducts) {
-          for (const products of Object.values(candidatesByCategory)) {
-            const product = products.find(
-              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
-            );
-            if (product) {
-              const existing = evaluations.get(product.id);
-              if (existing) {
-                const penalty = (5 - flag.harmony_score) * 0.5; // 0.5 or 1.0 point penalty
-                const penalized = Math.max(0, existing.final_item_score - penalty);
-                log.info(`Penalizing "${flag.title}"`, { phase: "validation", title: flag.title, penalty, harmonyScore: flag.harmony_score, before: existing.final_item_score, after: penalized });
-                evaluations.set(product.id, { ...existing, final_item_score: penalized });
-              }
-            }
-          }
-        }
-
-        if (clashingProducts.length > 0 || weakProducts.length > 0) {
-          log.info("Validation enforcement complete", { phase: "validation", dropped: clashingProducts.length, penalized: weakProducts.length });
-        }
-      }
-
-      reportStep({ step: "Validating all recommendations", status: "completed", data: validationData });
-    } else {
-      reportStep({ step: "Validating all recommendations", status: "failed" });
-    }
-
-    // Generate bundles for each tier — try multiple combinations, pick best
-    reportStep({ step: "Generating bundles", status: "running", data: { progress: 0, total: PRICE_TIERS.length } });
     const bundles: unknown[] = [];
     let bundleTiersCompleted = 0;
 
@@ -1751,8 +1758,20 @@ export async function runAgenticSearch(
       identifiedContext: ctx.identifiedContext,
     };
 
-    const bundlePromises = PRICE_TIERS.map(async (tier) => {
-      // Get top 3 products per category for this tier
+    // Bundle combo scoring — returns ALL scored combos per tier (no winner
+    // pick yet). Winner selection is deferred until validation finalizes
+    // so dropped products can be filtered out of the combo pool before
+    // we pick the best surviving combo. This keeps validation & bundle
+    // eval fully parallel while preserving correctness.
+    type ComboResult = {
+      products: CandidateProduct[];
+      scores: unknown;
+      final_bundle_score: number;
+      verdict: string;
+      analysis: unknown;
+    };
+
+    const bundleComboPromises = PRICE_TIERS.map(async (tier): Promise<{ tier: PriceTier; validResults: ComboResult[] } | null> => {
       const topByCategory: CandidateProduct[][] = [];
       for (const products of Object.values(candidatesByCategory)) {
         const tierFiltered = products.filter(
@@ -1768,11 +1787,8 @@ export async function runAgenticSearch(
 
       if (topByCategory.length === 0) return null;
 
-      // Generate full cartesian product of top candidates across categories
-      // e.g. 3 categories × 3 options each = up to 27 combos
       let combos = cartesian(topByCategory);
 
-      // Safety cap: if more than 27 combos, keep only top 27 by average individual score
       if (combos.length > 27) {
         combos.sort((a, b) => {
           const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
@@ -1782,8 +1798,6 @@ export async function runAgenticSearch(
         combos = combos.slice(0, 27);
       }
 
-      // Deterministic pre-filter (math + retailer dominance) runs before LLM eval.
-      // Skips ~50% of combos at zero token cost.
       const prefiltered = prefilterBundleCombos(combos, bundleCtx);
       if (prefiltered.dropped > 0) {
         log.info("Bundle prefilter dropped combos", {
@@ -1793,9 +1807,6 @@ export async function runAgenticSearch(
       }
       combos = prefiltered.kept;
 
-      // Evaluate all combos with concurrency limit. Vibe is narrative-only
-      // and doesn't affect final_bundle_score, so we skip it here and run it
-      // just for the winning combo below.
       const bundleEvalLimit = pLimit(3);
       const comboResults = await Promise.all(
         combos.map((combo) =>
@@ -1804,49 +1815,14 @@ export async function runAgenticSearch(
             const result = await evaluateBundle(combo, bundleCtx, { skipVibe: true });
             if (result.tokensUsed) { tokenBudget.add(result.tokensUsed); stats.tokensUsed += result.tokensUsed; stats.tokensPerPhase.bundle += result.tokensUsed; }
             if (result.success && result.data) {
-              return { products: combo, ...result.data };
+              return { products: combo, ...result.data } as ComboResult;
             }
             return null;
           })
         )
       );
 
-      const validResults = comboResults.filter(Boolean) as Array<{
-        products: CandidateProduct[];
-        scores: unknown;
-        final_bundle_score: number;
-        verdict: string;
-        analysis: unknown;
-      }>;
-
-      if (validResults.length === 0) return null;
-
-      // Pick the best bundle
-      validResults.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
-      const best = validResults[0];
-      for (const r of validResults) {
-        tracer.trace({ phase: "bundle", action: "evaluated", tier, score: r.final_bundle_score, metadata: { verdict: r.verdict } });
-      }
-      tracer.trace({ phase: "bundle", action: "selected", tier, score: best.final_bundle_score, metadata: { product_ids: best.products.map((p) => p.id) } });
-
-      // Produce the room-vibe narrative for the winner only.
-      let roomVibe: unknown = undefined;
-      if (!tokenBudget.exceeded) {
-        const vibeRes = await generateBundleVibe(best.products, bundleCtx, best.verdict);
-        if (vibeRes.tokensUsed) { tokenBudget.add(vibeRes.tokensUsed); stats.tokensUsed += vibeRes.tokensUsed; stats.tokensPerPhase.bundle += vibeRes.tokensUsed; }
-        if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
-      }
-
-      const result = {
-        tier,
-        scores: best.scores,
-        final_bundle_score: best.final_bundle_score,
-        verdict: best.verdict,
-        analysis: best.analysis,
-        room_vibe: roomVibe,
-        product_ids: best.products.map((p) => p.id),
-        combos_evaluated: validResults.length,
-      };
+      const validResults = comboResults.filter(Boolean) as ComboResult[];
 
       bundleTiersCompleted++;
       reportStep({
@@ -1854,12 +1830,118 @@ export async function runAgenticSearch(
         status: "running",
         data: { progress: bundleTiersCompleted, total: PRICE_TIERS.length },
       });
-      return result;
+
+      return { tier, validResults };
     });
 
-    const bundleResults = await Promise.all(bundlePromises);
-    for (const b of bundleResults) {
-      if (b) bundles.push(b);
+    // Run validation + bundle combo eval concurrently.
+    const [validationResult, bundleComboByTier] = await Promise.all([
+      validationPromise,
+      Promise.all(bundleComboPromises),
+    ]);
+
+    if (validationResult.tokensUsed) {
+      tokenBudget.add(validationResult.tokensUsed);
+      stats.tokensUsed += validationResult.tokensUsed;
+      stats.tokensPerPhase.validation += validationResult.tokensUsed;
+    }
+
+    // Apply validation drops/penalties to the candidate set BEFORE winner selection
+    // so bundle winners don't reference products that will be removed from the UI.
+    const droppedProductTitles = new Set<string>();
+    let validationData: { isValid: boolean; confidence: number; issues: string[] } | undefined;
+    if (validationResult.success && validationResult.data) {
+      validationData = {
+        isValid: validationResult.data.isValid,
+        confidence: validationResult.data.confidence,
+        issues: validationResult.data.issues,
+      };
+
+      const flags = validationResult.data.product_flags;
+      if (flags && flags.length > 0) {
+        const clashingProducts = flags.filter((f) => f.harmony_score <= 3);
+        const weakProducts = flags.filter((f) => f.harmony_score >= 4 && f.harmony_score <= 5);
+
+        for (const flag of clashingProducts) {
+          droppedProductTitles.add(flag.title.toLowerCase());
+          for (const [category, products] of Object.entries(candidatesByCategory)) {
+            const idx = products.findIndex(
+              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
+            );
+            if (idx !== -1) {
+              log.info(`Removing "${flag.title}" — harmony ${flag.harmony_score}/10`, { phase: "validation", title: flag.title, harmonyScore: flag.harmony_score, reason: flag.reason });
+              tracer.traceFilter("validation", products[idx].id, products[idx].product_url || "", `harmony ${flag.harmony_score}/10: ${flag.reason}`);
+              candidatesByCategory[category].splice(idx, 1);
+              stats.totalFinal--;
+            }
+          }
+        }
+
+        for (const flag of weakProducts) {
+          for (const products of Object.values(candidatesByCategory)) {
+            const product = products.find(
+              (p) => p.title?.toLowerCase() === flag.title.toLowerCase()
+            );
+            if (product) {
+              const existing = evaluations.get(product.id);
+              if (existing) {
+                const penalty = (5 - flag.harmony_score) * 0.5;
+                const penalized = Math.max(0, existing.final_item_score - penalty);
+                log.info(`Penalizing "${flag.title}"`, { phase: "validation", title: flag.title, penalty, harmonyScore: flag.harmony_score, before: existing.final_item_score, after: penalized });
+                evaluations.set(product.id, { ...existing, final_item_score: penalized });
+              }
+            }
+          }
+        }
+
+        if (clashingProducts.length > 0 || weakProducts.length > 0) {
+          log.info("Validation enforcement complete", { phase: "validation", dropped: clashingProducts.length, penalized: weakProducts.length });
+        }
+      }
+
+      reportStep({ step: "Validating all recommendations", status: "completed", data: validationData });
+    } else {
+      reportStep({ step: "Validating all recommendations", status: "failed" });
+    }
+
+    // Finalize bundle winners — filter combos that reference dropped products,
+    // pick the top survivor per tier, then generate the vibe narrative for
+    // winners only. Vibe is cheap (3 calls) and must be sequential after
+    // winner selection.
+    for (const tierBundle of bundleComboByTier) {
+      if (!tierBundle) continue;
+      const { tier, validResults } = tierBundle;
+      const surviving = droppedProductTitles.size > 0
+        ? validResults.filter((r) =>
+            !r.products.some((p) => droppedProductTitles.has((p.title || "").toLowerCase())),
+          )
+        : validResults;
+      if (surviving.length === 0) continue;
+
+      surviving.sort((a, b) => (b.final_bundle_score - a.final_bundle_score) || tiebreakBundle(a.products, b.products));
+      const best = surviving[0];
+      for (const r of surviving) {
+        tracer.trace({ phase: "bundle", action: "evaluated", tier, score: r.final_bundle_score, metadata: { verdict: r.verdict } });
+      }
+      tracer.trace({ phase: "bundle", action: "selected", tier, score: best.final_bundle_score, metadata: { product_ids: best.products.map((p) => p.id) } });
+
+      let roomVibe: unknown = undefined;
+      if (!tokenBudget.exceeded) {
+        const vibeRes = await generateBundleVibe(best.products, bundleCtx, best.verdict);
+        if (vibeRes.tokensUsed) { tokenBudget.add(vibeRes.tokensUsed); stats.tokensUsed += vibeRes.tokensUsed; stats.tokensPerPhase.bundle += vibeRes.tokensUsed; }
+        if (vibeRes.success && vibeRes.data) roomVibe = vibeRes.data.room_vibe;
+      }
+
+      bundles.push({
+        tier,
+        scores: best.scores,
+        final_bundle_score: best.final_bundle_score,
+        verdict: best.verdict,
+        analysis: best.analysis,
+        room_vibe: roomVibe,
+        product_ids: best.products.map((p) => p.id),
+        combos_evaluated: surviving.length,
+      });
     }
     reportStep({ step: "Generating bundles", status: "completed", data: { bundles: bundles.length } });
 
