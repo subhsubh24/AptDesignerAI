@@ -182,6 +182,17 @@ async function convertMessages(
       : {};
 
   for (const msg of messages) {
+    // Multi-turn function-calling with thinking: echo the raw model parts
+    // verbatim to preserve thought text, thought=true flags, and
+    // thoughtSignature values that Gemini 3 mandates on continuations.
+    if (msg._rawGeminiParts && msg.role === "assistant") {
+      result.push({
+        role: "model",
+        parts: msg._rawGeminiParts as Record<string, unknown>[],
+      });
+      continue;
+    }
+
     const parts: Record<string, unknown>[] = [];
 
     if (typeof msg.content === "string") {
@@ -624,9 +635,12 @@ export const geminiProvider: AIProvider = {
       thoughtSignature?: string;
     }> = [];
 
+    let rawModelParts: unknown[] | undefined;
+
     if (response.candidates && response.candidates.length > 0) {
       const candidate = response.candidates[0];
       if (candidate.content?.parts) {
+        rawModelParts = candidate.content.parts as unknown[];
         for (const part of candidate.content.parts) {
           const p = part as Record<string, unknown>;
           // Thought summaries are text parts marked thought=true; final
@@ -719,6 +733,7 @@ export const geminiProvider: AIProvider = {
       thoughtSignatures: thoughtSignatures.length > 0 ? thoughtSignatures : undefined,
       thoughtSummaries: thoughtSummaries.length > 0 ? thoughtSummaries : undefined,
       functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
+      modelContentParts: rawModelParts,
     };
   },
 };

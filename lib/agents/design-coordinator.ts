@@ -326,23 +326,33 @@ Begin. Call your first tool.`;
       };
     }
 
-    // Echo the model's response (text + function calls) as an assistant message
-    const assistantParts: AIContentBlock[] = [];
-    if (response.content) {
-      assistantParts.push({ type: "text", text: response.content });
-    }
-    for (const fc of functionCalls) {
-      assistantParts.push({
-        type: "function_call",
-        functionCall: {
-          id: fc.id,
-          name: fc.name,
-          args: fc.args,
-          thoughtSignature: fc.thoughtSignature,
-        },
+    // Echo the model's response verbatim to preserve thought parts and
+    // thoughtSignature values that Gemini 3 mandates on continuations.
+    // Falling back to manual reconstruction if raw parts are unavailable.
+    if (response.modelContentParts) {
+      messages.push({
+        role: "assistant",
+        content: [],
+        _rawGeminiParts: response.modelContentParts,
       });
+    } else {
+      const assistantParts: AIContentBlock[] = [];
+      if (response.content) {
+        assistantParts.push({ type: "text", text: response.content });
+      }
+      for (const fc of functionCalls) {
+        assistantParts.push({
+          type: "function_call",
+          functionCall: {
+            id: fc.id,
+            name: fc.name,
+            args: fc.args,
+            thoughtSignature: fc.thoughtSignature,
+          },
+        });
+      }
+      messages.push({ role: "assistant", content: assistantParts });
     }
-    messages.push({ role: "assistant", content: assistantParts });
 
     // Execute all function calls (parallel if multiple)
     const results = await Promise.all(

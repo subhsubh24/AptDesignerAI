@@ -447,22 +447,30 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
         break;
       }
 
-      // Echo the model's call back into history (with thoughtSignature) so
-      // Gemini 3 doesn't 400 on the next call.
-      const modelParts: AIContentBlock[] = [];
-      if (response.content) modelParts.push({ type: "text", text: response.content });
-      for (const call of calls) {
-        modelParts.push({
-          type: "function_call",
-          functionCall: {
-            id: call.id,
-            name: call.name,
-            args: call.args,
-            thoughtSignature: call.thoughtSignature,
-          },
+      // Echo the model's response verbatim to preserve thought parts and
+      // thoughtSignature values that Gemini 3 mandates on continuations.
+      if (response.modelContentParts) {
+        messages.push({
+          role: "assistant",
+          content: [],
+          _rawGeminiParts: response.modelContentParts,
         });
+      } else {
+        const modelParts: AIContentBlock[] = [];
+        if (response.content) modelParts.push({ type: "text", text: response.content });
+        for (const call of calls) {
+          modelParts.push({
+            type: "function_call",
+            functionCall: {
+              id: call.id,
+              name: call.name,
+              args: call.args,
+              thoughtSignature: call.thoughtSignature,
+            },
+          });
+        }
+        messages.push({ role: "assistant", content: modelParts });
       }
-      messages.push({ role: "assistant", content: modelParts });
 
       // Concatenated thought summary for this turn — surfaced via onTurn
       // so the SSE stream can show the user the agent's reasoning.

@@ -7,6 +7,15 @@
 export interface AIMessage {
   role: "user" | "assistant";
   content: string | AIContentBlock[];
+  /**
+   * Raw Gemini Part objects from the model's response. When present on an
+   * assistant message, `convertMessages()` echoes these parts verbatim
+   * instead of reconstructing from `content` — preserving thought text,
+   * `thought: true` flags, and `thoughtSignature` values that Gemini 3
+   * mandates on multi-turn continuations. Only set by callers that do
+   * multi-turn function calling with thinking mode enabled.
+   */
+  _rawGeminiParts?: unknown[];
 }
 
 export interface AIContentBlock {
@@ -102,6 +111,14 @@ export interface AIResponse {
     args: Record<string, unknown>;
     thoughtSignature?: string;
   }>;
+  /**
+   * Raw Gemini Part objects from the model's response content. Callers
+   * doing multi-turn function calling with thinking mode MUST echo these
+   * verbatim as the assistant message's `_rawGeminiParts` — reconstructing
+   * from parsed fields drops thought text + thought signatures, which
+   * Gemini 3 mandates on continuation requests.
+   */
+  modelContentParts?: unknown[];
 }
 
 export interface GoogleMapsToolConfig {
