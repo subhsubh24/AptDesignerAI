@@ -363,31 +363,14 @@ These photos show the REST of the apartment. Study them to understand:
   // Pass A prompt — UNDERSTAND the room. No what_it_needs here; that's Pass B.
   const passAPrompt = `\nStudy the ${room.name} photos carefully. This is PASS 1 of 2. Your job is to UNDERSTAND the room — diagnose it, determine design direction, and capture spatial/environmental context. A separate pass will produce the shopping list (what_it_needs) — do NOT produce recommendations here.
 
-## ANALYSIS PROCESS
+<process>
 Step 1: Study ALL room photos. Note every piece of furniture, finish, lighting condition, window/door.
 Step 2: Identify what's working (keep) and what's not (replace/remove). Name items with material + color.
 Step 3: Determine design direction based on the apartment's finishes and client preferences.
 Step 4: Capture spatial & environmental context (layout, lighting, windows/doors, outlets) precisely — Pass 2 depends on this to place items.
+</process>
 
-## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
-{
-  "summary": "3-4 sentence assessment — dominant colors, materials, what's working, what's broken",
-  "what_works": ["FURNITURE AND ITEMS the client should keep — each entry: item name + material + color + position. Start with any items the client explicitly asked to keep. Then add other furniture/decor visible in photos that works. Do NOT list architectural features (windows, flooring, walls, layout) here — those go in spatial_layout/lighting_conditions."],
-  "what_should_go": ["PHYSICAL ITEMS visible in the room to remove/replace — each entry: item name + why it doesn't work. Must be actual objects the client can remove. NEVER list absences ('lack of X'), architectural features ('bare flooring'), or things tenants can't change."],
-  "style_name": "2-3 word evocative label derived from the room's actual physical cues. Draw from the REAL materials and atmosphere you see. GOOD examples: 'Industrial Warmth' (dark sectional + metal bookshelf + need for warmth), 'Nordic Warmth' (light oak + linen undertones), 'West Coast Modern' (concrete + leather + wood grain), 'Cognac and Charcoal' (specific palette-led name). BAD (too generic — never use): 'Tech Minimalism', 'Contemporary Modern', 'Refined Minimalism', 'Clean Lines', 'Urban Chic'. The name must be specific enough that a different room couldn't have the same name.",
-  "design_direction": "4-6 sentences describing the [style_name] direction — color strategy, material mixing, texture layering, and the feeling it creates. Reference specific apartment finishes by name. Explain how the direction serves this specific client's identity and lifestyle.",
-  "recommended_palette": ["4-8 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
-  "recommended_materials": ["4-6 materials — e.g. 'solid walnut', 'linen', 'brushed brass', 'natural wool'"],
-  "recommended_textures": ["3-5 textures — e.g. 'bouclé', 'woven rattan', 'matte ceramic', 'raw linen'"],
-  "spatial_layout": "paragraph describing arrangement strategy — traffic flow, conversation zones, sightlines, focal points",
-  "lighting_conditions": "window direction, natural light at different times, existing artificial lighting, dark corners needing task lighting, glare concerns",
-  "window_door_positions": "every window and door with wall position + approximate size, door swing clearance",
-  "outlet_positions": "best-guess outlet locations from photos + typical layouts — note spots where lamps/media would need extension cords"
-}
-
-Use Google Search to verify current design trend terminology and material availability when needed. Use Code Execution for any spatial calculations (proportions, clearances, area coverage).
-
-## FEW-SHOT EXAMPLE (good Pass A output)
+<example_good_output>
 {
   "summary": "A 450-sqft studio with grey LVP flooring, white walls, south-facing windows providing strong natural light. The charcoal Kivik sectional anchors the living zone. The space lacks warmth — no textiles, no accent lighting, bare walls. The kitchen's white quartz counters and brushed nickel hardware establish a cool-neutral base.",
   "what_works": [
@@ -411,6 +394,36 @@ Use Google Search to verify current design trend terminology and material availa
   "window_door_positions": "South wall: two 4ft-wide windows centered, sills at 30 inch, 6ft between them. Entry door: north wall, left side, swings inward 90° (24 inch clearance needed). No other doors.",
   "outlet_positions": "South wall: one outlet between windows (ideal for lamp). West wall: one outlet behind sectional (accessible). East wall: one outlet center-low (TV/media). North wall: one outlet near entry (desk area). Northeast corner: no visible outlet — extension cord likely needed for desk lamp."
 }
+</example_good_output>
+
+<critical_rules>
+WHAT_WORKS RULES — every entry MUST be a physical object the client owns and can move:
+✅ CORRECT: furniture (sofas, tables, chairs, shelves), decor (lamps, baskets, art), textiles (rugs, pillows, throws)
+❌ WRONG — NEVER include these: flooring, countertops, cabinetry, appliances, windows, walls, ceiling fixtures, built-in shelving, paint color, tile, backsplash
+Architectural finishes belong in "summary", "spatial_layout", or "lighting_conditions" — NOT in what_works.
+
+WHAT_SHOULD_GO RULES — every entry MUST be a removable physical item visible in the photos:
+✅ CORRECT: "Cheap particle-board TV stand — wrong scale, laminate peeling" / "Mismatched throw pillows — competing patterns"
+❌ WRONG — NEVER include these: absences ("lack of X", "no rug"), architectural features ("builder-grade ceiling light", "bare flooring"), hypotheticals ("any big-box furniture sets"), things tenants cannot change (ceiling fixtures, HVAC vents, wall outlets, appliances)
+</critical_rules>
+
+<output_format>
+Return JSON only — no prose, no markdown fences. Every field is required.
+{
+  "summary": "3-4 sentence assessment — dominant colors, materials, what's working, what's broken. Mention flooring, countertops, and wall finishes HERE (not in what_works).",
+  "what_works": ["item name + material + color + position — ONLY movable furniture and decor the client owns"],
+  "what_should_go": ["item name + why it doesn't work — ONLY removable physical objects visible in photos"],
+  "style_name": "2-3 word evocative label derived from the room's actual physical cues. GOOD: 'Industrial Warmth', 'Cognac and Charcoal'. BAD (never use): 'Tech Minimalism', 'Contemporary Modern', 'Refined Minimalism'.",
+  "design_direction": "4-6 sentences — color strategy, material mixing, texture layering. Reference specific apartment finishes. Explain how the direction serves this client.",
+  "recommended_palette": ["4-8 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green'"],
+  "recommended_materials": ["4-6 materials — e.g. 'solid walnut', 'linen', 'brushed brass'"],
+  "recommended_textures": ["3-5 textures — e.g. 'bouclé', 'woven rattan', 'matte ceramic'"],
+  "spatial_layout": "paragraph — traffic flow, conversation zones, sightlines, focal points. Include flooring, wall finishes, and built-in features here.",
+  "lighting_conditions": "window direction, natural light at different times, existing artificial lighting (ceiling fixtures, etc.), dark corners, glare",
+  "window_door_positions": "every window and door with wall position + approximate size, door swing clearance",
+  "outlet_positions": "best-guess outlet locations from photos + typical layouts — note spots needing extension cords"
+}
+</output_format>
 
 Be extremely specific. Name exact colors, materials, dimensions. Do NOT include what_it_needs or any shopping recommendations.${identifiedPiecesBlock ? `\n\n${identifiedPiecesBlock}` : ""}`;
 

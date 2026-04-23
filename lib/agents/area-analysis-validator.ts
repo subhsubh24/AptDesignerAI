@@ -18,7 +18,7 @@ import { createLogger } from "@/lib/logging/logger";
 const log = createLogger("area-analysis-validator");
 
 export interface AreaAnalysisValidationIssue {
-  type: "exclusion_violation" | "keep_item_replaced" | "keep_item_in_remove" | "missing_request";
+  type: "exclusion_violation" | "keep_item_replaced" | "keep_item_in_remove" | "missing_request" | "architectural_in_keeps" | "invalid_remove";
   description: string;
   field: string;
   action: "removed" | "flagged";
@@ -94,6 +94,11 @@ function expandExclusionTerms(exclusions: string[]): string[] {
  *   "black arc floor lamp behind the sofa" → "black arc floor lamp"
  *   "two lights next to the TV" → "two lights"
  */
+function extractLocationContext(text: string): string {
+  const match = text.match(/\b(?:behind|next to|near|beside|by|on top of|under|underneath|above|in front of|across from|against|along|around|at|between|in|on|over|to the (?:left|right) of)\b.*/i);
+  return match ? normalize(match[0]) : "";
+}
+
 function stripLocationContext(text: string): string {
   return text
     .replace(/\b(?:behind|next to|near|beside|by|on top of|under|underneath|above|in front of|across from|against|along|around|at|between|in|on|over|to the (?:left|right) of|if possible)\b.*/gi, "")
@@ -101,7 +106,31 @@ function stripLocationContext(text: string): string {
     .trim();
 }
 
-function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[] }> {
+const LOCATION_LANDMARKS: Record<string, string[]> = {
+  tv: ["tv", "television", "media", "media console", "media wall", "entertainment"],
+  sofa: ["sofa", "couch", "sectional", "loveseat"],
+  bed: ["bed", "bedside", "headboard", "nightstand"],
+  desk: ["desk", "workspace", "office"],
+  window: ["window", "windowsill", "sill"],
+  door: ["door", "entry", "entrance", "doorway"],
+  dining: ["dining", "dining table", "kitchen"],
+  bookshelf: ["bookshelf", "bookcase", "shelving", "shelf"],
+  corner: ["corner"],
+};
+
+function locationsOverlap(keepLocation: string, proposedPlacement: string): boolean {
+  if (!keepLocation || !proposedPlacement) return true; // no data → assume overlap (conservative)
+  const normalPlacement = normalize(proposedPlacement);
+  for (const [, landmarks] of Object.entries(LOCATION_LANDMARKS)) {
+    const keepMentions = landmarks.some(l => keepLocation.includes(l));
+    const proposedMentions = landmarks.some(l => normalPlacement.includes(l));
+    if (keepMentions && proposedMentions) return true;
+    if (keepMentions && !proposedMentions) return false;
+  }
+  return true; // no recognized landmark in keep → can't disambiguate
+}
+
+function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[]; location: string }> {
   const categoryPatterns: Record<string, string[]> = {
     "floor lamp": ["floor_lamp", "floor lamp", "arc lamp", "standing lamp", "arc floor lamp", "tripod lamp", "tripod floor lamp", "tripod light"],
     "table lamp": ["table_lamp", "table lamp", "desk lamp", "accent lamp"],
@@ -115,6 +144,7 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
   };
 
   return keepItems.map((item) => {
+    const location = extractLocationContext(item);
     // Strip location context so "lamp behind the sofa" doesn't trigger "sofa" category
     const itemOnly = stripLocationContext(item);
     const normalItem = normalize(itemOnly);
@@ -124,7 +154,7 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
         keywords.push(...patterns);
       }
     }
-    return { item, keywords: [...new Set(keywords)] };
+    return { item, keywords: [...new Set(keywords)], location };
   });
 }
 
@@ -146,6 +176,55 @@ export function validateAreaAnalysis(
     ...keepItems,
     ...(parsed?.additionalKeepItems || []),
   ];
+
+  // --- Check 0: Filter architectural features from what_works / invalid entries from what_should_go ---
+  const ARCHITECTURAL_PATTERNS = [
+    /\bflooring\b/i, /\bhardwood.{0,10}floor/i, /\blvp\b/i, /\bvinyl\s*plank/i, /\btile\s*floor/i,
+    /\bcountertop/i, /\bquartz\b/i, /\bgranite\b/i, /\bmarble\s*counter/i,
+    /\bcabinet(?:ry|s)?\b/i, /\bmillwork\b/i, /\bbuilt.?in\s*(?:shelv|cabinet|closet)/i,
+    /\bappliance\s*(?:suite|package)?\b/i, /\bstainless\s*steel\s*appliance/i,
+    /\bbacksplash\b/i, /\bpaint\s*color\b/i, /\bwall\s*(?:color|finish|paint)\b/i,
+    /\bceiling\s*(?:height|fixture|fan)\b/i, /\bhvac\b/i, /\bvent\b/i,
+  ];
+
+  const INVALID_REMOVE_PATTERNS = [
+    /^\s*lack\s+of\b/i, /^\s*no\s+(?!longer)\w+/i, /\babsence\b/i, /^\s*missing\b/i,
+    /\bbuilder.?grade\s*(?:ceiling|flush|light|fixture)/i,
+    /\bceiling\s*(?:light|fixture|fan|mount)/i, /\bflush\s*mount/i,
+    /^\s*any\s+['"]/i, /^\s*any\s+(?:big|generic|matching)/i,
+    /\bexposed\s+(?:\w+\s+)*(?:cord|cable|wire|wiring)s?\b/i,
+    /\bwall\s*(?:outlet|socket|switch)\b/i,
+  ];
+
+  if (Array.isArray(patched.what_works)) {
+    patched.what_works = patched.what_works.filter((item: string) => {
+      if (ARCHITECTURAL_PATTERNS.some(p => p.test(item))) {
+        issues.push({
+          type: "architectural_in_keeps",
+          description: `Removed "${item}" from what_works — architectural feature, not movable furniture`,
+          field: "what_works",
+          action: "removed",
+        });
+        return false;
+      }
+      return true;
+    });
+  }
+
+  if (Array.isArray(patched.what_should_go)) {
+    patched.what_should_go = patched.what_should_go.filter((item: string) => {
+      if (INVALID_REMOVE_PATTERNS.some(p => p.test(item))) {
+        issues.push({
+          type: "invalid_remove",
+          description: `Removed "${item}" from what_should_go — not a removable physical item`,
+          field: "what_should_go",
+          action: "removed",
+        });
+        return false;
+      }
+      return true;
+    });
+  }
 
   // --- Check 1: Exclusion violations in what_it_needs ---
   if (parsed?.exclusions && parsed.exclusions.length > 0) {
@@ -215,7 +294,7 @@ export function validateAreaAnalysis(
   if (allKeepItems.length > 0) {
     const keepCategories = extractKeepCategories(allKeepItems);
 
-    for (const { item, keywords } of keepCategories) {
+    for (const { item, keywords, location } of keepCategories) {
       if (keywords.length === 0) continue;
 
       // Check if what_it_needs recommends a NEW item in the same category as a kept item
@@ -226,6 +305,19 @@ export function validateAreaAnalysis(
           const recText = `${rec.category || ""} ${rec.search_title || ""}`;
           const match = mentionsAny(recText, keywords);
           if (match) {
+            // If the keep item has a known location (e.g. "next to the TV") and the
+            // proposed item has a placement for a DIFFERENT location (e.g. "on the
+            // coffee table"), it's not a conflict — it's a new item elsewhere.
+            const proposedPlacement = String(rec.placement || "");
+            if (location && proposedPlacement && !locationsOverlap(location, proposedPlacement)) {
+              log.info("Keep-item keyword match but different location — allowing", {
+                keepItem: item,
+                keepLocation: location,
+                proposed: rec.search_title || rec.category,
+                proposedPlacement,
+              });
+              return true;
+            }
             issues.push({
               type: "keep_item_replaced",
               description: `Removed "${rec.search_title || rec.category}" from what_it_needs — conflicts with kept item "${item}"`,
