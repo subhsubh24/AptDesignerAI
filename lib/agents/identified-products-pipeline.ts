@@ -90,12 +90,12 @@ export async function runIdentifiedProductsPipeline(
   }
 
   // ─── 2. Per-crop: embed + retrieve + identify (concurrent) ──
-  // Run embed+identify in parallel (pLimit(4) prevents Gemini rate-limit
-  // spikes), then verify top candidates with a tighter concurrency pool.
+  // Run embed+identify in parallel. Flash Lite has 10K RPM; 20 concurrent
+  // crops is well within budget. Verify runs with its own tighter pool.
   const enrichedResults: IdentifiedProductEnriched[] = [];
   let verifyCallsMade = 0;
 
-  const identifyLimit = pLimit(4);
+  const identifyLimit = pLimit(20);
 
   type IdentifyResult = {
     crop: typeof cropperOut.crops[number];

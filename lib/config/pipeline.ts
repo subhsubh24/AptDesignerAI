@@ -58,13 +58,17 @@ export const ORCHESTRATOR = {
     ? parseInt(process.env.SEARCH_TOKEN_CAP, 10)
     : 10_000_000,
 
-  /** Concurrency limits per phase */
+  /**
+   * Concurrency limits per phase. All non-image traffic uses Gemini 3.1
+   * Flash Lite (10K RPM / 10M TPM on Tier 1) — these limits are sized to
+   * max out parallelism while staying well clear of the rate-limit ceiling.
+   */
   concurrency: {
-    search: 15,
-    extract: 20,
-    deepScore: 5,
-    bundleEval: 3,
-    backfillSearch: 10,
+    search: 50,
+    extract: 50,
+    deepScore: 30,
+    bundleEval: 20,
+    backfillSearch: 30,
   },
 
   /** Price range filter multipliers (relative to tier range) */

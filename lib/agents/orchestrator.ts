@@ -674,8 +674,8 @@ export async function runAgenticSearch(
 
     stats.totalSearchQueries = searchTasks.length;
 
-    // Run all searches with concurrency limit of 15 (Flash Lite is fast)
-    const searchLimit = pLimit(15);
+    // Run all searches with concurrency limit (Flash Lite is fast, 10K RPM)
+    const searchLimit = pLimit(50);
     const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
     let searchesCompleted = 0;
 
@@ -817,7 +817,7 @@ export async function runAgenticSearch(
     // HTTP wait, not CPU. More candidates → more survive the 8 post-extraction
     // filters (HTTP failures, sentinel titles, category mismatch, price range).
     // Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "20");
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "35");
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -912,7 +912,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(20);
+    const extractLimit = pLimit(50);
     // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
     // Gated on Browserbase credentials + package availability; becomes a no-op when absent.
     const cuFallbackLimit = pLimit(3);
@@ -1392,7 +1392,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Deep-scoring top candidates", status: "running" });
 
-    const deepScoreLimit = pLimit(5);
+    const deepScoreLimit = pLimit(30);
     const deepScorePromises: Promise<void>[] = [];
     let totalToDeepScore = 0;
 
@@ -1805,7 +1805,7 @@ export async function runAgenticSearch(
       }
       combos = prefiltered.kept;
 
-      const bundleEvalLimit = pLimit(3);
+      const bundleEvalLimit = pLimit(20);
       const comboResults = await Promise.all(
         combos.map((combo) =>
           bundleEvalLimit(async () => {
@@ -1996,7 +1996,7 @@ export async function runAgenticSearch(
       const tiersWithNewProducts = new Set<PriceTier>();
 
       // Run targeted backfill searches for weak tiers
-      const backfillSearchLimit = pLimit(10);
+      const backfillSearchLimit = pLimit(30);
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
           const styleHint = ctx.designDirection?.style_notes || "modern apartment";
@@ -2200,7 +2200,7 @@ export async function runAgenticSearch(
           }
           combos = prefiltered2.kept;
 
-          const bundleEvalLimit2 = pLimit(3);
+          const bundleEvalLimit2 = pLimit(20);
           const comboResults = await Promise.all(
             combos.map((combo) =>
               bundleEvalLimit2(async () => {
