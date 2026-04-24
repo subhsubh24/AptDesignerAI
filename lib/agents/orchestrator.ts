@@ -912,7 +912,7 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(50);
+    const extractLimit = pLimit(25);
     // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
     // Gated on Browserbase credentials + package availability; becomes a no-op when absent.
     const cuFallbackLimit = pLimit(3);

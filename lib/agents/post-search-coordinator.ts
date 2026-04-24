@@ -50,6 +50,23 @@ const log = createLogger("post-search-coordinator");
  */
 const SAFETY_TURN_LIMIT = 100;
 
+/**
+ * Hard cap on total re_search_category calls per coordinator run.
+ * Each re_search invokes a full mini-pipeline (search + extract + score)
+ * for a category and takes 3-5 minutes. With agentic latitude, the
+ * coordinator can chain several of these and burn 15+ minutes for marginal
+ * quality gains. The prompt warns about diminishing returns but the agent
+ * doesn't always heed it; this is the enforcement layer.
+ */
+const MAX_RE_SEARCH_CALLS = 2;
+
+/**
+ * Wall-clock budget for the coordinator loop. If exceeded, the coordinator
+ * is force-finalized regardless of pending work — search runs that take
+ * more than this should converge or accept current state.
+ */
+const COORDINATOR_WALL_CLOCK_MS = 5 * 60 * 1000;
+
 /** Coordinator decisions — always operational, never subjective design judgments. */
 export type CoordinatorTool =
   | "run_validation"
@@ -394,10 +411,22 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
   let finalized = false;
   let finalizeReason: string | undefined;
   let turn = 0;
+  let reSearchCalls = 0;
+  const startedAt = Date.now();
 
   try {
     while (turn < SAFETY_TURN_LIMIT && !finalized) {
       turn++;
+      if (Date.now() - startedAt > COORDINATOR_WALL_CLOCK_MS) {
+        log.warn("Coordinator hit wall-clock budget — force-finalizing", {
+          turn,
+          elapsedMs: Date.now() - startedAt,
+          budgetMs: COORDINATOR_WALL_CLOCK_MS,
+        });
+        finalized = true;
+        finalizeReason = "Wall-clock budget exceeded — finalizing with current state";
+        break;
+      }
       let response;
       try {
         response = await geminiProvider.chat({
@@ -496,6 +525,32 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           });
           continue;
         }
+
+        // Enforce re_search_category budget: each call runs a full mini-
+        // pipeline (search+extract+score) and takes 3-5 minutes. Cap total
+        // calls per run to keep wall-clock bounded.
+        if (call.name === "re_search_category" && reSearchCalls >= MAX_RE_SEARCH_CALLS) {
+          log.warn("Coordinator blocked re_search_category — budget exhausted", {
+            turn,
+            reSearchCalls,
+            cap: MAX_RE_SEARCH_CALLS,
+            category: String(call.args.category ?? ""),
+          });
+          history.push({ turn, tool: call.name, status: "blocked" });
+          responseParts.push({
+            type: "function_response",
+            functionResponse: {
+              id: call.id,
+              name: call.name,
+              response: {
+                status: "blocked",
+                message: `re_search_category budget exhausted (${MAX_RE_SEARCH_CALLS} calls already used). No more re-searches allowed this run — finalize with current state or call drop_category for unfillable gaps.`,
+              },
+            },
+          });
+          continue;
+        }
+        if (call.name === "re_search_category") reSearchCalls++;
 
         input.onTurn?.(turn, call.name, "running", turnThoughts);
         const result = await input.handle(call.name as CoordinatorTool, call.args);

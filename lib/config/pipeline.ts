@@ -65,7 +65,7 @@ export const ORCHESTRATOR = {
    */
   concurrency: {
     search: 50,
-    extract: 50,
+    extract: 25,
     deepScore: 30,
     bundleEval: 20,
     backfillSearch: 30,
