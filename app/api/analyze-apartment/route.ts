@@ -151,33 +151,40 @@ Summary: ${br.summary || ""}
         text: `Analyze this ${room.room_type} in detail. ${buildingContextText ? "Use the building research context to understand the apartment's finishes and architectural style." : ""}
 
 PROCESS:
-Step 1: Look at EVERY photo carefully. List ONLY items you can literally see: floor material+color, wall color, each piece of furniture (name + material + color), lighting fixtures, windows. If the room is mostly empty, say so.
-Step 2: For each item you listed in Step 1, decide: keep or replace? Only items from Step 1 can appear in keep/replace.
-Step 3: Score the current state and decide what to add.
+Step 1: Examine EVERY photo carefully. For each photo, catalog everything you see:
+  - Built-in: floor material+color, wall color+finish, ceiling fixtures, windows, countertops, cabinetry
+  - Furniture: sofas, chairs, tables, shelves, desks, beds, dressers — name each with material + color
+  - Lighting: floor lamps, table lamps, pendant lights, sconces — every light source
+  - Decor/misc: rugs, plants, art, books, yoga mats, electronics, storage items
+  Even a single bookshelf or floor lamp counts. List EVERYTHING visible, no matter how minor.
+Step 2: For each item from Step 1, decide keep or replace. Every visible item must appear in either keep OR replace.
+Step 3: Identify what's missing and build the "add" list.
 
 ## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
 {
-  "summary": "1-2 sentence assessment of this room — only reference what you see",
+  "summary": "1-2 sentence assessment of this room — reference specific items you see",
   "score": 1-10 current design score,
-  "keep": ["Items visible in the photos that should STAY — named with material+color+why it works"],
-  "replace": ["Items visible in the photos to REPLACE — what you see, why it's wrong, what would be better"],
+  "keep": ["Every visible item that should STAY — named with material+color+why it works"],
+  "replace": ["Every visible item to REPLACE — what you see, why, what would be better"],
   "add": ["Items to ADD: [Material] [item type] in [color/finish], [size], [purpose]"],
   "priority": 1-10 how urgently this room needs attention
 }
 
-CRITICAL RULES — HALLUCINATION PREVENTION:
-- "keep" and "replace" MUST ONLY contain items that are physically VISIBLE in the photos.
-- If the room is empty or sparsely furnished, "keep" and "replace" should be SHORT or EMPTY arrays. An empty room might have 0 items to keep and 0 to replace — that is correct.
-- NEVER describe furniture, rugs, coffee tables, or decorative items that you cannot point to in a specific photo. If you are unsure whether something is there, leave it out.
-- Built-in elements (flooring, walls, windows, countertops) ARE visible and CAN be in keep/replace.
-- If a room area isn't visible, say so — don't guess.
+CRITICAL RULES:
+- EVERY visible item from Step 1 MUST appear in either "keep" or "replace" — none can be omitted.
+- Built-in elements count: flooring, walls, windows, countertops, cabinetry, ceiling lights.
+- Even in a sparsely furnished room, there are ALWAYS built-ins to list (at minimum: flooring, wall color, windows, ceiling light fixtures).
+- NEVER say "None" for keep — every room has flooring, walls, and windows at minimum.
+- Do NOT invent furniture that isn't visible. But DO list every item you CAN see, even small ones (a single lamp, a bookshelf, a yoga mat).
+- If a room area isn't visible in photos, say so — don't guess what's there.
 
 FORMAT RULES:
-- keep: "Dark hardwood flooring — warm tone, good condition" ✓ | "Glass coffee table" when no coffee table is visible ✗
-- replace: "Builder-grade boob light on ceiling — swap for a modern flush-mount" ✓ | Inventing items not in photos ✗
+- keep: "Warm-toned LVP flooring — good neutral base for layering" ✓
+- keep: "Black arc floor lamp — adds height and sculptural interest" ✓
+- replace: "Builder-grade boob light on ceiling — swap for a modern flush-mount" ✓
 - add: "Large 8x10 textured wool area rug in warm ivory, to ground the seating area" ✓ | "Area rug" ✗
 
-Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases). The "add" list is where most recommendations go for sparsely furnished rooms.`,
+Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishings (pillows, blankets), lighting (multiple sources), and decorative elements (art, plants, vases).`,
       });
 
       const response = await geminiProvider.chat({
