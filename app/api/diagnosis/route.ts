@@ -8,6 +8,7 @@ import {
 } from "@/lib/agents/greedy-decorator";
 import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
 import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
+import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -188,6 +189,21 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       error_message: result.error,
     });
     return NextResponse.json({ error: result.error || "Diagnosis failed" }, { status: 500 });
+  }
+
+  // Self-review: LLM checks its own diagnosis for internal consistency
+  {
+    const selfReview = await selfReviewDiagnosis(
+      result.data.diagnosis as unknown as Record<string, unknown>,
+      result.data.design_direction as unknown as Record<string, unknown>,
+      ctx.roomType,
+    );
+    if (selfReview.wasCorrepted) {
+      result.data.diagnosis = selfReview.output.diagnosis as unknown as typeof result.data.diagnosis;
+      result.data.design_direction = selfReview.output.designDirection as unknown as typeof result.data.design_direction;
+      console.log(`[diagnosis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
+        selfReview.issues.join("; "));
+    }
   }
 
   // Validate diagnosis against user constraints (exclusions, keep items, explicit requests)

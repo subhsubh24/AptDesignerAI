@@ -15,6 +15,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
+import { selfReviewAreaAnalysis } from "@/lib/agents/self-correction";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
@@ -480,7 +481,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           model,
           system,
           messages: [{ role: "user", content: passAContent }],
-          max_tokens: 8192,
+          max_tokens: 16000,
           seed,
           responseMimeType: "application/json",
           cacheScope: contentBlocks.length > 0
@@ -835,6 +836,16 @@ Use Google Search to verify current pricing and material availability when neede
       if (dropped.length > 0) {
         analysis.what_it_needs = Array.from(seen.values());
         console.log(`[area-analysis] Deduplicated ${dropped.length} duplicate categor${dropped.length === 1 ? "y" : "ies"}: ${dropped.join(", ")} — now ${analysis.what_it_needs.length} items`);
+      }
+    }
+
+    // ── Self-review: LLM checks its own output for consistency ───────
+    {
+      const selfReview = await selfReviewAreaAnalysis(analysis, allKeepItems, room.room_type);
+      if (selfReview.wasCorrepted) {
+        analysis = selfReview.output as typeof analysis;
+        console.log(`[area-analysis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
+          selfReview.issues.join("; "));
       }
     }
 

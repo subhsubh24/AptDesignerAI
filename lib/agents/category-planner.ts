@@ -225,7 +225,7 @@ You have Google Search. Use it to verify whether the categories you're proposing
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 6000,
+            max_tokens: 10000,
             seed: DETERMINISTIC_SEED,
             responseSchema: CATEGORY_PLAN_GEMINI_SCHEMA,
             responseMimeType: "application/json",
@@ -239,7 +239,7 @@ You have Google Search. Use it to verify whether the categories you're proposing
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 6000,
+            max_tokens: 10000,
             seed: DETERMINISTIC_SEED,
             tools,
           });

@@ -1189,7 +1189,7 @@ Based on the scoring and holistic assessment above, decide: keep iterating, or s
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
-            max_tokens: 6000,
+            max_tokens: 10000,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,

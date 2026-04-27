@@ -18,7 +18,7 @@ import { createLogger } from "@/lib/logging/logger";
 const log = createLogger("area-analysis-validator");
 
 export interface AreaAnalysisValidationIssue {
-  type: "exclusion_violation" | "keep_item_replaced" | "keep_item_in_remove" | "missing_request" | "architectural_in_keeps" | "invalid_remove";
+  type: "exclusion_violation" | "keep_item_replaced" | "keep_item_in_remove" | "missing_request" | "architectural_in_keeps" | "invalid_remove" | "furniture_pairing";
   description: string;
   field: string;
   action: "removed" | "flagged";
@@ -506,6 +506,139 @@ export function validateAreaAnalysis(
           action: "flagged",
         });
       }
+    }
+  }
+
+  // --- Check 4: Furniture pairing consistency ---
+  // If a recommendation includes one half of a paired set (e.g. dining chairs)
+  // but the complementary piece (dining table) is neither in what_it_needs nor
+  // in the keep list, auto-inject the missing companion to avoid incoherent recs.
+  const FURNITURE_PAIRS: Array<{
+    item: string;
+    companion: string;
+    companionCategory: string;
+    companionTitle: string;
+    matchTerms: string[];
+    companionTerms: string[];
+  }> = [
+    {
+      item: "dining_chair",
+      companion: "dining_table",
+      companionCategory: "dining_table",
+      companionTitle: "Dining Table",
+      matchTerms: ["dining chair", "dining_chair", "dining chairs", "dining_chairs", "host chair", "side chair"],
+      companionTerms: ["dining table", "dining_table"],
+    },
+    {
+      item: "dining_table",
+      companion: "dining_chair",
+      companionCategory: "dining_chairs",
+      companionTitle: "Dining Chairs",
+      matchTerms: ["dining table", "dining_table"],
+      companionTerms: ["dining chair", "dining_chair", "dining chairs", "dining_chairs"],
+    },
+    {
+      item: "desk",
+      companion: "desk_chair",
+      companionCategory: "desk_chair",
+      companionTitle: "Desk Chair",
+      matchTerms: ["desk", "writing desk", "office desk"],
+      companionTerms: ["desk chair", "office chair", "task chair", "desk_chair"],
+    },
+    {
+      item: "desk_chair",
+      companion: "desk",
+      companionCategory: "desk",
+      companionTitle: "Desk",
+      matchTerms: ["desk chair", "desk_chair", "office chair", "task chair"],
+      companionTerms: ["desk", "writing desk", "office desk"],
+    },
+    {
+      item: "nightstand",
+      companion: "bed",
+      companionCategory: "bed",
+      companionTitle: "Bed Frame",
+      matchTerms: ["nightstand", "bedside table", "night table"],
+      companionTerms: ["bed", "bed frame", "bedframe", "platform bed"],
+    },
+    {
+      item: "bar_stool",
+      companion: "kitchen_island",
+      companionCategory: "kitchen_island",
+      companionTitle: "Kitchen Island / Counter",
+      matchTerms: ["bar stool", "bar_stool", "counter stool", "bar_stools"],
+      companionTerms: ["island", "counter", "bar", "peninsula"],
+    },
+  ];
+
+  if (Array.isArray(patched.what_it_needs)) {
+    const needsText = patched.what_it_needs.map((item: AnalysisItem) =>
+      normalize(`${item.category || ""} ${item.search_title || ""}`),
+    );
+    const keepText = allKeepItems.map((k) => normalize(k));
+    const worksText = Array.isArray(patched.what_works)
+      ? (patched.what_works as string[]).map((w) => normalize(w))
+      : [];
+    const allExisting = [...keepText, ...worksText];
+
+    for (const pair of FURNITURE_PAIRS) {
+      const hasItem = needsText.some((t: string) =>
+        pair.matchTerms.some((m) => t.includes(normalize(m))),
+      );
+      if (!hasItem) continue;
+
+      const companionInNeeds = needsText.some((t: string) =>
+        pair.companionTerms.some((m) => t.includes(normalize(m))),
+      );
+      if (companionInNeeds) continue;
+
+      const companionInExisting = allExisting.some((t) =>
+        pair.companionTerms.some((m) => t.includes(normalize(m))),
+      );
+      if (companionInExisting) continue;
+
+      // Companion is missing from everywhere — for items where the companion
+      // is typically already present (bar/counter for bar stools, bed for
+      // nightstand), just flag; for true pairs (table + chairs, desk + chair)
+      // auto-inject the missing companion.
+      const skipAutoInject = pair.companion === "kitchen_island" || pair.companion === "bed";
+      if (skipAutoInject) {
+        issues.push({
+          type: "furniture_pairing",
+          description: `"${pair.item}" recommended but companion "${pair.companion}" not found in Keep or what_it_needs — flagged for review`,
+          field: "what_it_needs",
+          action: "flagged",
+        });
+        continue;
+      }
+
+      const alreadyInjected = patched.what_it_needs.some(
+        (item: AnalysisItem) => item.category === pair.companionCategory,
+      );
+      if (alreadyInjected) continue;
+
+      patched.what_it_needs.push({
+        category: pair.companionCategory,
+        search_title: pair.companionTitle,
+        description: `Auto-injected — ${pair.item} was recommended without its companion ${pair.companion}`,
+        priority: "high",
+        specs: "",
+        placement: "",
+        _injected_by_validator: true,
+      });
+
+      issues.push({
+        type: "furniture_pairing",
+        description: `"${pair.item}" recommended without companion "${pair.companion}" — auto-injected ${pair.companionCategory} into what_it_needs`,
+        field: "what_it_needs",
+        action: "removed",
+      });
+
+      log.warn("Furniture pairing fix", {
+        phase: "area-analysis-validation",
+        item: pair.item,
+        injectedCompanion: pair.companionCategory,
+      });
     }
   }
 

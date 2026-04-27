@@ -369,7 +369,7 @@ export const geminiProvider: AIProvider = {
     model,
     system,
     messages,
-    max_tokens = 4000,
+    max_tokens = 16000,
     temperature,
     seed,
     tools,
@@ -708,7 +708,7 @@ export const geminiProvider: AIProvider = {
     const finishReason = response.candidates?.[0]?.finishReason as string | undefined;
     const truncated = finishReason === "MAX_TOKENS";
     if (truncated) {
-      log.warn("Response truncated (MAX_TOKENS)", { model });
+      log.warn("Response truncated (MAX_TOKENS)", { model, maxOutputTokens: max_tokens, outputTokens: (response.usageMetadata as Record<string, number> | undefined)?.candidatesTokenCount || 0 });
     } else if (finishReason && finishReason !== "STOP") {
       // SAFETY, RECITATION, OTHER, etc. — these silently produce empty
       // content unless we surface them. Callers seeing empty `content`

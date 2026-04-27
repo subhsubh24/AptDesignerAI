@@ -44,7 +44,7 @@ async function semanticChat<T>(opts: {
       model,
       system: opts.system,
       messages: [{ role: "user", content: opts.user }],
-      max_tokens: opts.maxTokens ?? 1500,
+      max_tokens: opts.maxTokens ?? 3000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });

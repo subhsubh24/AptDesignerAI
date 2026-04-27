@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { validateMockupPrompt } from "@/lib/agents/mockup-prompt-validator";
+import { generateWithVerification } from "@/lib/agents/mockup-verifier";
 import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
 import { extractRoomArchitecture, formatArchitectureForPrompt } from "@/lib/agents/room-architecture-extractor";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
@@ -363,28 +364,42 @@ RULES:
       });
     }
 
-    const imageResult = await generateMockupImage(visionPrompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
+    const verificationResult = await generateWithVerification({
+      generateFn: async (prompt) => {
+        const result = await generateMockupImage(prompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
+        if (!result.success || !result.data) return { success: false, error: result.error };
+        return { success: true, data: result.data };
+      },
+      originalPrompt: visionPrompt,
+      roomImageUrls,
+    });
 
-    if (!imageResult.success || !imageResult.data) {
+    if (!verificationResult.finalImageData) {
       await completeAgentRun(supabase, agentRun.id, {
         status: "failed",
-        error_message: imageResult.error,
+        error_message: "Image generation failed after verification attempts",
       });
-      return NextResponse.json({ error: imageResult.error }, { status: 500 });
+      return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
     }
 
-    // Upload generated image to storage under the cache key
-    const imageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type, visionCacheKey);
+    const imageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, visionCacheKey);
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
-      output_json: { image_url: imageUrl },
+      output_json: {
+        image_url: imageUrl,
+        verified: verificationResult.verified,
+        verification_attempts: verificationResult.attempts,
+        verification: verificationResult.finalVerification,
+      },
     });
 
     return NextResponse.json({
       image_url: imageUrl,
       prompt: visionPrompt,
       vision_mode: true,
+      verified: verificationResult.verified,
+      verification_attempts: verificationResult.attempts,
     });
   }
 
@@ -570,30 +585,37 @@ RULES:
     productReferences,
   };
 
-  // Generate image — pass room photos and floor plan for visual reference.
+  // Generate image with self-correction verification loop.
   // finalPrompt is either the original mockup prompt or the audit-revised
   // version when the audit flagged gaps.
-  const imageResult = await generateMockupImage(finalPrompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
+  const verificationResult = await generateWithVerification({
+    generateFn: async (prompt) => {
+      const result = await generateMockupImage(prompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
+      if (!result.success || !result.data) return { success: false, error: result.error };
+      return { success: true, data: result.data };
+    },
+    originalPrompt: finalPrompt,
+    roomImageUrls,
+  });
 
-  if (!imageResult.success || !imageResult.data) {
+  if (!verificationResult.finalImageData) {
     await supabase
       .from("mockup_jobs")
       .update({
         status: "failed",
         prompt: finalPrompt,
-        error_message: imageResult.error,
+        error_message: "Image generation failed after verification attempts",
       })
       .eq("id", mockupJob?.id);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
-      error_message: imageResult.error,
+      error_message: "Image generation failed after verification attempts",
     });
-    return NextResponse.json({ error: imageResult.error }, { status: 500 });
+    return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
   }
 
-  // Upload generated image under the content-addressed cache key, so a
-  // repeat request with the same inputs hits the cache next time.
-  const finalImageUrl = await uploadMockupImage(supabase, imageResult.data.image_url, imageResult.data.image_mime_type, cacheKey);
+  // Upload verified image under the content-addressed cache key.
+  const finalImageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, cacheKey);
 
   // Update mockup job
   await supabase
@@ -602,14 +624,23 @@ RULES:
       status: "completed",
       prompt: finalPrompt,
       result_image_url: finalImageUrl,
-      generation_provider: imageResult.data.provider,
+      generation_provider: "gemini-image",
+      generation_metadata: {
+        verified: verificationResult.verified,
+        verification_attempts: verificationResult.attempts,
+        verification: verificationResult.finalVerification,
+      },
       completed_at: new Date().toISOString(),
     })
     .eq("id", mockupJob?.id);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
-    output_json: { image_url: finalImageUrl },
+    output_json: {
+      image_url: finalImageUrl,
+      verified: verificationResult.verified,
+      verification_attempts: verificationResult.attempts,
+    },
     tokens_used: promptResult.tokensUsed,
   });
 
@@ -617,6 +648,8 @@ RULES:
     id: mockupJob?.id,
     image_url: finalImageUrl,
     prompt: finalPrompt,
+    verified: verificationResult.verified,
+    verification_attempts: verificationResult.attempts,
   });
 }
 

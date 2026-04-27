@@ -265,7 +265,7 @@ async function disambiguateWithVision(
       model: selectModel("apartment_research"),
       system: "You are an architectural vision assistant. Match user-provided apartment photos to floor-plan diagrams by comparing visible features. Never guess — if the photos don't show enough to decide, return matched_variant_name: null.",
       messages: [{ role: "user", content: blocks }],
-      max_tokens: 4000,
+      max_tokens: 8000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
     });
 

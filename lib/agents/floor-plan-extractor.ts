@@ -155,7 +155,7 @@ export async function runFloorPlanExtraction(
           ],
         },
       ],
-      max_tokens: 4000,
+      max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });

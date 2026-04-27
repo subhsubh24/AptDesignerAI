@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
 import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
+import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
@@ -186,6 +187,23 @@ export async function POST(request: Request) {
         }
 
         sendEvent("step", { step: "Running AI diagnosis", status: "done" });
+
+        // Step 3b: Self-review — LLM checks its own output
+        sendEvent("step", { step: "Self-reviewing diagnosis", status: "running", detail: "Checking for logical consistency" });
+        {
+          const selfReview = await selfReviewDiagnosis(
+            result.data.diagnosis as unknown as Record<string, unknown>,
+            result.data.design_direction as unknown as Record<string, unknown>,
+            ctx.roomType,
+          );
+          if (selfReview.wasCorrepted) {
+            result.data.diagnosis = selfReview.output.diagnosis as unknown as typeof result.data.diagnosis;
+            result.data.design_direction = selfReview.output.designDirection as unknown as typeof result.data.design_direction;
+            sendEvent("step", { step: "Self-reviewing diagnosis", status: "done", detail: `Self-corrected ${selfReview.correctionRounds} issue(s)` });
+          } else {
+            sendEvent("step", { step: "Self-reviewing diagnosis", status: "done" });
+          }
+        }
 
         // Step 4: Validating against constraints
         sendEvent("step", { step: "Validating recommendations", status: "running", detail: "Checking against your preferences and constraints" });

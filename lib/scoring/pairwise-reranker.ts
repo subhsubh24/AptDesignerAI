@@ -200,7 +200,7 @@ Return a JSON array with one object per pair:
       model: selectModel("quick_score"),
       system: "You are a furniture comparison expert. Be decisive — always pick a winner, even if close. Return ONLY valid JSON.",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 4000,
+      max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
