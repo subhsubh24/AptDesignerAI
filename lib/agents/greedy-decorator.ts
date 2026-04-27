@@ -252,7 +252,7 @@ export async function runDiagnosisExpansion(
         model,
         system: EXPANSION_SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
-        max_tokens: 8000,
+        max_tokens: 64000,
         seed: DETERMINISTIC_SEED + i,
         tools: [
           { googleSearch: {} as Record<string, never> },
@@ -319,7 +319,7 @@ export async function runDiagnosisExpansion(
           model,
           system: EXPANSION_SYSTEM_PROMPT,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 8000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED + i,
           tools: [
             { googleSearch: {} as Record<string, never> },
@@ -520,7 +520,7 @@ async function runCritiquePass(args: {
       model,
       system: CRITIQUE_SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
-      max_tokens: 10000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       tools: [
         { codeExecution: {} as Record<string, never> },

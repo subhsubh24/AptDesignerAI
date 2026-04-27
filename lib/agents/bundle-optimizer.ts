@@ -314,13 +314,13 @@ export async function evaluateBundle(
   };
 
   try {
-    const scoringRes = await runPass("scoring", getBundleScoringPrompt(evalCtx), 5000, (raw) => BundleScoringResponseSchema.parse(raw));
+    const scoringRes = await runPass("scoring", getBundleScoringPrompt(evalCtx), 64000, (raw) => BundleScoringResponseSchema.parse(raw));
     const vibeRes = options.skipVibe
       ? null
       : await runPass(
           "vibe",
           getBundleVibePrompt(evalCtx, scoringRes.data.verdict),
-          2500,
+          64000,
           (raw) => BundleVibeResponseSchema.parse(raw),
         );
 
@@ -475,7 +475,7 @@ export async function generateBundleVibe(
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 8000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
         });

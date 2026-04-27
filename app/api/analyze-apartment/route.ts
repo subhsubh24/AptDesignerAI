@@ -193,7 +193,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         messages: [{ role: "user", content: roomContent }],
         // High thinking needs a generous output budget — the model consumes
         // thinking tokens before emitting the JSON, and "high" can burn a lot.
-        max_tokens: 24000,
+        max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "high" },
@@ -285,7 +285,7 @@ ${synthInput}
       model,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: synthPrompt }] }],
-      max_tokens: 12000,
+      max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
       thinkingConfig: { thinkingLevel: "high" },

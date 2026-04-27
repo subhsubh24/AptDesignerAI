@@ -246,7 +246,7 @@ ${JSON.stringify({
         model,
         system,
         messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
-        max_tokens: 8000,
+        max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
       });
@@ -325,7 +325,7 @@ CRITICAL RULES:
       model,
       system,
       messages: [{ role: "user", content: contentBlocks }],
-      max_tokens: 10000,
+      max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
     });

@@ -506,7 +506,7 @@ export async function extractFromUrl(
           model,
           system,
           messages: [{ role: "user", content: buildContent(scrapeFirstContent) }],
-          max_tokens: 12000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
         });
 
@@ -544,7 +544,7 @@ export async function extractFromUrl(
       model,
       system,
       messages: [{ role: "user", content: buildContent(userContent) }],
-      max_tokens: 6000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       tools: [{ urlContext: {} }],
     });
@@ -571,7 +571,7 @@ export async function extractFromUrl(
         model,
         system,
         messages: [{ role: "user", content: buildContent(userContent) }],
-        max_tokens: 6000,
+        max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
         tools: [{ urlContext: {} }],
       });
@@ -609,7 +609,7 @@ export async function extractFromUrl(
           model,
           system,
           messages: [{ role: "user", content: buildContent(fallbackContent) }],
-          max_tokens: 12000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
         });
 
@@ -675,7 +675,7 @@ export async function extractFromImage(
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 8000,
+      max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
       mediaResolution: "high",

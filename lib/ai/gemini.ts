@@ -369,7 +369,7 @@ export const geminiProvider: AIProvider = {
     model,
     system,
     messages,
-    max_tokens = 16000,
+    max_tokens = 64000,
     temperature,
     seed,
     tools,

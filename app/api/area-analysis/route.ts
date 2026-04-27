@@ -481,7 +481,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           model,
           system,
           messages: [{ role: "user", content: passAContent }],
-          max_tokens: 16000,
+          max_tokens: 64000,
           seed,
           responseMimeType: "application/json",
           cacheScope: contentBlocks.length > 0
@@ -564,7 +564,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model,
           system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 8000,
+          max_tokens: 64000,
           cacheScope:
             contentBlocks.length > 0
               ? { sessionKey: areaSessionKey, content: contentBlocks }
@@ -687,7 +687,7 @@ Use Google Search to verify current pricing and material availability when neede
       model,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
-      max_tokens: 12000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       tools: [
@@ -1587,7 +1587,7 @@ Use Google Search to verify current pricing and material availability when neede
                       text: `Search for and summarize: ${query}\n\nReturn a concise summary of findings relevant to interior design recommendations.`,
                     }],
                   }],
-                  max_tokens: 8000,
+                  max_tokens: 64000,
                   tools: [{ googleSearch: {} as Record<string, never> }],
                 });
                 coordState.designTrendSearches = [

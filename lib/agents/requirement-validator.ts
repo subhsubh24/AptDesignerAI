@@ -222,7 +222,7 @@ Only search when the judgment is uncertain. Don't search for every product — u
             model,
             system,
             messages: [{ role: "user", content }],
-            max_tokens: 10000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
             responseMimeType: "application/json",
@@ -246,7 +246,7 @@ Only search when the judgment is uncertain. Don't search for every product — u
             model,
             system,
             messages: [{ role: "user", content }],
-            max_tokens: 10000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             tools: [{ googleSearch: {} as Record<string, never> }],
           });

@@ -44,7 +44,7 @@ async function semanticChat<T>(opts: {
       model,
       system: opts.system,
       messages: [{ role: "user", content: opts.user }],
-      max_tokens: opts.maxTokens ?? 3000,
+      max_tokens: opts.maxTokens ?? 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
@@ -80,7 +80,7 @@ export async function parseUserContextLLM(rawText: string): Promise<SemanticPars
   if (!rawText || rawText.trim().length < 8) return null;
   const result = await semanticChat<SemanticParsedContext>({
     label: "parseUserContext",
-    maxTokens: 1200,
+    maxTokens: 64000,
     system:
       "You parse free-text client design notes into structured constraints for an interior-design LLM. Be conservative: only extract what the client clearly stated. Do NOT invent items. Skip vague preferences (e.g. 'comfortable'). Distinguish 'I'm not a fan of beige' (exclusion: beige) from 'I am a fan of beige' (request: beige). Return strict JSON.",
     user: `Parse this client note into JSON with this exact shape:
@@ -131,7 +131,7 @@ export async function expandExclusionTermsLLM(exclusions: string[]): Promise<str
   if (exclusions.length === 0) return [];
   const result = await semanticChat<{ expanded: string[] }>({
     label: "expandExclusionTerms",
-    maxTokens: 800,
+    maxTokens: 64000,
     system:
       "You expand a furniture/decor item name into all near-synonyms a designer might use. Output a flat array of lowercase singular+plural forms. Be exhaustive within the same category but never cross categories.",
     user: `For each excluded item below, list every common synonym, plural, and category-equivalent term. Example: 'curtain' → ['curtain','curtains','drapery','drapes','window panel','window treatment','sheer','sheers']
@@ -160,7 +160,7 @@ export async function classifyArchitecturalLLM(items: string[]): Promise<Set<str
   if (items.length === 0) return new Set();
   const result = await semanticChat<{ architectural: string[] }>({
     label: "classifyArchitectural",
-    maxTokens: 600,
+    maxTokens: 64000,
     system:
       "You decide whether each item is an ARCHITECTURAL feature (built-in, fixed, requires construction — flooring, walls, paint, cabinetry, countertops, ceiling fixtures, HVAC) versus FURNITURE/DECOR (movable, purchasable). Architectural items don't go on a shopping list.",
     user: `Return JSON listing the items that are architectural features (NOT shoppable furniture/decor):
@@ -186,7 +186,7 @@ export async function classifyInvalidRemoveLLM(items: string[]): Promise<Set<str
   if (items.length === 0) return new Set();
   const result = await semanticChat<{ invalid: string[] }>({
     label: "classifyInvalidRemove",
-    maxTokens: 600,
+    maxTokens: 64000,
     system:
       "You decide whether each entry in a 'what should go' list is a REMOVABLE physical item (a couch, a vase) versus something INVALID for a removal list (an absence like 'lack of art', a built-in like 'ceiling fixture', infrastructure like 'wall outlet', or a generic platitude like 'any matching pieces').",
     user: `Return JSON listing items that are NOT validly removable:
@@ -224,7 +224,7 @@ export async function classifyStyleLabelLLM(
   if (haystack.length < 8) return null;
   const result = await semanticChat<{ label: string | null }>({
     label: "classifyStyleLabel",
-    maxTokens: 200,
+    maxTokens: 64000,
     system:
       "You classify an interior-design direction into ONE label from a closed vocabulary. Pick the SINGLE best match based on style notes + recommended materials. Return null if nothing fits confidently.",
     user: `Allowed labels: ${STYLE_LABELS.join(", ")}
@@ -264,7 +264,7 @@ export async function dedupProductTitlesLLM(
   const batch = items.slice(0, 30);
   const result = await semanticChat<{ groups: DedupGroup[] }>({
     label: "dedupProductTitles",
-    maxTokens: 1500,
+    maxTokens: 64000,
     system:
       "You group product listings that are the same physical product despite different titles. Match on retailer + product line + model name. DIFFERENT sizes / colors of the same model count as duplicates (we dedupe at the catalog level). DIFFERENT models in the same product line do NOT (e.g. Kallax 2x2 vs Kallax 4x4 are duplicates of catalog 'Kallax', but Kallax vs Billy are not).",
     user: `Find duplicate listings. Return JSON:
@@ -298,7 +298,7 @@ export async function isScrapeContextSufficientLLM(scrapedContext: string): Prom
   if (!scrapedContext || scrapedContext.length < 30) return false;
   const result = await semanticChat<{ sufficient: boolean }>({
     label: "scrapeSufficient",
-    maxTokens: 100,
+    maxTokens: 64000,
     system:
       "You decide whether scraped product-page text contains enough info to extract a product (must have a clear product name AND at least one of: price, description, dimensions). Be lenient: if the info is there but unlabeled, count it.",
     user: `Scraped context:
@@ -329,7 +329,7 @@ export async function productMatchesCategoryLLM(
   if (!title && !extractedCategory) return { ok: false, reason: "no title or category" };
   const result = await semanticChat<{ ok: boolean; reason: string }>({
     label: "productMatchesCategory",
-    maxTokens: 200,
+    maxTokens: 64000,
     system:
       "You decide whether a shopping result actually matches a furniture category request. Reject obvious wrong-category items (gift cards, cleaning supplies, books, apparel, warranty plans). Accept legitimate synonyms (settee = sofa, ottoman = pouf, credenza = sideboard).",
     user: `Expected category: ${expectedCategory}
@@ -362,7 +362,7 @@ export async function inferColorHslLLM(colorName: string): Promise<ColorHSL | nu
   if (!colorName || colorName.trim().length < 2) return null;
   const result = await semanticChat<ColorHSL>({
     label: "inferColorHsl",
-    maxTokens: 120,
+    maxTokens: 64000,
     system:
       "You map a color name to HSL (Hue 0-360, Saturation 0-100, Lightness 0-100). Be conservative — pick the most typical interpretation of the name in interior design context.",
     user: `Color: "${colorName}"
@@ -407,7 +407,7 @@ export async function summarizePreferencesLLM(input: {
   if (input.per_room_item_counts.length === 0) return null;
   const result = await semanticChat<SemanticPreferenceSummary>({
     label: "summarizePreferences",
-    maxTokens: 400,
+    maxTokens: 64000,
     system:
       "You summarize a household's design preferences from prior-room signals. Output ONE density label (minimalist/balanced/maximalist/unknown), ONE budget label (tight/comfortable/premium/unknown), and a one-sentence taste summary. Reason about intent — a 'budget' room because of constraints + a 'best_possible' room from a bonus = 'comfortable'.",
     user: `Prior-room signals:
@@ -459,7 +459,7 @@ export async function extractKeepCategoriesLLM(keepItems: string[]): Promise<Kee
   if (keepItems.length === 0) return [];
   const result = await semanticChat<{ items: KeepItemCategory[] }>({
     label: "extractKeepCategories",
-    maxTokens: 1200,
+    maxTokens: 64000,
     system:
       "You extract structured keep-item info for a constraint validator. For each item the user wants to keep, return: the category keywords that should block NEW recommendations of the same kind (don't recommend a new sofa if they're keeping their sofa) AND any location phrase. Output original item text VERBATIM.",
     user: `For each keep item, return:

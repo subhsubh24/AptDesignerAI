@@ -109,7 +109,7 @@ Return JSON:
       model,
       system: "You are an expert interior design photographer. Compare room mockups against reference photos for architectural accuracy. Be strict about walls, floors, and windows matching. Furniture style differences are expected — you are only checking that the ROOM SHELL matches.",
       messages: [{ role: "user", content }],
-      max_tokens: 8000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });

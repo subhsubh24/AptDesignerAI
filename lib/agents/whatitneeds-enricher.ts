@@ -156,7 +156,7 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
       model: selectModel("search"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 8000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       tools: [

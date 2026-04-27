@@ -280,7 +280,7 @@ Search before writing queries. Queries grounded in real product listings perform
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 8000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
             responseMimeType: "application/json",
@@ -304,7 +304,7 @@ Search before writing queries. Queries grounded in real product listings perform
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 8000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             tools: [{ googleSearch: {} as Record<string, never> }, { urlContext: {} as Record<string, never> }],
           });

@@ -300,7 +300,7 @@ ${context.mathScoresText ? `\n${context.mathScoresText}\n` : ""}`;
 
   // ─── Pass A: Per-item scoring (parallel chunks for large sets) ────────────
   const itemCount = whatItNeeds.length;
-  const passAMaxTokensBase = Math.min(8000 + itemCount * 2000, 48000);
+  const passAMaxTokensBase = 64000;
 
   // Build Pass A prompt. In chunked mode the full item list stays in sharedHeader for
   // cross-item context; a restriction note tells each parallel scorer to output only its group.
@@ -513,7 +513,7 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
       const group1 = whatItNeeds.slice(0, midpoint);
       const group2 = whatItNeeds.slice(midpoint);
       // Each chunk outputs ~half the items so the token budget is proportionally smaller
-      const chunkMaxTokens = Math.min(8000 + Math.ceil(itemCount / 2) * 2000, 28000);
+      const chunkMaxTokens = 64000;
 
       log.info("Harmony Pass A: splitting into parallel chunks", {
         totalItems: itemCount, group1: group1.length, group2: group2.length, chunkMaxTokens,
@@ -634,7 +634,7 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
             model,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
-            max_tokens: 10000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
@@ -841,7 +841,7 @@ ${context.mathScoresText || ""}`;
 
   // ─── Pass A: Per-item final scoring with revision history (parallel for large sets) ───
   const finalItemCount = whatItNeeds.length;
-  const passAMaxTokensBase = Math.min(8000 + finalItemCount * 2000, 48000);
+  const passAMaxTokensBase = 64000;
 
   // Build Pass A prompt. In chunked mode the full item list stays in sharedHeader for
   // cross-item context; a restriction note tells each parallel scorer to output only its group.
@@ -1015,7 +1015,7 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
       const midpoint = Math.ceil(finalItemCount / 2);
       const group1 = whatItNeeds.slice(0, midpoint);
       const group2 = whatItNeeds.slice(midpoint);
-      const chunkMaxTokens = Math.min(8000 + Math.ceil(finalItemCount / 2) * 2000, 28000);
+      const chunkMaxTokens = 64000;
 
       log.info("Final assessment Pass A: splitting into parallel chunks", {
         totalItems: finalItemCount, group1: group1.length, group2: group2.length, chunkMaxTokens,
@@ -1106,7 +1106,7 @@ Based on the room context and per-item final scores above, your task is: holisti
             model,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
-            max_tokens: 10000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
@@ -1189,7 +1189,7 @@ Based on the scoring and holistic assessment above, decide: keep iterating, or s
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
-            max_tokens: 10000,
+            max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
@@ -1457,7 +1457,7 @@ Return JSON:
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 16000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,

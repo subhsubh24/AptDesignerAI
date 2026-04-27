@@ -311,7 +311,7 @@ export async function generateMockupPrompt(
       model,
       system,
       messages: [{ role: "user", content: promptBlocks }],
-      max_tokens: 12000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       tools: [

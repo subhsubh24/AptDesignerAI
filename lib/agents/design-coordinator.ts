@@ -287,7 +287,7 @@ Begin. Call your first tool.`;
       model,
       system,
       messages: turn > 0 ? messages : messages,
-      max_tokens: 12000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       tools: [
         { functionDeclarations: COORDINATOR_TOOLS },

@@ -158,7 +158,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             model,
             system,
             messages: [{ role: "user", content: retryContent }],
-            max_tokens: 16000,
+            max_tokens: 64000,
             seed,
             responseMimeType: "application/json",
             mediaResolution: "ultra_high",
@@ -238,7 +238,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model: judgeModel,
           system: getSystemPrompt(),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 8000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
@@ -373,7 +373,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: retryText }] }],
-          max_tokens: 8000,
+          max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           cacheScope: cacheableBlocks.length > 0

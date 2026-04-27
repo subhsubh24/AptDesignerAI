@@ -121,7 +121,7 @@ If you find issues, fix them in corrected_analysis. ONLY fix the specific issues
     model,
     system: "You are a quality assurance agent for interior design recommendations. Check outputs for logical consistency. Be strict about furniture pairing and spatial feasibility. Return structured JSON.",
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 16000,
+    max_tokens: 64000,
     seed: DETERMINISTIC_SEED,
     responseMimeType: "application/json",
   });
@@ -231,7 +231,7 @@ Only fix actual inconsistencies. Don't change subjective style choices.`;
     model,
     system: "You are a senior interior designer reviewing a room diagnosis for internal consistency. Be strict about palette/material/style coherence. Return structured JSON.",
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 16000,
+    max_tokens: 64000,
     seed: DETERMINISTIC_SEED,
     responseMimeType: "application/json",
   });
@@ -271,7 +271,7 @@ Check:
 
 Return: {"valid": true/false, "issues": ["..."], "corrected": null or corrected object}`,
       }],
-      max_tokens: 4000,
+      max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
     });
