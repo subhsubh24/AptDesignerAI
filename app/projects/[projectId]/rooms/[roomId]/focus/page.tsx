@@ -340,8 +340,12 @@ export default function FocusPage() {
 
   // Auto-trigger vision mockup when analysis is ready (runs in background)
   const visionTriggered = useRef(false);
+  const visionAbortRef = useRef<AbortController | null>(null);
 
   const generateVisionInBackground = async (analysis: AreaAnalysis) => {
+    visionAbortRef.current?.abort();
+    const controller = new AbortController();
+    visionAbortRef.current = controller;
     setGeneratingVision(true);
     const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
     try {
@@ -354,15 +358,21 @@ export default function FocusPage() {
           design_direction: analysis.design_direction || "",
           items_description: items,
         }),
+        signal: controller.signal,
       });
       if (res.ok) {
         const data = await res.json();
         setVisionUrl(data.image_url);
       }
     } catch (err) {
-      console.error("Background vision generation error:", err);
+      if ((err as { name?: string })?.name !== "AbortError") {
+        console.error("Background vision generation error:", err);
+      }
     }
-    setGeneratingVision(false);
+    if (visionAbortRef.current === controller) {
+      visionAbortRef.current = null;
+      setGeneratingVision(false);
+    }
   };
 
   useEffect(() => {
@@ -371,6 +381,9 @@ export default function FocusPage() {
       // Fire and forget — generates in background while user reviews assessment
       generateVisionInBackground(areaAnalysis);
     }
+    return () => {
+      visionAbortRef.current?.abort();
+    };
   }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Manual trigger for vision mockup (re-generate or generate from vision step)

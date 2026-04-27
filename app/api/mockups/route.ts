@@ -364,6 +364,10 @@ RULES:
       });
     }
 
+    // Vision mode is a pre-search "imagination" preview shown while the user
+    // reviews the area analysis — it is NOT the final design. Tight wall-clock
+    // budget (90s) prevents the browser from dropping the background fetch
+    // when the verify→regenerate loop runs long.
     const verificationResult = await generateWithVerification({
       generateFn: async (prompt) => {
         const result = await generateMockupImage(prompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
@@ -372,6 +376,7 @@ RULES:
       },
       originalPrompt: visionPrompt,
       roomImageUrls,
+      wallClockBudgetMs: 90_000,
     });
 
     if (!verificationResult.finalImageData) {
