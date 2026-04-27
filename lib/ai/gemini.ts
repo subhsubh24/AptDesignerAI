@@ -71,6 +71,11 @@ function isServerError(err: unknown): boolean {
   return typeof status === "number" && status >= 500 && status < 600;
 }
 
+function isRateLimitError(err: unknown): boolean {
+  const status = (err as Record<string, unknown>)?.status;
+  return status === 429;
+}
+
 function getClient(): GoogleGenAI {
   if (!client) {
     client = new GoogleGenAI({
@@ -584,8 +589,10 @@ export const geminiProvider: AIProvider = {
         break;
       } catch (err) {
         const e = err as Record<string, unknown>;
+        const isRateLimit = isRateLimitError(err);
+        const maxAttempts = isRateLimit ? 5 : maxTransportAttempts;
         const canRetry =
-          attempt < maxTransportAttempts && (isTransportError(err) || isServerError(err));
+          attempt < maxAttempts && (isTransportError(err) || isServerError(err) || isRateLimit);
         if (!canRetry) {
           const status = e.status as number;
           log.error("API error", {
@@ -610,8 +617,11 @@ export const geminiProvider: AIProvider = {
           throw err;
         }
         const isServer = isServerError(err);
-        const delay = isServer ? 1000 * Math.pow(2, attempt - 1) : 500 * Math.pow(2, attempt - 1);
-        log.warn(isServer ? "Server error, retrying" : "Transport error, retrying", {
+        const delay = isRateLimit
+          ? 2000 * Math.pow(2, attempt - 1) // 2s, 4s, 8s, 16s, 32s
+          : isServer ? 1000 * Math.pow(2, attempt - 1) : 500 * Math.pow(2, attempt - 1);
+        const reason = isRateLimit ? "Rate limited (429), retrying" : isServer ? "Server error, retrying" : "Transport error, retrying";
+        log.warn(reason, {
           model,
           attempt,
           delay,
