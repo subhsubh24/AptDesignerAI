@@ -65,7 +65,7 @@ const MAX_RE_SEARCH_CALLS = 2;
  * is force-finalized regardless of pending work — search runs that take
  * more than this should converge or accept current state.
  */
-const COORDINATOR_WALL_CLOCK_MS = 5 * 60 * 1000;
+const COORDINATOR_WALL_CLOCK_MS = 10 * 60 * 1000;
 
 /** Coordinator decisions — always operational, never subjective design judgments. */
 export type CoordinatorTool =

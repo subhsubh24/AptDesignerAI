@@ -69,7 +69,7 @@ interface ProductResult {
   product_url: string | null;
   image_url: string | null;
   price: number | null;
-  metadata: { price_tier?: string } | null;
+  metadata: { price_tier?: string; fill_source?: string; fill_origin_tier?: string } | null;
   product_evaluations: Array<{
     final_item_score: number;
     verdict: Verdict;
@@ -1359,12 +1359,16 @@ function RecommendationTable({
       [0] || null;
   }
 
-  // Calculate tier totals
+  // Calculate tier totals. Borrowed picks (fill_source: "adjacent_tier")
+  // are shown as "Same as X" stubs in the table — don't double-count their
+  // price into this tier's total since they're really the other tier's pick.
   const tierTotals: Record<PriceTier, number> = { budget: 0, balanced: 0, high_end: 0 };
   for (const cat of categories) {
     for (const tier of tiers) {
       const best = getBestForTier(cat, tier);
-      if (best?.price) tierTotals[tier] += best.price;
+      if (best?.price && best.metadata?.fill_source !== "adjacent_tier") {
+        tierTotals[tier] += best.price;
+      }
     }
   }
 
@@ -1538,6 +1542,22 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
     tier === "budget" ? "text-emerald-700" :
     tier === "balanced" ? "text-blue-700" :
     "text-purple-700";
+
+  // When fillEmptyTiers borrowed this product from an adjacent tier, the
+  // metadata is tagged. Render a compact "→ [origin]" stub instead of a
+  // full duplicate row, so the user sees one pick rather than 3 copies.
+  const isBorrowed = product.metadata?.fill_source === "adjacent_tier";
+  if (isBorrowed) {
+    const origin = product.metadata?.fill_origin_tier;
+    const originLabel = origin === "budget" ? "Budget" : origin === "balanced" ? "Mid-Range" : origin === "high_end" ? "Luxury" : "other tier";
+    return (
+      <td className="px-4 py-3">
+        <div className="flex flex-col items-center gap-0.5 text-center text-muted-foreground">
+          <span className="text-[10px] italic">Same as {originLabel} →</span>
+        </div>
+      </td>
+    );
+  }
 
   return (
     <td className="px-4 py-3">

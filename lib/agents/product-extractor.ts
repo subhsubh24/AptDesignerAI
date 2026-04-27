@@ -382,6 +382,28 @@ function shouldTryStructuredScrapeFirst(url: string): boolean {
   }
 }
 
+/**
+ * Domains where URL Context consistently 400s with INVALID_ARGUMENT.
+ * For these, we skip the URL Context attempts entirely after structured
+ * scrape fails — going straight to the plain-text fallback. Saves ~3s
+ * of doomed retries per URL on these retailers.
+ */
+const URL_CONTEXT_BLACKLIST = new Set([
+  "wayfair.com",
+]);
+
+function isUrlContextBlacklisted(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    for (const d of URL_CONTEXT_BLACKLIST) {
+      if (host === d || host.endsWith(`.${d}`)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Consider scraped context "sufficient" only when it includes at least a
 // Title AND one of (Price, Description). Otherwise fall through to URL Context.
 function isScrapeContextSufficient(ctx: string): boolean {
@@ -491,8 +513,14 @@ export async function extractFromUrl(
     }
   }
 
+  // For domains where URL Context consistently 400s with INVALID_ARGUMENT
+  // (Wayfair, etc.), throw early in both attempts so we jump to the
+  // plain-text fallback rather than burning ~3s on doomed retries.
+  const skipUrlContext = isUrlContextBlacklisted(url);
+
   // Attempt 1: with urlContext tool
   try {
+    if (skipUrlContext) throw new Error("urlContext blacklisted for this domain");
     const response = await geminiProvider.chat({
       model,
       system,
@@ -517,8 +545,9 @@ export async function extractFromUrl(
   } catch (attempt1Error) {
     // Attempt 2: retry with urlContext after brief delay (transient errors)
     log.debug("urlContext attempt 1 failed", { url, error: attempt1Error instanceof Error ? attempt1Error.message : String(attempt1Error) });
-    await new Promise((r) => setTimeout(r, 1500));
+    if (!skipUrlContext) await new Promise((r) => setTimeout(r, 1500));
     try {
+      if (skipUrlContext) throw new Error("urlContext blacklisted for this domain");
       const response = await geminiProvider.chat({
         model,
         system,
