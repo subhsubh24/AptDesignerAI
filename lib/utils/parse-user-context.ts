@@ -128,6 +128,63 @@ function dedupNearDuplicates(raw: string[]): string[] {
   return kept;
 }
 
+/**
+ * Async LLM-based parser. Calls Gemini for semantic understanding (catches
+ * negations, paraphrases, lifestyle context that the regex misses), then
+ * unions with the regex parse so we never lose anything the regex caught.
+ *
+ * Falls back to the pure regex parse if the LLM call fails or is disabled.
+ */
+export async function parseUserContextAsync(rawContext: string): Promise<ParsedUserContext> {
+  if (!rawContext || rawContext.trim().length === 0) {
+    return {
+      exclusions: [],
+      explicitRequests: [],
+      additionalKeepItems: [],
+      lifestyleNotes: [],
+      rawContext: "",
+    };
+  }
+  // Local import to avoid pulling the AI provider into sync paths that
+  // never call this async variant (route handlers / agents pre-parse).
+  const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+  const [llm, regex] = await Promise.all([
+    parseUserContextLLM(rawContext).catch(() => null),
+    Promise.resolve(parseUserContext(rawContext)),
+  ]);
+  if (!llm) return regex;
+
+  const dedupStrings = (xs: string[]): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const x of xs) {
+      const k = x.toLowerCase().replace(/\s+/g, " ").trim();
+      if (k && !seen.has(k)) { seen.add(k); out.push(x); }
+    }
+    return out;
+  };
+  const dedupRequests = (xs: ParsedUserContext["explicitRequests"]): ParsedUserContext["explicitRequests"] => {
+    const seen = new Set<string>();
+    const out: ParsedUserContext["explicitRequests"] = [];
+    for (const r of xs) {
+      const k = r.item.toLowerCase().replace(/\s+/g, " ").trim();
+      if (k && !seen.has(k)) { seen.add(k); out.push(r); }
+    }
+    return out;
+  };
+
+  return {
+    exclusions: dedupStrings([...llm.exclusions, ...regex.exclusions]),
+    explicitRequests: dedupRequests([
+      ...llm.explicit_requests.map((r) => ({ item: r.item, wantsMultiple: r.wants_multiple })),
+      ...regex.explicitRequests,
+    ]),
+    additionalKeepItems: dedupStrings([...llm.additional_keep_items, ...regex.additionalKeepItems]),
+    lifestyleNotes: dedupStrings([...llm.lifestyle_notes, ...regex.lifestyleNotes]),
+    rawContext: rawContext.trim(),
+  };
+}
+
 export function parseUserContext(rawContext: string): ParsedUserContext {
   if (!rawContext || rawContext.trim().length === 0) {
     return {

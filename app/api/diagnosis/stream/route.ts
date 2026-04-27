@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
-import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
+import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
         // Step 4: Validating against constraints
         sendEvent("step", { step: "Validating recommendations", status: "running", detail: "Checking against your preferences and constraints" });
 
-        const validation = validateDiagnosis(result.data, ctx.keepItems, ctx.userContext);
+        const validation = await validateDiagnosisAsync(result.data, ctx.keepItems, ctx.userContext);
         const diagnosisData = validation.patched;
 
         if (validation.wasModified) {

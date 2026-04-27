@@ -13,8 +13,8 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
-import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
-import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
+import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
@@ -198,7 +198,7 @@ Use this apartment-level context to ensure cross-room coherence in your area ana
   }
 
   // Parse user context into structured constraints (exclusions, keep items, requests)
-  const parsedContext = room.user_context ? parseUserContext(room.user_context) : null;
+  const parsedContext = room.user_context ? await parseUserContextAsync(room.user_context) : null;
   const parsedContextBlock = parsedContext ? formatParsedContextForPrompt(parsedContext) : "";
 
   if (parsedContext) {
@@ -841,7 +841,7 @@ Use Google Search to verify current pricing and material availability when neede
     // ── Post-validation: enforce user constraints ────────────────────
     // Catch cases where the LLM ignored exclusions, keep items, or explicit requests
     if (parsedContext || allKeepItems.length > 0) {
-      const validation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      const validation = await validateAreaAnalysisAsync(analysis, allKeepItems, room.user_context || undefined);
       if (validation.wasModified) {
         analysis = validation.patched;
         console.log(`[area-analysis] Post-validation patched ${validation.issues.length} constraint violation(s):`,
@@ -1607,7 +1607,7 @@ Use Google Search to verify current pricing and material availability when neede
     // exclusions, keep-item protections, or explicit requests. Re-run
     // the deterministic validator as a final gate before saving.
     if (parsedContext || allKeepItems.length > 0) {
-      const postHarmonyValidation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      const postHarmonyValidation = await validateAreaAnalysisAsync(analysis, allKeepItems, room.user_context || undefined);
       if (postHarmonyValidation.wasModified) {
         analysis = postHarmonyValidation.patched;
         console.log(`[area-analysis] Post-harmony re-validation patched ${postHarmonyValidation.issues.length} constraint violation(s):`,

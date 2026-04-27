@@ -7,8 +7,8 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
-import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
-import { validateAreaAnalysis } from "@/lib/agents/area-analysis-validator";
+import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { semanticLookup, semanticStore } from "@/lib/ai/semantic-cache";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
@@ -139,7 +139,7 @@ Use this apartment-level context to ensure cross-room coherence in your refineme
   const keepItems = room.keep_items as string[] | null;
 
   // Parse user context into structured constraints (exclusions, keep items, requests)
-  const parsedContext = room.user_context ? parseUserContext(room.user_context) : null;
+  const parsedContext = room.user_context ? await parseUserContextAsync(room.user_context) : null;
   const parsedContextBlock = parsedContext ? formatParsedContextForPrompt(parsedContext) : "";
 
   // Merge keep items from explicit list + parsed context
@@ -348,7 +348,7 @@ CRITICAL RULES:
     // Post-refinement validation: enforce user constraints
     // Catch cases where the LLM ignored exclusions, keep items, or explicit requests
     if (parsedContext || allKeepItems.length > 0) {
-      const postValidation = validateAreaAnalysis(analysis, allKeepItems, room.user_context || undefined);
+      const postValidation = await validateAreaAnalysisAsync(analysis, allKeepItems, room.user_context || undefined);
       if (postValidation.wasModified) {
         Object.assign(analysis, postValidation.patched);
         console.log(`[area-analysis/refine] Post-validation patched ${postValidation.issues.length} constraint violation(s):`,

@@ -216,6 +216,11 @@ export function aggregatePreferenceSignals(
  * Fetch + aggregate signals in one call. Returns null if the DB call fails
  * or there are no sibling rooms — callers should treat preference context
  * as strictly optional.
+ *
+ * After the deterministic aggregation, calls an LLM to refine the density /
+ * budget classifications and generate a free-form taste summary that
+ * frequency-counting can't produce. LLM failure falls back to the
+ * heuristic-only signals.
  */
 export async function inferUserPreferences(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -235,6 +240,48 @@ export async function inferUserPreferences(
 
     const signals = aggregatePreferenceSignals(rooms as RoomRow[], currentRoomId);
     if (signals.source_room_count === 0) return null;
+
+    // LLM refinement — replaces inferDensityPreference / inferBudgetPressure
+    // heuristics + adds a one-sentence taste summary. Strictly enriches; never
+    // drops information.
+    try {
+      const siblings = (rooms as RoomRow[]).filter((r) => r.id !== currentRoomId);
+      const itemCounts = siblings.flatMap((r) => {
+        const diags = (r.room_diagnoses ?? []).slice().sort((a, b) =>
+          (a.created_at < b.created_at ? 1 : -1),
+        );
+        const latest = diags[0];
+        const actionList = (latest?.action_list as ActionItem[] | null) ?? [];
+        return [actionList.length];
+      });
+      const budgetModes = siblings.map((r) => r.budget_mode || "unknown");
+      const { summarizePreferencesLLM } = await import("@/lib/ai/semantic-extract");
+      const llm = await summarizePreferencesLLM({
+        keep_items: signals.preferred_items,
+        replace_items: signals.avoided_items,
+        materials: signals.preferred_materials,
+        palette: signals.preferred_palette,
+        style_notes: signals.style_notes,
+        priorities: signals.priorities,
+        user_context_snippets: signals.user_context_snippets,
+        budget_modes: budgetModes,
+        per_room_item_counts: itemCounts,
+      });
+      if (llm) {
+        return {
+          ...signals,
+          density_preference: llm.density_preference,
+          budget_pressure: llm.budget_pressure,
+          // Append the LLM taste summary to style_notes so existing prompt
+          // formatters surface it without a schema change.
+          style_notes: llm.taste_summary
+            ? [llm.taste_summary, ...signals.style_notes].slice(0, 4)
+            : signals.style_notes,
+        };
+      }
+    } catch (err) {
+      log.debug("LLM preference refinement skipped", { error: err instanceof Error ? err.message : String(err) });
+    }
     return signals;
   } catch (err) {
     log.warn("inferUserPreferences: lookup failed", {

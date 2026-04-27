@@ -12,7 +12,7 @@
  * It patches the output to fix violations rather than re-running the LLM.
  */
 
-import { parseUserContext } from "@/lib/utils/parse-user-context";
+import { parseUserContext, type ParsedUserContext } from "@/lib/utils/parse-user-context";
 import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("area-analysis-validator");
@@ -158,14 +158,56 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
   });
 }
 
-export function validateAreaAnalysis(
+export interface AreaAnalysisSemanticHints {
+  expandedExclusions: string[] | null;
+  keepItemCategories: Array<{ item: string; category_keywords: string[]; location_phrase: string }> | null;
+  /** Items in what_works flagged as architectural by LLM (verbatim text) */
+  architecturalInWorks: Set<string> | null;
+  /** Items in what_should_go flagged as invalid (verbatim text) */
+  invalidInRemove: Set<string> | null;
+}
+
+export async function validateAreaAnalysisAsync(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
   analysis: Record<string, any>,
   keepItems: string[],
   userContext?: string
+): Promise<AreaAnalysisValidationResult> {
+  const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+  const { expandExclusionTermsLLM, extractKeepCategoriesLLM, classifyArchitecturalLLM, classifyInvalidRemoveLLM } = await import("@/lib/ai/semantic-extract");
+
+  const parsed = userContext ? await parseUserContextAsync(userContext) : null;
+  const allKeepItems = [...keepItems, ...(parsed?.additionalKeepItems || [])];
+  const works = Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : [];
+  const removes = Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : [];
+
+  const [exp, kc, arch, inv] = await Promise.all([
+    parsed?.exclusions?.length ? expandExclusionTermsLLM(parsed.exclusions).catch(() => null) : Promise.resolve(null),
+    allKeepItems.length ? extractKeepCategoriesLLM(allKeepItems).catch(() => null) : Promise.resolve(null),
+    works.length ? classifyArchitecturalLLM(works).catch(() => null) : Promise.resolve(null),
+    removes.length ? classifyInvalidRemoveLLM(removes).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  return validateAreaAnalysis(analysis, keepItems, userContext, parsed, {
+    expandedExclusions: exp,
+    keepItemCategories: kc,
+    architecturalInWorks: arch,
+    invalidInRemove: inv,
+  });
+}
+
+export function validateAreaAnalysis(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
+  analysis: Record<string, any>,
+  keepItems: string[],
+  userContext?: string,
+  /** Optional pre-parsed context (LLM-enhanced). Falls back to regex parse when omitted. */
+  preParsedContext?: ParsedUserContext | null,
+  /** Optional LLM-computed semantic hints. Falls back to regex when omitted. */
+  semanticHints?: AreaAnalysisSemanticHints | null,
 ): AreaAnalysisValidationResult {
   const issues: AreaAnalysisValidationIssue[] = [];
-  const parsed = userContext ? parseUserContext(userContext) : null;
+  const parsed = preParsedContext ?? (userContext ? parseUserContext(userContext) : null);
 
   // Deep clone to avoid mutating the original
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic LLM analysis output
@@ -198,7 +240,10 @@ export function validateAreaAnalysis(
 
   if (Array.isArray(patched.what_works)) {
     patched.what_works = patched.what_works.filter((item: string) => {
-      if (ARCHITECTURAL_PATTERNS.some(p => p.test(item))) {
+      const flagged = semanticHints?.architecturalInWorks
+        ? semanticHints.architecturalInWorks.has(item)
+        : ARCHITECTURAL_PATTERNS.some(p => p.test(item));
+      if (flagged) {
         issues.push({
           type: "architectural_in_keeps",
           description: `Removed "${item}" from what_works — architectural feature, not movable furniture`,
@@ -213,7 +258,10 @@ export function validateAreaAnalysis(
 
   if (Array.isArray(patched.what_should_go)) {
     patched.what_should_go = patched.what_should_go.filter((item: string) => {
-      if (INVALID_REMOVE_PATTERNS.some(p => p.test(item))) {
+      const flagged = semanticHints?.invalidInRemove
+        ? semanticHints.invalidInRemove.has(item)
+        : INVALID_REMOVE_PATTERNS.some(p => p.test(item));
+      if (flagged) {
         issues.push({
           type: "invalid_remove",
           description: `Removed "${item}" from what_should_go — not a removable physical item`,
@@ -228,7 +276,7 @@ export function validateAreaAnalysis(
 
   // --- Check 1: Exclusion violations in what_it_needs ---
   if (parsed?.exclusions && parsed.exclusions.length > 0) {
-    const expandedExclusions = expandExclusionTerms(parsed.exclusions);
+    const expandedExclusions = semanticHints?.expandedExclusions ?? expandExclusionTerms(parsed.exclusions);
 
     if (Array.isArray(patched.what_it_needs)) {
       const originalCount = patched.what_it_needs.length;
@@ -297,7 +345,13 @@ export function validateAreaAnalysis(
   const DECOR_TITLE_PATTERN = /\b(?:decor|styling|style|vase|sculpture|candle|ornament|display|tray|basket|ceramic|brass|set|arrangement)\b/i;
 
   if (allKeepItems.length > 0) {
-    const keepCategories = extractKeepCategories(allKeepItems);
+    const keepCategories = semanticHints?.keepItemCategories
+      ? semanticHints.keepItemCategories.map((kc) => ({
+          item: kc.item,
+          keywords: kc.category_keywords,
+          location: kc.location_phrase,
+        }))
+      : extractKeepCategories(allKeepItems);
 
     for (const { item, keywords, location } of keepCategories) {
       if (keywords.length === 0) continue;

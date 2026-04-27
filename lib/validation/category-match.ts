@@ -213,3 +213,32 @@ export function productMatchesCategory(
     reason: `extracted category "${extracted}" doesn't match expected "${expected}", and title has no aliases`,
   };
 }
+
+/**
+ * LLM-enhanced semantic category match. Try the cheap regex/alias path first;
+ * on borderline rejects (Rule 4 / Rule 5 — extractor uncertain or label
+ * mismatch and no alias hit) escalate to an LLM judgment that catches
+ * synonyms outside the alias list (settee → sofa, credenza → sideboard).
+ *
+ * Always honors hard rejects from Rule 1 (disqualifying terms — gift cards,
+ * cleaning supplies). Always honors clean accepts from Rules 2-3.
+ */
+export async function productMatchesCategoryAsync(
+  expectedCategory: string,
+  extractedCategory: string | null | undefined,
+  title: string | null | undefined,
+): Promise<CategoryMatchResult> {
+  const initial = productMatchesCategory(expectedCategory, extractedCategory, title);
+  // Disqualifying-term reject + clean accepts → no need for LLM
+  if (initial.ok) return initial;
+  if (initial.reason.startsWith("title contains disqualifying term")) return initial;
+
+  try {
+    const { productMatchesCategoryLLM } = await import("@/lib/ai/semantic-extract");
+    const llm = await productMatchesCategoryLLM(expectedCategory, title, extractedCategory);
+    if (llm) return llm;
+  } catch {
+    // Fall through to original regex result
+  }
+  return initial;
+}

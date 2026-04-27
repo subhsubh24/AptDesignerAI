@@ -7,7 +7,7 @@ import {
   type SiblingRoomSummary,
 } from "@/lib/agents/greedy-decorator";
 import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
-import { validateDiagnosis } from "@/lib/agents/diagnosis-validator";
+import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -191,7 +191,7 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
   }
 
   // Validate diagnosis against user constraints (exclusions, keep items, explicit requests)
-  const validation = validateDiagnosis(
+  const validation = await validateDiagnosisAsync(
     result.data,
     ctx.keepItems,
     ctx.userContext

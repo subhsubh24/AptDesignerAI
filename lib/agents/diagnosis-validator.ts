@@ -12,7 +12,7 @@
  * It patches the output to fix violations rather than re-running the LLM.
  */
 
-import { parseUserContext } from "@/lib/utils/parse-user-context";
+import { parseUserContext, type ParsedUserContext } from "@/lib/utils/parse-user-context";
 import { createLogger } from "@/lib/logging/logger";
 import type { DiagnosisResult } from "./room-diagnostician";
 
@@ -124,6 +124,33 @@ const DECOR_CATEGORIES = new Set(
  * Build keep-item category keywords for detecting replacement recommendations.
  * E.g., "black arc floor lamp" -> ["floor lamp", "arc lamp", "lamp"]
  */
+/**
+ * LLM-enhanced wrapper. Calls Gemini for semantic expansion of exclusions and
+ * keep-item categories, then runs the existing sync validator with the
+ * enriched data. Falls back to regex-only when LLM calls fail.
+ */
+export async function validateDiagnosisAsync(
+  result: DiagnosisResult,
+  keepItems: string[],
+  userContext?: string
+): Promise<DiagnosisValidationResult> {
+  const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+  const { expandExclusionTermsLLM, extractKeepCategoriesLLM } = await import("@/lib/ai/semantic-extract");
+
+  const parsed = userContext ? await parseUserContextAsync(userContext) : null;
+  const allKeepItems = [...keepItems, ...(parsed?.additionalKeepItems || [])];
+
+  const [llmExclusions, llmKeepCats] = await Promise.all([
+    parsed?.exclusions?.length ? expandExclusionTermsLLM(parsed.exclusions).catch(() => null) : Promise.resolve(null),
+    allKeepItems.length ? extractKeepCategoriesLLM(allKeepItems).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  return validateDiagnosis(result, keepItems, userContext, parsed, {
+    expandedExclusions: llmExclusions,
+    keepItemCategories: llmKeepCats,
+  });
+}
+
 function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywords: string[] }> {
   const categoryPatterns: Record<string, string[]> = {
     "floor lamp": ["floor lamp", "arc lamp", "standing lamp", "tripod lamp", "tripod floor lamp", "tripod light"],
@@ -153,13 +180,24 @@ function extractKeepCategories(keepItems: string[]): Array<{ item: string; keywo
   });
 }
 
+export interface DiagnosisSemanticHints {
+  /** LLM-expanded exclusion synonyms (preferred over hardcoded synonymMap) */
+  expandedExclusions: string[] | null;
+  /** LLM-extracted keep-item categories (preferred over hardcoded categoryPatterns) */
+  keepItemCategories: Array<{ item: string; category_keywords: string[]; location_phrase: string }> | null;
+}
+
 export function validateDiagnosis(
   result: DiagnosisResult,
   keepItems: string[],
-  userContext?: string
+  userContext?: string,
+  /** Optional pre-parsed context (LLM-enhanced). Falls back to regex parse when omitted. */
+  preParsedContext?: ParsedUserContext | null,
+  /** Optional LLM-computed semantic hints. Falls back to regex when omitted. */
+  semanticHints?: DiagnosisSemanticHints | null,
 ): DiagnosisValidationResult {
   const issues: ValidationIssue[] = [];
-  const parsed = userContext ? parseUserContext(userContext) : null;
+  const parsed = preParsedContext ?? (userContext ? parseUserContext(userContext) : null);
 
   // Deep clone to avoid mutating the original
   const patched: DiagnosisResult = JSON.parse(JSON.stringify(result));
@@ -172,7 +210,7 @@ export function validateDiagnosis(
 
   // --- Check 1: Exclusion violations ---
   if (parsed?.exclusions && parsed.exclusions.length > 0) {
-    const expandedExclusions = expandExclusionTerms(parsed.exclusions);
+    const expandedExclusions = semanticHints?.expandedExclusions ?? expandExclusionTerms(parsed.exclusions);
 
     // Check action_list
     patched.action_list = patched.action_list.filter((action) => {
@@ -244,7 +282,9 @@ export function validateDiagnosis(
 
   // --- Check 2: Keep-item replacement violations ---
   if (allKeepItems.length > 0) {
-    const keepCategories = extractKeepCategories(allKeepItems);
+    const keepCategories = semanticHints?.keepItemCategories
+      ? semanticHints.keepItemCategories.map((kc) => ({ item: kc.item, keywords: kc.category_keywords }))
+      : extractKeepCategories(allKeepItems);
 
     for (const { item, keywords } of keepCategories) {
       if (keywords.length === 0) continue;

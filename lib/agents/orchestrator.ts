@@ -30,7 +30,7 @@ import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-
 import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
-import { productMatchesCategory } from "@/lib/validation/category-match";
+import { productMatchesCategoryAsync } from "@/lib/validation/category-match";
 import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
 import { createLogger } from "@/lib/logging/logger";
@@ -332,7 +332,7 @@ async function reSearchCategoryForCorrection(
       const title = extractRes.data.title || "";
       if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") continue;
 
-      const catCheck = productMatchesCategory(correctionCategory, extractRes.data.category, title);
+      const catCheck = await productMatchesCategoryAsync(correctionCategory, extractRes.data.category, title);
       if (!catCheck.ok) continue;
 
       const priceRange = catBrief?.tiers[tier]?.price_range;
@@ -988,7 +988,7 @@ export async function runAgenticSearch(
                 // requested category (e.g. a lint roller returned for a
                 // "vase" search). Quick-screen is URL-heuristic only; this
                 // is the first semantic check on actual product content.
-                const catCheck = productMatchesCategory(
+                const catCheck = await productMatchesCategoryAsync(
                   category,
                   extractResult.data.category,
                   extractResult.data.title,
@@ -1235,19 +1235,21 @@ export async function runAgenticSearch(
       }
     }
 
-    // Deduplicate extracted products by title+retailer within each tier
-    // Uses fuzzy matching: normalize titles by removing size/color variants,
-    // and deduplicate by URL hostname+path to catch same product with different titles
+    // Deduplicate extracted products by title+retailer within each tier.
+    // Two-phase: (1) cheap exact-key + URL dedup; (2) LLM-driven semantic
+    // dedup that catches IKEA-style naming variants ("KALLAX 2x4" vs
+    // "Kallax Bookshelf 2×4 White") the regex normalization can't handle.
+    const { dedupProductTitlesLLM } = await import("@/lib/ai/semantic-extract");
+    const semanticDedupTasks: Array<Promise<void>> = [];
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       for (const tier of PRICE_TIERS) {
         const seenTitles = new Set<string>();
         const seenUrlKeys = new Set<string>();
-        extractedByCategory[category][tier] = tierResults[tier].filter((p) => {
+        const phase1: typeof tierResults[typeof tier] = tierResults[tier].filter((p) => {
           // Exact title+retailer dedup
           const titleKey = `${(p.title || "").toLowerCase().trim()}|${(p.retailer || "").toLowerCase().trim()}`;
           if (seenTitles.has(titleKey)) return false;
           seenTitles.add(titleKey);
-
           // URL-based dedup: normalize URL to hostname+pathname (ignore query params)
           if (p.product_url) {
             try {
@@ -1257,21 +1259,34 @@ export async function runAgenticSearch(
               seenUrlKeys.add(urlKey);
             } catch { /* invalid URL, skip URL dedup */ }
           }
-
-          // Fuzzy title dedup: strip size/color suffixes and common variant patterns
-          const normalizedTitle = (p.title || "")
-            .toLowerCase()
-            .replace(/\s*[-–]\s*(small|medium|large|xl|king|queen|twin|full|\d+["'x×]\s*\d+).*$/i, "")
-            .replace(/\s*in\s+(white|black|gray|grey|beige|cream|walnut|oak|navy|blue|green)\s*$/i, "")
-            .replace(/[^a-z0-9]/g, "")
-            .trim();
-          const fuzzyKey = `${normalizedTitle}|${(p.retailer || "").toLowerCase().trim()}`;
-          if (normalizedTitle.length > 5 && seenTitles.has(fuzzyKey)) return false;
-          seenTitles.add(fuzzyKey);
-
           return true;
         });
+        extractedByCategory[category][tier] = phase1;
+
+        // Phase 2: semantic dedup via LLM on what survived Phase 1.
+        // Only worth calling when there are enough survivors to risk variants.
+        if (phase1.length >= 4) {
+          const items = phase1
+            .filter((p) => (p.title || "").length > 4)
+            .map((p) => ({ id: p.id, title: p.title || "", retailer: p.retailer ?? null }));
+          if (items.length >= 4) {
+            semanticDedupTasks.push(
+              dedupProductTitlesLLM(items)
+                .then((drop) => {
+                  if (!drop || drop.size === 0) return;
+                  extractedByCategory[category][tier] = phase1.filter((p) => !drop.has(p.id));
+                  log.info("Semantic dedup removed duplicates", {
+                    category, tier, removed: drop.size, before: phase1.length,
+                  });
+                })
+                .catch(() => { /* fail-open: keep Phase 1 result */ })
+            );
+          }
+        }
       }
+    }
+    if (semanticDedupTasks.length > 0) {
+      await Promise.all(semanticDedupTasks);
     }
 
     reportStep({
@@ -2015,7 +2030,7 @@ export async function runAgenticSearch(
               if (!extractResult.success || !extractResult.data) continue;
               if (!extractResult.data.title && !extractResult.data.price) continue;
 
-              const catCheck = productMatchesCategory(
+              const catCheck = await productMatchesCategoryAsync(
                 wt.category,
                 extractResult.data.category,
                 extractResult.data.title,

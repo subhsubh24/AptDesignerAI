@@ -362,6 +362,39 @@ function hexToHsl(input: string): HSL | null {
   return { h: Math.round(h), s: Math.round(sat * 100), l: Math.round(l * 100) };
 }
 
+/**
+ * Async LLM-fallback color lookup. Tries the deterministic regex/table path first
+ * (zero cost for the 200+ named colors), and only calls Gemini for designer
+ * one-offs ("Mediterranean blue", "muted sage with cool undertones") that aren't
+ * in the table.
+ *
+ * Caches LLM results in-process so repeated lookups of the same custom color
+ * across products don't re-call.
+ */
+const llmColorCache = new Map<string, HSL>();
+export async function lookupColorAsync(name: string): Promise<HSL | null> {
+  const sync = lookupColor(name);
+  if (sync) return sync;
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+  const cached = llmColorCache.get(key);
+  if (cached) return cached;
+  try {
+    const { inferColorHslLLM } = await import("@/lib/ai/semantic-extract");
+    const llm = await inferColorHslLLM(name);
+    if (llm) {
+      llmColorCache.set(key, llm);
+      // Bound cache size
+      if (llmColorCache.size > 500) {
+        const first = llmColorCache.keys().next();
+        if (!first.done && first.value !== undefined) llmColorCache.delete(first.value);
+      }
+      return llm;
+    }
+  } catch { /* fall through */ }
+  return null;
+}
+
 export function lookupColor(name: string): HSL | null {
   const raw = name.trim();
 

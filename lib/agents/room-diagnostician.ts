@@ -13,6 +13,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import { selfConsistent } from "./self-consistency";
+import { classifyStyleLabelLLM } from "@/lib/ai/semantic-extract";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentContext, AgentResult } from "./types";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
@@ -32,11 +33,17 @@ const log = createLogger("room-diagnostician");
  * Returns null when no confident label matches — the fetcher will fall back
  * to same-room_type-any-direction examples.
  */
-function inferStyleLabel(direction: DesignDirection): string | null {
-  const notes = (direction.style_notes ?? "").toLowerCase();
-  const materials = (direction.recommended_materials ?? []).join(" ").toLowerCase();
-  const haystack = `${notes} ${materials}`;
+async function inferStyleLabel(direction: DesignDirection): Promise<string | null> {
+  const notes = direction.style_notes ?? "";
+  const materials = direction.recommended_materials ?? [];
 
+  // LLM classification — catches paraphrases ("warm minimalist with mid-century
+  // influence") and material-driven inferences the regex can't make.
+  const llm = await classifyStyleLabelLLM(notes, materials).catch(() => null);
+  if (llm) return llm;
+
+  // Regex fallback for the deterministic path.
+  const haystack = `${notes} ${materials.join(" ")}`.toLowerCase();
   const namedStyles: Array<[string, RegExp]> = [
     ["Japandi", /\bjapandi\b/],
     ["Scandinavian", /\bscandi(navian)?\b/],
@@ -55,17 +62,13 @@ function inferStyleLabel(direction: DesignDirection): string | null {
     ["Classic", /\bclassic\b/],
     ["Art Deco", /\bart[-\s]?deco\b/],
   ];
-
   for (const [label, rx] of namedStyles) {
     if (rx.test(haystack)) return label;
   }
-
-  // Material-driven heuristics (rough but better than nothing)
   const hasRattan = /\brattan\b|\bwicker\b/.test(haystack);
   const hasLinen = /\blinen\b/.test(haystack);
   const hasWhiteWashed = /\bwhite[-\s]?washed\b/.test(haystack);
   if (hasRattan && (hasLinen || hasWhiteWashed)) return "Coastal";
-
   return null;
 }
 
@@ -326,7 +329,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
   //      we can pull examples from the same direction bucket (minimalist,
   //      coastal, modern, traditional, eclectic). When nothing matches, the
   //      fetcher falls back to any direction for the same room_type.
-  const inferredStyleLabel = inferStyleLabel(analysis.design_direction);
+  const inferredStyleLabel = await inferStyleLabel(analysis.design_direction);
   const fewShotExamples = await fetchDiagnosisExamples(
     ctx.roomType,
     inferredStyleLabel,

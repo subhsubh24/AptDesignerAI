@@ -406,11 +406,30 @@ function isUrlContextBlacklisted(url: string): boolean {
 
 // Consider scraped context "sufficient" only when it includes at least a
 // Title AND one of (Price, Description). Otherwise fall through to URL Context.
+//
+// Two-phase: cheap regex check first (catches the labeled-fields case with
+// zero cost), then an LLM semantic check on the borderline case where the
+// regex says "no" — this catches pages whose JSON-LD names fields differently
+// (e.g., "Product Name" instead of "Title:") and would otherwise burn an
+// expensive URL Context call unnecessarily.
 function isScrapeContextSufficient(ctx: string): boolean {
   const hasTitle = /^Title:/m.test(ctx);
   const hasPrice = /^Price:/m.test(ctx);
   const hasDesc = /^Description:/m.test(ctx);
   return hasTitle && (hasPrice || hasDesc);
+}
+
+async function isScrapeContextSufficientAsync(ctx: string): Promise<boolean> {
+  if (isScrapeContextSufficient(ctx)) return true;
+  // LLM tiebreaker for the "regex said no but content might still be enough" case.
+  if (!ctx || ctx.length < 60) return false;
+  try {
+    const { isScrapeContextSufficientLLM } = await import("@/lib/ai/semantic-extract");
+    const llm = await isScrapeContextSufficientLLM(ctx);
+    return llm === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -480,7 +499,7 @@ export async function extractFromUrl(
   if (shouldTryStructuredScrapeFirst(url)) {
     try {
       const pageContext = await scrapePageContext(url);
-      if (pageContext && isScrapeContextSufficient(pageContext)) {
+      if (pageContext && await isScrapeContextSufficientAsync(pageContext)) {
         const scrapeFirstContent = `${extractionPrompt}\n\nExtract product information for: ${url}\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
         const response = await geminiProvider.chat({
