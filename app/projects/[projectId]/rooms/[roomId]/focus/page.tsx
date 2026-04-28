@@ -476,17 +476,12 @@ export default function FocusPage() {
     const items = analysis.what_it_needs || [];
     const designDir = analysis.design_direction || "";
 
-    // Generate sequentially to avoid overwhelming the API with parallel
-    // image generation requests (each is expensive). High-priority first.
-    const sorted = [...items].sort((a, b) => {
-      const order = { high: 0, medium: 1, low: 2 };
-      return (order[a.priority] ?? 1) - (order[b.priority] ?? 1);
-    });
-
-    for (const item of sorted) {
-      if (controller.signal.aborted) break;
-      await generateItemMockup(item, designDir, controller.signal);
-    }
+    // Fire all item mockups in parallel — each is an independent product
+    // shot with no room context, so they don't compete for room-photo
+    // resources. The server-side pLimit(8) handles rate limiting.
+    await Promise.allSettled(
+      items.map((item) => generateItemMockup(item, designDir, controller.signal)),
+    );
   };
 
   // Auto-trigger item mockups after the vision mockup starts generating

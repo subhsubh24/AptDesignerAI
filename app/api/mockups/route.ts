@@ -191,6 +191,114 @@ export async function POST(request: Request) {
   const floorPlanImageUrl = buildingResearch?.floor_plan_image_url as string | undefined;
   const extractedFloorPlan = buildingResearch?.extracted_floor_plan as ExtractedFloorPlan | undefined;
 
+  // ─── Recommendation Mockup Mode: per-item product shot ─────────
+  // Early-return BEFORE photo orientation / room architecture extraction —
+  // product shots don't need room photos at all, so skip the expensive
+  // LLM calls that vision_mode and standard mode require.
+  if (recommendation_mockup) {
+    const djsonEarly = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
+    const ddJsonEarly = diagnosis?.design_direction_json as Record<string, unknown> | undefined;
+
+    const rec = recommendation_mockup as {
+      category?: string;
+      search_title?: string;
+      description?: string;
+      specs?: string;
+    };
+
+    const agentRun = await createAgentRun(supabase, {
+      room_id,
+      agent_type: "mockup_recommendation",
+      input_json: { category: rec.category },
+    });
+
+    const effectiveDirection = design_direction
+      || (djsonEarly?.design_direction as string)
+      || (ddJsonEarly?.style_notes as string)
+      || "modern, cohesive design";
+
+    const productParts: string[] = [];
+    if (rec.search_title) productParts.push(rec.search_title);
+    else if (rec.category) productParts.push(rec.category.replace(/_/g, " "));
+    if (rec.specs) productParts.push(`Specs: ${rec.specs}`);
+    const productDescription = productParts.join("\n");
+
+    const recPrompt = `Generate a photorealistic studio product photography image of a single piece of furniture/decor.
+
+PRODUCT TO RENDER:
+${productDescription}
+
+STYLE CONTEXT (for material/finish cues only): ${effectiveDirection}
+
+REQUIREMENTS:
+- This is a CATALOG-STYLE PRODUCT SHOT showing ONLY the product itself.
+- Clean, neutral, soft-lit background (light grey, off-white, or subtle gradient — like a high-end furniture e-commerce listing).
+- The product is centered, fills most of the frame, shot from a flattering 3/4 angle.
+- Render every material, color, finish, and dimension EXACTLY as specified above.
+- Sharp focus, soft studio lighting, subtle shadow grounding the product.
+- NO room background, NO walls, NO floors, NO other furniture, NO people, NO architectural context.
+- The result should look like a professional product photo from a furniture retailer's website (West Elm, CB2, Article style).`;
+
+    const recCacheKey = computeMockupCacheKey({
+      roomImageUrls: [],
+      productIds: [rec.category || "rec", rec.search_title || "", rec.specs || ""],
+      placementMap: undefined,
+      designDirection: recPrompt,
+      imageSize: imageOptions.imageSize,
+      aspectRatio: imageOptions.aspectRatio,
+      grounded: imageOptions.imageSearchGrounding,
+    });
+    const cachedRec = findCachedMockup(recCacheKey);
+    if (cachedRec) {
+      console.log(`[mockup] recommendation cache hit key=${recCacheKey}`);
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "completed",
+        output_json: { image_url: cachedRec.url, cache_hit: true },
+      });
+      return NextResponse.json({
+        image_url: cachedRec.url,
+        prompt: recPrompt,
+        recommendation_mockup: true,
+        category: rec.category,
+        cache_hit: true,
+      });
+    }
+
+    const verificationResult = await generateWithVerification({
+      generateFn: async (prompt) => {
+        const result = await generateMockupImage(prompt, [], imageOptions, undefined, undefined);
+        if (!result.success || !result.data) return { success: false, error: result.error };
+        return { success: true, data: result.data };
+      },
+      originalPrompt: recPrompt,
+      roomImageUrls: [],
+      wallClockBudgetMs: 90_000,
+      skipVerification: true,
+    });
+
+    if (!verificationResult.finalImageData) {
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: "Recommendation mockup generation failed",
+      });
+      return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
+    }
+
+    const imageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, recCacheKey);
+
+    await completeAgentRun(supabase, agentRun.id, {
+      status: "completed",
+      output_json: { image_url: imageUrl, category: rec.category },
+    });
+
+    return NextResponse.json({
+      image_url: imageUrl,
+      prompt: recPrompt,
+      recommendation_mockup: true,
+      category: rec.category,
+    });
+  }
+
   // Collect room image URLs for visual reference
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
@@ -405,120 +513,6 @@ RULES:
       vision_mode: true,
       verified: verificationResult.verified,
       verification_attempts: verificationResult.attempts,
-    });
-  }
-
-  // ─── Recommendation Mockup Mode: per-item product shot ─────────
-  // Generates a clean product photography image of ONE recommended item —
-  // no room context, no existing furniture. The output looks like a
-  // catalog/studio shot so the user can clearly see what the item itself
-  // looks like.
-  if (recommendation_mockup) {
-    const rec = recommendation_mockup as {
-      category?: string;
-      search_title?: string;
-      description?: string;
-      specs?: string;
-      placement?: string;
-    };
-
-    const agentRun = await createAgentRun(supabase, {
-      room_id,
-      agent_type: "mockup_recommendation",
-      input_json: { category: rec.category },
-    });
-
-    const effectiveDirection = design_direction
-      || (djson?.design_direction as string)
-      || (ddJson?.style_notes as string)
-      || "modern, cohesive design";
-
-    // Build the product description with every available detail
-    const productParts: string[] = [];
-    if (rec.search_title) productParts.push(rec.search_title);
-    else if (rec.category) productParts.push(rec.category.replace(/_/g, " "));
-    if (rec.specs) productParts.push(`Specs: ${rec.specs}`);
-    const productDescription = productParts.join("\n");
-
-    const recPrompt = `Generate a photorealistic studio product photography image of a single piece of furniture/decor.
-
-PRODUCT TO RENDER:
-${productDescription}
-
-STYLE CONTEXT (for material/finish cues only): ${effectiveDirection}
-
-REQUIREMENTS:
-- This is a CATALOG-STYLE PRODUCT SHOT showing ONLY the product itself.
-- Clean, neutral, soft-lit background (light grey, off-white, or subtle gradient — like a high-end furniture e-commerce listing).
-- The product is centered, fills most of the frame, shot from a flattering 3/4 angle.
-- Render every material, color, finish, and dimension EXACTLY as specified above.
-- Sharp focus, soft studio lighting, subtle shadow grounding the product.
-- NO room background, NO walls, NO floors, NO other furniture, NO people, NO architectural context.
-- The result should look like a professional product photo from a furniture retailer's website (West Elm, CB2, Article style).`;
-
-    // Cache key intentionally excludes room images — the mockup is room-
-    // independent (just the product). Same recommendation = same cache hit
-    // across users/rooms.
-    const recCacheKey = computeMockupCacheKey({
-      roomImageUrls: [],
-      productIds: [rec.category || "rec", rec.search_title || "", rec.specs || ""],
-      placementMap: undefined,
-      designDirection: recPrompt,
-      imageSize: imageOptions.imageSize,
-      aspectRatio: imageOptions.aspectRatio,
-      grounded: imageOptions.imageSearchGrounding,
-    });
-    const cachedRec = findCachedMockup(recCacheKey);
-    if (cachedRec) {
-      console.log(`[mockup] recommendation cache hit key=${recCacheKey}`);
-      await completeAgentRun(supabase, agentRun.id, {
-        status: "completed",
-        output_json: { image_url: cachedRec.url, cache_hit: true },
-      });
-      return NextResponse.json({
-        image_url: cachedRec.url,
-        prompt: recPrompt,
-        recommendation_mockup: true,
-        category: rec.category,
-        cache_hit: true,
-      });
-    }
-
-    // Product shots don't need verification (no room shell to match) and
-    // don't need the room photos as references — pass empty array so the
-    // image model focuses entirely on rendering the product.
-    const verificationResult = await generateWithVerification({
-      generateFn: async (prompt) => {
-        const result = await generateMockupImage(prompt, [], imageOptions, undefined, undefined);
-        if (!result.success || !result.data) return { success: false, error: result.error };
-        return { success: true, data: result.data };
-      },
-      originalPrompt: recPrompt,
-      roomImageUrls: [],
-      wallClockBudgetMs: 90_000,
-      skipVerification: true,
-    });
-
-    if (!verificationResult.finalImageData) {
-      await completeAgentRun(supabase, agentRun.id, {
-        status: "failed",
-        error_message: "Recommendation mockup generation failed",
-      });
-      return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
-    }
-
-    const imageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, recCacheKey);
-
-    await completeAgentRun(supabase, agentRun.id, {
-      status: "completed",
-      output_json: { image_url: imageUrl, category: rec.category },
-    });
-
-    return NextResponse.json({
-      image_url: imageUrl,
-      prompt: recPrompt,
-      recommendation_mockup: true,
-      category: rec.category,
     });
   }
 
