@@ -479,3 +479,75 @@ export interface ProductImageEmbedding {
   source: string;
   created_at: string;
 }
+
+// ─── Refine chat: incremental analysis editing ─────────────────────────
+
+/**
+ * One item in the what_it_needs array — the thing the LLM produces in
+ * Pass B and the patch agent edits incrementally. Subset of ActionItem
+ * fields that the area-analysis pipeline actually emits.
+ */
+export interface WhatItNeedsItem {
+  category: string;
+  search_title?: string;
+  description: string;
+  priority: "high" | "medium" | "low";
+  specs: string;
+  placement?: string;
+}
+
+/**
+ * Semantic patch describing what changed in an analysis. The LLM emits
+ * this; `applyAnalysisPatch` mutates the prior analysis deterministically.
+ *
+ * Only specified fields are edited. Strings/scalars overwrite. Arrays
+ * specified as `string[]` overwrite fully. Diff objects (`{ add, remove }`)
+ * apply incremental changes — used for what_works / what_should_go where
+ * the user typically wants to add or drop a single line.
+ */
+export interface AnalysisPatch {
+  // Scalar overwrites
+  summary?: string;
+  design_direction?: string;
+  style_name?: string;
+  spatial_layout?: string;
+  lighting_conditions?: string;
+
+  // Array overwrites (pass full new value)
+  recommended_palette?: string[];
+  recommended_materials?: string[];
+  recommended_textures?: string[];
+
+  // String-list diffs
+  what_works?: { add?: string[]; remove?: string[] };
+  what_should_go?: { add?: string[]; remove?: string[] };
+
+  // Item-level operations on what_it_needs (keyed by category slug)
+  what_it_needs?: {
+    add?: WhatItNeedsItem[];
+    remove?: string[];
+    update?: Array<{ category: string; changes: Partial<WhatItNeedsItem> }>;
+  };
+}
+
+export interface DesignerWarning {
+  severity: "low" | "medium" | "high";
+  /** Field path the warning concerns: "palette", "what_it_needs.sofa", "design_direction", etc. */
+  field: string;
+  message: string;
+  /** Optional concrete suggestion for resolution */
+  suggestion?: string;
+}
+
+export interface RefineMessage {
+  id: string;
+  room_id: string;
+  user_id: string;
+  role: "user" | "assistant";
+  content: string;
+  patch_json: AnalysisPatch | null;
+  warnings_json: DesignerWarning[] | null;
+  analysis_snapshot: Record<string, unknown> | null;
+  tokens_used: number;
+  created_at: string;
+}

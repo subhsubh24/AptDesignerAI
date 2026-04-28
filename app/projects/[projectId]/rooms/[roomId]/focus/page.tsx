@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   Loader2,
@@ -25,15 +24,14 @@ import {
   ShieldCheck,
   Ruler,
   LayoutGrid,
-  MessageSquare,
   RefreshCw,
-  ArrowRight,
   LinkIcon,
   Bookmark,
   BookmarkCheck,
 } from "lucide-react";
 import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingForm";
 import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
+import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
@@ -159,12 +157,8 @@ export default function FocusPage() {
   } | null>(null);
   const [floorPlanFound, setFloorPlanFound] = useState<boolean | null>(null);
 
-  // Feedback / refinement state
-  const [feedbackText, setFeedbackText] = useState("");
-  const [refining, setRefining] = useState(false);
-  const [impactSummary, setImpactSummary] = useState<string | null>(null);
-  const [changesMade, setChangesMade] = useState<string[]>([]);
-  const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  // Refinement is now handled by the <RefineChat /> chat panel.
+  // No local state needed — it owns its messages, input, and loading flags.
 
   // Vision mockup state
   const [visionUrl, setVisionUrl] = useState<string | null>(null);
@@ -305,43 +299,6 @@ export default function FocusPage() {
     }
     analyze();
   }, [roomId, projectId]);
-
-  // Refine analysis based on user feedback
-  const handleRefine = async () => {
-    if (!feedbackText.trim() || !areaAnalysis) return;
-    setRefining(true);
-    setImpactSummary(null);
-    setChangesMade([]);
-
-    try {
-      const res = await fetch("/api/area-analysis/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          room_id: roomId,
-          project_id: projectId,
-          user_feedback: feedbackText.trim(),
-          previous_analysis: areaAnalysis,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAreaAnalysis(data.analysis);
-        setImpactSummary(data.impact_summary || null);
-        setChangesMade(data.changes_made || []);
-        setFeedbackText("");
-        setShowFeedbackInput(false);
-        // Clear existing products and vision since the analysis changed
-        setProducts([]);
-        setVisionUrl(null);
-        visionTriggered.current = false; // Allow auto-regeneration for new analysis
-      }
-    } catch (err) {
-      console.error("Refinement error:", err);
-    }
-    setRefining(false);
-  };
 
   // Auto-trigger vision mockup when analysis is ready (runs in background)
   const visionTriggered = useRef(false);
@@ -995,87 +952,25 @@ export default function FocusPage() {
             </CardContent>
           </Card>
 
-          {/* Impact summary — shown after refinement */}
-          {impactSummary && (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-300 animate-fade-in-up">
-              <RefreshCw className="h-5 w-5 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Analysis updated based on your feedback</p>
-                <p className="text-sm">{impactSummary}</p>
-                {changesMade.length > 0 && (
-                  <ul className="text-xs space-y-0.5 mt-1">
-                    {changesMade.map((change, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-blue-500" />
-                        <span>{change}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* User feedback input */}
-          {showFeedbackInput ? (
-            <Card className="border-accent-warm/30 animate-fade-in-up">
-              <CardContent className="pt-5 pb-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <MessageSquare className="h-4 w-4 text-accent-warm" />
-                  Refine this assessment
-                </div>
-                <Textarea
-                  placeholder={"e.g. \"Actually I want to keep the floor lamp\" or \"I need more seating for hosting\" or \"I prefer lighter wood tones\""}
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  rows={3}
-                  className="resize-none text-sm"
-                  disabled={refining}
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    onClick={handleRefine}
-                    disabled={!feedbackText.trim() || refining}
-                    size="sm"
-                  >
-                    {refining ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                        Refining...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-1.5" />
-                        Refine Analysis
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setShowFeedbackInput(false); setFeedbackText(""); }}
-                    disabled={refining}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setShowFeedbackInput(true)}
-            >
-              <MessageSquare className="h-4 w-4 mr-1.5" />
-              Something off? Refine this assessment
-            </Button>
-          )}
+          {/* Chat-style refinement */}
+          <RefineChat
+            roomId={roomId}
+            onAnalysisUpdate={(updatedAnalysis, changedFields) => {
+              setAreaAnalysis(updatedAnalysis as unknown as AreaAnalysis);
+              // Drop products only if what_it_needs changed (categories shifted)
+              if (changedFields.includes("what_it_needs") || changedFields.some((f) => f.startsWith("what_it_needs."))) {
+                setProducts([]);
+              }
+            }}
+            onVisionShouldRegen={() => {
+              setVisionUrl(null);
+              visionTriggered.current = false;
+            }}
+          />
 
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button size="lg" className="flex-1 h-14 text-base" onClick={handleSearch} disabled={refining}>
+            <Button size="lg" className="flex-1 h-14 text-base" onClick={handleSearch}>
               <Search className="h-5 w-5 mr-2" />
               Find pieces for this room
             </Button>
@@ -1084,8 +979,7 @@ export default function FocusPage() {
               variant="outline"
               className="flex-1 h-14 text-base"
               onClick={() => setStep("manual_sourcing")}
-              disabled={refining}
-            >
+                         >
               <LinkIcon className="h-5 w-5 mr-2" />
               I&apos;ll find my own
             </Button>
