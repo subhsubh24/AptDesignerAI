@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import pLimit from "p-limit";
 import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
@@ -38,6 +39,20 @@ const log = createLogger("gemini");
  * take 60–90s on Pro tier. Real stalls are orders of magnitude longer.
  */
 const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_CALL_TIMEOUT_MS) || 180_000;
+
+/**
+ * Global concurrency limiter for Gemini calls.
+ *
+ * Without this, 20+ parallel calls (e.g., the search-brief / quick-screen
+ * fan-out in orchestrator) all hit the per-minute quota at the same instant,
+ * trigger 429s, and retry in lockstep — staying synchronized indefinitely.
+ *
+ * Default 8 concurrent calls keeps the per-minute rate within Flash Lite's
+ * free-tier quota while leaving headroom for image-generation and verifier
+ * calls. Override via GEMINI_MAX_CONCURRENCY for paid tiers.
+ */
+const GEMINI_MAX_CONCURRENCY = Number(process.env.GEMINI_MAX_CONCURRENCY) || 8;
+const geminiConcurrencyLimit = pLimit(GEMINI_MAX_CONCURRENCY);
 
 let client: GoogleGenAI | null = null;
 
@@ -567,7 +582,7 @@ export const geminiProvider: AIProvider = {
     const maxTransportAttempts = 3;
     for (let attempt = 1; ; attempt++) {
       try {
-        response = await Promise.race([
+        response = await geminiConcurrencyLimit(() => Promise.race([
           ai.models.generateContent({
             model,
             contents,
@@ -585,7 +600,7 @@ export const geminiProvider: AIProvider = {
               GEMINI_CALL_TIMEOUT_MS,
             ),
           ),
-        ]);
+        ]));
         break;
       } catch (err) {
         const e = err as Record<string, unknown>;
@@ -617,9 +632,13 @@ export const geminiProvider: AIProvider = {
           throw err;
         }
         const isServer = isServerError(err);
-        const delay = isRateLimit
-          ? 2000 * Math.pow(2, attempt - 1) // 2s, 4s, 8s, 16s, 32s
+        // Full jitter (AWS pattern): random delay in [0, baseDelay] decorrelates
+        // parallel retries. Without this, dozens of concurrent calls all hit 429
+        // and retry at exactly 2s/4s/8s, staying lockstep-synchronized forever.
+        const baseDelay = isRateLimit
+          ? 2000 * Math.pow(2, attempt - 1) // up to 2s, 4s, 8s, 16s, 32s
           : isServer ? 1000 * Math.pow(2, attempt - 1) : 500 * Math.pow(2, attempt - 1);
+        const delay = isRateLimit ? Math.floor(Math.random() * baseDelay) + 500 : baseDelay;
         const reason = isRateLimit ? "Rate limited (429), retrying" : isServer ? "Server error, retrying" : "Transport error, retrying";
         log.warn(reason, {
           model,
