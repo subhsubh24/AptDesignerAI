@@ -171,6 +171,11 @@ export default function FocusPage() {
   const [generatingVision, setGeneratingVision] = useState(false);
   const [showVisionOverlay, setShowVisionOverlay] = useState(false);
 
+  // Per-recommendation mockup state — keyed by category
+  const [itemMockups, setItemMockups] = useState<Record<string, string>>({});
+  const [itemMockupsLoading, setItemMockupsLoading] = useState<Record<string, boolean>>({});
+  const [expandedMockup, setExpandedMockup] = useState<string | null>(null);
+
   // Mockup state
   const [mockupUrl, setMockupUrl] = useState<string | null>(null);
   const [generatingMockup, setGeneratingMockup] = useState(false);
@@ -421,6 +426,81 @@ export default function FocusPage() {
     }
     setGeneratingVision(false);
   };
+
+  // Per-recommendation mockup generation — generates a focused mockup for
+  // a single recommended item placed in the room with all existing items.
+  const itemMockupsTriggered = useRef(false);
+  const itemMockupAbortRef = useRef<AbortController | null>(null);
+
+  const generateItemMockup = async (
+    item: AreaAnalysis["what_it_needs"][number],
+    existingItems: string[],
+    designDir: string,
+    signal: AbortSignal,
+  ) => {
+    const key = item.category;
+    setItemMockupsLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await fetch("/api/mockups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room_id: roomId,
+          recommendation_mockup: {
+            category: item.category,
+            search_title: item.search_title,
+            description: item.description,
+            specs: item.specs,
+          },
+          existing_items: existingItems,
+          design_direction: designDir,
+        }),
+        signal,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItemMockups((prev) => ({ ...prev, [key]: data.image_url }));
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name !== "AbortError") {
+        console.error(`Item mockup generation failed for ${key}:`, err);
+      }
+    }
+    setItemMockupsLoading((prev) => ({ ...prev, [key]: false }));
+  };
+
+  const generateAllItemMockups = async (analysis: AreaAnalysis) => {
+    itemMockupAbortRef.current?.abort();
+    const controller = new AbortController();
+    itemMockupAbortRef.current = controller;
+
+    const items = analysis.what_it_needs || [];
+    const existingItems = analysis.what_works || [];
+    const designDir = analysis.design_direction || "";
+
+    // Generate sequentially to avoid overwhelming the API with parallel
+    // image generation requests (each is expensive). High-priority first.
+    const sorted = [...items].sort((a, b) => {
+      const order = { high: 0, medium: 1, low: 2 };
+      return (order[a.priority] ?? 1) - (order[b.priority] ?? 1);
+    });
+
+    for (const item of sorted) {
+      if (controller.signal.aborted) break;
+      await generateItemMockup(item, existingItems, designDir, controller.signal);
+    }
+  };
+
+  // Auto-trigger item mockups after the vision mockup starts generating
+  useEffect(() => {
+    if (areaAnalysis && !itemMockupsTriggered.current && step === "analysis") {
+      itemMockupsTriggered.current = true;
+      generateAllItemMockups(areaAnalysis);
+    }
+    return () => {
+      itemMockupAbortRef.current?.abort();
+    };
+  }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveDesign = async (stage: "assessment" | "full") => {
     setSaving(true);
@@ -749,16 +829,60 @@ export default function FocusPage() {
               <div>
                 <h3 className="font-semibold text-sm mb-3">What to get</h3>
                 <div className="space-y-3">
-                  {(areaAnalysis.what_it_needs || []).map((item, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/50">
-                      <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
-                      <div>
-                        <p className="font-medium text-sm">{item.search_title || item.category.replace(/_/g, " ")}</p>
-                        <p className="text-sm text-muted-foreground">{item.description}</p>
-                        {item.specs && <p className="text-xs text-muted-foreground mt-1 italic">{item.specs}</p>}
+                  {(areaAnalysis.what_it_needs || []).map((item, i) => {
+                    const mockupUrl = itemMockups[item.category];
+                    const loading = itemMockupsLoading[item.category];
+                    const isExpanded = expandedMockup === item.category;
+                    return (
+                      <div key={i} className="rounded-xl bg-muted/50 overflow-hidden">
+                        <div className="flex items-start gap-3 p-3">
+                          <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{item.search_title || item.category.replace(/_/g, " ")}</p>
+                            <p className="text-sm text-muted-foreground">{item.description}</p>
+                            {item.specs && <p className="text-xs text-muted-foreground mt-1 italic">{item.specs}</p>}
+                          </div>
+                          {/* Mockup thumbnail */}
+                          <div className="shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-muted border">
+                            {mockupUrl ? (
+                              <button
+                                className="w-full h-full relative group"
+                                onClick={() => setExpandedMockup(isExpanded ? null : item.category)}
+                              >
+                                <img src={mockupUrl} alt={`Preview: ${item.category}`} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                  <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                                </div>
+                              </button>
+                            ) : loading ? (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              </div>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Expanded mockup view */}
+                        {isExpanded && mockupUrl && (
+                          <div className="px-3 pb-3">
+                            <div className="relative rounded-lg overflow-hidden border">
+                              <img src={mockupUrl} alt={`${item.search_title || item.category} in your room`} className="w-full h-auto" />
+                              <button
+                                className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                                onClick={() => setExpandedMockup(null)}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1.5">AI-generated preview showing this item placed in your room</p>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

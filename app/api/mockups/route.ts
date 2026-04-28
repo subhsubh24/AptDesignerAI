@@ -148,7 +148,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { room_id, bundle_id, product_ids, vision_mode, design_direction, items_description, iteration_notes } = body;
+  const { room_id, bundle_id, product_ids, vision_mode, recommendation_mockup, design_direction, items_description, iteration_notes } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
@@ -405,6 +405,143 @@ RULES:
       vision_mode: true,
       verified: verificationResult.verified,
       verification_attempts: verificationResult.attempts,
+    });
+  }
+
+  // ─── Recommendation Mockup Mode: per-item preview ──────────────
+  // Generates a focused mockup showing ONE recommended item placed in the
+  // room alongside all existing/kept items. The caller passes the full
+  // recommendation object (category, search_title, description, specs,
+  // placement) and the existing_items array with detailed descriptions.
+  if (recommendation_mockup) {
+    const rec = recommendation_mockup as {
+      category?: string;
+      search_title?: string;
+      description?: string;
+      specs?: string;
+      placement?: string;
+    };
+    const existingItems = (body.existing_items as string[]) || (djson?.what_works as string[]) || (djson?.what_is_working as string[]) || [];
+
+    const agentRun = await createAgentRun(supabase, {
+      room_id,
+      agent_type: "mockup_recommendation",
+      input_json: { category: rec.category },
+    });
+
+    const archContext = buildArchitecturalContext(buildingResearch, room.room_type);
+    const roomSummary = (djson?.summary as string) || "";
+
+    const effectiveDirection = design_direction
+      || (djson?.design_direction as string)
+      || (ddJson?.style_notes as string)
+      || "modern, cohesive apartment design";
+
+    const paletteSection = palette.length > 0 ? `\nColor palette: ${palette.join(", ")}` : "";
+    const materialsSection = materials.length > 0 ? `\nMaterials: ${materials.join(", ")}` : "";
+    const texturesSection = textures.length > 0 ? `\nTextures: ${textures.join(", ")}` : "";
+
+    // Build detailed existing items block — each item fully described
+    const existingBlock = existingItems.length > 0
+      ? `\nEXISTING FURNITURE THAT MUST APPEAR IN THE SCENE (keep these exactly as described — same material, color, position):\n${existingItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+      : "";
+
+    // Build the focal item description with every available detail
+    const focalParts: string[] = [];
+    if (rec.search_title) focalParts.push(rec.search_title);
+    else if (rec.category) focalParts.push(rec.category.replace(/_/g, " "));
+    if (rec.specs) focalParts.push(`Specs: ${rec.specs}`);
+    if (rec.placement) focalParts.push(`Placement: ${rec.placement}`);
+    if (rec.description) focalParts.push(`Purpose: ${rec.description}`);
+    const focalDescription = focalParts.join("\n");
+
+    const roomArchitectureBlock = roomArchitecture
+      ? formatArchitectureForPrompt(roomArchitecture)
+      : `Match the reference photos exactly — same walls, floor, windows, ceiling, proportions.`;
+
+    const recPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type} focusing on ONE NEW ITEM being added.
+
+CRITICAL — THIS IS A REAL APARTMENT. MATCH IT EXACTLY.
+${roomSummary ? `\nCURRENT ROOM:\n${roomSummary}\n` : ""}
+${roomArchitectureBlock}
+${archContext}
+${spatialLayout ? `\nSpatial layout: ${spatialLayout}` : ""}
+${lightingConditions ? `\nLighting: ${lightingConditions}` : ""}
+${windowDoorPositions ? `\nWindows and doors: ${windowDoorPositions}` : ""}
+
+Design direction: ${effectiveDirection}${paletteSection}${materialsSection}${texturesSection}
+${existingBlock}
+
+FOCAL ITEM — this is the NEW piece being added to the room. It should be prominent and clearly visible:
+${focalDescription}
+
+RULES:
+- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos.
+- ALL existing items listed above must appear in their described positions with correct materials and colors.
+- The FOCAL ITEM is the star — render it with clear detail, correct scale, and proper material/color as specified.
+- The focal item should be well-lit and prominently placed per the placement instructions.
+- Do NOT add any furniture beyond the existing items + the focal item.
+- The result should look like a real photograph, not a generic render.`;
+
+    const recCacheKey = computeMockupCacheKey({
+      roomImageUrls,
+      productIds: [rec.category || "rec"],
+      placementMap: rec.placement ? { [rec.category || "focal"]: rec.placement } : undefined,
+      designDirection: recPrompt,
+      imageSize: imageOptions.imageSize,
+      aspectRatio: imageOptions.aspectRatio,
+      grounded: imageOptions.imageSearchGrounding,
+    });
+    const cachedRec = findCachedMockup(recCacheKey);
+    if (cachedRec) {
+      console.log(`[mockup] recommendation cache hit key=${recCacheKey}`);
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "completed",
+        output_json: { image_url: cachedRec.url, cache_hit: true },
+      });
+      return NextResponse.json({
+        image_url: cachedRec.url,
+        prompt: recPrompt,
+        recommendation_mockup: true,
+        category: rec.category,
+        cache_hit: true,
+      });
+    }
+
+    // Recommendation mockups are lightweight previews — skip verification
+    // to keep latency low (one image gen call only).
+    const verificationResult = await generateWithVerification({
+      generateFn: async (prompt) => {
+        const result = await generateMockupImage(prompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
+        if (!result.success || !result.data) return { success: false, error: result.error };
+        return { success: true, data: result.data };
+      },
+      originalPrompt: recPrompt,
+      roomImageUrls,
+      wallClockBudgetMs: 90_000,
+      skipVerification: true,
+    });
+
+    if (!verificationResult.finalImageData) {
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: "Recommendation mockup generation failed",
+      });
+      return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
+    }
+
+    const imageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, recCacheKey);
+
+    await completeAgentRun(supabase, agentRun.id, {
+      status: "completed",
+      output_json: { image_url: imageUrl, category: rec.category },
+    });
+
+    return NextResponse.json({
+      image_url: imageUrl,
+      prompt: recPrompt,
+      recommendation_mockup: true,
+      category: rec.category,
     });
   }
 
