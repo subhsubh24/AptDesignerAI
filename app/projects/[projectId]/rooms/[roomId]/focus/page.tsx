@@ -434,7 +434,6 @@ export default function FocusPage() {
 
   const generateItemMockup = async (
     item: AreaAnalysis["what_it_needs"][number],
-    existingItems: string[],
     designDir: string,
     signal: AbortSignal,
   ) => {
@@ -452,8 +451,8 @@ export default function FocusPage() {
             description: item.description,
             specs: item.specs,
           },
-          existing_items: existingItems,
           design_direction: designDir,
+          aspect_ratio: "1:1",
         }),
         signal,
       });
@@ -475,7 +474,6 @@ export default function FocusPage() {
     itemMockupAbortRef.current = controller;
 
     const items = analysis.what_it_needs || [];
-    const existingItems = analysis.what_works || [];
     const designDir = analysis.design_direction || "";
 
     // Generate sequentially to avoid overwhelming the API with parallel
@@ -487,7 +485,7 @@ export default function FocusPage() {
 
     for (const item of sorted) {
       if (controller.signal.aborted) break;
-      await generateItemMockup(item, existingItems, designDir, controller.signal);
+      await generateItemMockup(item, designDir, controller.signal);
     }
   };
 
@@ -877,7 +875,7 @@ export default function FocusPage() {
                                 <X className="h-3 w-3" />
                               </button>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1.5">AI-generated preview showing this item placed in your room</p>
+                            <p className="text-xs text-muted-foreground mt-1.5">AI-generated visualization of the recommended product</p>
                           </div>
                         )}
                       </div>

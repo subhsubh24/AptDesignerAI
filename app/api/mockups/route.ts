@@ -408,11 +408,11 @@ RULES:
     });
   }
 
-  // ─── Recommendation Mockup Mode: per-item preview ──────────────
-  // Generates a focused mockup showing ONE recommended item placed in the
-  // room alongside all existing/kept items. The caller passes the full
-  // recommendation object (category, search_title, description, specs,
-  // placement) and the existing_items array with detailed descriptions.
+  // ─── Recommendation Mockup Mode: per-item product shot ─────────
+  // Generates a clean product photography image of ONE recommended item —
+  // no room context, no existing furniture. The output looks like a
+  // catalog/studio shot so the user can clearly see what the item itself
+  // looks like.
   if (recommendation_mockup) {
     const rec = recommendation_mockup as {
       category?: string;
@@ -421,7 +421,6 @@ RULES:
       specs?: string;
       placement?: string;
     };
-    const existingItems = (body.existing_items as string[]) || (djson?.what_works as string[]) || (djson?.what_is_working as string[]) || [];
 
     const agentRun = await createAgentRun(supabase, {
       room_id,
@@ -429,64 +428,41 @@ RULES:
       input_json: { category: rec.category },
     });
 
-    const archContext = buildArchitecturalContext(buildingResearch, room.room_type);
-    const roomSummary = (djson?.summary as string) || "";
-
     const effectiveDirection = design_direction
       || (djson?.design_direction as string)
       || (ddJson?.style_notes as string)
-      || "modern, cohesive apartment design";
+      || "modern, cohesive design";
 
-    const paletteSection = palette.length > 0 ? `\nColor palette: ${palette.join(", ")}` : "";
-    const materialsSection = materials.length > 0 ? `\nMaterials: ${materials.join(", ")}` : "";
-    const texturesSection = textures.length > 0 ? `\nTextures: ${textures.join(", ")}` : "";
+    // Build the product description with every available detail
+    const productParts: string[] = [];
+    if (rec.search_title) productParts.push(rec.search_title);
+    else if (rec.category) productParts.push(rec.category.replace(/_/g, " "));
+    if (rec.specs) productParts.push(`Specs: ${rec.specs}`);
+    const productDescription = productParts.join("\n");
 
-    // Build detailed existing items block — each item fully described
-    const existingBlock = existingItems.length > 0
-      ? `\nEXISTING FURNITURE THAT MUST APPEAR IN THE SCENE (keep these exactly as described — same material, color, position):\n${existingItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
-      : "";
+    const recPrompt = `Generate a photorealistic studio product photography image of a single piece of furniture/decor.
 
-    // Build the focal item description with every available detail
-    const focalParts: string[] = [];
-    if (rec.search_title) focalParts.push(rec.search_title);
-    else if (rec.category) focalParts.push(rec.category.replace(/_/g, " "));
-    if (rec.specs) focalParts.push(`Specs: ${rec.specs}`);
-    if (rec.placement) focalParts.push(`Placement: ${rec.placement}`);
-    if (rec.description) focalParts.push(`Purpose: ${rec.description}`);
-    const focalDescription = focalParts.join("\n");
+PRODUCT TO RENDER:
+${productDescription}
 
-    const roomArchitectureBlock = roomArchitecture
-      ? formatArchitectureForPrompt(roomArchitecture)
-      : `Match the reference photos exactly — same walls, floor, windows, ceiling, proportions.`;
+STYLE CONTEXT (for material/finish cues only): ${effectiveDirection}
 
-    const recPrompt = `Generate a photorealistic interior design visualization of this ${room.room_type} focusing on ONE NEW ITEM being added.
+REQUIREMENTS:
+- This is a CATALOG-STYLE PRODUCT SHOT showing ONLY the product itself.
+- Clean, neutral, soft-lit background (light grey, off-white, or subtle gradient — like a high-end furniture e-commerce listing).
+- The product is centered, fills most of the frame, shot from a flattering 3/4 angle.
+- Render every material, color, finish, and dimension EXACTLY as specified above.
+- Sharp focus, soft studio lighting, subtle shadow grounding the product.
+- NO room background, NO walls, NO floors, NO other furniture, NO people, NO architectural context.
+- The result should look like a professional product photo from a furniture retailer's website (West Elm, CB2, Article style).`;
 
-CRITICAL — THIS IS A REAL APARTMENT. MATCH IT EXACTLY.
-${roomSummary ? `\nCURRENT ROOM:\n${roomSummary}\n` : ""}
-${roomArchitectureBlock}
-${archContext}
-${spatialLayout ? `\nSpatial layout: ${spatialLayout}` : ""}
-${lightingConditions ? `\nLighting: ${lightingConditions}` : ""}
-${windowDoorPositions ? `\nWindows and doors: ${windowDoorPositions}` : ""}
-
-Design direction: ${effectiveDirection}${paletteSection}${materialsSection}${texturesSection}
-${existingBlock}
-
-FOCAL ITEM — this is the NEW piece being added to the room. It should be prominent and clearly visible:
-${focalDescription}
-
-RULES:
-- The room shell (walls, floor, ceiling, windows) must look IDENTICAL to the reference photos.
-- ALL existing items listed above must appear in their described positions with correct materials and colors.
-- The FOCAL ITEM is the star — render it with clear detail, correct scale, and proper material/color as specified.
-- The focal item should be well-lit and prominently placed per the placement instructions.
-- Do NOT add any furniture beyond the existing items + the focal item.
-- The result should look like a real photograph, not a generic render.`;
-
+    // Cache key intentionally excludes room images — the mockup is room-
+    // independent (just the product). Same recommendation = same cache hit
+    // across users/rooms.
     const recCacheKey = computeMockupCacheKey({
-      roomImageUrls,
-      productIds: [rec.category || "rec"],
-      placementMap: rec.placement ? { [rec.category || "focal"]: rec.placement } : undefined,
+      roomImageUrls: [],
+      productIds: [rec.category || "rec", rec.search_title || "", rec.specs || ""],
+      placementMap: undefined,
       designDirection: recPrompt,
       imageSize: imageOptions.imageSize,
       aspectRatio: imageOptions.aspectRatio,
@@ -508,16 +484,17 @@ RULES:
       });
     }
 
-    // Recommendation mockups are lightweight previews — skip verification
-    // to keep latency low (one image gen call only).
+    // Product shots don't need verification (no room shell to match) and
+    // don't need the room photos as references — pass empty array so the
+    // image model focuses entirely on rendering the product.
     const verificationResult = await generateWithVerification({
       generateFn: async (prompt) => {
-        const result = await generateMockupImage(prompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
+        const result = await generateMockupImage(prompt, [], imageOptions, undefined, undefined);
         if (!result.success || !result.data) return { success: false, error: result.error };
         return { success: true, data: result.data };
       },
       originalPrompt: recPrompt,
-      roomImageUrls,
+      roomImageUrls: [],
       wallClockBudgetMs: 90_000,
       skipVerification: true,
     });
