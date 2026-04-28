@@ -76,6 +76,9 @@ export interface MockupImageOptions {
    * SEE each product to match silhouette, color, and material.
    */
   productReferences?: Array<{ imageUrl: string; caption: string }>;
+  /** Override the default thinking level for image generation. Defaults to
+   *  "high" for room scenes. Use "low" or "minimal" for simple product shots. */
+  thinkingLevel?: "minimal" | "low" | "medium" | "high";
 }
 
 export interface MockupContext {
@@ -497,12 +500,10 @@ ${groundingSystemNote}`;
     const imageModel = selectModel("mockup_image"); // → gemini-3-pro-image-preview
     const isProModel = imageModel.includes("pro");
 
-    // For Nano Banana 2 (fallback): explicitly set thinking to "high" to
-    // maximally improve composition quality. For Pro, thinking is always on
-    // and the thinkingConfig field is ignored (no-op to pass it).
+    const requestedLevel = options.thinkingLevel || "high";
     const thinkingCfg = isProModel
       ? undefined
-      : { thinkingLevel: "high" as const };
+      : { thinkingLevel: requestedLevel as "minimal" | "low" | "medium" | "high" };
 
     const response = await geminiProvider.chat({
       model: imageModel,

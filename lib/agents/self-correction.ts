@@ -113,7 +113,14 @@ function filterUnanchoredItems(
 ): Record<string, unknown> {
   const summary = ((analysis.summary as string | undefined) || "").toLowerCase();
   const keepText = keepItems.join(" ").toLowerCase();
-  const haystack = `${summary} ${keepText}`;
+  const designDir = ((analysis.design_direction as string | undefined) || "").toLowerCase();
+  const needsText = Array.isArray(analysis.what_it_needs)
+    ? (analysis.what_it_needs as Array<Record<string, unknown>>)
+        .map((n) => `${n.category || ""} ${n.description || ""} ${n.search_title || ""}`)
+        .join(" ")
+        .toLowerCase()
+    : "";
+  const haystack = `${summary} ${keepText} ${designDir} ${needsText}`;
 
   const STOPWORDS = new Set([
     "the", "and", "with", "for", "from", "this", "that", "into", "your", "their",
@@ -191,8 +198,8 @@ Check for these specific problems:
 4. STYLE CONSISTENCY: Do all recommended items align with the stated design_direction?
 5. COMPLETENESS: For each recommended item, does it have a non-empty category, search_title, and placement?
 6. DUPLICATES: Are there duplicate categories in what_it_needs that shouldn't be duplicated?
-7. WHAT_SHOULD_GO GROUNDING — STRICT: For each entry in what_should_go, find the EXACT noun phrase (e.g. "TV stand", "dining chairs", "wall art", "rug") in the existing summary. If you cannot find a clear match, that entry is HALLUCINATED — DELETE it from what_should_go. Common hallucinations to watch for: "mass-produced canvas wall art" (no wall art in summary), "mismatched plastic dining chairs" (no dining chairs in summary), "cheap TV stand" (no TV stand in summary), "side tables" (no side tables in summary). The summary is fixed; the items list must shrink to match it.
-8. WHAT_WORKS GROUNDING — STRICT: Same rule. Each what_works entry must reference an object the summary or keep_items list explicitly names. If the summary doesn't mention a "vintage rug" or "ceramic vase", DELETE that entry from what_works — do not invent objects to praise. NEVER include architectural finishes (flooring, countertops, paint) — those belong in summary.
+7. WHAT_SHOULD_GO GROUNDING: Each what_should_go entry must reference a PHYSICAL OBJECT that is plausibly present in the room. It can be anchored in the summary, keep_items, OR in what_it_needs descriptions (items being replaced reference what they're replacing). DELETE entries that are: (a) abstract concepts like "clutter" or "impersonal arrangement" rather than named objects, (b) items with zero evidence anywhere in the analysis — e.g. "canvas wall art" when no wall art is mentioned in summary, keep_items, or what_it_needs. Do NOT delete an entry just because the summary doesn't name it verbatim — if what_it_needs says "replaces the existing media console" then "media console" IS anchored.
+8. WHAT_WORKS GROUNDING: Each what_works entry must reference a movable object the user owns. It can be anchored in the summary, keep_items list, OR be clearly implied by the photos (the summary is a condensed overview, not an exhaustive inventory). DELETE entries that name items with zero evidence anywhere. NEVER include architectural finishes (flooring, countertops, paint) — those belong in summary.
 
 Return JSON:
 {

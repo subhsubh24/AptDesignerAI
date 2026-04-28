@@ -269,7 +269,7 @@ REQUIREMENTS:
 
     const verificationResult = await generateWithVerification({
       generateFn: async (prompt) => {
-        const result = await generateMockupImage(prompt, [], imageOptions, undefined, undefined);
+        const result = await generateMockupImage(prompt, [], { ...imageOptions, thinkingLevel: "low" }, undefined, undefined);
         if (!result.success || !result.data) return { success: false, error: result.error };
         return { success: true, data: result.data };
       },

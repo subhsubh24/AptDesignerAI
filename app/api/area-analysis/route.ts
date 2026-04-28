@@ -1599,6 +1599,59 @@ Use Google Search to verify current pricing and material availability when neede
                 return { query, error: "Search failed" };
               }
             }
+            case "run_pass_a":
+              return { error: "Pass A already completed before coordinator started. Use run_harmony_round to refine." };
+            case "run_pass_b":
+            case "rerun_pass_b": {
+              const feedback = args.feedback as string | undefined;
+              if (!feedback) {
+                return { error: "Pass B already completed. Provide feedback to re-run, or use run_harmony_round to refine individual items." };
+              }
+              // Re-run Pass B with feedback by calling the same furnishing logic
+              const passBRerunPrompt = `You are an interior designer revising the shopping list for the ${room.name}.
+
+DESIGN BRIEF FROM PASS A:
+${JSON.stringify({
+  summary: (analysis as Record<string, unknown>).summary,
+  design_direction: (analysis as Record<string, unknown>).design_direction,
+  recommended_palette: (analysis as Record<string, unknown>).recommended_palette,
+  recommended_materials: (analysis as Record<string, unknown>).recommended_materials,
+  what_works: (analysis as Record<string, unknown>).what_works,
+  what_should_go: (analysis as Record<string, unknown>).what_should_go,
+}, null, 2)}
+
+CURRENT ITEM LIST:
+${JSON.stringify((analysis as Record<string, unknown>).what_it_needs, null, 2)}
+
+REVISION FEEDBACK:
+${feedback}
+
+Produce a REVISED what_it_needs list that addresses the feedback. Keep items that are working well unchanged. Return JSON array of items with: category, search_title, description, priority, specs, placement.`;
+
+              try {
+                const rerunResp = await geminiProvider.chat({
+                  model: selectModel("area_analysis"),
+                  system: getSystemPrompt(profile),
+                  messages: [{ role: "user", content: [{ type: "text", text: passBRerunPrompt }] }],
+                  max_tokens: 64000,
+                  seed: DETERMINISTIC_SEED,
+                  responseMimeType: "application/json",
+                });
+                const rerunItems = extractJsonObject(rerunResp.content);
+                const items = Array.isArray(rerunItems) ? rerunItems
+                  : (rerunItems as Record<string, unknown>)?.what_it_needs;
+                if (Array.isArray(items) && items.length > 0) {
+                  (analysis as Record<string, unknown>).what_it_needs = items;
+                  coordState.passBComplete = true;
+                  return { success: true, itemCount: items.length, feedback };
+                }
+                return { error: "Re-run produced no items" };
+              } catch (err) {
+                return { error: `Pass B re-run failed: ${err instanceof Error ? err.message : "unknown"}` };
+              }
+            }
+            case "run_enrichment":
+              return { error: "Enrichment already completed before coordinator started." };
             case "finalize":
               return { reason: (args.reason as string) || "Coordinator finalized" };
             default:
