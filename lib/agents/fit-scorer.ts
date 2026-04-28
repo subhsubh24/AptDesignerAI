@@ -90,6 +90,8 @@ export interface ScoringContext {
    * evaluate routes leave default (true) because ManualScorecardView displays them.
    */
   includeFitNotes?: boolean;
+  /** Per-category reference mockup for visual validation during scoring. */
+  recommendationMockups?: Record<string, { imageUrl: string; prompt: string }>;
 }
 
 // ─── Score Calibration Anchors ────────────────────────────────
@@ -433,8 +435,18 @@ export async function scoreProducts(
         includeFitNotes: scoringCtx.includeFitNotes ?? true,
       });
 
-      // Build per-product blocks: each gets an index, its images, and
-      // its text info (title, price, materials, math section).
+      // If a recommendation mockup exists for this category, inject it as
+      // a visual reference so the scorer can compare candidate products against
+      // the intended design direction.
+      const catKey = batch[0].category || "unknown";
+      const refMockup = scoringCtx.recommendationMockups?.[catKey];
+      const referenceBlocks: AIContentBlock[] = [];
+      let referenceText = "";
+      if (refMockup?.imageUrl && isGeminiCompatibleImageUrl(refMockup.imageUrl)) {
+        referenceBlocks.push({ type: "image", source: { type: "url", url: refMockup.imageUrl } });
+        referenceText = `\n\n## REFERENCE PRODUCT MOCKUP\nThe image above is a designer-generated reference mockup showing the IDEAL ${catKey.replace(/_/g, " ")} for this room. Use it as a VISUAL BENCHMARK when scoring — products that closely match its style, proportions, material feel, and color palette should score higher on style_fit and palette_fit. This is not a hard requirement but a strong signal of design intent.`;
+      }
+
       const perProductMath: ProductMathScores[] = [];
       const productBlocks: AIContentBlock[] = [];
       const productTextParts: string[] = [];
@@ -524,8 +536,9 @@ Return JSON ONLY matching this shape (no prose, no markdown fences):
 </output_contract>`;
 
       const messageContent: AIContentBlock[] = [
+        ...referenceBlocks,
         ...productBlocks,
-        { type: "text", text: `${basePrompt}${batchTail}` },
+        { type: "text", text: `${basePrompt}${referenceText}${batchTail}` },
       ];
 
       let lastError: string | undefined;

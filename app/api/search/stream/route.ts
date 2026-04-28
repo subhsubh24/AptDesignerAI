@@ -175,6 +175,31 @@ export async function POST(request: Request) {
     }
   }
 
+  // Load recommendation mockups generated during the assessment phase.
+  // These serve as visual references during product scoring — the scorer
+  // compares candidate product images against the designer-generated mockup.
+  let recommendationMockups: Record<string, { imageUrl: string; prompt: string }> | undefined;
+  {
+    const { data: recRuns } = await supabase
+      .from("agent_runs")
+      .select("output_json")
+      .eq("room_id", room_id)
+      .eq("agent_type", "mockup_recommendation")
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (recRuns && recRuns.length > 0) {
+      const map: Record<string, { imageUrl: string; prompt: string }> = {};
+      for (const run of recRuns) {
+        const out = run.output_json as { category?: string; image_url?: string; prompt?: string } | null;
+        if (out?.category && out.image_url && out.prompt && !map[out.category]) {
+          map[out.category] = { imageUrl: out.image_url, prompt: out.prompt };
+        }
+      }
+      if (Object.keys(map).length > 0) recommendationMockups = map;
+    }
+  }
+
   const ctx: AgentContext = {
     roomId: room_id,
     roomType: room.room_type,
@@ -202,6 +227,7 @@ export async function POST(request: Request) {
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,
     fillAllTiers: fillAllTiers !== false,
+    recommendationMockups,
   };
 
   // Categories can be strings or rich objects { category, search_title, specs }

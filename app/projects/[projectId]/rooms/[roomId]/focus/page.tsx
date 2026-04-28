@@ -439,30 +439,45 @@ export default function FocusPage() {
   ) => {
     const key = item.category;
     setItemMockupsLoading((prev) => ({ ...prev, [key]: true }));
-    try {
-      const res = await fetch("/api/mockups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          room_id: roomId,
-          recommendation_mockup: {
-            category: item.category,
-            search_title: item.search_title,
-            description: item.description,
-            specs: item.specs,
-          },
-          design_direction: designDir,
-          aspect_ratio: "1:1",
-        }),
-        signal,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setItemMockups((prev) => ({ ...prev, [key]: data.image_url }));
-      }
-    } catch (err) {
-      if ((err as { name?: string })?.name !== "AbortError") {
-        console.error(`Item mockup generation failed for ${key}:`, err);
+
+    const MAX_RETRIES = 3;
+    const payload = JSON.stringify({
+      room_id: roomId,
+      recommendation_mockup: {
+        category: item.category,
+        search_title: item.search_title,
+        description: item.description,
+        specs: item.specs,
+      },
+      design_direction: designDir,
+      aspect_ratio: "1:1",
+    });
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (signal.aborted) break;
+      try {
+        const res = await fetch("/api/mockups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setItemMockups((prev) => ({ ...prev, [key]: data.image_url }));
+          break;
+        }
+        if (res.status === 429 && attempt < MAX_RETRIES) {
+          const backoff = Math.min(2000 * 2 ** attempt, 16000);
+          await new Promise((r) => setTimeout(r, backoff));
+          continue;
+        }
+        break;
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") break;
+        if (attempt === MAX_RETRIES) {
+          console.error(`Item mockup generation failed for ${key}:`, err);
+        }
       }
     }
     setItemMockupsLoading((prev) => ({ ...prev, [key]: false }));
@@ -476,11 +491,24 @@ export default function FocusPage() {
     const items = analysis.what_it_needs || [];
     const designDir = analysis.design_direction || "";
 
-    // Fire all item mockups in parallel — each is an independent product
-    // shot with no room context, so they don't compete for room-photo
-    // resources. The server-side pLimit(8) handles rate limiting.
+    // Client-side concurrency limiter — cap at 3 concurrent requests so
+    // we don't overwhelm the server even with the higher rate limit.
+    let active = 0;
+    const queue: Array<() => void> = [];
+    const CONCURRENCY = 3;
+    function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+      return new Promise<T>((resolve, reject) => {
+        const run = () => {
+          active++;
+          fn().then(resolve, reject).finally(() => { active--; const next = queue.shift(); if (next) next(); });
+        };
+        if (active < CONCURRENCY) run();
+        else queue.push(run);
+      });
+    }
+
     await Promise.allSettled(
-      items.map((item) => generateItemMockup(item, designDir, controller.signal)),
+      items.map((item) => enqueue(() => generateItemMockup(item, designDir, controller.signal))),
     );
   };
 

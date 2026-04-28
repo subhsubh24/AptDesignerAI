@@ -439,6 +439,7 @@ async function reSearchCategoryForCorrection(
       anchorSpecs: DEPENDENT_CATEGORIES_SET.has(cat) && Object.keys(anchorSpecs).length > 0 ? anchorSpecs : undefined,
       harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
       includeFitNotes: false,
+      recommendationMockups: ctx.recommendationMockups,
     }, 3);
     if (tokensUsed) {
       tokenBudget.add(tokensUsed);
@@ -1481,6 +1482,7 @@ export async function runAgenticSearch(
             : undefined,
           harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== productCategory),
           includeFitNotes: false,
+          recommendationMockups: ctx.recommendationMockups,
         };
 
         deepScorePromises.push(
@@ -2139,6 +2141,7 @@ export async function runAgenticSearch(
                 : undefined,
               harmonyNeighbors: harmonyNeighbors.filter((n) => n.category !== cat),
               includeFitNotes: false,
+              recommendationMockups: ctx.recommendationMockups,
             }, 3);
             if (tokensUsed) {
               tokenBudget.add(tokensUsed);

@@ -96,6 +96,8 @@ export const RATE_LIMITS = {
   evaluate: { maxRequests: 30, windowMs: 60_000 },
   /** Mockup generation: 5 per minute per user */
   mockup: { maxRequests: 5, windowMs: 60_000 },
+  /** Recommendation mockups: lightweight product shots, higher limit */
+  recommendationMockup: { maxRequests: 15, windowMs: 60_000 },
   /** Upload: 20 per minute per user */
   upload: { maxRequests: 20, windowMs: 60_000 },
   /** Area analysis — slow, heavy. 3 per 5 minutes per user */

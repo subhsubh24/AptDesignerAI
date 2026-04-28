@@ -68,6 +68,13 @@ export interface AgentContext {
    */
   identifiedContext?: string;
 
+  /**
+   * Per-category reference mockup from the recommendation stage. Used during
+   * scoring to visually validate that found products align with the intended design.
+   * Key = category slug, value = { imageUrl, prompt }.
+   */
+  recommendationMockups?: Record<string, { imageUrl: string; prompt: string }>;
+
   /** When true, after normal backfill every empty category×tier cell is
    * filled with the best available product — first from that tier's
    * alsoConsidered pool, else from adjacent tiers. Prioritizes UX over

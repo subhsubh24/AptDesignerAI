@@ -138,17 +138,20 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Rate limit
-  const limit = checkRateLimit(`mockup:${user.id}`, RATE_LIMITS.mockup);
+  const body = await request.json();
+  const { room_id, bundle_id, product_ids, vision_mode, recommendation_mockup, design_direction, items_description, iteration_notes } = body;
+
+  // Rate limit — recommendation mockups (lightweight product shots) get a
+  // higher allowance than full room-scene mockups.
+  const rlConfig = recommendation_mockup ? RATE_LIMITS.recommendationMockup : RATE_LIMITS.mockup;
+  const rlKey = recommendation_mockup ? `rec-mockup:${user.id}` : `mockup:${user.id}`;
+  const limit = checkRateLimit(rlKey, rlConfig);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many mockup requests. Please wait a moment." },
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
-
-  const body = await request.json();
-  const { room_id, bundle_id, product_ids, vision_mode, recommendation_mockup, design_direction, items_description, iteration_notes } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
@@ -253,7 +256,7 @@ REQUIREMENTS:
       console.log(`[mockup] recommendation cache hit key=${recCacheKey}`);
       await completeAgentRun(supabase, agentRun.id, {
         status: "completed",
-        output_json: { image_url: cachedRec.url, cache_hit: true },
+        output_json: { image_url: cachedRec.url, cache_hit: true, category: rec.category, prompt: recPrompt },
       });
       return NextResponse.json({
         image_url: cachedRec.url,
@@ -288,7 +291,7 @@ REQUIREMENTS:
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
-      output_json: { image_url: imageUrl, category: rec.category },
+      output_json: { image_url: imageUrl, category: rec.category, prompt: recPrompt },
     });
 
     return NextResponse.json({
