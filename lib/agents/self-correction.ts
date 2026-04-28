@@ -120,7 +120,10 @@ function filterUnanchoredItems(
         .join(" ")
         .toLowerCase()
     : "";
-  const haystack = `${summary} ${keepText} ${designDir} ${needsText}`;
+  const worksText = Array.isArray(analysis.what_works)
+    ? (analysis.what_works as string[]).join(" ").toLowerCase()
+    : "";
+  const haystack = `${summary} ${keepText} ${designDir} ${needsText} ${worksText}`;
 
   const STOPWORDS = new Set([
     "the", "and", "with", "for", "from", "this", "that", "into", "your", "their",
@@ -130,7 +133,12 @@ function filterUnanchoredItems(
   ]);
 
   const isAnchored = (entry: string): boolean => {
-    const head = entry.split(/[—\-:]/)[0].toLowerCase();
+    // Split on " — " or " - " (reason separator), fall back to ":" if neither found.
+    // Avoid splitting on hyphens inside compound words like "low-profile".
+    const separatorMatch = entry.match(/\s[—–-]\s|:\s/);
+    const head = separatorMatch
+      ? entry.slice(0, separatorMatch.index).toLowerCase()
+      : entry.toLowerCase();
     const tokens = head
       .replace(/[^a-z\s]/g, " ")
       .split(/\s+/)
