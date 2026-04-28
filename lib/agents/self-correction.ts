@@ -107,6 +107,7 @@ Check for these specific problems:
 5. COMPLETENESS: For each recommended item, does it have a non-empty category, search_title, and placement?
 6. DUPLICATES: Are there duplicate categories in what_it_needs that shouldn't be duplicated?
 7. WHAT_SHOULD_GO GROUNDING: For each entry in what_should_go, does the summary or what_works mention an item matching its description? If summary describes a sparse room with only a sofa and bookshelf, what_should_go must NOT include "TV stand", "side tables", "armchair", "wall art" — those are hallucinated. Each entry must correspond to something the summary actually describes as present in the room. Drop any what_should_go entry that has no anchor in the summary.
+8. WHAT_WORKS GROUNDING: Same rule for what_works. Every entry must be a physical object the summary or keep items confirm is actually in the room. The model must NOT fabricate "good" items (e.g. claiming a "vintage rug" or "ceramic vase" works well when nothing in the summary indicates one is present). Drop any what_works entry with no grounding in the summary or keep_items list. NEVER include architectural finishes (flooring, countertops, paint) in what_works — those belong in summary.
 
 Return JSON:
 {
