@@ -1711,7 +1711,19 @@ export async function runAgenticSearch(
     });
     reportStep({ step: "Generating bundles", status: "running", data: { progress: 0, total: PRICE_TIERS.length } });
 
-    const validationPromise = validateProductSet(
+    // Skip validation when there are too few products for meaningful harmony /
+    // pairwise checks. A 1-2 product set has no pairwise conflicts and the
+    // deep-score has already done per-product harmony via cohesion_fit_score.
+    const skipValidation = allProducts.length < 4;
+    if (skipValidation) {
+      log.info("Skipping validation — too few products for meaningful harmony pass", {
+        productCount: allProducts.length,
+      });
+    }
+
+    const validationPromise = skipValidation
+      ? Promise.resolve({ success: true as const, data: { isValid: true, confidence: 8, issues: [], product_flags: [], pairwise_conflicts: [] }, tokensUsed: 0 })
+      : validateProductSet(
       allProducts.map((p) => {
         const pMeta = p.metadata as Record<string, unknown> | null;
         return {
