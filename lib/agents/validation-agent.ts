@@ -240,6 +240,7 @@ export async function validateRoomHarmony(
     identifiedContext?: string;
     diagnosis?: DiagnosisData;
     designDirection?: DesignDirection;
+    cacheScope?: { sessionKey: string; content: AIContentBlock[] };
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -450,6 +451,7 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
           responseMimeType: "application/json",
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
+          cacheScope: context.cacheScope,
         });
 
         if (response.truncated) {
@@ -634,11 +636,12 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
             model,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
-            max_tokens: 64000,
+            max_tokens: 16384,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
+            cacheScope: context.cacheScope,
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -761,6 +764,7 @@ export async function performFinalAssessment(
     identifiedContext?: string;
     diagnosis?: DiagnosisData;
     designDirection?: DesignDirection;
+    cacheScope?: { sessionKey: string; content: AIContentBlock[] };
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
   const model = selectModel("validation");
@@ -953,6 +957,7 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           responseMimeType: "application/json",
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
+          cacheScope: context.cacheScope,
         });
 
         if (response.truncated) {
@@ -1106,11 +1111,12 @@ Based on the room context and per-item final scores above, your task is: holisti
             model,
             system,
             messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
-            max_tokens: 64000,
+            max_tokens: 16384,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
+            cacheScope: context.cacheScope,
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1189,10 +1195,11 @@ Based on the scoring and holistic assessment above, decide: keep iterating, or s
             model,
             system,
             messages: [{ role: "user", content: [{ type: "text", text: textBlock }] }],
-            max_tokens: 64000,
+            max_tokens: 4096,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
+            thinkingConfig: { thinkingLevel: "minimal" },
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;

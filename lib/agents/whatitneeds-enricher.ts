@@ -156,9 +156,10 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
       model: selectModel("search"),
       system: getSystemPrompt(),
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 64000,
+      max_tokens: 16384,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },

@@ -481,7 +481,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           model,
           system,
           messages: [{ role: "user", content: passAContent }],
-          max_tokens: 64000,
+          max_tokens: 16384,
           seed,
           responseMimeType: "application/json",
           cacheScope: contentBlocks.length > 0
@@ -564,7 +564,8 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           model,
           system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
-          max_tokens: 64000,
+          max_tokens: 4096,
+          thinkingConfig: { thinkingLevel: "low" },
           cacheScope:
             contentBlocks.length > 0
               ? { sessionKey: areaSessionKey, content: contentBlocks }
@@ -588,6 +589,14 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       generate: generatePassASample,
       judge: judgePassA,
       label: "area-analysis.passA",
+      qualityCheck: (sample) => {
+        const d = sample.data;
+        const palette = Array.isArray(d.recommended_palette) ? d.recommended_palette : [];
+        const materials = Array.isArray(d.recommended_materials) ? d.recommended_materials : [];
+        const whatWorks = Array.isArray(d.what_works) ? d.what_works : [];
+        return palette.length >= 3 && materials.length >= 3 && whatWorks.length >= 1
+          && typeof d.summary === "string" && d.summary.length > 50;
+      },
     });
     const understanding = selection.chosen.data;
     // Sum tokens across every surviving sample — the generation cost is N×,
@@ -687,7 +696,7 @@ Use Google Search to verify current pricing and material availability when neede
       model,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
-      max_tokens: 64000,
+      max_tokens: 32768,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       tools: [
@@ -936,6 +945,29 @@ Use Google Search to verify current pricing and material availability when neede
           }
         : null;
 
+    // Build a cacheScope for room images — these are sent repeatedly across
+    // all harmony/validation rounds and are the heaviest content. Caching them
+    // avoids re-tokenizing 4+ images every round.
+    const harmonyCacheBlocks: AIContentBlock[] = [];
+    if (floorPlanImageUrl) {
+      harmonyCacheBlocks.push({
+        type: "text",
+        text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features, and orientation.",
+      });
+      harmonyCacheBlocks.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
+    }
+    for (const url of roomImageUrls.slice(0, 4)) {
+      harmonyCacheBlocks.push({ type: "image", source: { type: "url", url } });
+    }
+    const harmonyCacheSessionKey = crypto
+      .createHash("sha256")
+      .update(`harmony|${room_id}|${roomImageUrls.join("|")}`)
+      .digest("hex")
+      .slice(0, 16);
+    const harmonyCacheScope = harmonyCacheBlocks.length > 0
+      ? { sessionKey: harmonyCacheSessionKey, content: harmonyCacheBlocks }
+      : undefined;
+
     const harmonyCtx = {
       roomType: room.room_type,
       roomName: room.name,
@@ -949,6 +981,7 @@ Use Google Search to verify current pricing and material availability when neede
       userContext: room.user_context || undefined,
       otherRooms: otherRoomsForHarmony.length > 0 ? otherRoomsForHarmony : undefined,
       identifiedContext: identifiedPiecesBlock || undefined,
+      cacheScope: harmonyCacheScope,
     };
 
     // ── Design Coordinator (agentic) vs. Hardcoded Harmony Loop ──────
@@ -1253,7 +1286,7 @@ Use Google Search to verify current pricing and material availability when neede
       }
 
       // (g) Early exit: convergence velocity check — if average improvement < 0.2 per round, stop
-      if (round >= 3) {
+      if (round >= 2) {
         let totalImprovement = 0;
         let itemCount = 0;
         for (const s of harmony.item_scores) {
@@ -1587,7 +1620,8 @@ Use Google Search to verify current pricing and material availability when neede
                       text: `Search for and summarize: ${query}\n\nReturn a concise summary of findings relevant to interior design recommendations.`,
                     }],
                   }],
-                  max_tokens: 64000,
+                  max_tokens: 8192,
+                  thinkingConfig: { thinkingLevel: "low" },
                   tools: [{ googleSearch: {} as Record<string, never> }],
                 });
                 coordState.designTrendSearches = [
@@ -1633,7 +1667,7 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
                   model: selectModel("area_analysis"),
                   system: getSystemPrompt(profile),
                   messages: [{ role: "user", content: [{ type: "text", text: passBRerunPrompt }] }],
-                  max_tokens: 64000,
+                  max_tokens: 32768,
                   seed: DETERMINISTIC_SEED,
                   responseMimeType: "application/json",
                 });

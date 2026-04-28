@@ -34,7 +34,7 @@ import type { AIMessage, AIContentBlock, FunctionDeclaration } from "@/lib/ai/pr
 
 const log = createLogger("design-coordinator");
 
-const SAFETY_TURN_LIMIT = 100;
+const SAFETY_TURN_LIMIT = 15;
 
 export type DesignCoordinatorTool =
   | "run_pass_a"
@@ -287,14 +287,14 @@ Begin. Call your first tool.`;
       model,
       system,
       messages: turn > 0 ? messages : messages,
-      max_tokens: 64000,
+      max_tokens: 8192,
       seed: DETERMINISTIC_SEED,
       tools: [
         { functionDeclarations: COORDINATOR_TOOLS },
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
       ],
-      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+      thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
     });
 
     totalTokens +=
@@ -409,6 +409,26 @@ Begin. Call your first tool.`;
     }
 
     messages.push({ role: "user", content: responseParts });
+
+    // Auto-finalize guard: if state shows convergence, stop early to save tokens
+    const st = getState();
+    const allAboveTarget = st.latestScores && st.latestScores.length > 0 &&
+      st.latestScores.every(s => s.score >= 8.5 || s.stabilized);
+    const velocityExhausted = st.convergenceVelocity !== undefined && st.convergenceVelocity < 0.2;
+    const allStabilized = st.stabilizedCount !== undefined && st.totalItems !== undefined &&
+      st.stabilizedCount >= st.totalItems;
+    if (st.harmonyRoundsCompleted >= 1 && (allAboveTarget || velocityExhausted || allStabilized)) {
+      log.info("Auto-finalize: convergence detected", {
+        turn, allAboveTarget, velocityExhausted, allStabilized,
+        rounds: st.harmonyRoundsCompleted,
+      });
+      return {
+        success: true,
+        data: { finalized: true, reason: `Auto-finalize: ${allAboveTarget ? "all items ≥ 8.5" : velocityExhausted ? "velocity < 0.2" : "all stabilized"} after ${st.harmonyRoundsCompleted} round(s)` },
+        tokensUsed: totalTokens,
+        model,
+      };
+    }
   }
 
   log.warn("Design coordinator hit safety turn limit", {

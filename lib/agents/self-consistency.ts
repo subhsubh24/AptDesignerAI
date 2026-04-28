@@ -20,12 +20,15 @@ import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("self-consistency");
 
-/** Number of parallel samples per self-consistent call (defaults to 3). */
+/** Number of parallel samples per self-consistent call (defaults to 1).
+ *  Changed from 3→1: single-sample is sufficient for most runs since the
+ *  judge rarely picks a non-zero candidate. The downstream self-correction
+ *  loop catches quality issues anyway. Override via SELF_CONSISTENCY_N=3. */
 export const SELF_CONSISTENCY_N = (() => {
   const raw = process.env.SELF_CONSISTENCY_N;
-  if (!raw) return 3;
+  if (!raw) return 1;
   const n = parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 1 ? n : 3;
+  return Number.isFinite(n) && n >= 1 ? n : 1;
 })();
 
 /**
@@ -52,6 +55,10 @@ export interface SelfConsistencyConfig<T> {
   judge: (candidates: T[]) => Promise<number>;
   /** Label used in logging. */
   label?: string;
+  /** Optional quality check for lazy escalation: if the sole sample from
+   *  N=1 fails this check, auto-escalate to N=3 + judge. Return true if
+   *  the sample passes quality, false to trigger escalation. */
+  qualityCheck?: (sample: T) => boolean;
 }
 
 /**
@@ -76,6 +83,12 @@ export async function selfConsistent<T>(config: SelfConsistencyConfig<T>): Promi
   if (n === 1) {
     const only = await config.generate(seedForSample(0), 0);
     if (only == null) throw new Error(`${label}: sole sample failed`);
+    // Lazy escalation: if the sole sample fails quality, auto-escalate to 3
+    if (config.qualityCheck && !config.qualityCheck(only)) {
+      log.warn(`${label}: sole sample failed quality check — escalating to N=3`);
+      const escalated = await selfConsistent({ ...config, n: 3, qualityCheck: undefined });
+      return escalated;
+    }
     return { chosen: only, candidates: [only], judgeIndex: 0, fellBack: false };
   }
 
