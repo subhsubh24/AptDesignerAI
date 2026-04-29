@@ -295,11 +295,11 @@ These photos show the REST of the apartment. Study them to understand:
 ⚠️ Your ENTIRE analysis must be about the ${room.name} above — these photos are CONTEXT ONLY.`,
     });
 
-    // 90-day freshness window — palette/direction from older sibling
-    // diagnoses reflects a previous user preference that has likely evolved.
-    // Falling back to stale summaries makes the current room drift toward
-    // an outdated direction.
-    const staleCutoffMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    // 90-day freshness window anchored to the room's own creation time
+    // (not wall-clock) so the same room always sees the same sibling context
+    // regardless of when the analysis is re-run.
+    const roomCreatedMs = room.created_at ? Date.parse(room.created_at) : Date.now();
+    const staleCutoffMs = (Number.isFinite(roomCreatedMs) ? roomCreatedMs : Date.now()) - 90 * 24 * 60 * 60 * 1000;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const otherRoom of otherRooms as any[]) {
       const diagnoses = otherRoom.room_diagnoses as Array<{ diagnosis_json: Record<string, unknown>; created_at?: string }> | undefined;
@@ -574,6 +574,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 4096,
+          seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel: "low" },
           cacheScope:
             contentBlocks.length > 0
@@ -1240,6 +1241,7 @@ Use Google Search to verify current pricing and material availability when neede
     const prevRoundScores = new Map<string, number>();
 
     let totalRoundsCompleted = 0;
+    let consecutiveLowVelocityRounds = 0;
 
     // ── Phase 1: Iterative refinement rounds — stop when ALL scores >= 9.5/10 ──
     for (let round = 1; round <= SAFETY_HARMONY_LIMIT; round++) {
@@ -1523,8 +1525,13 @@ Use Google Search to verify current pricing and material availability when neede
         }
         const avgImprovement = itemCount > 0 ? totalImprovement / itemCount : 0;
         if (avgImprovement < 0.2 && itemCount > 0) {
-          console.log(`[area-analysis] Round ${round}: convergence velocity ${avgImprovement.toFixed(2)} < 0.2 threshold — early exit to save LLM rounds`);
-          break;
+          consecutiveLowVelocityRounds++;
+          if (consecutiveLowVelocityRounds >= 2) {
+            console.log(`[area-analysis] Round ${round}: convergence velocity ${avgImprovement.toFixed(2)} < 0.2 for ${consecutiveLowVelocityRounds} consecutive rounds — early exit to save LLM rounds`);
+            break;
+          }
+        } else {
+          consecutiveLowVelocityRounds = 0;
         }
       }
 

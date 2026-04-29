@@ -490,9 +490,10 @@ export const geminiProvider: AIProvider = {
     // Pre-compute: urlContext tool presence gates multiple config fields below.
     const hasUrlContext = tools?.some((t) => "urlContext" in (t as Record<string, unknown>));
 
-    // seed is incompatible with responseSchema AND urlContext tools on
-    // Gemini 3.1 Flash Lite — combining them produces INVALID_ARGUMENT (400).
-    if (typeof effectiveSeed === "number" && !responseSchema && !hasUrlContext) {
+    // seed was previously incompatible with responseSchema on older Gemini
+    // versions but works on 3.1 (verified April 2026). urlContext tools
+    // still reject seed — guard only for that case.
+    if (typeof effectiveSeed === "number" && !hasUrlContext) {
       config.seed = effectiveSeed;
     }
 

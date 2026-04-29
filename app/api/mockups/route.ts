@@ -275,7 +275,6 @@ REQUIREMENTS:
       },
       originalPrompt: recPrompt,
       roomImageUrls: [],
-      wallClockBudgetMs: 90_000,
       skipVerification: true,
     });
 
@@ -487,7 +486,6 @@ RULES:
       },
       originalPrompt: visionPrompt,
       roomImageUrls,
-      wallClockBudgetMs: 90_000,
     });
 
     if (!verificationResult.finalImageData) {

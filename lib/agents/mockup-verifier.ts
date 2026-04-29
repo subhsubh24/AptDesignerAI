@@ -135,22 +135,12 @@ export async function generateWithVerification(opts: {
   originalPrompt: string;
   roomImageUrls: string[];
   /**
-   * Wall-clock budget in ms. Once exceeded, accept the latest image without
-   * further retries. Prevents the verify→regenerate loop from running so long
-   * that the browser drops the fetch (image gen can be 180s × 3 transport
-   * retries × 3 verification attempts = ~27 min worst case).
-   * Default: 240s (one full image gen + one verification round).
-   */
-  wallClockBudgetMs?: number;
-  /**
    * If true, skip the verify→regenerate loop and return the first generated
    * image. Use for non-final previews (e.g., pre-search "imagination" mockup)
    * where strict room-shell accuracy isn't worth the latency.
    */
   skipVerification?: boolean;
 }): Promise<MockupVerificationResult> {
-  const startedAt = Date.now();
-  const budgetMs = opts.wallClockBudgetMs ?? 240_000;
   let currentPrompt = opts.originalPrompt;
   let lastImageData = "";
   let lastMimeType: string | undefined;
@@ -170,16 +160,6 @@ export async function generateWithVerification(opts: {
     lastMimeType = imageResult.data.image_mime_type;
 
     if (opts.skipVerification || opts.roomImageUrls.length === 0) {
-      return { verified: true, attempts: attempt, finalVerification: null, finalImageData: lastImageData, finalImageMimeType: lastMimeType };
-    }
-
-    const elapsedAfterGen = Date.now() - startedAt;
-    if (elapsedAfterGen > budgetMs) {
-      log.warn("Mockup verification budget exceeded — accepting image without verification", {
-        attempt,
-        elapsedMs: elapsedAfterGen,
-        budgetMs,
-      });
       return { verified: true, attempts: attempt, finalVerification: null, finalImageData: lastImageData, finalImageMimeType: lastMimeType };
     }
 
@@ -208,16 +188,6 @@ export async function generateWithVerification(opts: {
       log.warn("Mockup verification failed after max attempts — accepting best effort", {
         attempts: attempt,
         issues: verification.data.issues,
-      });
-      break;
-    }
-
-    const elapsedAfterVerify = Date.now() - startedAt;
-    if (elapsedAfterVerify > budgetMs) {
-      log.warn("Mockup verification budget exceeded — accepting best-effort image", {
-        attempt,
-        elapsedMs: elapsedAfterVerify,
-        budgetMs,
       });
       break;
     }
