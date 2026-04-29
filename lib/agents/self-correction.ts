@@ -107,23 +107,29 @@ export async function selfReviewAreaAnalysis(
  * " - "), tokenize into significant words (3+ chars, not stopwords), and
  * require at least one token to appear in the summary or keep_items.
  */
-function filterUnanchoredItems(
+export function filterUnanchoredItems(
   analysis: Record<string, unknown>,
   keepItems: string[],
 ): Record<string, unknown> {
   const summary = ((analysis.summary as string | undefined) || "").toLowerCase();
   const keepText = keepItems.join(" ").toLowerCase();
-  const designDir = ((analysis.design_direction as string | undefined) || "").toLowerCase();
-  const needsText = Array.isArray(analysis.what_it_needs)
-    ? (analysis.what_it_needs as Array<Record<string, unknown>>)
-        .map((n) => `${n.category || ""} ${n.description || ""} ${n.search_title || ""}`)
-        .join(" ")
-        .toLowerCase()
-    : "";
   const worksText = Array.isArray(analysis.what_works)
     ? (analysis.what_works as string[]).join(" ").toLowerCase()
     : "";
-  const haystack = `${summary} ${keepText} ${designDir} ${needsText} ${worksText}`;
+  const shouldGoText = Array.isArray(analysis.what_should_go)
+    ? (analysis.what_should_go as string[]).join(" ").toLowerCase()
+    : "";
+
+  // what_should_go claims items EXIST in the room → only ground against things
+  // known to be present: summary (photo description), keepItems (user-confirmed),
+  // what_works (other existing items). Crucially EXCLUDES what_it_needs (future
+  // purchases) — otherwise "area_rug" in needs falsely grounds a hallucinated
+  // "area rug" in should_go.
+  const shouldGoHaystack = `${summary} ${keepText} ${worksText}`;
+
+  // what_works claims items exist and are good → ground against summary,
+  // keepItems, and what_should_go (also existing items, just flagged for removal).
+  const worksHaystack = `${summary} ${keepText} ${shouldGoText}`;
 
   const STOPWORDS = new Set([
     "the", "and", "with", "for", "from", "this", "that", "into", "your", "their",
@@ -132,9 +138,7 @@ function filterUnanchoredItems(
     "inconsistent", "outdated", "low", "high", "quality",
   ]);
 
-  const isAnchored = (entry: string): boolean => {
-    // Split on " — " or " - " (reason separator), fall back to ":" if neither found.
-    // Avoid splitting on hyphens inside compound words like "low-profile".
+  const isAnchored = (entry: string, haystack: string): boolean => {
     const separatorMatch = entry.match(/\s[—–-]\s|:\s/);
     const head = separatorMatch
       ? entry.slice(0, separatorMatch.index).toLowerCase()
@@ -151,10 +155,10 @@ function filterUnanchoredItems(
 
   if (Array.isArray(analysis.what_should_go)) {
     const before = analysis.what_should_go as string[];
-    const after = before.filter((e) => typeof e === "string" && isAnchored(e));
+    const after = before.filter((e) => typeof e === "string" && isAnchored(e, shouldGoHaystack));
     if (after.length !== before.length) {
       log.warn("Dropped unanchored what_should_go entries", {
-        dropped: before.filter((e) => !isAnchored(e)),
+        dropped: before.filter((e) => !isAnchored(e, shouldGoHaystack)),
       });
     }
     result.what_should_go = after;
@@ -162,10 +166,10 @@ function filterUnanchoredItems(
 
   if (Array.isArray(analysis.what_works)) {
     const before = analysis.what_works as string[];
-    const after = before.filter((e) => typeof e === "string" && isAnchored(e));
+    const after = before.filter((e) => typeof e === "string" && isAnchored(e, worksHaystack));
     if (after.length !== before.length) {
       log.warn("Dropped unanchored what_works entries", {
-        dropped: before.filter((e) => !isAnchored(e)),
+        dropped: before.filter((e) => !isAnchored(e, worksHaystack)),
       });
     }
     result.what_works = after;
@@ -206,7 +210,7 @@ Check for these specific problems:
 4. STYLE CONSISTENCY: Do all recommended items align with the stated design_direction?
 5. COMPLETENESS: For each recommended item, does it have a non-empty category, search_title, and placement?
 6. DUPLICATES: Are there duplicate categories in what_it_needs that shouldn't be duplicated?
-7. WHAT_SHOULD_GO GROUNDING: Each what_should_go entry must reference a PHYSICAL OBJECT that is plausibly present in the room. It can be anchored in the summary, keep_items, OR in what_it_needs descriptions (items being replaced reference what they're replacing). DELETE entries that are: (a) abstract concepts like "clutter" or "impersonal arrangement" rather than named objects, (b) items with zero evidence anywhere in the analysis — e.g. "canvas wall art" when no wall art is mentioned in summary, keep_items, or what_it_needs. Do NOT delete an entry just because the summary doesn't name it verbatim — if what_it_needs says "replaces the existing media console" then "media console" IS anchored.
+7. WHAT_SHOULD_GO GROUNDING: Each what_should_go entry must reference a PHYSICAL OBJECT that is ACTUALLY VISIBLE in the room photos. It can ONLY be anchored in the summary or keep_items — NOT in what_it_needs. ⚠️ COMMON HALLUCINATION: the model recommends buying an item (e.g. area_rug in what_it_needs) and ALSO hallucinates that a bad version of that item already exists in the room (e.g. "Undersized area rug" in what_should_go). If the summary does not mention a rug and the user didn't list one in keep_items, DELETE it — the what_it_needs recommendation is not evidence the item exists. DELETE entries that are: (a) abstract concepts like "clutter" or "impersonal arrangement" rather than named objects, (b) items with zero evidence in the summary or keep_items.
 8. WHAT_WORKS GROUNDING: Each what_works entry must reference a movable object the user owns. It can be anchored in the summary, keep_items list, OR be clearly implied by the photos (the summary is a condensed overview, not an exhaustive inventory). DELETE entries that name items with zero evidence anywhere. NEVER include architectural finishes (flooring, countertops, paint) — those belong in summary.
 
 Return JSON:

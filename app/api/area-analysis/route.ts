@@ -406,6 +406,7 @@ Architectural finishes belong in "summary", "spatial_layout", or "lighting_condi
 WHAT_SHOULD_GO RULES — every entry MUST be a removable physical item visible in the photos:
 ✅ CORRECT: "Cheap particle-board TV stand — wrong scale, laminate peeling" / "Mismatched throw pillows — competing patterns"
 ❌ WRONG — NEVER include these: absences ("lack of X", "no rug"), architectural features ("builder-grade ceiling light", "bare flooring"), hypotheticals ("any big-box furniture sets"), things tenants cannot change (ceiling fixtures, HVAC vents, wall outlets, appliances)
+⚠️ HALLUCINATION TRAP: Do NOT invent items to justify a purchase recommendation. If you plan to recommend buying a rug, DO NOT also claim there's already a bad rug in the room unless you can clearly see one in the photos. The same applies to all categories — only list items you can actually see.
 </critical_rules>
 
 <output_format>
