@@ -151,6 +151,54 @@ describe("verifyWhatShouldGoAgainstPhotos", () => {
     const imageBlocks = content.filter((c) => c.type === "image");
     expect(imageBlocks).toHaveLength(PHOTOS.length);
   });
+
+  it("KEEPS entries when LLM marks not-visible but reason confirms object exists with different attributes", async () => {
+    const input = [
+      "Black laminate media console — cheap finish, conflicts with white quartz",
+      "Glass-top dining table with metal legs — fragmented look",
+    ];
+    mockResponse({
+      verdicts: [
+        { entry: input[0], visible: false, reason: "The media console under the television is white, not black." },
+        { entry: input[1], visible: false, reason: "There is no dining table visible in the provided photos." },
+      ],
+    });
+    const result = await verifyWhatShouldGoAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.fellBack).toBe(false);
+    // First entry kept (object exists, only color is wrong); second dropped (no dining table at all).
+    expect(result.what_should_go).toEqual([input[0]]);
+    expect(result.dropped).toHaveLength(1);
+    expect(result.dropped[0].entry).toBe(input[1]);
+  });
+
+  it("KEEPS entry when reason describes the object's attribute (the X is Y)", async () => {
+    const input = ["Mismatched metal dining chairs — cold and industrial"];
+    mockResponse({
+      verdicts: [
+        { entry: input[0], visible: false, reason: "The dining chairs in the photo are wood, not metal." },
+      ],
+    });
+    const result = await verifyWhatShouldGoAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.what_should_go).toEqual(input);
+  });
+
+  it("still DROPS entries when reason clearly says object does not exist", async () => {
+    const input = [
+      "Sofa — too heavy",
+      "Plastic storage bins under the console",
+      "Floor-to-ceiling roller shades",
+    ];
+    mockResponse({
+      verdicts: [
+        { entry: input[0], visible: true, reason: "centered in photo 1" },
+        { entry: input[1], visible: false, reason: "No plastic storage bins are visible in any of the photos." },
+        { entry: input[2], visible: false, reason: "Roller shades are not visible — the windows have sheer curtains." },
+      ],
+    });
+    const result = await verifyWhatShouldGoAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.what_should_go).toEqual([input[0]]);
+    expect(result.dropped).toHaveLength(2);
+  });
 });
 
 describe("verifyWhatWorksAgainstPhotos", () => {

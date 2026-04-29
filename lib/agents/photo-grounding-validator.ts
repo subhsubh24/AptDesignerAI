@@ -50,6 +50,37 @@ interface ValidatorOutput {
 }
 
 /**
+ * Detect when the LLM's "not visible" reason actually CONFIRMS the object
+ * exists with different attributes (e.g. "the media console is white, not
+ * black"). In that case the FURNITURE TYPE is real — we should keep the
+ * entry, not drop it. This catches the common LLM failure mode where it
+ * drops an item over a color/material descriptor mismatch despite the prompt
+ * telling it not to.
+ */
+function reasonImpliesObjectExists(reason: string): boolean {
+  if (!reason) return false;
+  const lower = reason.toLowerCase();
+  // Reasons that mean the object does NOT exist take priority.
+  if (/\b(?:no|not|none|never|cannot|can't|do not|don't|isn't|aren't|wasn't|weren't)\s+(?:visible|present|seen|found|in|shown|exist|exists|appear|appears|locate|located|identifiable)/.test(lower)) {
+    return false;
+  }
+  if (/\b(?:not|no|don't|doesn't|cannot|can't)\s+(?:see|find|detect|identify)/.test(lower)) {
+    return false;
+  }
+  if (/\bnowhere\s+(?:in|to)\b/.test(lower)) return false;
+  if (/\bnot in any\b/.test(lower)) return false;
+  // "is X, not Y" / "appears X, not Y" / "looks X, not Y" — attribute correction.
+  if (/\b(?:is|are|appears?|looks?|seems?)\s+\w+(?:[,\s]+\w+)*[,\s]+not\b/.test(lower)) {
+    return true;
+  }
+  // "the X is/are <attribute>" — LLM is describing the object that exists.
+  if (/^the\s+\w+(?:\s+\w+){0,4}\s+(?:is|are|appears?|looks?)\s+/.test(lower.trim())) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Validate each what_should_go entry against the room photos.
  *
  * @param whatShouldGo - List of strings from Pass A's what_should_go.
@@ -77,14 +108,17 @@ ${whatShouldGo.map((e, i) => `${i + 1}. ${e}`).join("\n")}
 
 YOUR JOB
 ========
-For EACH item above, look at the photos and determine: is this item actually visible in the photos?
+For EACH item above, look at the photos and determine: is the FURNITURE TYPE actually visible in the photos?
 
 Rules:
-- Return visible: true if you can clearly locate the item in at least one photo.
-- Return visible: false ONLY if you are confident the item is NOT in any of the photos.
+- Return visible: true if you can clearly locate the FURNITURE TYPE in at least one photo.
+- Return visible: false ONLY if you are confident the FURNITURE TYPE is NOT in any of the photos.
 - When uncertain (item could be partially obscured, in a corner you can't see clearly, or referenced abstractly), return visible: true. We are conservative — don't drop real items.
-- Furniture synonyms count: a "sectional" matches "sofa" / "couch"; a "media console" matches "TV stand"; etc.
-- Color/material descriptors don't have to match perfectly — focus on whether the OBJECT exists, not whether the description is exactly right.
+- Furniture synonyms count: a "sectional" matches "sofa" / "couch"; a "media console" matches "TV stand" / "TV cabinet"; "loveseat" matches "sofa"; etc.
+- 🛑 CRITICAL — DO NOT drop items because the COLOR, MATERIAL, FINISH, or STYLE descriptor is wrong. Focus ONLY on whether the FURNITURE TYPE / OBJECT exists. The description's adjectives (color, material, brand, finish) may be inaccurate, but if the object exists, return visible: TRUE.
+   • Example: Entry says "Black laminate media console" but the photo shows a WHITE media console → visible: TRUE (a media console exists, color descriptor is wrong but irrelevant — what matters is the object).
+   • Example: Entry says "Glass-top dining table with metal legs" but no dining table is in the photos at all → visible: FALSE (the OBJECT itself is missing).
+   • Example: Entry says "Mismatched metal dining chairs" but the photos show wood dining chairs → visible: TRUE (chairs exist, material descriptor is wrong).
 - Items described abstractly ("loose clutter", "general visual noise") with no concrete object → visible: false (these are not specific objects).
 
 OUTPUT FORMAT (strict JSON, no prose):
@@ -131,13 +165,26 @@ Return one verdict per input entry, in the same order.`;
 
     const kept: string[] = [];
     const dropped: Array<{ entry: string; reason: string }> = [];
+    const attrCorrected: Array<{ entry: string; reason: string }> = [];
     for (const entry of original) {
       const verdict = verdictByEntry.get(entry);
       if (!verdict || verdict.visible) {
         kept.push(entry);
+      } else if (reasonImpliesObjectExists(verdict.reason)) {
+        // LLM said "not visible" but its reason confirms the object exists
+        // with different attributes — keep the entry.
+        kept.push(entry);
+        attrCorrected.push({ entry, reason: verdict.reason });
       } else {
         dropped.push({ entry, reason: verdict.reason });
       }
+    }
+
+    if (attrCorrected.length > 0) {
+      log.warn("Photo-grounding validator overrode visible:false for attribute-correction reasons", {
+        count: attrCorrected.length,
+        items: attrCorrected.map((a) => `${a.entry} (${a.reason})`),
+      });
     }
 
     // Refuse to drop EVERYTHING — almost always means LLM misread the prompt.
@@ -196,18 +243,20 @@ ${whatWorks.map((e, i) => `${i + 1}. ${e}`).join("\n")}
 YOUR JOB
 ========
 For EACH item above, decide whether it should be in a "Keep" list. Return visible: true ONLY if BOTH conditions hold:
-  (a) The item is clearly visible in at least one photo, AND
+  (a) The FURNITURE TYPE is clearly visible in at least one photo, AND
   (b) The item is movable furniture or decor — NOT an architectural / built-in element.
 
 Return visible: false if:
-  - The item is NOT in any photo (hallucinated furniture).
+  - The FURNITURE TYPE is NOT in any photo (hallucinated furniture).
   - The item IS visible but it's an architectural feature, not movable furniture.
     Examples: window shades / roller shades / blinds / curtains attached to the building, hardwood/LVP/laminate flooring, walls, ceiling, built-in cabinetry, kitchen counters, kitchen appliances, light fixtures hard-wired into the ceiling. These belong to the building, not the user's furniture set.
 
 When uncertain about visibility (item could be partially obscured), return visible: true. We are conservative — don't drop real items.
 
 Furniture synonyms count: a "sectional" matches "sofa" / "couch"; a "media console" matches "TV stand"; etc.
-Color/material descriptors don't have to match perfectly — focus on whether the OBJECT exists, not whether the description is exactly right.
+
+🛑 CRITICAL — DO NOT drop items because the COLOR, MATERIAL, FINISH, or STYLE descriptor is wrong. Focus ONLY on whether the FURNITURE TYPE / OBJECT exists. The description's adjectives may be inaccurate, but if the object exists, return visible: TRUE.
+  • Example: Entry says "Grey leather sofa" but the photo shows a BLUE fabric sofa → visible: TRUE (a sofa exists, descriptors are wrong but irrelevant).
 
 OUTPUT FORMAT (strict JSON, no prose):
 {
@@ -252,13 +301,24 @@ Return one verdict per input entry, in the same order.`;
 
     const kept: string[] = [];
     const dropped: Array<{ entry: string; reason: string }> = [];
+    const attrCorrected: Array<{ entry: string; reason: string }> = [];
     for (const entry of original) {
       const verdict = verdictByEntry.get(entry);
       if (!verdict || verdict.visible) {
         kept.push(entry);
+      } else if (reasonImpliesObjectExists(verdict.reason)) {
+        kept.push(entry);
+        attrCorrected.push({ entry, reason: verdict.reason });
       } else {
         dropped.push({ entry, reason: verdict.reason });
       }
+    }
+
+    if (attrCorrected.length > 0) {
+      log.warn("what_works grounding validator overrode visible:false for attribute-correction reasons", {
+        count: attrCorrected.length,
+        items: attrCorrected.map((a) => `${a.entry} (${a.reason})`),
+      });
     }
 
     if (original.length > 0 && kept.length === 0) {
