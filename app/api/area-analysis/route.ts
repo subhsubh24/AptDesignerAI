@@ -16,6 +16,7 @@ import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { selfReviewAreaAnalysis } from "@/lib/agents/self-correction";
+import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
@@ -846,6 +847,29 @@ Use Google Search to verify current pricing and material availability when neede
       if (dropped.length > 0) {
         analysis.what_it_needs = Array.from(seen.values());
         console.log(`[area-analysis] Deduplicated ${dropped.length} duplicate categor${dropped.length === 1 ? "y" : "ies"}: ${dropped.join(", ")} — now ${analysis.what_it_needs.length} items`);
+      }
+    }
+
+    // ── Reconciliation: cross-check Pass A's keep/replace lists against Pass B's shopping list ──
+    // Pass A saw photos and produced what_works/what_should_go. Pass B did NOT
+    // see photos and produced what_it_needs. Only AT THIS POINT do we have all
+    // three lists in one place. The reconciler resolves contradictions:
+    // cross-reference hallucinations, user-keep conflicts, duplicates, and
+    // abstract non-items. It defaults to trusting Pass A's photo observations.
+    {
+      const reconciled = await reconcileKeepReplace({
+        summary: String(analysis.summary || ""),
+        what_works: Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : [],
+        what_should_go: Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : [],
+        what_it_needs: analysis.what_it_needs,
+        keep_items: allKeepItems,
+        room_type: room.room_type,
+      });
+      if (!reconciled.fellBack && reconciled.decisions.length > 0) {
+        analysis.what_works = reconciled.what_works;
+        analysis.what_should_go = reconciled.what_should_go;
+        console.log(`[area-analysis] Reconciler applied ${reconciled.decisions.length} change(s):`,
+          reconciled.decisions.join("; "));
       }
     }
 

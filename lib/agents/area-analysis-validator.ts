@@ -61,6 +61,35 @@ function mentionsAny(text: string, terms: string[]): string | null {
 }
 
 /**
+ * Generic single words that the LLM-driven keep-item keyword extractor
+ * sometimes returns (e.g. "storage" for a bookshelf, "wood" for a coffee
+ * table). These produce false positives in keep_item_in_remove /
+ * keep_item_replaced checks because unrelated entries contain them
+ * ("plastic storage bins" ≠ "bookshelf"). Strip them BEFORE matching.
+ *
+ * Multi-word phrases like "storage cabinet" are still allowed because
+ * mentionsAny uses substring containment for those — they only match
+ * when the full phrase is present.
+ */
+const GENERIC_KEEP_KEYWORD_DENYLIST = new Set([
+  "storage", "wood", "wooden", "metal", "fabric", "leather", "glass", "plastic",
+  "white", "black", "grey", "gray", "brown", "beige", "tan", "blue", "green",
+  "red", "yellow", "modern", "small", "large", "big", "tall", "short", "round",
+  "square", "oval", "decor", "decorative", "accent", "neutral", "warm", "cool",
+  "dark", "matte", "glossy", "natural", "vintage", "classic", "set", "pair",
+  "piece", "item", "items", "thing", "things", "stuff", "shelf",
+]);
+
+function filterKeepKeywords(keywords: string[]): string[] {
+  return keywords.filter((kw) => {
+    const normal = normalize(kw);
+    if (!normal) return false;
+    if (normal.split(" ").length > 1) return true; // multi-word phrases are specific enough
+    return !GENERIC_KEEP_KEYWORD_DENYLIST.has(normal);
+  });
+}
+
+/**
  * Expand exclusion terms with synonyms to catch LLM rephrasing.
  */
 function expandExclusionTerms(exclusions: string[]): string[] {
@@ -348,10 +377,13 @@ export function validateAreaAnalysis(
     const keepCategories = semanticHints?.keepItemCategories
       ? semanticHints.keepItemCategories.map((kc) => ({
           item: kc.item,
-          keywords: kc.category_keywords,
+          keywords: filterKeepKeywords(kc.category_keywords),
           location: kc.location_phrase,
         }))
-      : extractKeepCategories(allKeepItems);
+      : extractKeepCategories(allKeepItems).map((kc) => ({
+          ...kc,
+          keywords: filterKeepKeywords(kc.keywords),
+        }));
 
     for (const { item, keywords, location } of keepCategories) {
       if (keywords.length === 0) continue;

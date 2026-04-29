@@ -85,10 +85,11 @@ export async function selfReviewAreaAnalysis(
     }
   }
 
-  // Final deterministic filter: drop what_should_go / what_works entries
-  // that have no anchor in the (frozen) summary or keep_items. Catches any
-  // hallucinations that survived the LLM rounds.
-  current = filterUnanchoredItems(current, keepItems);
+  // NOTE: filterUnanchoredItems is intentionally NOT invoked here. Cleanup of
+  // what_works / what_should_go runs upstream in keep-replace-reconciler.ts,
+  // which has access to Pass B's what_it_needs and can resolve cross-references
+  // with full context. The deterministic filter remains exported for use as a
+  // fallback or in tests.
 
   return {
     output: current,
