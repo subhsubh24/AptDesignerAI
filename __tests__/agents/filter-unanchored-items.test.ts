@@ -128,4 +128,46 @@ describe("filterUnanchoredItems", () => {
     expect(result.what_should_go).toBeUndefined();
     expect(result.what_works).toBeUndefined();
   });
+
+  it("anchors 'sectional' against keepItems mentioning 'sofa' (synonym)", () => {
+    // The user says "sofa", the analysis says "sectional" — both are the
+    // same physical item. Without synonyms, the filter drops the entry.
+    const analysis = {
+      summary: "A 14x14 living area with grey LVP flooring and a TV stand.",
+      what_works: [
+        "Neutral, deep-seated sectional base — provides good footprint",
+      ],
+    };
+    const result = filterUnanchoredItems(analysis, [
+      "black arc floor lamp behind the sofa",
+    ]);
+    expect(result.what_works).toHaveLength(1);
+  });
+
+  it("anchors 'couch' against summary mentioning 'sofa'", () => {
+    const analysis = {
+      summary: "Living room contains a grey fabric sofa and a coffee table.",
+      what_works: ["Grey fabric couch — anchors the seating zone"],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    expect(result.what_works).toHaveLength(1);
+  });
+
+  it("anchors 'bookcase' against keepItems mentioning 'bookshelf'", () => {
+    const analysis = {
+      summary: "Studio apartment with hardwood floors.",
+      what_works: ["Black metal bookcase — modular, fits the corner"],
+    };
+    const result = filterUnanchoredItems(analysis, ["bookshelf"]);
+    expect(result.what_works).toHaveLength(1);
+  });
+
+  it("anchors 'carpet' against summary mentioning 'rug'", () => {
+    const analysis = {
+      summary: "Bedroom with an existing wool area rug.",
+      what_works: ["Wool carpet — defines sleeping zone"],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    expect(result.what_works).toHaveLength(1);
+  });
 });

@@ -138,6 +138,45 @@ export function filterUnanchoredItems(
     "inconsistent", "outdated", "low", "high", "quality",
   ]);
 
+  // Furniture cross-vocabulary: same physical item, different words.
+  // The user might say "sofa" while the analysis says "sectional"; both
+  // refer to the same object. Without this map, the filter treats them as
+  // unrelated and drops legitimate keeps.
+  const FURNITURE_SYNONYMS: Record<string, readonly string[]> = {
+    sofa: ["sectional", "couch", "loveseat", "settee"],
+    sectional: ["sofa", "couch"],
+    couch: ["sofa", "sectional"],
+    loveseat: ["sofa"],
+    settee: ["sofa"],
+    bookshelf: ["bookcase", "shelving", "shelves"],
+    bookcase: ["bookshelf", "shelving", "shelves"],
+    shelves: ["bookshelf", "bookcase", "shelving"],
+    shelving: ["bookshelf", "bookcase", "shelves"],
+    rug: ["carpet"],
+    carpet: ["rug"],
+    lamp: ["light", "sconce", "pendant"],
+    light: ["lamp"],
+    sconce: ["lamp"],
+    tv: ["television"],
+    television: ["tv"],
+    desk: ["workspace"],
+    ottoman: ["footstool", "pouf"],
+    footstool: ["ottoman", "pouf"],
+    pouf: ["ottoman", "footstool"],
+    armchair: ["chair"],
+    dresser: ["bureau"],
+    bureau: ["dresser"],
+    nightstand: ["bedside"],
+    artwork: ["art"],
+    art: ["artwork"],
+  };
+
+  const tokenInHaystack = (token: string, haystack: string): boolean => {
+    if (haystack.includes(token)) return true;
+    const synonyms = FURNITURE_SYNONYMS[token];
+    return synonyms ? synonyms.some((s) => haystack.includes(s)) : false;
+  };
+
   const isAnchored = (entry: string, haystack: string): boolean => {
     const separatorMatch = entry.match(/\s[—–-]\s|:\s/);
     const head = separatorMatch
@@ -148,7 +187,7 @@ export function filterUnanchoredItems(
       .split(/\s+/)
       .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
     if (tokens.length === 0) return true;
-    return tokens.some((t) => haystack.includes(t));
+    return tokens.some((t) => tokenInHaystack(t, haystack));
   };
 
   const result = { ...analysis };
