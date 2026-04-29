@@ -151,3 +151,126 @@ describe("area-analysis-validator: keep-keyword denylist", () => {
     expect(replaced).toHaveLength(0);
   });
 });
+
+describe("area-analysis-validator: furniture pairing false positives", () => {
+  it("does NOT auto-inject desk_chair when 'desk' only appears in a 'desk lamp' search title", () => {
+    // Reproduces the bug: search_title "Minimalist matte black architectural
+    // desk lamp..." substring-matched "desk" in the desk-pair matchTerms,
+    // triggering an unwanted desk_chair injection.
+    const analysis = {
+      summary: "Living room with floor-to-ceiling windows.",
+      what_works: ["Neutral grey sofa — provides a solid base"],
+      what_should_go: [],
+      what_it_needs: [
+        {
+          category: "table_lamp",
+          search_title: "Minimalist matte black architectural desk lamp with adjustable directional shade",
+          description: "Provides layered ambient light",
+          priority: "low",
+          specs: "",
+          placement: "",
+        },
+        {
+          category: "area_rug",
+          search_title: "Wool area rug",
+          description: "",
+          priority: "high",
+          specs: "",
+          placement: "",
+        },
+      ],
+    };
+
+    const result = validateAreaAnalysis(
+      analysis,
+      [],
+      undefined,
+      null,
+      {
+        expandedExclusions: null,
+        keepItemCategories: [],
+        architecturalInWorks: null,
+        invalidInRemove: null,
+      },
+    );
+
+    const needs = result.patched.what_it_needs as Array<{ category: string }>;
+    const categories = needs.map((n) => n.category);
+    // No desk_chair should have been injected.
+    expect(categories).not.toContain("desk_chair");
+    expect(needs).toHaveLength(2);
+    const pairingIssues = result.issues.filter((i) => i.type === "furniture_pairing");
+    expect(pairingIssues).toHaveLength(0);
+  });
+
+  it("DOES auto-inject desk_chair when category is exactly 'desk'", () => {
+    // Sanity check: the pairing logic still works for real desks.
+    const analysis = {
+      summary: "Bedroom with a desk in the corner.",
+      what_works: [],
+      what_should_go: [],
+      what_it_needs: [
+        {
+          category: "desk",
+          search_title: "Solid walnut writing desk 48 inch",
+          description: "Workspace for tech professional",
+          priority: "high",
+          specs: "",
+          placement: "",
+        },
+      ],
+    };
+
+    const result = validateAreaAnalysis(
+      analysis,
+      [],
+      undefined,
+      null,
+      {
+        expandedExclusions: null,
+        keepItemCategories: [],
+        architecturalInWorks: null,
+        invalidInRemove: null,
+      },
+    );
+
+    const needs = result.patched.what_it_needs as Array<{ category: string }>;
+    const categories = needs.map((n) => n.category);
+    expect(categories).toContain("desk_chair");
+  });
+
+  it("does NOT auto-inject desk_chair when an office chair is already in keep items", () => {
+    const analysis = {
+      summary: "Bedroom with a desk and existing office chair.",
+      what_works: [],
+      what_should_go: [],
+      what_it_needs: [
+        {
+          category: "desk",
+          search_title: "Solid walnut writing desk",
+          description: "",
+          priority: "high",
+          specs: "",
+          placement: "",
+        },
+      ],
+    };
+
+    const result = validateAreaAnalysis(
+      analysis,
+      ["existing office chair"],
+      undefined,
+      null,
+      {
+        expandedExclusions: null,
+        keepItemCategories: [],
+        architecturalInWorks: null,
+        invalidInRemove: null,
+      },
+    );
+
+    const needs = result.patched.what_it_needs as Array<{ category: string }>;
+    const categories = needs.map((n) => n.category);
+    expect(categories).not.toContain("desk_chair");
+  });
+});

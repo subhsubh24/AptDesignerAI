@@ -605,8 +605,13 @@ export function validateAreaAnalysis(
   ];
 
   if (Array.isArray(patched.what_it_needs)) {
-    const needsText = patched.what_it_needs.map((item: AnalysisItem) =>
-      normalize(`${item.category || ""} ${item.search_title || ""}`),
+    // Match against the structured CATEGORY field, not search_title. Search
+    // titles like "Minimalist matte black architectural desk lamp" would
+    // substring-match "desk" and falsely trigger desk_chair injection. Category
+    // is the trusted structured field — for a desk lamp it would be e.g.
+    // "table_lamp" or "desk_lamp", neither of which equals "desk".
+    const needsCategories = patched.what_it_needs.map((item: AnalysisItem) =>
+      normalize(String(item.category || "")),
     );
     const keepText = allKeepItems.map((k) => normalize(k));
     const worksText = Array.isArray(patched.what_works)
@@ -614,19 +619,39 @@ export function validateAreaAnalysis(
       : [];
     const allExisting = [...keepText, ...worksText];
 
+    // Word-boundary substring match — "desk" must be a complete word, not
+    // a prefix of "desk lamp" or part of "computer desk shelf".
+    const wholeWordIncludes = (haystack: string, needle: string): boolean => {
+      const norm = normalize(needle);
+      if (!norm) return false;
+      // Multi-word terms — substring is fine since they're already specific.
+      if (norm.includes(" ")) return haystack.includes(norm);
+      const re = new RegExp(`(^|\\s)${norm.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}(\\s|$)`);
+      return re.test(haystack);
+    };
+
     for (const pair of FURNITURE_PAIRS) {
-      const hasItem = needsText.some((t: string) =>
-        pair.matchTerms.some((m) => t.includes(normalize(m))),
+      // hasItem: exact category match against any matchTerm. The matchTerms
+      // list includes singular/plural variants (e.g. "dining_chair" AND
+      // "dining_chairs") so plain equality after normalization is sufficient.
+      const normalizedMatchTerms = pair.matchTerms.map(normalize);
+      const hasItem = needsCategories.some((cat: string) =>
+        normalizedMatchTerms.some((m) => cat === m),
       );
       if (!hasItem) continue;
 
-      const companionInNeeds = needsText.some((t: string) =>
-        pair.companionTerms.some((m) => t.includes(normalize(m))),
+      // companionInNeeds: same — exact category match.
+      const normalizedCompanionTerms = pair.companionTerms.map(normalize);
+      const companionInNeeds = needsCategories.some((cat: string) =>
+        normalizedCompanionTerms.some((m) => cat === m),
       );
       if (companionInNeeds) continue;
 
+      // companionInExisting: keep_items / what_works are descriptive text, so
+      // word-boundary substring match. "office chair" can match "office chair
+      // by herman miller" but "desk" does NOT match "desk lamp".
       const companionInExisting = allExisting.some((t) =>
-        pair.companionTerms.some((m) => t.includes(normalize(m))),
+        pair.companionTerms.some((m) => wholeWordIncludes(t, m)),
       );
       if (companionInExisting) continue;
 
