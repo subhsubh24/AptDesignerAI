@@ -16,7 +16,6 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { generateAnalysisPatch } from "@/lib/agents/refine-patcher";
 import { generateDesignerWarnings } from "@/lib/agents/designer-warnings";
 import { applyAnalysisPatch } from "@/lib/agents/apply-analysis-patch";
-import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { parseUserContextAsync } from "@/lib/utils/parse-user-context";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AnalysisPatch, DesignerWarning } from "@/lib/types/database";
@@ -153,21 +152,37 @@ export async function POST(request: NextRequest) {
       patchedAnalysis = applied.analysis;
       changedFields = applied.changedFields;
 
-      // Enforce user constraints (keep items, exclusions) on the patched result
-      if (parsedContext || keepItems.length > 0) {
-        const postValidation = await validateAreaAnalysisAsync(
-          patchedAnalysis,
-          keepItems,
-          room.user_context || undefined
-        );
-        if (postValidation.wasModified) {
-          patchedAnalysis = postValidation.patched as Record<string, unknown>;
-        }
-      }
+      // Skip the full area-analysis-validator here. It was designed for
+      // initial analysis and re-checks ALL items for keep_item_replaced,
+      // exclusion_violation, etc. — which strips items the patcher just
+      // added (e.g. "bookshelf decor" flagged as replacing kept bookshelf).
+      // The patcher already has keep items + exclusions in its prompt and
+      // produces changes that respect them.
 
       // ── Designer warnings (advisory) ────────────────────────────────
+      // Only pass the items ADDED or CHANGED by this patch, not the full
+      // analysis. This prevents the LLM from flagging pre-existing items
+      // (e.g. "42-inch dining table creates a bottleneck" was already in
+      // the assessment before the user asked to "make it cozier").
+      const changedItemCategories = changedFields
+        .filter((f) => f.startsWith("what_it_needs."))
+        .map((f) => f.replace("what_it_needs.", ""));
+      const allNeeds = Array.isArray(patchedAnalysis.what_it_needs)
+        ? (patchedAnalysis.what_it_needs as Array<Record<string, unknown>>)
+        : [];
+      const changedItems = changedItemCategories.length > 0
+        ? allNeeds.filter((it) =>
+            changedItemCategories.some(
+              (cat) => String(it.category || "").toLowerCase().replace(/[\s-]+/g, "_") === cat,
+            ),
+          )
+        : [];
+      const warningAnalysis = {
+        ...patchedAnalysis,
+        what_it_needs: changedItems.length > 0 ? changedItems : patchedAnalysis.what_it_needs,
+      };
       const warningsResult = await generateDesignerWarnings({
-        analysis: patchedAnalysis,
+        analysis: warningAnalysis,
         changedFields,
         feedback: content,
         system,
