@@ -73,9 +73,10 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
     setSending(true);
     setError(null);
 
+    const now = new Date().toISOString();
     // Optimistic user message
     const optimisticUser: RefineMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-user-${Date.now()}`,
       room_id: roomId,
       user_id: "",
       role: "user",
@@ -84,9 +85,22 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       warnings_json: null,
       analysis_snapshot: null,
       tokens_used: 0,
-      created_at: new Date().toISOString(),
+      created_at: now,
     };
-    setMessages((prev) => [...prev, optimisticUser]);
+    // Optimistic assistant placeholder so the user sees the chat ack immediately.
+    const optimisticAssistant: RefineMessage = {
+      id: `temp-assistant-${Date.now()}`,
+      room_id: roomId,
+      user_id: "",
+      role: "assistant",
+      content: "On it — updating the assessment…",
+      patch_json: null,
+      warnings_json: null,
+      analysis_snapshot: null,
+      tokens_used: 0,
+      created_at: now,
+    };
+    setMessages((prev) => [...prev, optimisticUser, optimisticAssistant]);
     setInput("");
 
     try {
@@ -101,10 +115,12 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       }
       const data = await res.json();
 
-      // Replace optimistic with persisted user msg + assistant msg
+      // Replace optimistic placeholders with persisted user msg + assistant msg
       setMessages((prev) => {
-        const withoutOptimistic = prev.filter((m) => m.id !== optimisticUser.id);
-        return [...withoutOptimistic, data.user_message, data.assistant_message];
+        const cleaned = prev.filter(
+          (m) => m.id !== optimisticUser.id && m.id !== optimisticAssistant.id,
+        );
+        return [...cleaned, data.user_message, data.assistant_message];
       });
 
       // Update parent analysis only if a patch actually applied
@@ -116,8 +132,10 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
         if (shouldRegenVision) onVisionShouldRegen?.();
       }
     } catch (err) {
-      // Roll back optimistic message on failure
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticUser.id));
+      // Roll back optimistic messages on failure
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== optimisticUser.id && m.id !== optimisticAssistant.id),
+      );
       setInput(trimmed);
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
@@ -143,9 +161,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       >
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">
-            {collapsed ? "Refine this assessment" : "Chat with the designer"}
-          </span>
+          <span className="font-medium text-sm">Chat with the designer</span>
           {messages.length > 0 && headerHasUnread && (
             <span className="text-xs text-muted-foreground">
               ({messages.filter((m) => m.role === "user").length} message{messages.filter((m) => m.role === "user").length === 1 ? "" : "s"})
@@ -203,6 +219,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
 function ChatMessage({ message }: { message: RefineMessage }) {
   const isUser = message.role === "user";
   const warnings = (message.warnings_json as DesignerWarning[] | null) || [];
+  const isPending = !isUser && message.id.startsWith("temp-assistant-");
 
   return (
     <div className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}>
@@ -211,10 +228,18 @@ function ChatMessage({ message }: { message: RefineMessage }) {
           "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
           isUser
             ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground"
+            : "bg-muted text-foreground",
+          isPending && "italic text-muted-foreground"
         )}
       >
-        {message.content}
+        {isPending ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {message.content}
+          </span>
+        ) : (
+          message.content
+        )}
       </div>
       {!isUser && warnings.length > 0 && (
         <div className="max-w-[85%] space-y-1.5">

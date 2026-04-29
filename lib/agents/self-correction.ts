@@ -88,6 +88,19 @@ export async function selfReviewAreaAnalysis(
             rug: ["carpet"], carpet: ["rug"], lamp: ["light"], light: ["lamp"],
             tv: ["television"], television: ["tv"], ottoman: ["footstool", "pouf"],
           };
+          // Generic descriptors that must not anchor a match on their own.
+          // E.g. "floor" in keep "black arc floor lamp" should not match a
+          // what_works entry like "Floor-to-ceiling roller shades" — only the
+          // OBJECT noun ("lamp") should anchor.
+          const KEEP_GENERIC = new Set([
+            "floor", "wall", "ceiling", "corner", "back", "front", "left", "right",
+            "side", "top", "bottom", "near", "next", "behind", "above", "below",
+            "black", "white", "grey", "gray", "brown", "blue", "red", "green",
+            "beige", "tan", "cream", "ivory", "natural", "neutral",
+            "small", "large", "long", "short", "tall", "wide", "narrow", "big", "mini",
+            "two", "three", "four", "five", "set", "pair", "the", "and", "with",
+            "also", "possible", "for", "next", "from",
+          ]);
           const matchesKeep = (entry: string): string | null => {
             const lower = entry.toLowerCase();
             for (const ki of keepItems) {
@@ -95,7 +108,7 @@ export async function selfReviewAreaAnalysis(
               if (!kiNorm) continue;
               if (lower.includes(kiNorm)) return ki;
               for (const word of kiNorm.split(/\s+/)) {
-                if (word.length < 3) continue;
+                if (word.length < 3 || KEEP_GENERIC.has(word)) continue;
                 if (lower.includes(word)) return ki;
                 const syns = KEEP_SYN[word];
                 if (syns?.some((s) => lower.includes(s))) return ki;

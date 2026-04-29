@@ -35,6 +35,12 @@ export interface PhotoGroundingResult {
   fellBack: boolean;
 }
 
+export interface WhatWorksGroundingResult {
+  what_works: string[];
+  dropped: Array<{ entry: string; reason: string }>;
+  fellBack: boolean;
+}
+
 interface ValidatorOutput {
   verdicts: Array<{
     entry: string;
@@ -156,5 +162,125 @@ Return one verdict per input entry, in the same order.`;
       error: err instanceof Error ? err.message : String(err),
     });
     return { what_should_go: original, dropped: [], fellBack: true };
+  }
+}
+
+/**
+ * Validate each what_works entry against the room photos.
+ *
+ * Same approach as verifyWhatShouldGoAgainstPhotos but ALSO drops architectural
+ * elements (roller shades, built-in flooring, walls, ceiling) because Keep
+ * should only list movable furniture/decor — not parts of the building.
+ *
+ * Conservative defaults: keeps when uncertain, refuses to drop ALL, fails open.
+ */
+export async function verifyWhatWorksAgainstPhotos(
+  whatWorks: string[],
+  roomImageUrls: string[],
+  roomType: string,
+): Promise<WhatWorksGroundingResult> {
+  const original = [...whatWorks];
+
+  if (whatWorks.length === 0 || roomImageUrls.length === 0) {
+    return { what_works: original, dropped: [], fellBack: false };
+  }
+
+  try {
+    const model = selectModel("scoring");
+
+    const promptText = `You are verifying that a list of items is actually visible in photos of a ${roomType}.
+
+ITEMS TO VERIFY (each one was claimed to exist in the room):
+${whatWorks.map((e, i) => `${i + 1}. ${e}`).join("\n")}
+
+YOUR JOB
+========
+For EACH item above, decide whether it should be in a "Keep" list. Return visible: true ONLY if BOTH conditions hold:
+  (a) The item is clearly visible in at least one photo, AND
+  (b) The item is movable furniture or decor — NOT an architectural / built-in element.
+
+Return visible: false if:
+  - The item is NOT in any photo (hallucinated furniture).
+  - The item IS visible but it's an architectural feature, not movable furniture.
+    Examples: window shades / roller shades / blinds / curtains attached to the building, hardwood/LVP/laminate flooring, walls, ceiling, built-in cabinetry, kitchen counters, kitchen appliances, light fixtures hard-wired into the ceiling. These belong to the building, not the user's furniture set.
+
+When uncertain about visibility (item could be partially obscured), return visible: true. We are conservative — don't drop real items.
+
+Furniture synonyms count: a "sectional" matches "sofa" / "couch"; a "media console" matches "TV stand"; etc.
+Color/material descriptors don't have to match perfectly — focus on whether the OBJECT exists, not whether the description is exactly right.
+
+OUTPUT FORMAT (strict JSON, no prose):
+{
+  "verdicts": [
+    { "entry": "<exact entry text from above>", "visible": true|false, "reason": "<one short sentence>" }
+  ]
+}
+
+Return one verdict per input entry, in the same order.`;
+
+    const content: AIContentBlock[] = [{ type: "text", text: promptText }];
+    for (const url of roomImageUrls) {
+      content.push({ type: "image", source: { type: "url", url } });
+    }
+
+    const response = await geminiProvider.chat({
+      model,
+      system:
+        "You are a visual verification agent. Your only job is to check whether each named item is actually present in the provided room photos AND is movable furniture or decor (not architecture). Be conservative — keep items when uncertain.",
+      messages: [{ role: "user", content }],
+      max_tokens: 4096,
+      seed: DETERMINISTIC_SEED,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
+    });
+
+    const parsed = extractJsonObject<ValidatorOutput>(response.content);
+    if (!parsed || !Array.isArray(parsed.verdicts)) {
+      log.warn("what_works grounding validator returned unparseable JSON — falling back to original");
+      return { what_works: original, dropped: [], fellBack: true };
+    }
+
+    const verdictByEntry = new Map<string, { visible: boolean; reason: string }>();
+    for (const v of parsed.verdicts) {
+      if (typeof v.entry === "string") {
+        verdictByEntry.set(v.entry, {
+          visible: v.visible !== false,
+          reason: typeof v.reason === "string" ? v.reason : "",
+        });
+      }
+    }
+
+    const kept: string[] = [];
+    const dropped: Array<{ entry: string; reason: string }> = [];
+    for (const entry of original) {
+      const verdict = verdictByEntry.get(entry);
+      if (!verdict || verdict.visible) {
+        kept.push(entry);
+      } else {
+        dropped.push({ entry, reason: verdict.reason });
+      }
+    }
+
+    if (original.length > 0 && kept.length === 0) {
+      log.warn("what_works grounding validator dropped ALL entries — falling back", {
+        originalCount: original.length,
+      });
+      return { what_works: original, dropped: [], fellBack: true };
+    }
+
+    if (dropped.length > 0) {
+      log.info("what_works grounding validator dropped hallucinated/architectural entries", {
+        droppedCount: dropped.length,
+        keptCount: kept.length,
+        dropped: dropped.map((d) => `${d.entry} (${d.reason})`),
+      });
+    }
+
+    return { what_works: kept, dropped, fellBack: false };
+  } catch (err) {
+    log.warn("what_works grounding validator threw — falling back to original", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { what_works: original, dropped: [], fellBack: true };
   }
 }

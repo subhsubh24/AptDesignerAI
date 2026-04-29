@@ -956,10 +956,28 @@ export default function FocusPage() {
           <RefineChat
             roomId={roomId}
             onAnalysisUpdate={(updatedAnalysis, changedFields) => {
-              setAreaAnalysis(updatedAnalysis as unknown as AreaAnalysis);
-              // Drop products only if what_it_needs changed (categories shifted)
-              if (changedFields.includes("what_it_needs") || changedFields.some((f) => f.startsWith("what_it_needs."))) {
+              const updated = updatedAnalysis as unknown as AreaAnalysis;
+              setAreaAnalysis(updated);
+              const needsChanged =
+                changedFields.includes("what_it_needs") ||
+                changedFields.some((f) => f.startsWith("what_it_needs."));
+              if (needsChanged) {
+                // Categories shifted — drop products so new ones get fetched.
                 setProducts([]);
+                // Generate mockups only for items that don't already have one
+                // (token-efficient: skip items whose mockup we already cached).
+                const designDir = updated.design_direction || "";
+                const newItems = (updated.what_it_needs || []).filter(
+                  (item) => !itemMockups[item.category],
+                );
+                if (newItems.length > 0) {
+                  itemMockupAbortRef.current?.abort();
+                  const controller = new AbortController();
+                  itemMockupAbortRef.current = controller;
+                  for (const item of newItems) {
+                    generateItemMockup(item, designDir, controller.signal);
+                  }
+                }
               }
             }}
             onVisionShouldRegen={() => {

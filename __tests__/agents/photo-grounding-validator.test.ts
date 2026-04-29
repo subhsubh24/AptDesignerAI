@@ -4,7 +4,10 @@ vi.mock("@/lib/ai/gemini", () => ({
   geminiProvider: { chat: vi.fn() },
 }));
 
-import { verifyWhatShouldGoAgainstPhotos } from "@/lib/agents/photo-grounding-validator";
+import {
+  verifyWhatShouldGoAgainstPhotos,
+  verifyWhatWorksAgainstPhotos,
+} from "@/lib/agents/photo-grounding-validator";
 import { geminiProvider } from "@/lib/ai/gemini";
 
 const mockChat = geminiProvider.chat as unknown as ReturnType<typeof vi.fn>;
@@ -147,5 +150,83 @@ describe("verifyWhatShouldGoAgainstPhotos", () => {
     const content = call.messages[0].content as Array<{ type: string }>;
     const imageBlocks = content.filter((c) => c.type === "image");
     expect(imageBlocks).toHaveLength(PHOTOS.length);
+  });
+});
+
+describe("verifyWhatWorksAgainstPhotos", () => {
+  beforeEach(() => {
+    mockChat.mockReset();
+  });
+
+  it("short-circuits without an LLM call when the list is empty", async () => {
+    const result = await verifyWhatWorksAgainstPhotos([], PHOTOS, "living_room");
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(result.what_works).toEqual([]);
+    expect(result.dropped).toEqual([]);
+    expect(result.fellBack).toBe(false);
+  });
+
+  it("short-circuits when no photo URLs are provided", async () => {
+    const result = await verifyWhatWorksAgainstPhotos(
+      ["Grey fabric sectional"],
+      [],
+      "living_room",
+    );
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(result.what_works).toEqual(["Grey fabric sectional"]);
+    expect(result.fellBack).toBe(false);
+  });
+
+  it("drops hallucinated furniture and architectural elements", async () => {
+    const input = [
+      "Grey fabric sectional sofa — neutral tone",
+      "Round glass-top dining table — appropriately sized",
+      "Floor-to-ceiling roller shades — minimalist",
+    ];
+    mockResponse({
+      verdicts: [
+        { entry: input[0], visible: true, reason: "Visible centered in photo 1" },
+        { entry: input[1], visible: false, reason: "No dining table visible in any photo" },
+        { entry: input[2], visible: false, reason: "Window shades are architectural — not movable furniture" },
+      ],
+    });
+    const result = await verifyWhatWorksAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.fellBack).toBe(false);
+    expect(result.what_works).toEqual([input[0]]);
+    expect(result.dropped).toHaveLength(2);
+  });
+
+  it("falls open and keeps everything when LLM returns invalid JSON", async () => {
+    mockChat.mockResolvedValueOnce({
+      content: "not json at all",
+      usage: { input_tokens: 0, output_tokens: 0, thinking_tokens: 0 },
+    });
+    const input = ["Sofa"];
+    const result = await verifyWhatWorksAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.fellBack).toBe(true);
+    expect(result.what_works).toEqual(input);
+  });
+
+  it("refuses to drop ALL entries (likely LLM misread) and falls back", async () => {
+    const input = ["Sofa", "Coffee table"];
+    mockResponse({
+      verdicts: [
+        { entry: "Sofa", visible: false, reason: "?" },
+        { entry: "Coffee table", visible: false, reason: "?" },
+      ],
+    });
+    const result = await verifyWhatWorksAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.fellBack).toBe(true);
+    expect(result.what_works).toEqual(input);
+  });
+
+  it("defaults to keeping entries with no matching verdict", async () => {
+    const input = ["Sofa", "Coffee table"];
+    mockResponse({
+      verdicts: [{ entry: "Sofa", visible: true, reason: "ok" }],
+    });
+    const result = await verifyWhatWorksAgainstPhotos(input, PHOTOS, "living_room");
+    expect(result.fellBack).toBe(false);
+    expect(result.what_works).toEqual(input);
   });
 });

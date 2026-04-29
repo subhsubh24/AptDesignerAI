@@ -65,7 +65,7 @@ const PatchSchema = z.object({
 
 const PatchResponseSchema = z.object({
   patch: PatchSchema,
-  summary: z.string().min(1),
+  summary: z.string().optional(),
   /** Whether anything changed at all. If false, patch should be empty. */
   changed: z.boolean(),
 });
@@ -225,7 +225,9 @@ Now produce the patch JSON.`;
         (response.usage.thinking_tokens || 0);
       return {
         patch: parsed.patch as AnalysisPatch,
-        summary: parsed.summary,
+        summary: parsed.summary && parsed.summary.trim().length > 0
+          ? parsed.summary
+          : (parsed.changed ? "Updated the assessment." : "No change made."),
         changed: parsed.changed,
         tokens,
       };
