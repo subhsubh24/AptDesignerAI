@@ -20,6 +20,11 @@
  * - Uses generic display labels — never invents specific item details.
  */
 
+import type { AIContentBlock } from "@/lib/ai/provider";
+import { geminiProvider } from "@/lib/ai/gemini";
+import { selectModel } from "@/lib/ai/models";
+import { extractJsonObject } from "@/lib/ai/extract-json";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("infer-replacements");
@@ -58,7 +63,6 @@ export interface InferredReplacement {
 export function inferReplacementsFromGap(
   analysis: AnalysisShape,
   keepItems: string[],
-  droppedEntries?: string[],
 ): InferredReplacement[] {
   if (!Array.isArray(analysis.what_it_needs) || analysis.what_it_needs.length === 0) {
     return [];
@@ -72,7 +76,6 @@ export function inferReplacementsFromGap(
     String(analysis.spatial_layout || ""),
     ...(Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : []),
     ...(Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : []),
-    ...(Array.isArray(droppedEntries) ? droppedEntries : []),
   ].join(" ").toLowerCase();
 
   const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
@@ -116,7 +119,7 @@ export function inferReplacementsFromGap(
 
     const newTitle = String(need.search_title || "").trim();
     const reason = newTitle
-      ? `being replaced by ${newTitle.length > 80 ? newTitle.slice(0, 77) + "..." : newTitle}`
+      ? `being replaced by ${newTitle}`
       : `being replaced with the new ${match.display} below`;
     inferred.push({
       entry: `Existing ${match.display} — ${reason}`,
@@ -126,11 +129,165 @@ export function inferReplacementsFromGap(
   }
 
   if (inferred.length > 0) {
-    log.info("Inferred replacement entries from Pass B / room gap", {
+    log.info("Inferred replacement entries from Pass B / room gap (deterministic fallback)", {
       count: inferred.length,
       categories: inferred.map((i) => i.category),
     });
   }
 
   return inferred;
+}
+
+interface LLMReplacementVerdict {
+  category: string;
+  existing_item_visible: boolean;
+  existing_description: string;
+  reason: string;
+}
+
+interface LLMReplacementOutput {
+  verdicts: LLMReplacementVerdict[];
+}
+
+export async function inferReplacementsFromPhotos(
+  analysis: AnalysisShape,
+  keepItems: string[],
+  roomImageUrls: string[],
+  roomType: string,
+): Promise<InferredReplacement[]> {
+  if (!Array.isArray(analysis.what_it_needs) || analysis.what_it_needs.length === 0) {
+    return [];
+  }
+
+  if (roomImageUrls.length === 0) {
+    log.info("No room photos — falling back to deterministic inference");
+    return inferReplacementsFromGap(analysis, keepItems);
+  }
+
+  const seenCategories = new Set<string>();
+  const candidateNeeds: Array<{ category: string; search_title: string; display: string }> = [];
+  for (const need of analysis.what_it_needs) {
+    const cat = String(need.category || "").toLowerCase();
+    if (!cat || seenCategories.has(cat)) continue;
+    const match = REPLACEABLE_CATEGORIES.find((r) => r.cats.includes(cat));
+    if (!match) continue;
+    seenCategories.add(cat);
+
+    const keepText = keepItems.join(" ").toLowerCase();
+    const userKeepsIt = match.aliases.some((a) => keepText.includes(a));
+    if (userKeepsIt) continue;
+
+    const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
+    const alreadyInRemove = match.aliases.some((a) => removeText.includes(a));
+    if (alreadyInRemove) continue;
+
+    candidateNeeds.push({
+      category: cat,
+      search_title: String(need.search_title || ""),
+      display: match.display,
+    });
+  }
+
+  if (candidateNeeds.length === 0) return [];
+
+  try {
+    const model = selectModel("scoring");
+
+    const promptText = `You are verifying which furniture items in a ${roomType} are being REPLACED by new purchases.
+
+SHOPPING LIST (new items being purchased):
+${candidateNeeds.map((n, i) => `${i + 1}. Category: ${n.category} — "${n.search_title}"`).join("\n")}
+
+YOUR JOB
+========
+For EACH item in the shopping list above, look at the room photos and determine:
+Is there an EXISTING version of this furniture type currently visible in the room?
+
+If yes → the new purchase is REPLACING the existing item.
+If no → the new purchase is being ADDED (no existing item to replace).
+
+Rules:
+- Focus on the FURNITURE TYPE, not color/material/style. A grey fabric sofa is the same type as a leather sofa.
+- Be specific about what you see: "dark grey fabric sectional visible against the back wall."
+- Return existing_item_visible: false if you genuinely cannot see that furniture type in ANY of the photos.
+- When uncertain, return false — we only want to flag clear replacements.
+- Furniture synonyms count: "sectional" = "sofa" = "couch"; "media console" = "TV stand"; "rug" = "carpet"; etc.
+
+OUTPUT FORMAT (strict JSON, no prose):
+{
+  "verdicts": [
+    {
+      "category": "<category from shopping list>",
+      "existing_item_visible": true|false,
+      "existing_description": "<brief description of the existing item you see, or empty string if not visible>",
+      "reason": "<one sentence: where you saw it, or why it's not present>"
+    }
+  ]
+}
+
+Return one verdict per shopping list item, in the same order.`;
+
+    const content: AIContentBlock[] = [{ type: "text", text: promptText }];
+    for (const url of roomImageUrls) {
+      content.push({ type: "image", source: { type: "url", url } });
+    }
+
+    const response = await geminiProvider.chat({
+      model,
+      system: "You are a visual verification agent. Your job is to look at room photos and identify which existing furniture items are being replaced by new purchases. Be accurate — only confirm items you can clearly see.",
+      messages: [{ role: "user", content }],
+      max_tokens: 4096,
+      seed: DETERMINISTIC_SEED,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
+    });
+
+    const parsed = extractJsonObject<LLMReplacementOutput>(response.content);
+    if (!parsed || !Array.isArray(parsed.verdicts)) {
+      log.warn("LLM replacement inference returned unparseable JSON — falling back to deterministic");
+      return inferReplacementsFromGap(analysis, keepItems);
+    }
+
+    const verdictByCategory = new Map<string, LLMReplacementVerdict>();
+    for (const v of parsed.verdicts) {
+      if (typeof v.category === "string") {
+        verdictByCategory.set(v.category.toLowerCase(), v);
+      }
+    }
+
+    const inferred: InferredReplacement[] = [];
+    for (const candidate of candidateNeeds) {
+      const verdict = verdictByCategory.get(candidate.category);
+      if (!verdict || !verdict.existing_item_visible) continue;
+
+      const existingDesc = (verdict.existing_description || "").trim();
+      const newTitle = candidate.search_title.trim();
+      const entryHead = existingDesc
+        ? `Existing ${candidate.display} (${existingDesc})`
+        : `Existing ${candidate.display}`;
+      const reason = newTitle
+        ? `being replaced by ${newTitle}`
+        : `being replaced with the new ${candidate.display} below`;
+
+      inferred.push({
+        entry: `${entryHead} — ${reason}`,
+        category: candidate.category,
+        matchedAlias: candidate.display,
+      });
+    }
+
+    if (inferred.length > 0) {
+      log.info("LLM-verified replacement entries from room photos", {
+        count: inferred.length,
+        categories: inferred.map((i) => i.category),
+      });
+    }
+
+    return inferred;
+  } catch (err) {
+    log.warn("LLM replacement inference threw — falling back to deterministic", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return inferReplacementsFromGap(analysis, keepItems);
+  }
 }

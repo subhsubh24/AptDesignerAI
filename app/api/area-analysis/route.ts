@@ -18,7 +18,7 @@ import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator"
 import { selfReviewAreaAnalysis, filterUnanchoredItems } from "@/lib/agents/self-correction";
 import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
 import { verifyWhatShouldGoAgainstPhotos, verifyWhatWorksAgainstPhotos } from "@/lib/agents/photo-grounding-validator";
-import { inferReplacementsFromGap } from "@/lib/agents/infer-replacements";
+import { inferReplacementsFromPhotos } from "@/lib/agents/infer-replacements";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
@@ -902,7 +902,6 @@ Use Google Search to verify current pricing and material availability when neede
     // they sound real. These two image-based LLM calls catch both classes.
     // Conservative: drops only entries the model confidently rejects. Fails open.
     let photoVerifiedEntries: string[] = [];
-    let photoGroundingDroppedEntries: string[] = [];
     const groundingImageUrls = (room.room_images || [])
       .map((img: { image_url: string }) => img.image_url)
       .filter(Boolean);
@@ -917,7 +916,6 @@ Use Google Search to verify current pricing and material availability when neede
         photoVerifiedEntries = grounding.what_should_go;
         if (grounding.dropped.length > 0) {
           analysis.what_should_go = grounding.what_should_go;
-          photoGroundingDroppedEntries = grounding.dropped.map((d) => d.entry);
           console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
         }
       }
@@ -1056,13 +1054,11 @@ Use Google Search to verify current pricing and material availability when neede
     }
 
     // ── Infer replacements from Pass B gap ─────────────────────────
-    // If Pass B is buying a new sofa/coffee table/media console AND the room
-    // has one AND the user didn't keep it, the existing version is being
-    // replaced — but Pass A may have been too vague to say so. Make it
-    // explicit so the Replace section reflects what's actually happening.
-    // Runs AFTER self-correction so the LLM cleanup can't strip these.
+    // LLM-based: look at room photos to determine which Pass B purchases
+    // are replacing existing visible items. Falls back to deterministic
+    // text matching if no photos or LLM fails.
     {
-      const inferredReplacements = inferReplacementsFromGap(
+      const inferredReplacements = await inferReplacementsFromPhotos(
         {
           summary: String(analysis.summary || ""),
           design_direction: String(analysis.design_direction || ""),
@@ -1072,7 +1068,8 @@ Use Google Search to verify current pricing and material availability when neede
           what_it_needs: analysis.what_it_needs,
         },
         allKeepItems,
-        photoGroundingDroppedEntries,
+        groundingImageUrls,
+        room.room_type || "living_room",
       );
       if (inferredReplacements.length > 0) {
         if (!Array.isArray(analysis.what_should_go)) {

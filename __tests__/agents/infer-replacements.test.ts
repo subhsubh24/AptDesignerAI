@@ -1,5 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { inferReplacementsFromGap } from "@/lib/agents/infer-replacements";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { inferReplacementsFromGap, inferReplacementsFromPhotos } from "@/lib/agents/infer-replacements";
+
+vi.mock("@/lib/ai/gemini", () => ({
+  geminiProvider: { chat: vi.fn() },
+}));
+
+import { geminiProvider } from "@/lib/ai/gemini";
+
+const mockChat = geminiProvider.chat as unknown as ReturnType<typeof vi.fn>;
 
 describe("inferReplacementsFromGap", () => {
   it("infers a sofa replacement when Pass B buys a sofa, room has one, and user did not keep it", () => {
@@ -145,7 +153,7 @@ describe("inferReplacementsFromGap", () => {
     expect(result[0].matchedAlias).toBe("tv stand");
   });
 
-  it("truncates very long search titles in the entry text", () => {
+  it("preserves full search title in the entry text without truncation", () => {
     const longTitle = "A".repeat(120);
     const result = inferReplacementsFromGap(
       {
@@ -157,8 +165,8 @@ describe("inferReplacementsFromGap", () => {
       [],
     );
     expect(result).toHaveLength(1);
-    expect(result[0].entry.length).toBeLessThan(longTitle.length + 50);
-    expect(result[0].entry).toContain("...");
+    expect(result[0].entry).toContain(longTitle);
+    expect(result[0].entry).not.toContain("...");
   });
 
   it("dedupes when Pass B has multiple needs in the same category", () => {
@@ -224,38 +232,189 @@ describe("inferReplacementsFromGap", () => {
     );
     expect(result).toHaveLength(0);
   });
+});
 
-  it("infers replacement from photo-grounding dropped entries when summary omits the item", () => {
-    const result = inferReplacementsFromGap(
+const PHOTOS = ["https://example.com/room1.jpg", "https://example.com/room2.jpg"];
+
+function mockResponse(payload: object) {
+  mockChat.mockResolvedValueOnce({
+    content: JSON.stringify(payload),
+    usage: { input_tokens: 0, output_tokens: 0, thinking_tokens: 0 },
+  });
+}
+
+describe("inferReplacementsFromPhotos", () => {
+  beforeEach(() => {
+    mockChat.mockReset();
+  });
+
+  it("uses LLM verdicts to infer replacements for visible items only", async () => {
+    mockResponse({
+      verdicts: [
+        { category: "sofa", existing_item_visible: true, existing_description: "dark grey fabric sectional", reason: "Visible against the back wall" },
+        { category: "coffee_table", existing_item_visible: true, existing_description: "small glass coffee table", reason: "Between sofa and TV" },
+        { category: "dining_table", existing_item_visible: false, existing_description: "", reason: "No dining table visible in the room" },
+      ],
+    });
+
+    const result = await inferReplacementsFromPhotos(
       {
-        summary: "Compact living room with basic rental furniture.",
+        summary: "Living room with rental furniture.",
         what_works: [],
         what_should_go: [],
         what_it_needs: [
+          { category: "sofa", search_title: "Cognac leather 84-inch sofa" },
           { category: "coffee_table", search_title: "Solid walnut round coffee table" },
+          { category: "dining_table", search_title: "Round walnut dining table" },
         ],
       },
       [],
-      ["Glass coffee table — wrong scale for the room"],
+      PHOTOS,
+      "living_room",
     );
-    expect(result).toHaveLength(1);
-    expect(result[0].category).toBe("coffee_table");
-    expect(result[0].matchedAlias).toBe("coffee table");
+
+    expect(result).toHaveLength(2);
+    const cats = result.map((r) => r.category).sort();
+    expect(cats).toEqual(["coffee_table", "sofa"]);
+    expect(result[0].entry).toContain("dark grey fabric sectional");
+    expect(result[0].entry).toContain("Cognac leather 84-inch sofa");
+    expect(result[0].entry).not.toContain("...");
   });
 
-  it("does NOT double-infer when dropped entry overlaps with existing what_should_go", () => {
-    const result = inferReplacementsFromGap(
+  it("does NOT infer when user keeps the category", async () => {
+    const result = await inferReplacementsFromPhotos(
       {
-        summary: "Living room with a sectional sofa and a small coffee table.",
+        summary: "Living room.",
         what_works: [],
-        what_should_go: ["Small glass coffee table — too fragile"],
+        what_should_go: [],
+        what_it_needs: [{ category: "sofa", search_title: "New sofa" }],
+      },
+      ["my sectional"],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(result).toHaveLength(0);
+  });
+
+  it("does NOT infer when category is already in what_should_go", async () => {
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room.",
+        what_works: [],
+        what_should_go: ["Old grey sectional — wrong scale"],
+        what_it_needs: [{ category: "sofa", search_title: "New sofa" }],
+      },
+      [],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(result).toHaveLength(0);
+  });
+
+  it("falls back to deterministic when LLM returns invalid JSON", async () => {
+    mockChat.mockResolvedValueOnce({
+      content: "not json at all",
+      usage: { input_tokens: 0, output_tokens: 0, thinking_tokens: 0 },
+    });
+
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room with a dark grey sectional sofa.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [{ category: "sofa", search_title: "New sofa" }],
+      },
+      [],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+  });
+
+  it("falls back to deterministic when no photos are provided", async () => {
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room with a sectional sofa.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [{ category: "sofa", search_title: "New sofa" }],
+      },
+      [],
+      [],
+      "living_room",
+    );
+
+    expect(mockChat).not.toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+  });
+
+  it("falls back to deterministic when LLM throws", async () => {
+    mockChat.mockRejectedValueOnce(new Error("API timeout"));
+
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room with a sofa.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [{ category: "sofa", search_title: "New sofa" }],
+      },
+      [],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+  });
+
+  it("does NOT infer dining_chairs when LLM confirms they are not visible", async () => {
+    mockResponse({
+      verdicts: [
+        { category: "sofa", existing_item_visible: true, existing_description: "grey fabric sectional", reason: "Centered in photo 1" },
+        { category: "dining_chairs", existing_item_visible: false, existing_description: "", reason: "No dining chairs visible in the living room" },
+      ],
+    });
+
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room with rental furniture.",
+        what_works: [],
+        what_should_go: [],
         what_it_needs: [
-          { category: "coffee_table", search_title: "Walnut coffee table" },
+          { category: "sofa", search_title: "New leather sofa" },
+          { category: "dining_chairs", search_title: "Set of 4 dining chairs" },
         ],
       },
       [],
-      ["Glass coffee table — wrong scale"],
+      PHOTOS,
+      "living_room",
     );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+  });
+
+  it("skips non-replaceable categories without calling LLM", async () => {
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Living room.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [{ category: "throw_pillows", search_title: "New pillow set" }],
+      },
+      [],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(mockChat).not.toHaveBeenCalled();
     expect(result).toHaveLength(0);
   });
 });
