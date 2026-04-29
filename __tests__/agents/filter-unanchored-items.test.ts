@@ -54,7 +54,11 @@ describe("filterUnanchoredItems", () => {
     expect(result.what_should_go).toHaveLength(1);
   });
 
-  it("drops what_should_go entries NOT grounded in summary or keepItems", () => {
+  it("drops cross-reference hallucinations (rug pattern)", () => {
+    // The hallucinated rug entry has tokens that ALL match what_it_needs
+    // categories (area, rug) but no anchor in summary or keepItems. This is
+    // the classic "Pass A invents an existing item to mirror a recommended
+    // purchase" pattern.
     const analysis = {
       ...baseAnalysis,
       what_should_go: [
@@ -70,18 +74,43 @@ describe("filterUnanchoredItems", () => {
     expect(list).toHaveLength(2);
   });
 
-  it("does NOT let what_it_needs falsely ground what_should_go entries", () => {
+  it("TRUSTS Pass A on items not in summary but with concrete object names", () => {
+    // The summary doesn't mention bean bag chair or polyester pillows, but
+    // Pass A saw the photos and listed them. Self-corrector and filter
+    // CANNOT see photos — they should NOT drop these.
     const analysis = {
-      ...baseAnalysis,
+      summary: "Studio apartment with grey LVP flooring and undersized juvenile furniture overall.",
       what_should_go: [
-        "Worn sisal rug — threadbare, wrong scale",
+        "Bean bag chair — undersized, juvenile aesthetic",
+        "Folding metal TV tray table — wrong material story",
+        "Plastic storage crates — visible clutter",
+        "Mismatched polyester throw pillows — competing patterns",
+      ],
+      what_it_needs: [
+        { category: "sofa", description: "primary seating", priority: "high", specs: "..." },
+        { category: "coffee_table", description: "anchors zone", priority: "high", specs: "..." },
       ],
     };
-    // "area_rug" is in what_it_needs with "rug" in its description,
-    // but "rug" / "sisal" are NOT in the summary or keepItems.
-    // The filter must drop it — future purchases don't prove existence.
     const result = filterUnanchoredItems(analysis, []);
-    expect(result.what_should_go).toHaveLength(0);
+    expect(result.what_should_go).toHaveLength(4);
+  });
+
+  it("drops cross-reference hallucination but keeps unrelated what_should_go items", () => {
+    const analysis = {
+      summary: "Studio apartment with juvenile furniture.",
+      what_should_go: [
+        "Bean bag chair — wrong scale",
+        "Undersized area rug — threadbare", // cross-ref: head "area rug" matches "area_rug"
+      ],
+      what_it_needs: [
+        { category: "area_rug", description: "...", priority: "high", specs: "..." },
+        { category: "sofa", description: "...", priority: "high", specs: "..." },
+      ],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    const list = result.what_should_go as string[];
+    expect(list).toHaveLength(1);
+    expect(list[0]).toContain("Bean bag chair");
   });
 
   it("keeps what_works entries anchored in summary", () => {

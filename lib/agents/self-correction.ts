@@ -99,13 +99,28 @@ export async function selfReviewAreaAnalysis(
 }
 
 /**
- * Drop entries in what_should_go and what_works that don't reference any
- * noun anchored in the summary or keep_items. The LLM self-corrector is
- * the primary defense; this is a deterministic backstop.
+ * Drop entries in what_should_go and what_works that are clearly hallucinated.
  *
- * Strategy: extract the head noun from each entry (text before " — " or
- * " - "), tokenize into significant words (3+ chars, not stopwords), and
- * require at least one token to appear in the summary or keep_items.
+ * ARCHITECTURE NOTE: Pass A sees the room photos directly when it generates
+ * what_works and what_should_go. The self-corrector and this deterministic
+ * filter do NOT see the photos — they only see the analysis text. So we
+ * cannot verify grounding against the photos themselves; we can only catch
+ * specific anti-patterns that are detectable from text alone:
+ *
+ * 1. The "cross-reference" hallucination: Pass A invents an existing item to
+ *    justify a recommended purchase (e.g. recommends buying area_rug AND
+ *    claims a bad area_rug already exists in the room). When the head noun of
+ *    a what_should_go entry exactly matches a what_it_needs category AND no
+ *    other anchor confirms it (summary, keep_items), it's the rug pattern.
+ *
+ * 2. Abstract concepts: entries with no concrete physical object name
+ *    (e.g. "loose clutter", "impersonal arrangement").
+ *
+ * 3. For what_works: entries that match no token in summary, keep_items, or
+ *    what_should_go (even with synonyms). These are typically pure
+ *    fabrications.
+ *
+ * Otherwise we TRUST Pass A's direct observation of the photos.
  */
 export function filterUnanchoredItems(
   analysis: Record<string, unknown>,
@@ -113,23 +128,21 @@ export function filterUnanchoredItems(
 ): Record<string, unknown> {
   const summary = ((analysis.summary as string | undefined) || "").toLowerCase();
   const keepText = keepItems.join(" ").toLowerCase();
-  const worksText = Array.isArray(analysis.what_works)
-    ? (analysis.what_works as string[]).join(" ").toLowerCase()
-    : "";
   const shouldGoText = Array.isArray(analysis.what_should_go)
     ? (analysis.what_should_go as string[]).join(" ").toLowerCase()
     : "";
 
-  // what_should_go claims items EXIST in the room → only ground against things
-  // known to be present: summary (photo description), keepItems (user-confirmed),
-  // what_works (other existing items). Crucially EXCLUDES what_it_needs (future
-  // purchases) — otherwise "area_rug" in needs falsely grounds a hallucinated
-  // "area rug" in should_go.
-  const shouldGoHaystack = `${summary} ${keepText} ${worksText}`;
-
-  // what_works claims items exist and are good → ground against summary,
-  // keepItems, and what_should_go (also existing items, just flagged for removal).
-  const worksHaystack = `${summary} ${keepText} ${shouldGoText}`;
+  // Collect what_it_needs categories EXACTLY (no tokenization). The cross-ref
+  // detection only fires when an entry's full head phrase matches a complete
+  // category — not when a single common word like "table" partially matches
+  // "coffee_table". Otherwise generic terms would falsely trigger drops.
+  const needsCategoriesFull = new Set<string>();
+  if (Array.isArray(analysis.what_it_needs)) {
+    for (const n of analysis.what_it_needs as Array<Record<string, unknown>>) {
+      const cat = String(n.category || "").toLowerCase().trim();
+      if (cat) needsCategoriesFull.add(cat);
+    }
+  }
 
   const STOPWORDS = new Set([
     "the", "and", "with", "for", "from", "this", "that", "into", "your", "their",
@@ -138,10 +151,6 @@ export function filterUnanchoredItems(
     "inconsistent", "outdated", "low", "high", "quality",
   ]);
 
-  // Furniture cross-vocabulary: same physical item, different words.
-  // The user might say "sofa" while the analysis says "sectional"; both
-  // refer to the same object. Without this map, the filter treats them as
-  // unrelated and drops legitimate keeps.
   const FURNITURE_SYNONYMS: Record<string, readonly string[]> = {
     sofa: ["sectional", "couch", "loveseat", "settee"],
     sectional: ["sofa", "couch"],
@@ -171,33 +180,65 @@ export function filterUnanchoredItems(
     art: ["artwork"],
   };
 
+  const extractHeadTokens = (entry: string): string[] => {
+    const separatorMatch = entry.match(/\s[—–-]\s|:\s/);
+    const head = separatorMatch
+      ? entry.slice(0, separatorMatch.index).toLowerCase()
+      : entry.toLowerCase();
+    return head
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+  };
+
   const tokenInHaystack = (token: string, haystack: string): boolean => {
     if (haystack.includes(token)) return true;
     const synonyms = FURNITURE_SYNONYMS[token];
     return synonyms ? synonyms.some((s) => haystack.includes(s)) : false;
   };
 
-  const isAnchored = (entry: string, haystack: string): boolean => {
-    const separatorMatch = entry.match(/\s[—–-]\s|:\s/);
-    const head = separatorMatch
-      ? entry.slice(0, separatorMatch.index).toLowerCase()
-      : entry.toLowerCase();
-    const tokens = head
-      .replace(/[^a-z\s]/g, " ")
-      .split(/\s+/)
-      .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+  // For what_should_go: detect the rug-style cross-reference hallucination.
+  // Pattern: the entry's HEAD NOUN PHRASE (last 1-2 specific tokens) matches
+  // a complete what_it_needs category exactly, AND no token is anchored in
+  // summary or keep_items. E.g. "Undersized synthetic area rug" → head phrase
+  // "area rug" → normalizes to "area_rug" → matches the "area_rug" needs
+  // category exactly → and no rug anchor in summary → drop.
+  // Narrow on purpose: catches cross-references but trusts Pass A's vision
+  // for concrete items like "Bean bag chair" or "Folding TV tray table"
+  // whose phrase doesn't equal any needs category.
+  const matchesNeedsCategory = (phrase: string): boolean => {
+    const normalized = phrase.replace(/\s+/g, "_");
+    return needsCategoriesFull.has(normalized) || needsCategoriesFull.has(phrase);
+  };
+
+  const isCrossReferenceHallucination = (entry: string): boolean => {
+    const tokens = extractHeadTokens(entry);
+    if (tokens.length === 0) return false;
+    const directAnchor = tokens.some((t) => tokenInHaystack(t, `${summary} ${keepText}`));
+    if (directAnchor) return false;
+    const last2 = tokens.slice(-2).join(" ");
+    const last1 = tokens[tokens.length - 1];
+    return matchesNeedsCategory(last2) || matchesNeedsCategory(last1);
+  };
+
+  // For what_works: keep wider grounding with synonyms. Note we exclude
+  // worksText from the haystack to avoid circular self-anchoring (an entry
+  // shouldn't anchor itself just because it's in the list).
+  const worksHaystack = `${summary} ${keepText} ${shouldGoText}`;
+  const isAnchoredForWorks = (entry: string): boolean => {
+    const tokens = extractHeadTokens(entry);
     if (tokens.length === 0) return true;
-    return tokens.some((t) => tokenInHaystack(t, haystack));
+    return tokens.some((t) => tokenInHaystack(t, worksHaystack));
   };
 
   const result = { ...analysis };
 
   if (Array.isArray(analysis.what_should_go)) {
     const before = analysis.what_should_go as string[];
-    const after = before.filter((e) => typeof e === "string" && isAnchored(e, shouldGoHaystack));
+    const after = before.filter((e) => typeof e === "string" && !isCrossReferenceHallucination(e));
     if (after.length !== before.length) {
-      log.warn("Dropped unanchored what_should_go entries", {
-        dropped: before.filter((e) => !isAnchored(e, shouldGoHaystack)),
+      log.warn("Dropped cross-reference hallucinations from what_should_go", {
+        dropped: before.filter((e) => typeof e === "string" && isCrossReferenceHallucination(e)),
       });
     }
     result.what_should_go = after;
@@ -205,10 +246,10 @@ export function filterUnanchoredItems(
 
   if (Array.isArray(analysis.what_works)) {
     const before = analysis.what_works as string[];
-    const after = before.filter((e) => typeof e === "string" && isAnchored(e, worksHaystack));
+    const after = before.filter((e) => typeof e === "string" && isAnchoredForWorks(e));
     if (after.length !== before.length) {
       log.warn("Dropped unanchored what_works entries", {
-        dropped: before.filter((e) => !isAnchored(e, worksHaystack)),
+        dropped: before.filter((e) => !isAnchoredForWorks(e)),
       });
     }
     result.what_works = after;
@@ -249,8 +290,8 @@ Check for these specific problems:
 4. STYLE CONSISTENCY: Do all recommended items align with the stated design_direction?
 5. COMPLETENESS: For each recommended item, does it have a non-empty category, search_title, and placement?
 6. DUPLICATES: Are there duplicate categories in what_it_needs that shouldn't be duplicated?
-7. WHAT_SHOULD_GO GROUNDING: Each what_should_go entry must reference a PHYSICAL OBJECT that is ACTUALLY VISIBLE in the room photos. It can ONLY be anchored in the summary or keep_items — NOT in what_it_needs. ⚠️ COMMON HALLUCINATION: the model recommends buying an item (e.g. area_rug in what_it_needs) and ALSO hallucinates that a bad version of that item already exists in the room (e.g. "Undersized area rug" in what_should_go). If the summary does not mention a rug and the user didn't list one in keep_items, DELETE it — the what_it_needs recommendation is not evidence the item exists. DELETE entries that are: (a) abstract concepts like "clutter" or "impersonal arrangement" rather than named objects, (b) items with zero evidence in the summary or keep_items.
-8. WHAT_WORKS GROUNDING: Each what_works entry must reference a movable object the user owns. It can be anchored in the summary, keep_items list, OR be clearly implied by the photos (the summary is a condensed overview, not an exhaustive inventory). DELETE entries that name items with zero evidence anywhere. NEVER include architectural finishes (flooring, countertops, paint) — those belong in summary.
+7. WHAT_SHOULD_GO GROUNDING: ⚠️ CRITICAL — you do NOT see the room photos. Pass A DID see the photos when it produced what_should_go. The summary is only a 3-4 sentence overview, NOT a complete inventory. So an item being absent from the summary is NOT proof of hallucination — Pass A may have seen it and just didn't repeat it in the summary. TRUST Pass A's direct observation. ONLY delete what_should_go entries that match these specific patterns: (a) ABSTRACT CONCEPTS — "loose clutter", "impersonal arrangement", "lack of personality" without a named physical object, (b) CROSS-REFERENCE HALLUCINATION — the entry's category matches a category in what_it_needs AND has no other anchor (e.g. what_it_needs has area_rug and what_should_go has "Undersized synthetic area rug" — Pass A invented a bad rug to justify the purchase). DO NOT delete entries that name specific physical objects with concrete details (e.g. "Bean bag chair", "Folding TV tray", "Plastic storage crates") just because they aren't repeated in the summary.
+8. WHAT_WORKS GROUNDING: Each what_works entry must reference a movable object the user owns. Pass A saw the photos. Trust its observations unless an entry is clearly inconsistent with the design direction or names something architectural. NEVER include architectural finishes (flooring, countertops, paint) — those belong in summary.
 
 Return JSON:
 {
