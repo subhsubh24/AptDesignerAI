@@ -244,4 +244,30 @@ describe("filterUnanchoredItems", () => {
     const list = result.what_should_go as string[];
     expect(list).toHaveLength(1);
   });
+
+  it("keeps photo-verified entries even when they match a needs category", () => {
+    const analysis = {
+      summary: "Studio with a desk and a floor lamp.",
+      what_should_go: [
+        "Laminate media console — cheap finish",
+        "Metal-frame coffee table — cold aesthetic",
+        "Plastic side table — too small",
+      ],
+      what_it_needs: [
+        { category: "media_console", search_title: "Walnut media console" },
+        { category: "coffee_table", search_title: "Oak coffee table" },
+        { category: "side_table", search_title: "Walnut end table" },
+      ],
+    };
+    const photoVerified = [
+      "Laminate media console — cheap finish",
+      "Metal-frame coffee table — cold aesthetic",
+    ];
+    const result = filterUnanchoredItems(analysis, [], photoVerified);
+    const list = result.what_should_go as string[];
+    expect(list).toContainEqual(expect.stringContaining("media console"));
+    expect(list).toContainEqual(expect.stringContaining("coffee table"));
+    // Non-verified entry still gets dropped
+    expect(list).not.toContainEqual(expect.stringContaining("side table"));
+  });
 });

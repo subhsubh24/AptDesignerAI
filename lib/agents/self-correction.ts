@@ -190,6 +190,7 @@ export async function selfReviewAreaAnalysis(
 export function filterUnanchoredItems(
   analysis: Record<string, unknown>,
   keepItems: string[],
+  photoVerifiedEntries?: string[],
 ): Record<string, unknown> {
   const summary = ((analysis.summary as string | undefined) || "").toLowerCase();
   const keepText = keepItems.join(" ").toLowerCase();
@@ -299,7 +300,11 @@ export function filterUnanchoredItems(
     "table", "chair", "lamp", "light", "stand", "shelf", "bin", "box",
     "basket", "frame", "set", "piece", "unit",
   ]);
+  const photoVerifiedSet = new Set(
+    (photoVerifiedEntries || []).map((e) => e.toLowerCase()),
+  );
   const isCrossReferenceHallucination = (entry: string): boolean => {
+    if (photoVerifiedSet.has(entry.toLowerCase())) return false;
     const tokens = extractHeadTokens(entry);
     if (tokens.length === 0) return false;
     const strongAnchor = tokens.some(

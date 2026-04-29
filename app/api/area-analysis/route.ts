@@ -864,6 +864,7 @@ Use Google Search to verify current pricing and material availability when neede
     // step makes one image-based LLM call to verify each entry is actually
     // visible. Conservative: drops only entries the model confidently can't
     // locate. Fails open on error.
+    let photoVerifiedEntries: string[] = [];
     if (Array.isArray(analysis.what_should_go) && analysis.what_should_go.length > 0) {
       const roomImageUrls = (room.room_images || [])
         .map((img: { image_url: string }) => img.image_url)
@@ -874,9 +875,12 @@ Use Google Search to verify current pricing and material availability when neede
           roomImageUrls,
           room.room_type,
         );
-        if (!grounding.fellBack && grounding.dropped.length > 0) {
-          analysis.what_should_go = grounding.what_should_go;
-          console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
+        if (!grounding.fellBack) {
+          photoVerifiedEntries = grounding.what_should_go;
+          if (grounding.dropped.length > 0) {
+            analysis.what_should_go = grounding.what_should_go;
+            console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
+          }
         }
       }
     }
@@ -922,7 +926,7 @@ Use Google Search to verify current pricing and material availability when neede
     // what_it_needs category AND is not grounded in summary/keep items,
     // Pass A likely invented it to justify the purchase. Drop it.
     {
-      const filtered = filterUnanchoredItems(analysis, allKeepItems);
+      const filtered = filterUnanchoredItems(analysis, allKeepItems, photoVerifiedEntries);
       const origGo = Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : [];
       const filtGo = Array.isArray(filtered.what_should_go) ? (filtered.what_should_go as string[]) : [];
       if (filtGo.length < origGo.length) {
