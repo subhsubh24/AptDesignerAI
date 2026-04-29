@@ -17,6 +17,7 @@ import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { selfReviewAreaAnalysis } from "@/lib/agents/self-correction";
 import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
+import { inferReplacementsFromGap } from "@/lib/agents/infer-replacements";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
@@ -405,8 +406,13 @@ WHAT_WORKS RULES — every entry MUST be a physical object the client owns and c
 Architectural finishes belong in "summary", "spatial_layout", or "lighting_conditions" — NOT in what_works.
 
 WHAT_SHOULD_GO RULES — every entry MUST be a removable physical item visible in the photos:
-✅ CORRECT: "Cheap particle-board TV stand — wrong scale, laminate peeling" / "Mismatched throw pillows — competing patterns"
-❌ WRONG — NEVER include these: absences ("lack of X", "no rug"), architectural features ("builder-grade ceiling light", "bare flooring"), hypotheticals ("any big-box furniture sets"), things tenants cannot change (ceiling fixtures, HVAC vents, wall outlets, appliances)
+✅ CORRECT: "Cheap particle-board TV stand — wrong scale, laminate peeling" / "Mismatched throw pillows — competing patterns" / "Existing dark grey fabric sectional — undersized for the planned upgraded living area"
+❌ WRONG — NEVER include these: absences ("lack of X", "no rug"), architectural features ("builder-grade ceiling light", "bare flooring"), hypotheticals ("any big-box furniture sets"), things tenants cannot change (ceiling fixtures, HVAC vents, wall outlets, appliances), abstract/vague catch-alls ("general clutter", "generic rental furniture", "filler decor", "miscellaneous items").
+
+🎯 BE CONCRETE AND SPECIFIC. Each entry must NAME the exact physical object you see — color + material + form. NEVER use vague phrases like "general clutter", "personal items", "rental aesthetic", or "generic furniture". If you can see a dark grey fabric sectional that should go, write "Dark grey fabric sectional sofa — undersized for the planned upgrades", NOT "generic seating".
+
+🪑 MAJOR FURNITURE REPLACEMENT: If a major piece of furniture (sofa, coffee table, media console / TV stand, dining table, area rug, accent chair, dresser, desk) is visible in the photos AND is NOT in the keep list AND your design_direction implies upgrading it, you MUST list the existing version as a specific entry in what_should_go. Do not skip this — the replace list is how the system knows which existing items are leaving.
+
 ⚠️ HALLUCINATION TRAP: Do NOT invent items to justify a purchase recommendation. If you plan to recommend buying a rug, DO NOT also claim there's already a bad rug in the room unless you can clearly see one in the photos. The same applies to all categories — only list items you can actually see.
 </critical_rules>
 
@@ -926,6 +932,35 @@ Use Google Search to verify current pricing and material availability when neede
         analysis = selfReview.output as typeof analysis;
         console.log(`[area-analysis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
           selfReview.issues.join("; "));
+      }
+    }
+
+    // ── Infer replacements from Pass B gap ─────────────────────────
+    // If Pass B is buying a new sofa/coffee table/media console AND the room
+    // has one AND the user didn't keep it, the existing version is being
+    // replaced — but Pass A may have been too vague to say so. Make it
+    // explicit so the Replace section reflects what's actually happening.
+    // Runs AFTER self-correction so the LLM cleanup can't strip these.
+    {
+      const inferredReplacements = inferReplacementsFromGap(
+        {
+          summary: String(analysis.summary || ""),
+          design_direction: String(analysis.design_direction || ""),
+          spatial_layout: String(analysis.spatial_layout || ""),
+          what_works: Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : [],
+          what_should_go: Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : [],
+          what_it_needs: analysis.what_it_needs,
+        },
+        allKeepItems,
+      );
+      if (inferredReplacements.length > 0) {
+        if (!Array.isArray(analysis.what_should_go)) {
+          analysis.what_should_go = [];
+        }
+        for (const inf of inferredReplacements) {
+          (analysis.what_should_go as string[]).push(inf.entry);
+        }
+        console.log(`[area-analysis] Inferred ${inferredReplacements.length} replacement(s) into what_should_go: ${inferredReplacements.map((r) => r.category).join(", ")}`);
       }
     }
 
