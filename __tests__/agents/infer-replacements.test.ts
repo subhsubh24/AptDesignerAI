@@ -156,6 +156,41 @@ describe("inferReplacementsFromGap", () => {
     expect(result).toHaveLength(1);
   });
 
+  it("infers from what_should_go when summary is vague but items were flagged for removal", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Compact living room with disjointed rental furniture.",
+        what_works: ["bookshelf — kept per client request"],
+        what_should_go: ["Dark sectional sofa — overpowers the room", "Small glass coffee table — too fragile"],
+        what_it_needs: [
+          { category: "sofa", search_title: "Cognac leather sofa" },
+          { category: "coffee_table", search_title: "Solid walnut coffee table" },
+        ],
+      },
+      ["bookshelf"],
+    );
+    // sofa and coffee_table already appear in what_should_go, so no inference needed
+    // (the aliases "sofa" and "coffee table" are found in removeText)
+    expect(result).toHaveLength(0);
+  });
+
+  it("infers media console when only what_should_go mentions it (not summary)", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Compact living room with basic rental furniture.",
+        what_works: [],
+        what_should_go: [],
+        spatial_layout: "TV mounted on the east wall, media console below",
+        what_it_needs: [
+          { category: "media_console", search_title: "Walnut media console 70in" },
+        ],
+      },
+      [],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("media_console");
+  });
+
   it("does NOT infer for a category not in REPLACEABLE_CATEGORIES (e.g. throw_pillows)", () => {
     const result = inferReplacementsFromGap(
       {

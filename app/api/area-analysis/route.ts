@@ -819,6 +819,42 @@ Use Google Search to verify current pricing and material availability when neede
 
     console.log(`[area-analysis] AI response: ${analysis.what_it_needs.length} items needed, ${analysis.what_works.length} items working, ${analysis.what_should_go?.length || 0} items to go`);
 
+    // ── Filter prose entries from what_works ──────────────────────────
+    // Pass A occasionally returns explanatory prose instead of actual
+    // furniture items (e.g. "None identified — existing furniture is
+    // categorized as disjointed..."). These poison the pipeline.
+    {
+      const NON_ITEM_PATTERNS = [
+        /^none\b/i,
+        /^nothing\b/i,
+        /^no (?:items?|furniture|pieces?|elements?)\b/i,
+        /^not applicable\b/i,
+        /^n\/a\b/i,
+      ];
+      const isProseEntry = (entry: string): boolean => {
+        const head = entry.split(/\s[—–-]\s|:\s/)[0].trim();
+        return NON_ITEM_PATTERNS.some((p) => p.test(head));
+      };
+      if (Array.isArray(analysis.what_works)) {
+        const before = analysis.what_works as string[];
+        const after = before.filter((e) => typeof e === "string" && !isProseEntry(e));
+        if (after.length < before.length) {
+          const dropped = before.filter((e) => typeof e === "string" && isProseEntry(e));
+          analysis.what_works = after;
+          console.log(`[area-analysis] Filtered ${dropped.length} prose entry/entries from what_works: ${dropped.join("; ")}`);
+        }
+      }
+      if (Array.isArray(analysis.what_should_go)) {
+        const before = analysis.what_should_go as string[];
+        const after = before.filter((e) => typeof e === "string" && !isProseEntry(e));
+        if (after.length < before.length) {
+          const dropped = before.filter((e) => typeof e === "string" && isProseEntry(e));
+          analysis.what_should_go = after;
+          console.log(`[area-analysis] Filtered ${dropped.length} prose entry/entries from what_should_go: ${dropped.join("; ")}`);
+        }
+      }
+    }
+
     // ── Category dedup: collapse duplicate categories into one item ──
     // Pass B occasionally emits the same category twice (e.g. two "plant"
     // entries). Downstream scoring treats them as independent items, which
@@ -952,21 +988,32 @@ Use Google Search to verify current pricing and material availability when neede
     // Runs AFTER self-correction so the LLM can't strip injected entries.
     // If the user said "keep the bookshelf" and no what_works entry mentions
     // "bookshelf", inject a stub so the Keep section isn't empty.
+    // Also removes conflicting entries from what_should_go (user said keep,
+    // not remove). Only checks worksText — NOT goText, because single-word
+    // synonym matches against goText caused false positives (e.g. "lamp" in
+    // keep matching "lighting" in a what_should_go reason).
     if (allKeepItems.length > 0 && Array.isArray(analysis.what_works)) {
-      const worksText = (analysis.what_works as string[]).join(" ").toLowerCase();
-      const goText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
       const KEEP_SYNONYMS: Record<string, string[]> = {
         sofa: ["sectional", "couch"], sectional: ["sofa", "couch"], couch: ["sofa", "sectional"],
         bookshelf: ["bookcase", "shelving"], bookcase: ["bookshelf"], shelving: ["bookshelf", "bookcase"],
         rug: ["carpet"], carpet: ["rug"], lamp: ["light"], light: ["lamp"],
         tv: ["television"], television: ["tv"], ottoman: ["footstool", "pouf"],
       };
-      const inText = (term: string, haystack: string): boolean => {
+      const KEEP_INJECT_GENERIC = new Set([
+        "floor", "wall", "ceiling", "corner", "back", "front", "left", "right",
+        "side", "top", "bottom", "near", "next", "behind", "above", "below",
+        "black", "white", "grey", "gray", "brown", "blue", "red", "green",
+        "beige", "tan", "cream", "ivory", "natural", "neutral",
+        "small", "large", "long", "short", "tall", "wide", "narrow", "big", "mini",
+        "two", "three", "four", "five", "set", "pair", "the", "and", "with",
+        "also", "possible", "for", "next", "from", "arc",
+      ]);
+      const inWorksText = (term: string, haystack: string): boolean => {
         const norm = term.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
         if (!norm) return false;
         if (haystack.includes(norm)) return true;
         for (const word of norm.split(/\s+/)) {
-          if (word.length < 3) continue;
+          if (word.length < 3 || KEEP_INJECT_GENERIC.has(word)) continue;
           if (haystack.includes(word)) return true;
           const syns = KEEP_SYNONYMS[word];
           if (syns?.some((s) => haystack.includes(s))) return true;
@@ -974,19 +1021,32 @@ Use Google Search to verify current pricing and material availability when neede
         return false;
       };
       const stripCtx = (s: string) => s.replace(/\b(?:behind|next to|near|beside|by|on top of|under|also|if possible)\b.*/gi, "").trim();
+      const worksText = (analysis.what_works as string[]).join(" ").toLowerCase();
       const injected: string[] = [];
+      const movedFromGo: string[] = [];
       const seen = new Set<string>();
       for (const ki of allKeepItems) {
         const stripped = stripCtx(ki);
         if (!stripped || seen.has(stripped.toLowerCase())) continue;
         seen.add(stripped.toLowerCase());
-        if (!inText(stripped, worksText) && !inText(stripped, goText)) {
-          (analysis.what_works as string[]).push(`${stripped} — kept per client request`);
-          injected.push(stripped);
+        if (inWorksText(stripped, worksText)) continue;
+        (analysis.what_works as string[]).push(`${stripped} — kept per client request`);
+        injected.push(stripped);
+        // Remove conflicting entries from what_should_go
+        if (Array.isArray(analysis.what_should_go)) {
+          const goArr = analysis.what_should_go as string[];
+          const conflicting = goArr.filter((e) => inWorksText(stripped, e.toLowerCase()));
+          if (conflicting.length > 0) {
+            analysis.what_should_go = goArr.filter((e) => !conflicting.includes(e));
+            movedFromGo.push(...conflicting);
+          }
         }
       }
       if (injected.length > 0) {
         console.log(`[area-analysis] Injected ${injected.length} missing keep item(s) into what_works: ${injected.join(", ")}`);
+      }
+      if (movedFromGo.length > 0) {
+        console.log(`[area-analysis] Removed ${movedFromGo.length} keep-conflicting entry/entries from what_should_go: ${movedFromGo.join("; ")}`);
       }
     }
 

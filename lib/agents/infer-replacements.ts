@@ -64,11 +64,13 @@ export function inferReplacementsFromGap(
   }
 
   // The room context — anywhere Pass A might have mentioned existing furniture.
+  // Include what_should_go: items there are definitely in the room (being removed).
   const roomContext = [
     String(analysis.summary || ""),
     String(analysis.design_direction || ""),
     String(analysis.spatial_layout || ""),
     ...(Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : []),
+    ...(Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : []),
   ].join(" ").toLowerCase();
 
   const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
