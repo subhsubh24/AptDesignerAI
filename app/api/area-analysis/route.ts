@@ -873,9 +873,55 @@ Use Google Search to verify current pricing and material availability when neede
       }
     }
 
+    // ── Ensure user keep items appear in what_works ────────────────
+    // Pass A only sees photos + the keep list in its prompt, but sometimes
+    // forgets to list kept items in what_works. If the user explicitly said
+    // "keep the bookshelf" and no what_works entry mentions "bookshelf",
+    // inject a stub so the Keep section isn't empty.
+    if (allKeepItems.length > 0 && Array.isArray(analysis.what_works)) {
+      const worksText = (analysis.what_works as string[]).join(" ").toLowerCase();
+      const goText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
+      const KEEP_SYNONYMS: Record<string, string[]> = {
+        sofa: ["sectional", "couch"], sectional: ["sofa", "couch"], couch: ["sofa", "sectional"],
+        bookshelf: ["bookcase", "shelving"], bookcase: ["bookshelf"], shelving: ["bookshelf", "bookcase"],
+        rug: ["carpet"], carpet: ["rug"], lamp: ["light"], light: ["lamp"],
+        tv: ["television"], television: ["tv"], ottoman: ["footstool", "pouf"],
+      };
+      const inText = (term: string, haystack: string): boolean => {
+        const norm = term.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+        if (!norm) return false;
+        if (haystack.includes(norm)) return true;
+        for (const word of norm.split(/\s+/)) {
+          if (word.length < 3) continue;
+          if (haystack.includes(word)) return true;
+          const syns = KEEP_SYNONYMS[word];
+          if (syns?.some((s) => haystack.includes(s))) return true;
+        }
+        return false;
+      };
+      const stripCtx = (s: string) => s.replace(/\b(?:behind|next to|near|beside|by|on top of|under|also|if possible)\b.*/gi, "").trim();
+      const injected: string[] = [];
+      const seen = new Set<string>();
+      for (const ki of allKeepItems) {
+        const stripped = stripCtx(ki);
+        if (!stripped || seen.has(stripped.toLowerCase())) continue;
+        seen.add(stripped.toLowerCase());
+        if (!inText(stripped, worksText) && !inText(stripped, goText)) {
+          (analysis.what_works as string[]).push(`${stripped} — kept per client request`);
+          injected.push(stripped);
+        }
+      }
+      if (injected.length > 0) {
+        console.log(`[area-analysis] Injected ${injected.length} missing keep item(s) into what_works: ${injected.join(", ")}`);
+      }
+    }
+
     // ── Self-review: LLM checks its own output for consistency ───────
     {
-      const selfReview = await selfReviewAreaAnalysis(analysis, allKeepItems, room.room_type);
+      const selfReview = await selfReviewAreaAnalysis(
+        analysis, allKeepItems, room.room_type,
+        parsedContext?.explicitRequests?.map((r) => r.item),
+      );
       if (selfReview.wasCorrepted) {
         analysis = selfReview.output as typeof analysis;
         console.log(`[area-analysis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,

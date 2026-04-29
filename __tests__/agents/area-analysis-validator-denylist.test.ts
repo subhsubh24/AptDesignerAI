@@ -114,4 +114,40 @@ describe("area-analysis-validator: keep-keyword denylist", () => {
     expect(removes).toHaveLength(1);
     expect(removes[0]).toContain("picture frames");
   });
+
+  it("does not block a table lamp recommendation when user keeps a floor lamp", () => {
+    const analysis = {
+      summary: "Living room with a floor lamp and sofa.",
+      what_works: [],
+      what_should_go: [],
+      what_it_needs: [
+        { category: "table_lamp", search_title: "Sculptural matte black table lamp with warm linen drum shade" },
+      ],
+    };
+
+    const result = validateAreaAnalysis(
+      analysis,
+      ["black arc floor lamp"],
+      undefined,
+      null,
+      {
+        expandedExclusions: null,
+        keepItemCategories: [
+          {
+            item: "black arc floor lamp",
+            category_keywords: ["floor lamp", "arc lamp", "standing lamp", "lamp", "light"],
+            location_phrase: "",
+          },
+        ],
+        architecturalInWorks: null,
+        invalidInRemove: null,
+      },
+    );
+
+    const needs = result.patched.what_it_needs as Array<{ category: string }>;
+    expect(needs).toHaveLength(1);
+    expect(needs[0].category).toBe("table_lamp");
+    const replaced = result.issues.filter((i) => i.type === "keep_item_replaced");
+    expect(replaced).toHaveLength(0);
+  });
 });

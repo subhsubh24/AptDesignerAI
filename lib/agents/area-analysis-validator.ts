@@ -78,6 +78,7 @@ const GENERIC_KEEP_KEYWORD_DENYLIST = new Set([
   "square", "oval", "decor", "decorative", "accent", "neutral", "warm", "cool",
   "dark", "matte", "glossy", "natural", "vintage", "classic", "set", "pair",
   "piece", "item", "items", "thing", "things", "stuff", "shelf",
+  "lamp", "light", "table", "stand", "chair", "rug",
 ]);
 
 function filterKeepKeywords(keywords: string[]): string[] {

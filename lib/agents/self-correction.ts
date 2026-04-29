@@ -36,6 +36,7 @@ export async function selfReviewAreaAnalysis(
   analysis: Record<string, unknown>,
   keepItems: string[],
   roomType: string,
+  userRequests?: string[],
 ): Promise<SelfReviewResult<Record<string, unknown>>> {
   let current = analysis;
   const allIssues: string[] = [];
@@ -43,7 +44,7 @@ export async function selfReviewAreaAnalysis(
 
   for (let round = 0; round < MAX_CORRECTION_ROUNDS; round++) {
     try {
-      const reviewResult = await reviewAreaAnalysisRound(current, keepItems, roomType);
+      const reviewResult = await reviewAreaAnalysisRound(current, keepItems, roomType, userRequests);
       if (!reviewResult) break;
 
       if (reviewResult.is_consistent && reviewResult.issues.length === 0) {
@@ -71,6 +72,27 @@ export async function selfReviewAreaAnalysis(
             correctedLen: correctedSummary.length,
           });
           corrected.summary = originalSummary;
+        }
+        // Hard guard: restore what_it_needs items the LLM removed that match
+        // user-requested categories. The user explicitly asked for these.
+        if (userRequests && userRequests.length > 0 && Array.isArray(corrected.what_it_needs)) {
+          const prevNeeds = Array.isArray(current.what_it_needs)
+            ? (current.what_it_needs as Array<Record<string, unknown>>)
+            : [];
+          const correctedNeeds = corrected.what_it_needs as Array<Record<string, unknown>>;
+          const correctedCats = new Set(correctedNeeds.map((n) => String(n.category || "").toLowerCase()));
+          const requestNorm = userRequests.map((r) => r.toLowerCase().replace(/[\s-]+/g, "_"));
+          for (const item of prevNeeds) {
+            const cat = String(item.category || "").toLowerCase();
+            if (!correctedCats.has(cat) && requestNorm.some((r) => cat.includes(r) || r.includes(cat))) {
+              log.warn("Self-correction removed user-requested item — restoring", {
+                category: cat,
+                matchedRequest: requestNorm.find((r) => cat.includes(r) || r.includes(cat)),
+              });
+              correctedNeeds.push(item);
+              correctedCats.add(cat);
+            }
+          }
         }
         current = corrected;
       } else {
@@ -269,13 +291,18 @@ async function reviewAreaAnalysisRound(
   analysis: Record<string, unknown>,
   keepItems: string[],
   roomType: string,
+  userRequests?: string[],
 ): Promise<AreaAnalysisReviewOutput | null> {
   const model = selectModel("scoring");
+
+  const requestsBlock = userRequests && userRequests.length > 0
+    ? `\nUSER EXPLICITLY REQUESTED THESE ITEMS: ${JSON.stringify(userRequests)}\n⚠️ NEVER remove items from what_it_needs whose category matches a user request. If the user asked for a "dining table", do NOT remove dining_table from what_it_needs — even if it seems spatially challenging or the summary doesn't mention a dining area.\n`
+    : "";
 
   const prompt = `Review this area analysis for a ${roomType} for logical consistency.
 
 KEEP ITEMS (user wants to keep these): ${JSON.stringify(keepItems)}
-
+${requestsBlock}
 ANALYSIS OUTPUT:
 ${JSON.stringify(analysis, null, 2)}
 
