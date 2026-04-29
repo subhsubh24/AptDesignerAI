@@ -74,8 +74,16 @@ export function inferReplacementsFromGap(
   ].join(" ").toLowerCase();
 
   const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
-  const worksText = (Array.isArray(analysis.what_works) ? (analysis.what_works as string[]).join(" ") : "").toLowerCase();
   const keepText = keepItems.join(" ").toLowerCase();
+
+  // For what_works, only check each entry's HEAD (before the em-dash) to avoid
+  // false positives from placement context like "lamp — behind the sofa"
+  // matching "sofa" and suppressing sofa replacement inference.
+  const worksHeads = (Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : [])
+    .map((e) => {
+      const sep = e.match(/\s[—–-]\s|:\s/);
+      return (sep ? e.slice(0, sep.index) : e).toLowerCase();
+    });
 
   const inferred: InferredReplacement[] = [];
   const seenCategories = new Set<string>();
@@ -99,7 +107,9 @@ export function inferReplacementsFromGap(
 
     // Is it already represented in what_should_go or what_works?
     const alreadyInRemove = match.aliases.some((a) => removeText.includes(a));
-    const alreadyInWorks = match.aliases.some((a) => worksText.includes(a));
+    const alreadyInWorks = worksHeads.some((head) =>
+      match.aliases.some((a) => head.includes(a)),
+    );
     if (alreadyInRemove || alreadyInWorks) continue;
 
     const newTitle = String(need.search_title || "").trim();

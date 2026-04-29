@@ -105,6 +105,27 @@ describe("inferReplacementsFromGap", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("DOES infer sofa when 'sofa' only appears in a what_works entry's context, not its head", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Living room with a dark grey sectional sofa and a small coffee table.",
+        what_works: [
+          "bookshelf — kept per client request",
+          "Generic black floor lamp — to be incorporated as ambient/arc lighting behind sofa",
+          "black arc floor lamp — kept per client request",
+        ],
+        what_should_go: ["Generic black-metal TV console — undersized"],
+        what_it_needs: [
+          { category: "sofa", search_title: "Cream bouclé sectional 90in" },
+          { category: "coffee_table", search_title: "Solid walnut round coffee table" },
+        ],
+      },
+      ["bookshelf", "black arc floor lamp"],
+    );
+    const cats = result.map((r) => r.category).sort();
+    expect(cats).toEqual(["coffee_table", "sofa"]);
+  });
+
   it("returns empty when what_it_needs is missing or empty", () => {
     expect(inferReplacementsFromGap({ summary: "Anything" }, [])).toEqual([]);
     expect(inferReplacementsFromGap({ summary: "Anything", what_it_needs: [] }, [])).toEqual([]);
