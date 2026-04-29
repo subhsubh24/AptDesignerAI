@@ -127,8 +127,21 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       const changedFields: string[] = data.changed_fields || [];
       if (changedFields.length > 0 && data.analysis) {
         onAnalysisUpdate(data.analysis, changedFields);
-        const visionRelevantFields = ["recommended_palette", "recommended_materials", "design_direction", "style_name"];
-        const shouldRegenVision = changedFields.some((f) => visionRelevantFields.includes(f));
+        // Regenerate the full-room Design Vision Preview whenever palette,
+        // materials, style direction, or the item list changed. The preview
+        // composites all what_it_needs items into the room shell, so adding
+        // a throw blanket or swapping a sofa needs to be reflected there too.
+        const visionRelevantFields = [
+          "recommended_palette",
+          "recommended_materials",
+          "recommended_textures",
+          "design_direction",
+          "style_name",
+          "what_it_needs",
+        ];
+        const shouldRegenVision = changedFields.some(
+          (f) => visionRelevantFields.includes(f) || f.startsWith("what_it_needs."),
+        );
         if (shouldRegenVision) onVisionShouldRegen?.();
       }
     } catch (err) {
