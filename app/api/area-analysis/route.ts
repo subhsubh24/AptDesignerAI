@@ -17,6 +17,7 @@ import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { selfReviewAreaAnalysis, filterUnanchoredItems } from "@/lib/agents/self-correction";
 import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
+import { verifyWhatShouldGoAgainstPhotos } from "@/lib/agents/photo-grounding-validator";
 import { inferReplacementsFromGap } from "@/lib/agents/infer-replacements";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
 import { runDesignCoordinator, type DesignCoordinatorState, type DesignCoordinatorTool } from "@/lib/agents/design-coordinator";
@@ -853,6 +854,30 @@ Use Google Search to verify current pricing and material availability when neede
       if (dropped.length > 0) {
         analysis.what_it_needs = Array.from(seen.values());
         console.log(`[area-analysis] Deduplicated ${dropped.length} duplicate categor${dropped.length === 1 ? "y" : "ies"}: ${dropped.join(", ")} — now ${analysis.what_it_needs.length} items`);
+      }
+    }
+
+    // ── Photo-grounding: verify Pass A's what_should_go against the photos ──
+    // Pass A occasionally hallucinates concrete-sounding items it expects to
+    // see but doesn't ("dining chairs", "plastic storage bins"). Every
+    // downstream text-only step trusts these because they sound real. This
+    // step makes one image-based LLM call to verify each entry is actually
+    // visible. Conservative: drops only entries the model confidently can't
+    // locate. Fails open on error.
+    if (Array.isArray(analysis.what_should_go) && analysis.what_should_go.length > 0) {
+      const roomImageUrls = (room.room_images || [])
+        .map((img: { image_url: string }) => img.image_url)
+        .filter(Boolean);
+      if (roomImageUrls.length > 0) {
+        const grounding = await verifyWhatShouldGoAgainstPhotos(
+          analysis.what_should_go as string[],
+          roomImageUrls,
+          room.room_type,
+        );
+        if (!grounding.fellBack && grounding.dropped.length > 0) {
+          analysis.what_should_go = grounding.what_should_go;
+          console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
+        }
       }
     }
 
