@@ -902,6 +902,7 @@ Use Google Search to verify current pricing and material availability when neede
     // they sound real. These two image-based LLM calls catch both classes.
     // Conservative: drops only entries the model confidently rejects. Fails open.
     let photoVerifiedEntries: string[] = [];
+    let photoGroundingDroppedEntries: string[] = [];
     const groundingImageUrls = (room.room_images || [])
       .map((img: { image_url: string }) => img.image_url)
       .filter(Boolean);
@@ -916,6 +917,7 @@ Use Google Search to verify current pricing and material availability when neede
         photoVerifiedEntries = grounding.what_should_go;
         if (grounding.dropped.length > 0) {
           analysis.what_should_go = grounding.what_should_go;
+          photoGroundingDroppedEntries = grounding.dropped.map((d) => d.entry);
           console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
         }
       }
@@ -1012,13 +1014,16 @@ Use Google Search to verify current pricing and material availability when neede
         const norm = term.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
         if (!norm) return false;
         if (haystack.includes(norm)) return true;
-        for (const word of norm.split(/\s+/)) {
-          if (word.length < 3 || KEEP_INJECT_GENERIC.has(word)) continue;
-          if (haystack.includes(word)) return true;
+        const significantWords = norm.split(/\s+/).filter(w => w.length >= 3 && !KEEP_INJECT_GENERIC.has(w));
+        if (significantWords.length === 0) return false;
+        let matchCount = 0;
+        for (const word of significantWords) {
+          if (haystack.includes(word)) { matchCount++; continue; }
           const syns = KEEP_SYNONYMS[word];
-          if (syns?.some((s) => haystack.includes(s))) return true;
+          if (syns?.some((s) => haystack.includes(s))) { matchCount++; }
         }
-        return false;
+        if (significantWords.length >= 3) return matchCount >= Math.ceil(significantWords.length * 0.6);
+        return matchCount > 0;
       };
       const stripCtx = (s: string) => s.replace(/\b(?:behind|next to|near|beside|by|on top of|under|also|if possible)\b.*/gi, "").trim();
       const worksText = (analysis.what_works as string[]).join(" ").toLowerCase();
@@ -1067,6 +1072,7 @@ Use Google Search to verify current pricing and material availability when neede
           what_it_needs: analysis.what_it_needs,
         },
         allKeepItems,
+        photoGroundingDroppedEntries,
       );
       if (inferredReplacements.length > 0) {
         if (!Array.isArray(analysis.what_should_go)) {

@@ -224,4 +224,38 @@ describe("inferReplacementsFromGap", () => {
     );
     expect(result).toHaveLength(0);
   });
+
+  it("infers replacement from photo-grounding dropped entries when summary omits the item", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Compact living room with basic rental furniture.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [
+          { category: "coffee_table", search_title: "Solid walnut round coffee table" },
+        ],
+      },
+      [],
+      ["Glass coffee table — wrong scale for the room"],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("coffee_table");
+    expect(result[0].matchedAlias).toBe("coffee table");
+  });
+
+  it("does NOT double-infer when dropped entry overlaps with existing what_should_go", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Living room with a sectional sofa and a small coffee table.",
+        what_works: [],
+        what_should_go: ["Small glass coffee table — too fragile"],
+        what_it_needs: [
+          { category: "coffee_table", search_title: "Walnut coffee table" },
+        ],
+      },
+      [],
+      ["Glass coffee table — wrong scale"],
+    );
+    expect(result).toHaveLength(0);
+  });
 });

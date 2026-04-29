@@ -58,6 +58,7 @@ export interface InferredReplacement {
 export function inferReplacementsFromGap(
   analysis: AnalysisShape,
   keepItems: string[],
+  droppedEntries?: string[],
 ): InferredReplacement[] {
   if (!Array.isArray(analysis.what_it_needs) || analysis.what_it_needs.length === 0) {
     return [];
@@ -71,6 +72,7 @@ export function inferReplacementsFromGap(
     String(analysis.spatial_layout || ""),
     ...(Array.isArray(analysis.what_works) ? (analysis.what_works as string[]) : []),
     ...(Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : []),
+    ...(Array.isArray(droppedEntries) ? droppedEntries : []),
   ].join(" ").toLowerCase();
 
   const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
