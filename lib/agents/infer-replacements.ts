@@ -29,6 +29,17 @@ import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("infer-replacements");
 
+const SPATIAL_PREP_PATTERN = /\s+(?:behind|beside|next to|near|by|on top of|under|underneath|above|over|in front of|across from|facing|against|to the (?:left|right) of|between)\s+/i;
+
+function keepItemTargetsCategory(keepItem: string, aliases: readonly string[]): boolean {
+  const lower = keepItem.toLowerCase();
+  const spatialMatch = lower.match(SPATIAL_PREP_PATTERN);
+  const head = spatialMatch && spatialMatch.index! > 0
+    ? lower.slice(0, spatialMatch.index).trim()
+    : lower;
+  return aliases.some((a) => head.includes(a));
+}
+
 const REPLACEABLE_CATEGORIES: Array<{ cats: readonly string[]; display: string; aliases: readonly string[] }> = [
   { cats: ["sofa"], display: "sofa", aliases: ["sofa", "couch", "sectional", "loveseat", "settee"] },
   { cats: ["coffee_table"], display: "coffee table", aliases: ["coffee table"] },
@@ -79,7 +90,6 @@ export function inferReplacementsFromGap(
   ].join(" ").toLowerCase();
 
   const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
-  const keepText = keepItems.join(" ").toLowerCase();
 
   // For what_works, only check each entry's HEAD (before the em-dash) to avoid
   // false positives from placement context like "lamp — behind the sofa"
@@ -107,8 +117,7 @@ export function inferReplacementsFromGap(
     if (!matchedAlias) continue;
 
     // Did the user explicitly say to keep this category?
-    const userKeepsIt = match.aliases.some((a) => keepText.includes(a));
-    if (userKeepsIt) continue;
+    if (keepItems.some((item) => keepItemTargetsCategory(item, match.aliases))) continue;
 
     // Is it already represented in what_should_go or what_works?
     const alreadyInRemove = match.aliases.some((a) => removeText.includes(a));
@@ -173,9 +182,7 @@ export async function inferReplacementsFromPhotos(
     if (!match) continue;
     seenCategories.add(cat);
 
-    const keepText = keepItems.join(" ").toLowerCase();
-    const userKeepsIt = match.aliases.some((a) => keepText.includes(a));
-    if (userKeepsIt) continue;
+    if (keepItems.some((item) => keepItemTargetsCategory(item, match.aliases))) continue;
 
     const removeText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
     const alreadyInRemove = match.aliases.some((a) => removeText.includes(a));
@@ -193,7 +200,17 @@ export async function inferReplacementsFromPhotos(
   try {
     const model = selectModel("scoring");
 
+    const keepHints = keepItems.length > 0
+      ? keepItems.map((item) => `- ${item}`).join("\n")
+      : "None specified.";
+
     const promptText = `You are verifying which furniture items in a ${roomType} are being REPLACED by new purchases.
+
+ROOM DESCRIPTION (from initial analysis):
+${String(analysis.summary || "No room description available.")}
+
+USER NOTES — ITEMS THEY WANT TO KEEP:
+${keepHints}
 
 SHOPPING LIST (new items being purchased):
 ${candidateNeeds.map((n, i) => `${i + 1}. Category: ${n.category} — "${n.search_title}"`).join("\n")}
@@ -209,8 +226,9 @@ If no → the new purchase is being ADDED (no existing item to replace).
 Rules:
 - Focus on the FURNITURE TYPE, not color/material/style. A grey fabric sofa is the same type as a leather sofa.
 - Be specific about what you see: "dark grey fabric sectional visible against the back wall."
-- Return existing_item_visible: false if you genuinely cannot see that furniture type in ANY of the photos.
-- When uncertain, return false — we only want to flag clear replacements.
+- Return existing_item_visible: false ONLY if you genuinely cannot see that furniture type in ANY of the photos AND there are no contextual clues it exists.
+- The room description and user keep notes may reference existing furniture indirectly. For example, "black arc floor lamp behind the sofa" implies a sofa exists. If context clues reference an item, look more carefully for it in the photos — even partially visible or obscured items count.
+- When there is zero evidence (neither visual nor contextual) that an item exists, return false.
 - Furniture synonyms count: "sectional" = "sofa" = "couch"; "media console" = "TV stand"; "rug" = "carpet"; etc.
 
 OUTPUT FORMAT (strict JSON, no prose):

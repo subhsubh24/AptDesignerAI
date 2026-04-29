@@ -61,6 +61,20 @@ describe("inferReplacementsFromGap", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("DOES infer sofa when keep item only mentions sofa as spatial context ('behind the sofa')", () => {
+    const result = inferReplacementsFromGap(
+      {
+        summary: "Living room with a dark grey fabric sectional sofa.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [{ category: "sofa", search_title: "Cognac leather sofa" }],
+      },
+      ["black arc floor lamp behind the sofa"],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+  });
+
   it("does NOT infer when the user keeps via a synonym (sectional)", () => {
     const result = inferReplacementsFromGap(
       {
@@ -399,6 +413,39 @@ describe("inferReplacementsFromPhotos", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].category).toBe("sofa");
+  });
+
+  it("passes keep items and room summary as context hints to the LLM prompt", async () => {
+    mockResponse({
+      verdicts: [
+        { category: "sofa", existing_item_visible: true, existing_description: "grey sectional partially visible behind lamp", reason: "User notes mention 'behind the sofa' and sectional is partially visible in photo 1" },
+      ],
+    });
+
+    const result = await inferReplacementsFromPhotos(
+      {
+        summary: "Open-concept living area with grey sectional sofa and basic rental furniture.",
+        what_works: [],
+        what_should_go: [],
+        what_it_needs: [
+          { category: "sofa", search_title: "Cognac leather 84-inch sofa" },
+        ],
+      },
+      ["black arc floor lamp behind the sofa", "bookshelf"],
+      PHOTOS,
+      "living_room",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].category).toBe("sofa");
+
+    // Verify the LLM prompt includes context hints
+    const promptText = mockChat.mock.calls[0][0].messages[0].content[0].text;
+    expect(promptText).toContain("ROOM DESCRIPTION");
+    expect(promptText).toContain("Open-concept living area");
+    expect(promptText).toContain("USER NOTES");
+    expect(promptText).toContain("black arc floor lamp behind the sofa");
+    expect(promptText).toContain("bookshelf");
   });
 
   it("skips non-replaceable categories without calling LLM", async () => {
