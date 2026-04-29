@@ -15,7 +15,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
-import { selfReviewAreaAnalysis } from "@/lib/agents/self-correction";
+import { selfReviewAreaAnalysis, filterUnanchoredItems } from "@/lib/agents/self-correction";
 import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
 import { inferReplacementsFromGap } from "@/lib/agents/infer-replacements";
 import { ROOM_FURNISHING_TIERS, ORCHESTRATOR } from "@/lib/config/pipeline";
@@ -879,11 +879,38 @@ Use Google Search to verify current pricing and material availability when neede
       }
     }
 
+    // ── Self-review: LLM checks its own output for consistency ───────
+    {
+      const selfReview = await selfReviewAreaAnalysis(
+        analysis, allKeepItems, room.room_type,
+        parsedContext?.explicitRequests?.map((r) => r.item),
+      );
+      if (selfReview.wasCorrepted) {
+        analysis = selfReview.output as typeof analysis;
+        console.log(`[area-analysis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
+          selfReview.issues.join("; "));
+      }
+    }
+
+    // ── Cross-reference hallucination filter ──────────────────────
+    // Deterministic check: if a what_should_go entry's head noun matches a
+    // what_it_needs category AND is not grounded in summary/keep items,
+    // Pass A likely invented it to justify the purchase. Drop it.
+    {
+      const filtered = filterUnanchoredItems(analysis, allKeepItems);
+      const origGo = Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]) : [];
+      const filtGo = Array.isArray(filtered.what_should_go) ? (filtered.what_should_go as string[]) : [];
+      if (filtGo.length < origGo.length) {
+        const dropped = origGo.filter((e) => !filtGo.includes(e));
+        analysis.what_should_go = filtGo;
+        console.log(`[area-analysis] Cross-reference filter dropped ${dropped.length} hallucinated what_should_go: ${dropped.join("; ")}`);
+      }
+    }
+
     // ── Ensure user keep items appear in what_works ────────────────
-    // Pass A only sees photos + the keep list in its prompt, but sometimes
-    // forgets to list kept items in what_works. If the user explicitly said
-    // "keep the bookshelf" and no what_works entry mentions "bookshelf",
-    // inject a stub so the Keep section isn't empty.
+    // Runs AFTER self-correction so the LLM can't strip injected entries.
+    // If the user said "keep the bookshelf" and no what_works entry mentions
+    // "bookshelf", inject a stub so the Keep section isn't empty.
     if (allKeepItems.length > 0 && Array.isArray(analysis.what_works)) {
       const worksText = (analysis.what_works as string[]).join(" ").toLowerCase();
       const goText = (Array.isArray(analysis.what_should_go) ? (analysis.what_should_go as string[]).join(" ") : "").toLowerCase();
@@ -919,19 +946,6 @@ Use Google Search to verify current pricing and material availability when neede
       }
       if (injected.length > 0) {
         console.log(`[area-analysis] Injected ${injected.length} missing keep item(s) into what_works: ${injected.join(", ")}`);
-      }
-    }
-
-    // ── Self-review: LLM checks its own output for consistency ───────
-    {
-      const selfReview = await selfReviewAreaAnalysis(
-        analysis, allKeepItems, room.room_type,
-        parsedContext?.explicitRequests?.map((r) => r.item),
-      );
-      if (selfReview.wasCorrepted) {
-        analysis = selfReview.output as typeof analysis;
-        console.log(`[area-analysis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
-          selfReview.issues.join("; "));
       }
     }
 

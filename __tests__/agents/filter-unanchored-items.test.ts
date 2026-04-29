@@ -199,4 +199,49 @@ describe("filterUnanchoredItems", () => {
     const result = filterUnanchoredItems(analysis, []);
     expect(result.what_works).toHaveLength(1);
   });
+
+  it("drops 'plastic side table' when 'table' is only a weak anchor from 'coffee table' in summary", () => {
+    const analysis = {
+      summary: "Living room with a sectional sofa and a glass coffee table.",
+      what_should_go: [
+        "Mismatched plastic side table — wrong scale",
+      ],
+      what_it_needs: [
+        { category: "side_table", search_title: "Walnut end table" },
+      ],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    const list = result.what_should_go as string[];
+    expect(list).toHaveLength(0);
+  });
+
+  it("drops cross-reference via category synonyms (side_table matches end_table in needs)", () => {
+    const analysis = {
+      summary: "Studio with a desk and a floor lamp.",
+      what_should_go: [
+        "Plastic side table — too small",
+      ],
+      what_it_needs: [
+        { category: "end_table", search_title: "Walnut end table" },
+      ],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    const list = result.what_should_go as string[];
+    expect(list).toHaveLength(0);
+  });
+
+  it("keeps a genuinely anchored side table (mentioned in summary)", () => {
+    const analysis = {
+      summary: "Living room with a plastic side table next to the sofa.",
+      what_should_go: [
+        "Plastic side table — wrong material",
+      ],
+      what_it_needs: [
+        { category: "side_table", search_title: "Walnut end table" },
+      ],
+    };
+    const result = filterUnanchoredItems(analysis, []);
+    const list = result.what_should_go as string[];
+    expect(list).toHaveLength(1);
+  });
 });

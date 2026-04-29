@@ -73,6 +73,48 @@ export async function selfReviewAreaAnalysis(
           });
           corrected.summary = originalSummary;
         }
+        // Hard guard: restore what_works entries for user keep items.
+        // The user explicitly said to keep these — the self-corrector must not
+        // remove them even if it thinks they're "redundant" or "unanchored".
+        if (keepItems.length > 0 && Array.isArray(corrected.what_works)) {
+          const prevWorks = Array.isArray(current.what_works)
+            ? (current.what_works as string[])
+            : [];
+          const correctedWorks = corrected.what_works as string[];
+          const correctedWorksLower = correctedWorks.map((w) => w.toLowerCase());
+          const KEEP_SYN: Record<string, string[]> = {
+            sofa: ["sectional", "couch"], sectional: ["sofa", "couch"], couch: ["sofa", "sectional"],
+            bookshelf: ["bookcase", "shelving"], bookcase: ["bookshelf"], shelving: ["bookshelf", "bookcase"],
+            rug: ["carpet"], carpet: ["rug"], lamp: ["light"], light: ["lamp"],
+            tv: ["television"], television: ["tv"], ottoman: ["footstool", "pouf"],
+          };
+          const matchesKeep = (entry: string): string | null => {
+            const lower = entry.toLowerCase();
+            for (const ki of keepItems) {
+              const kiNorm = ki.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+              if (!kiNorm) continue;
+              if (lower.includes(kiNorm)) return ki;
+              for (const word of kiNorm.split(/\s+/)) {
+                if (word.length < 3) continue;
+                if (lower.includes(word)) return ki;
+                const syns = KEEP_SYN[word];
+                if (syns?.some((s) => lower.includes(s))) return ki;
+              }
+            }
+            return null;
+          };
+          for (const entry of prevWorks) {
+            const keepMatch = matchesKeep(entry);
+            if (keepMatch && !correctedWorksLower.some((cw) => cw === entry.toLowerCase())) {
+              log.warn("Self-correction removed user keep item from what_works — restoring", {
+                entry,
+                matchedKeep: keepMatch,
+              });
+              correctedWorks.push(entry);
+              correctedWorksLower.push(entry.toLowerCase());
+            }
+          }
+        }
         // Hard guard: restore what_it_needs items the LLM removed that match
         // user-requested categories. The user explicitly asked for these.
         if (userRequests && userRequests.length > 0 && Array.isArray(corrected.what_it_needs)) {
@@ -229,16 +271,41 @@ export function filterUnanchoredItems(
   // Narrow on purpose: catches cross-references but trusts Pass A's vision
   // for concrete items like "Bean bag chair" or "Folding TV tray table"
   // whose phrase doesn't equal any needs category.
+  const CATEGORY_SYNONYMS: Record<string, string[]> = {
+    side_table: ["end_table", "accent_table"],
+    end_table: ["side_table", "accent_table"],
+    accent_table: ["side_table", "end_table"],
+    tv_stand: ["media_console", "tv_console", "entertainment_center"],
+    media_console: ["tv_stand", "tv_console", "entertainment_center"],
+    tv_console: ["tv_stand", "media_console"],
+    entertainment_center: ["tv_stand", "media_console"],
+    couch: ["sofa", "sectional"],
+    sofa: ["couch", "sectional"],
+    sectional: ["sofa", "couch"],
+    bookshelf: ["bookcase"],
+    bookcase: ["bookshelf"],
+    area_rug: ["rug"],
+  };
   const matchesNeedsCategory = (phrase: string): boolean => {
     const normalized = phrase.replace(/\s+/g, "_");
-    return needsCategoriesFull.has(normalized) || needsCategoriesFull.has(phrase);
+    if (needsCategoriesFull.has(normalized) || needsCategoriesFull.has(phrase)) return true;
+    const syns = CATEGORY_SYNONYMS[normalized];
+    return syns ? syns.some((s) => needsCategoriesFull.has(s)) : false;
   };
 
+  // Words too generic to anchor a what_should_go entry on their own.
+  // "table" in summary's "coffee table" shouldn't anchor "plastic side table".
+  const WEAK_ANCHORS = new Set([
+    "table", "chair", "lamp", "light", "stand", "shelf", "bin", "box",
+    "basket", "frame", "set", "piece", "unit",
+  ]);
   const isCrossReferenceHallucination = (entry: string): boolean => {
     const tokens = extractHeadTokens(entry);
     if (tokens.length === 0) return false;
-    const directAnchor = tokens.some((t) => tokenInHaystack(t, `${summary} ${keepText}`));
-    if (directAnchor) return false;
+    const strongAnchor = tokens.some(
+      (t) => !WEAK_ANCHORS.has(t) && tokenInHaystack(t, `${summary} ${keepText}`),
+    );
+    if (strongAnchor) return false;
     const last2 = tokens.slice(-2).join(" ");
     const last1 = tokens[tokens.length - 1];
     return matchesNeedsCategory(last2) || matchesNeedsCategory(last1);
