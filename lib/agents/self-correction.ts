@@ -18,6 +18,34 @@ const log = createLogger("self-correction");
 
 const MAX_CORRECTION_ROUNDS = 2;
 
+const SPATIAL_PREP_PATTERN = /\s+(?:behind|beside|next to|near|by|on top of|under|underneath|above|over|in front of|across from|facing|against|to the (?:left|right) of|between)\s+(?:the\s+)?/gi;
+const STOP_AFTER_PATTERN = /\s+(?:and|or|with|to|for|in|on|at|by|that|which|while|but|so|because)\b/i;
+
+/**
+ * Extract furniture-like nouns mentioned AFTER spatial prepositions in keep items.
+ * E.g. "black arc floor lamp behind the sofa" → {"sofa"}.
+ * Used to detect when the self-correction LLM has misinterpreted spatial
+ * context as a keep instruction for the referenced furniture.
+ */
+export function extractSpatialContextNouns(keepItems: string[]): Set<string> {
+  const nouns = new Set<string>();
+  for (const item of keepItems) {
+    const lower = item.toLowerCase();
+    let match: RegExpExecArray | null;
+    SPATIAL_PREP_PATTERN.lastIndex = 0;
+    while ((match = SPATIAL_PREP_PATTERN.exec(lower)) !== null) {
+      const after = lower.slice(match.index + match[0].length);
+      const stopMatch = after.match(STOP_AFTER_PATTERN);
+      const phrase = (stopMatch ? after.slice(0, stopMatch.index) : after).trim();
+      const tokens = phrase.replace(/[^a-z\s]/g, " ").split(/\s+/).filter((t) => t.length >= 3);
+      for (const token of tokens) {
+        nouns.add(token);
+      }
+    }
+  }
+  return nouns;
+}
+
 export interface SelfReviewResult<T> {
   output: T;
   wasCorrepted: boolean;
@@ -125,6 +153,36 @@ export async function selfReviewAreaAnalysis(
               });
               correctedWorks.push(entry);
               correctedWorksLower.push(entry.toLowerCase());
+            }
+          }
+        }
+        // Hard guard: restore what_should_go entries the LLM removed because it
+        // misinterpreted spatial context in a keep item ("behind the sofa")
+        // as a keep instruction for the spatially-referenced object. If a keep
+        // item like "lamp behind the sofa" mentions a sofa, the user is keeping
+        // the lamp, not the sofa — but the LLM sometimes infers otherwise and
+        // strips sofa entries from what_should_go.
+        if (Array.isArray(corrected.what_should_go) && keepItems.length > 0) {
+          const spatialContextNouns = extractSpatialContextNouns(keepItems);
+          if (spatialContextNouns.size > 0) {
+            const prevShouldGo = Array.isArray(current.what_should_go)
+              ? (current.what_should_go as string[])
+              : [];
+            const correctedShouldGo = corrected.what_should_go as string[];
+            const correctedShouldGoLower = correctedShouldGo.map((e) => e.toLowerCase());
+            for (const entry of prevShouldGo) {
+              if (typeof entry !== "string") continue;
+              const lower = entry.toLowerCase();
+              if (correctedShouldGoLower.includes(lower)) continue;
+              const referencesSpatialNoun = Array.from(spatialContextNouns).some((noun) => lower.includes(noun));
+              if (referencesSpatialNoun) {
+                log.warn("Self-correction stripped what_should_go entry referenced by spatial keep context — restoring", {
+                  entry,
+                  spatialNouns: Array.from(spatialContextNouns),
+                });
+                correctedShouldGo.push(entry);
+                correctedShouldGoLower.push(lower);
+              }
             }
           }
         }
@@ -390,6 +448,9 @@ KEEP ITEMS (user wants to keep these): ${JSON.stringify(keepItems)}
 ${requestsBlock}
 ANALYSIS OUTPUT:
 ${JSON.stringify(analysis, null, 2)}
+
+🛑 CRITICAL RULE — KEEP ITEMS ARE LITERAL, NOT IMPLIED:
+Keep items name ONLY the objects the user explicitly wants to keep. When a keep item references other furniture as SPATIAL CONTEXT (e.g., "black arc floor lamp behind the sofa", "lamp next to the dresser", "rug under the coffee table"), that mention does NOT mean the user wants to keep the referenced furniture. The keep target is the object BEFORE the spatial preposition (behind / beside / next to / by / under / above / in front of / near / against / facing). In "black arc floor lamp behind the sofa" the user is keeping the LAMP, not the sofa — the sofa is just describing where the lamp is. NEVER infer additional keep intent from spatial mentions, and NEVER remove items from what_should_go because they were spatially referenced in a keep note.
 
 🛑 CRITICAL RULE — THE SUMMARY IS FROZEN GROUND TRUTH FROM PHOTOS:
 The "summary" field describes what is ACTUALLY VISIBLE in the user's room photos. It is the ONLY source of truth about what's in the room. You MUST NOT modify the summary — not to add items, not to mention things, not to enrich it. Copy it byte-for-byte into corrected_analysis.summary.
