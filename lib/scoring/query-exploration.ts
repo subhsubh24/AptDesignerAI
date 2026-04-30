@@ -100,9 +100,13 @@ export function generateExplorationQueries(
     const seed = simpleHash(`${roomId}:${category}:${tier}:explore`);
     if (seed > EXPLORATION_RATE) continue;
 
-    // Pick a style synonym if the design direction contains a known style
+    // Pick a style synonym if the design direction contains a known style.
+    // Truncate to first 60 chars — Tavily rejects (400) or rate-limits (429)
+    // very long query strings, and the LLM-generated style_notes can be
+    // hundreds of characters of paragraph-form prose.
     let explorationQuery = "";
-    const directionLower = (designDirection || "").toLowerCase();
+    const directionRaw = (designDirection || "").toLowerCase();
+    const directionLower = directionRaw.split(/[.!?]/)[0].slice(0, 60).trim();
 
     // Try style synonym replacement first
     for (const [style, synonyms] of Object.entries(STYLE_SYNONYMS)) {
@@ -124,7 +128,10 @@ export function generateExplorationQueries(
       const modIdx = Math.floor(simpleHash(`${roomId}:${category}:mod`) * EXPLORATION_MODIFIERS.length);
       const modifier = EXPLORATION_MODIFIERS[modIdx];
       const categoryName = category.replace(/_/g, " ");
-      explorationQuery = `${modifier} ${categoryName} for ${directionLower || "modern"} room`;
+      // Keep concise — Tavily 400/429s on long queries.
+      explorationQuery = directionLower
+        ? `${modifier} ${categoryName} ${directionLower}`
+        : `${modifier} ${categoryName}`;
     }
 
     explorationQueries.push({

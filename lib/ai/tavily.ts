@@ -12,19 +12,69 @@ function getApiKey(): string {
   return key;
 }
 
-function getRateLimit(): ReturnType<typeof pLimit> {
+// ─── Rate limiting ───────────────────────────────────────────────
+//
+// Tavily dev tier = 100 RPM, prod = 1000 RPM. pLimit alone caps concurrency
+// but not request RATE — when each call is fast (~1s), 8 concurrent calls
+// produce ~480 RPM and trigger 429s. We layer a sliding-window RPM gate on
+// top of pLimit so every request waits until the trailing-60s count is
+// below cap before being dispatched.
+
+interface RateConfig { concurrency: number; rpm: number }
+
+function readRateConfig(): RateConfig {
   const tier = process.env.TAVILY_RATE_TIER ?? "dev";
-  // Conservative caps — bursts of 15 dev requests routinely hit 429 in practice.
-  // Override via TAVILY_CONCURRENCY env var.
-  const envOverride = Number(process.env.TAVILY_CONCURRENCY || "0");
-  const concurrency = envOverride > 0 ? envOverride : (tier === "prod" ? 50 : 8);
-  return pLimit(concurrency);
+  const concEnv = Number(process.env.TAVILY_CONCURRENCY || "0");
+  const rpmEnv = Number(process.env.TAVILY_RPM || "0");
+  // Conservative defaults — leave headroom under Tavily's 100/1000 RPM caps.
+  const defaults = tier === "prod"
+    ? { concurrency: 30, rpm: 800 }
+    : { concurrency: 5, rpm: 80 };
+  return {
+    concurrency: concEnv > 0 ? concEnv : defaults.concurrency,
+    rpm: rpmEnv > 0 ? rpmEnv : defaults.rpm,
+  };
 }
 
-let _limiter: ReturnType<typeof pLimit> | null = null;
-function limiter() {
-  if (!_limiter) _limiter = getRateLimit();
-  return _limiter;
+let _config: RateConfig | null = null;
+let _concurrencyLimit: ReturnType<typeof pLimit> | null = null;
+const _requestTimestamps: number[] = [];
+
+function getConfig(): RateConfig {
+  if (!_config) _config = readRateConfig();
+  return _config;
+}
+
+function getConcurrencyLimit(): ReturnType<typeof pLimit> {
+  if (!_concurrencyLimit) _concurrencyLimit = pLimit(getConfig().concurrency);
+  return _concurrencyLimit;
+}
+
+/** Wait until the trailing-60s request count is < rpm cap, then record this request. */
+async function waitForRateSlot(): Promise<void> {
+  const { rpm } = getConfig();
+  while (true) {
+    const now = Date.now();
+    // Drop timestamps older than 60s
+    while (_requestTimestamps.length > 0 && _requestTimestamps[0] < now - 60_000) {
+      _requestTimestamps.shift();
+    }
+    if (_requestTimestamps.length < rpm) {
+      _requestTimestamps.push(now);
+      return;
+    }
+    // Sleep until oldest entry rolls out of the window (+50ms safety margin)
+    const wait = 60_000 - (now - _requestTimestamps[0]) + 50;
+    await new Promise((r) => setTimeout(r, Math.max(wait, 100)));
+  }
+}
+
+/** Execute fn under both concurrency cap AND RPM rate limit. */
+function rateLimited<T>(fn: () => Promise<T>): Promise<T> {
+  return getConcurrencyLimit()(async () => {
+    await waitForRateSlot();
+    return fn();
+  });
 }
 
 // ─── Search types ────────────────────────────────────────────────
@@ -145,7 +195,7 @@ async function tavilyPost<T>(path: string, body: Record<string, unknown>): Promi
 export async function tavilySearch(opts: TavilySearchOptions): Promise<TavilySearchResponse> {
   const start = Date.now();
 
-  const result = await limiter()(() =>
+  const result = await rateLimited(() =>
     withRetry(
       () =>
         tavilyPost<TavilySearchResponse>("/search", {
@@ -197,7 +247,7 @@ export async function tavilyExtract(opts: TavilyExtractOptions): Promise<TavilyE
   const urls = Array.isArray(opts.urls) ? opts.urls : [opts.urls];
   const start = Date.now();
 
-  const result = await limiter()(() =>
+  const result = await rateLimited(() =>
     withRetry(
       () =>
         tavilyPost<TavilyExtractResponse>("/extract", {
