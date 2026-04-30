@@ -330,7 +330,7 @@ async function reSearchCategoryForCorrection(
       }
       if (!extractRes.success || !extractRes.data) continue;
       const title = extractRes.data.title || "";
-      if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") continue;
+      if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE" || title === "PRODUCT_DATA_UNAVAILABLE") continue;
 
       const catCheck = await productMatchesCategoryAsync(correctionCategory, extractRes.data.category, title);
       if (!catCheck.ok) continue;
@@ -1012,7 +1012,7 @@ export async function runAgenticSearch(
               }
 
               const title = extractResult.data.title || "";
-              if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
+              if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE" || title === "PRODUCT_DATA_UNAVAILABLE") {
                 trackExtraction(candidate.url, true);
                 tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
                 extractedSoFar++;
@@ -1839,13 +1839,15 @@ export async function runAgenticSearch(
 
       let combos = cartesian(topByCategory);
 
-      if (combos.length > 27) {
+      // Cap initial combo expansion (override via MAX_BUNDLE_COMBOS env)
+      const maxCombosPreFilter = Number(process.env.MAX_BUNDLE_COMBOS || "18");
+      if (combos.length > maxCombosPreFilter) {
         combos.sort((a, b) => {
           const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
           const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
           return (avgB - avgA) || tiebreakBundle(a, b);
         });
-        combos = combos.slice(0, 27);
+        combos = combos.slice(0, maxCombosPreFilter);
       }
 
       const prefiltered = prefilterBundleCombos(combos, bundleCtx);
@@ -1856,6 +1858,19 @@ export async function runAgenticSearch(
         });
       }
       combos = prefiltered.kept;
+
+      // Final cap on LLM bundle evaluations after prefilter (override via MAX_BUNDLE_EVALS).
+      // Each eval costs ~17K tokens; this prevents the bundle phase from
+      // dominating the budget when prefilter passes too many borderline combos.
+      const maxBundleEvals = Number(process.env.MAX_BUNDLE_EVALS || "10");
+      if (combos.length > maxBundleEvals) {
+        combos.sort((a, b) => {
+          const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
+          const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
+          return (avgB - avgA) || tiebreakBundle(a, b);
+        });
+        combos = combos.slice(0, maxBundleEvals);
+      }
 
       const bundleEvalLimit = pLimit(20);
       const comboResults = await Promise.all(
@@ -2047,12 +2062,17 @@ export async function runAgenticSearch(
       // tokens on already-known bundles.
       const tiersWithNewProducts = new Set<PriceTier>();
 
-      // Run targeted backfill searches for weak tiers
-      const backfillSearchLimit = pLimit(30);
+      // Run targeted backfill searches for weak tiers. Reduced concurrency
+      // to avoid Tavily 429 rate limits on bursty backfill bursts.
+      const backfillSearchLimit = pLimit(8);
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
-          const styleHint = ctx.designDirection?.style_notes || "modern apartment";
-          const backfillQuery = `best ${wt.category} for ${styleHint} ${TIER_LABELS[wt.tier]} price ${new Date().getFullYear()}`;
+          // Tavily query length cap — long style descriptions trigger HTTP 400.
+          // Pull a short style hint from style_notes (first sentence, 80 chars max).
+          const rawStyle = ctx.designDirection?.style_notes || "";
+          const firstSentence = rawStyle.split(/[.!?]/)[0] || rawStyle;
+          const styleHint = firstSentence.slice(0, 80).trim() || "modern apartment";
+          const backfillQuery = `${styleHint} ${wt.category.replace(/_/g, " ")} ${TIER_LABELS[wt.tier]}`;
           const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 
@@ -2234,13 +2254,14 @@ export async function runAgenticSearch(
             combo.some((p) => (p.metadata as { backfill?: boolean } | null)?.backfill === true)
           );
           if (backfillOnly.length > 0) combos = backfillOnly;
-          if (combos.length > 27) {
+          const maxCombosPreFilter2 = Number(process.env.MAX_BUNDLE_COMBOS || "18");
+          if (combos.length > maxCombosPreFilter2) {
             combos.sort((a, b) => {
               const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
               const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
               return (avgB - avgA) || tiebreakBundle(a, b);
             });
-            combos = combos.slice(0, 27);
+            combos = combos.slice(0, maxCombosPreFilter2);
           }
 
           // Deterministic pre-filter (math + retailer dominance) before LLM eval.
@@ -2252,6 +2273,16 @@ export async function runAgenticSearch(
             });
           }
           combos = prefiltered2.kept;
+
+          const maxBundleEvals2 = Number(process.env.MAX_BUNDLE_EVALS || "10");
+          if (combos.length > maxBundleEvals2) {
+            combos.sort((a, b) => {
+              const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
+              const avgB = b.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / b.length;
+              return (avgB - avgA) || tiebreakBundle(a, b);
+            });
+            combos = combos.slice(0, maxBundleEvals2);
+          }
 
           const bundleEvalLimit2 = pLimit(20);
           const comboResults = await Promise.all(

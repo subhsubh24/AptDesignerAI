@@ -14,7 +14,10 @@ function getApiKey(): string {
 
 function getRateLimit(): ReturnType<typeof pLimit> {
   const tier = process.env.TAVILY_RATE_TIER ?? "dev";
-  const concurrency = tier === "prod" ? 80 : 15;
+  // Conservative caps — bursts of 15 dev requests routinely hit 429 in practice.
+  // Override via TAVILY_CONCURRENCY env var.
+  const envOverride = Number(process.env.TAVILY_CONCURRENCY || "0");
+  const concurrency = envOverride > 0 ? envOverride : (tier === "prod" ? 50 : 8);
   return pLimit(concurrency);
 }
 
@@ -96,6 +99,7 @@ export class TavilyError extends Error {
     message: string,
     public readonly status: number,
     public readonly body?: string,
+    public readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "TavilyError";
@@ -117,10 +121,19 @@ async function tavilyPost<T>(path: string, body: Record<string, unknown>): Promi
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    let retryAfterMs: number | undefined;
+    if (res.status === 429) {
+      const ra = res.headers.get("retry-after");
+      if (ra) {
+        const seconds = Number(ra);
+        retryAfterMs = Number.isFinite(seconds) ? seconds * 1000 : undefined;
+      }
+    }
     throw new TavilyError(
       `Tavily ${path} failed: ${res.status} ${res.statusText}`,
       res.status,
       text,
+      retryAfterMs,
     );
   }
 
@@ -150,10 +163,15 @@ export async function tavilySearch(opts: TavilySearchOptions): Promise<TavilySea
           ...(opts.chunks_per_source !== undefined && { chunks_per_source: opts.chunks_per_source }),
         }),
       {
-        maxAttempts: 3,
-        baseDelayMs: 2000,
+        maxAttempts: 4,
+        baseDelayMs: 3000,
+        maxDelayMs: 30000,
         isRetryable: isTavilyRetryable,
-        onRetry: (attempt, delay, error) => {
+        onRetry: async (attempt, delay, error) => {
+          // Honor Retry-After header on 429 — wait the server's stated time.
+          if (error instanceof TavilyError && error.retryAfterMs && error.retryAfterMs > delay) {
+            await new Promise((r) => setTimeout(r, error.retryAfterMs! - delay));
+          }
           log.warn("tavily search retry", {
             attempt,
             delayMs: delay,
@@ -192,10 +210,14 @@ export async function tavilyExtract(opts: TavilyExtractOptions): Promise<TavilyE
           ...(opts.timeout !== undefined && { timeout: opts.timeout }),
         }),
       {
-        maxAttempts: 3,
-        baseDelayMs: 2000,
+        maxAttempts: 4,
+        baseDelayMs: 3000,
+        maxDelayMs: 30000,
         isRetryable: isTavilyRetryable,
-        onRetry: (attempt, delay, error) => {
+        onRetry: async (attempt, delay, error) => {
+          if (error instanceof TavilyError && error.retryAfterMs && error.retryAfterMs > delay) {
+            await new Promise((r) => setTimeout(r, error.retryAfterMs! - delay));
+          }
           log.warn("tavily extract retry", {
             attempt,
             delayMs: delay,

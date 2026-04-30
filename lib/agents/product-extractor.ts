@@ -463,10 +463,15 @@ export async function extractFromUrlBatch(
     }
   }
 
-  // 3. Tavily Extract for URLs without pre-extracted content (batches of 20)
+  // 3. Tavily Extract for URLs without pre-extracted content (batches of 20).
+  // If a basic-depth call gets <30% success on a batch, retry the failed URLs
+  // with advanced depth — those retailers ship JS-heavy pages that basic can't
+  // parse, but advanced can. Costs 2 credits/5 URLs vs 1 — only triggered on
+  // batches that are clearly failing.
   const EXTRACT_BATCH_SIZE = 20;
   for (let i = 0; i < needsExtract.length; i += EXTRACT_BATCH_SIZE) {
     const chunk = needsExtract.slice(i, i + EXTRACT_BATCH_SIZE);
+    const failedUrls: string[] = [];
     try {
       const extractResponse = await tavilyExtract({
         urls: chunk,
@@ -481,12 +486,36 @@ export async function extractFromUrlBatch(
         }
       }
       for (const f of extractResponse.failed_results) {
-        log.debug("Tavily extract failed for URL", { url: f.url, error: f.error });
+        failedUrls.push(f.url);
       }
     } catch (err) {
       log.warn("Tavily extract batch failed", {
         urlCount: chunk.length, error: err instanceof Error ? err.message : String(err),
       });
+      failedUrls.push(...chunk);
+    }
+
+    // Advanced retry when basic mostly failed
+    const successRate = (chunk.length - failedUrls.length) / chunk.length;
+    if (failedUrls.length >= 2 && successRate < 0.3) {
+      try {
+        const retryResponse = await tavilyExtract({
+          urls: failedUrls,
+          include_images: true,
+          query: `${category} product: title, price, dimensions, materials, colors`,
+          chunks_per_source: 5,
+          extract_depth: "advanced",
+        });
+        for (const r of retryResponse.results) {
+          if (r.raw_content && r.raw_content.length > 100) {
+            contentMap.set(r.url, r.raw_content);
+          }
+        }
+      } catch (err) {
+        log.debug("Tavily advanced-depth retry failed", {
+          urlCount: failedUrls.length, error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
@@ -546,6 +575,7 @@ Return ONLY valid JSON:
         messages: [{ role: "user", content: prompt }],
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
+        responseMimeType: "application/json",
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -584,15 +614,20 @@ Return ONLY valid JSON:
     }
   }
 
-  // 6. Fallback for URLs with no content — try scrape + single LLM call
+  // 6. Fallback for URLs with no content — try HTML scrape, then LLM parse.
+  // If scrape fails too, fail the URL outright instead of wasting ~5-10K tokens
+  // asking the LLM to "extract from the URL slug" (which produces sentinel
+  // PRODUCT_DATA_UNAVAILABLE / NOT_A_PRODUCT_PAGE results that pollute the
+  // pipeline downstream).
   for (const url of urlsWithoutContent) {
     try {
       const pageContext = await scrapePageContext(url);
-      const contextBlock = pageContext
-        ? `\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.`
-        : `\n\nNote: The page could not be fetched. Extract what you can from the URL slug itself and set all fields conservatively.`;
+      if (!pageContext || pageContext.length < 60) {
+        results.set(url, { success: false, error: "no extractable content" });
+        continue;
+      }
 
-      const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}${contextBlock}\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+      const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
       const response = await geminiProvider.chat({
         model,
@@ -600,6 +635,7 @@ Return ONLY valid JSON:
         messages: [{ role: "user", content: fallbackContent }],
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
+        responseMimeType: "application/json",
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;

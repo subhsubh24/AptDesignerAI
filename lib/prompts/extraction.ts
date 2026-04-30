@@ -1,53 +1,42 @@
 export function getExtractionPrompt(): string {
-  return `You are extracting detailed product information from a retailer website page. Use the URL Context tool to visit the page and examine it thoroughly.
+  return `You are extracting detailed product information from a retailer website page. Read carefully through the supplied page content (provided in the prompt) and extract structured data.
 
 ## EXTRACTION PROCESS — Follow these steps in order:
 
-### Step 1: READ the entire page
-Scan the FULL page, not just the top. Look at: product title, price (check for sale price vs. regular price), full description, ALL specification tabs (Dimensions, Materials, Care, Shipping), reviews summary if visible. Do NOT stop at the hero section — scroll down and read all sections.
+### Step 1: READ the entire supplied content
+Scan ALL the supplied page content, not just the top. Look for: product title, price (check for sale price vs. regular price), full description, specification tables (Dimensions, Materials, Care, Shipping), and any visible reviews summary. Use everything available in the supplied content.
 
-### Step 2: EXAMINE every product image
-Most product pages have 4-10+ images. For each one, note what it shows:
+### Step 2: EXAMINE any image URLs in the content
+Look for img src, data-src, srcset, and og:image references in the supplied content. For each, note what it shows:
    - **Hero/main shot**: The primary product photo — use this for image_url
    - **Lifestyle/room shots**: Product styled in a real room — use the BEST one for lifestyle_image_url
    - **Detail/texture close-ups**: Reveals material quality, grain, weave, finish
-   - **Dimension diagrams**: Often contains exact measurements — extract these
-   - **Alternate angles**: Front, side, back, top-down views
-   - **Swatch images**: Color/finish options shown as swatches
 
-   For each image, note what it reveals about the product's actual appearance, quality, and scale.
-
-### Step 3: FIND all variants
+### Step 3: FIND all variants in the supplied content
 Look for:
-   - Color swatches (clickable dots or squares)
-   - Dropdown menus for finish, fabric, size, configuration
+   - Color swatch labels
    - "Also available in..." sections
-   - List EVERY variant, not just the default. This is critical for matching design palettes.
+   - Variant dropdown options for finish, fabric, size, configuration
+   - List EVERY variant referenced in the content, not just the default.
 
 ### Step 4: EXTRACT dimensions precisely
-   - Check the Specifications/Dimensions tab (often hidden behind a click)
-   - Check further down the page — many retailers list specs in a table below the fold
-   - Look for dimension diagram images
+   - Look for explicit dimensions in specification tables, JSON-LD data, or product descriptions
    - Record width, depth, height separately. For round items, record diameter.
    - If dimensions are in cm AND inches, prefer inches.
-   - If dimensions are NOT explicitly stated anywhere on the page, set to null — do NOT estimate.
+   - If dimensions are NOT explicitly stated in the supplied content, set to null — do NOT estimate.
    - For rugs: record as width × depth (e.g., 96 × 120 for 8x10)
    - For dining tables: note seating capacity if mentioned
 
 ### Step 5: CAPTURE image URLs
-   - **CRITICAL: You MUST extract the EXACT URL from the page's HTML (img src, data-src, srcset, og:image meta tag). NEVER construct, guess, or invent an image URL.** If you cannot find a real image URL in the page content, set image_url to null.
+   - **CRITICAL: You MUST extract the EXACT URL from the supplied content. NEVER construct, guess, or invent an image URL.** If no image URL appears in the supplied content, set image_url to null.
    - Choose the highest-resolution, full-color, well-lit image showing the complete product
-   - Look at img src, data-src, or srcset attributes — get the largest version
-   - Check the page's <meta property="og:image"> tag — this is often the most reliable high-res product image URL
-   - REJECT: thumbnails (under 400px), cropped images, lifestyle crops, swatch images
-   - The URL should end in .jpg, .png, .webp or contain /images/ in the path
-   - **Do NOT fabricate URLs by combining a domain with a guessed path. If you didn't read the exact URL from the page, use null.**
+   - Prefer URLs from og:image meta tags or JSON-LD image fields
+   - REJECT: thumbnails (under 400px), cropped images, swatch images
+   - **Do NOT fabricate URLs by combining a domain with a guessed path. If you didn't read the exact URL from the supplied content, use null.**
 
 ### Step 6: CAPTURE lifestyle image
-   - Find an image showing the product IN a room setting with other furniture visible
-   - This reveals scale, style compatibility, and real-world appearance
-   - **Same rule: only use URLs you actually found on the page. Never invent a URL. Use null if none found.**
-   - If no lifestyle image exists, set to null
+   - Find an image URL referenced in the content that shows the product IN a room setting
+   - **Same rule: only use URLs you actually found in the supplied content. Never invent a URL. Use null if none found.**
 
 ## OUTPUT FORMAT
 Return a JSON object with ALL fields populated (use null only when truly unavailable):
@@ -80,8 +69,9 @@ Return a JSON object with ALL fields populated (use null only when truly unavail
 - Extract the COMPLETE materials list. "Solid oak frame with linen upholstery and brass ferrules" = ["solid oak", "linen upholstery", "brass ferrules"], NOT just ["wood"].
 - For image URLs, get the FULL-SIZE version. Look at src, data-src, srcset, og:image attributes. Reject URLs containing "thumb", "small", "150x", "200x".
 - The description MUST reflect what you actually SEE in the images, not just marketing copy. Describe the real color (not the name), the texture, the proportions.
-- If the page is a category/listing page (not a single product), return null for all fields except set title to "NOT_A_PRODUCT_PAGE".
-- If the page is behind a paywall, login wall, or returns an error, set title to "PAGE_NOT_ACCESSIBLE".
+- If the supplied content is a category/listing page (not a single product), return null for all fields except set title to "NOT_A_PRODUCT_PAGE".
+- If the supplied content is behind a paywall, login wall, or shows an error, set title to "PAGE_NOT_ACCESSIBLE".
+- If the supplied content has no usable product data (almost empty, garbled, or unrelated), set title to "PRODUCT_DATA_UNAVAILABLE".
 
 ## COMMON MISTAKES TO AVOID:
 1. NEVER fabricate image URLs — this breaks the app. Use null if you can't find a real URL.

@@ -144,7 +144,7 @@ export default function FocusPage() {
   const [searchStartTime, setSearchStartTime] = useState<number | null>(null);
   const [searchElapsed, setSearchElapsed] = useState(0);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [fillAllTiers, setFillAllTiers] = useState<boolean>(true);
+  const [fillAllTiers, setFillAllTiers] = useState<boolean>(false);
 
   // Floor plan context
   const [floorPlan, setFloorPlan] = useState<{
