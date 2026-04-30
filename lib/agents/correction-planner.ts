@@ -289,15 +289,13 @@ Search before writing queries. Queries grounded in real product listings perform
             // to compute precise dimension math and budget allocations.
             ...(useTools ? {
               tools: [
-                { googleSearch: {} as Record<string, never> },
-                { urlContext: {} as Record<string, never> },
                 { codeExecution: {} as Record<string, never> },
               ],
             } : {}),
           });
         } catch (err) {
           if (!useTools) throw err;
-          log.warn("Grounded+structured plan call rejected — falling back to grounded-only", {
+          log.warn("Structured plan call rejected — falling back to plain", {
             error: err instanceof Error ? err.message : String(err),
           });
           return await geminiProvider.chat({
@@ -306,7 +304,6 @@ Search before writing queries. Queries grounded in real product listings perform
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
             max_tokens: 64000,
             seed: DETERMINISTIC_SEED,
-            tools: [{ googleSearch: {} as Record<string, never> }, { urlContext: {} as Record<string, never> }],
           });
         }
       },

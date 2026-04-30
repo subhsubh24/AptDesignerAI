@@ -23,6 +23,7 @@ import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
+import { tavilySearch } from "@/lib/ai/tavily";
 import { z } from "zod";
 import type { AgentResult, DiagnosisItem } from "./types";
 import type { CandidateProduct, DiagnosisData } from "@/lib/types/database";
@@ -148,7 +149,7 @@ export async function validateRequirements(
     .filter((c) => !coveredCategories.includes(c) || !input.topPicksByCategory[c])
     .join(", ");
 
-  const prompt = `You are the final gate between a product search run and the user. Audit whether the chosen products actually satisfy what the design assessment said this ${input.roomType} needs.
+  let prompt = `You are the final gate between a product search run and the user. Audit whether the chosen products actually satisfy what the design assessment said this ${input.roomType} needs.
 
 ## REQUIRED CATEGORIES (from assessment)
 ${input.missingCategories.length > 0 ? input.missingCategories.map((c) => `- ${c}`).join("\n") : "(none)"}${uncoveredHint ? `\n\nHEADS UP — these categories have no product in the final set: ${uncoveredHint}` : ""}
@@ -191,17 +192,42 @@ Be specific — list which problems are addressed vs unaddressed.
 ## OUTPUT
 Return JSON matching the schema exactly. Keep reasoning tight (1-2 sentences per field). Issues are user-facing — write them as concrete, actionable statements (e.g., "The rug is 6x9 but should be 8x10 per the assessment" not "size mismatch"). Suggestions should be specific fixes (e.g., "Search for a larger rug in the 8x10 range for the balanced tier").
 
-Overall alignment score: how well does this set deliver on the assessment? Target ≥ 8.0. Below 7.0 means significant rework needed.${input.enableGoogleSearch ? `
+Overall alignment score: how well does this set deliver on the assessment? Target ≥ 8.0. Below 7.0 means significant rework needed.`;
 
-## GROUNDING — YOU HAVE GOOGLE SEARCH
-Use Google Search to verify your spec-match judgments. Before penalizing a product for "wrong size" or "wrong material", search the retailer's site for what the product actually offers. Before flagging a category as "unachievable in budget", search for alternatives at the target tier. Cite what you found in the reasoning field.
+  // When grounding is enabled, pre-fetch verification data via Tavily Search
+  // and inject into the prompt as context. Replaces Google Search tool.
+  let verificationContext = "";
+  if (input.enableGoogleSearch) {
+    try {
+      const categories = Object.keys(input.topPicksByCategory);
+      const verifyQueries = categories.slice(0, 5).map((cat) => {
+        const topPick = input.topPicksByCategory[cat];
+        if (topPick?.title) return `${topPick.title} ${cat} specifications dimensions price`;
+        return `${input.roomType} ${cat} furniture specifications`;
+      });
+      const verifyResults = await Promise.all(
+        verifyQueries.map((q) => tavilySearch({ query: q, max_results: 3, search_depth: "basic" }).catch(() => null))
+      );
+      const lines: string[] = [];
+      for (let i = 0; i < verifyResults.length; i++) {
+        const res = verifyResults[i];
+        if (!res || res.results.length === 0) continue;
+        lines.push(`### ${categories[i]}`);
+        for (const r of res.results) {
+          lines.push(`- ${r.title}: ${r.content.slice(0, 200)} (${r.url})`);
+        }
+      }
+      if (lines.length > 0) {
+        verificationContext = `\n\n## VERIFICATION CONTEXT (from web search)\nUse these search results to verify your spec-match judgments. Cite them in reasoning when relevant.\n${lines.join("\n")}`;
+      }
+    } catch (err) {
+      log.warn("Tavily verification pre-fetch failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
-Examples of when to search:
-- A spec says "8x10 wool rug ~$500" but top pick is smaller: search "8x10 wool rug under $500" to check if the stated requirement is even realistic at that tier.
-- A product's materials field is empty: search the product URL or title to verify the material.
-- A category appears missing: search "${input.roomType} ${Object.keys(input.topPicksByCategory).join(", ")}" retailers to verify alternatives exist.
-
-Only search when the judgment is uncertain. Don't search for every product — use it as a verification tool for close calls.` : ""}`;
+  prompt += verificationContext;
 
   const content: AIContentBlock[] = [];
   if (input.roomImageUrls?.length) {
@@ -214,43 +240,20 @@ Only search when the judgment is uncertain. Don't search for every product — u
   try {
     const response = await withRetry(
       async () => {
-        // When Google Search is enabled, Gemini 3 models support combining
-        // it with responseSchema. Fall back to text parsing if the combined
-        // call is rejected (happens on some older model snapshots).
-        try {
-          return await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content }],
-            max_tokens: 64000,
-            seed: DETERMINISTIC_SEED,
-            responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
-            responseMimeType: "application/json",
-            // Tools: when grounding enabled, give the agent Google Search
-            // (verify retailer availability) + Code Execution (compute
-            // dimension math, area coverage, budget allocations precisely
-            // instead of estimating).
-            ...(input.enableGoogleSearch ? {
-              tools: [
-                { googleSearch: {} as Record<string, never> },
-                { codeExecution: {} as Record<string, never> },
-              ],
-            } : {}),
-          });
-        } catch (err) {
-          if (!input.enableGoogleSearch) throw err;
-          log.warn("Grounded+structured call rejected — falling back to grounded-only", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-          return await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content }],
-            max_tokens: 64000,
-            seed: DETERMINISTIC_SEED,
-            tools: [{ googleSearch: {} as Record<string, never> }],
-          });
-        }
+        return await geminiProvider.chat({
+          model,
+          system,
+          messages: [{ role: "user", content }],
+          max_tokens: 64000,
+          seed: DETERMINISTIC_SEED,
+          responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
+          responseMimeType: "application/json",
+          ...(input.enableGoogleSearch ? {
+            tools: [
+              { codeExecution: {} as Record<string, never> },
+            ],
+          } : {}),
+        });
       },
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );

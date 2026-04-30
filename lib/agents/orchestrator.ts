@@ -6,7 +6,7 @@ import {
   type SearchCandidate,
   type SearchBrief,
 } from "./shopping-researcher";
-import { extractFromUrl } from "./product-extractor";
+import { extractFromUrl, extractFromUrlBatch } from "./product-extractor";
 import { runProductVerifier } from "./computer-use/product-verifier";
 import { scoreProducts, quickScoreProducts } from "./fit-scorer";
 import { evaluateBundle, generateBundleVibe, prefilterBundleCombos } from "./bundle-optimizer";
@@ -675,8 +675,8 @@ export async function runAgenticSearch(
 
     stats.totalSearchQueries = searchTasks.length;
 
-    // Run all searches with concurrency limit (Flash Lite is fast, 10K RPM)
-    const searchLimit = pLimit(50);
+    // Tavily rate limit: 100 RPM dev, 1000 RPM prod — keep concurrency moderate
+    const searchLimit = pLimit(Number(process.env.TAVILY_SEARCH_CONCURRENCY || "20"));
     const searchResultsByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
     let searchesCompleted = 0;
 
@@ -759,6 +759,29 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     // PHASE 3: Quick screen with Flash (batch, text-only)
     // ═══════════════════════════════════════════════════════════
+
+    // Pre-filter: drop candidates with very low Tavily relevance score
+    const minRelevance = Number(process.env.TAVILY_MIN_RELEVANCE || "0.3");
+    let relevanceDropped = 0;
+    for (const [category, tierResults] of Object.entries(dedupedByCategory)) {
+      for (const tier of PRICE_TIERS) {
+        const before = tierResults[tier].length;
+        tierResults[tier] = tierResults[tier].filter((c) => {
+          if (c.relevanceScore !== undefined && c.relevanceScore < minRelevance) {
+            tracer.traceFilter("relevance", "", c.url, `relevance ${c.relevanceScore.toFixed(2)} < ${minRelevance}`);
+            return false;
+          }
+          return true;
+        });
+        relevanceDropped += before - tierResults[tier].length;
+      }
+    }
+    if (relevanceDropped > 0) {
+      log.info("Relevance pre-filter dropped candidates", {
+        phase: "screen", dropped: relevanceDropped, threshold: minRelevance,
+      });
+    }
+
     reportStep({ step: "Quick-screening candidates", status: "running" });
 
     const screenedByCategory: Record<string, Record<PriceTier, SearchCandidate[]>> = {};
@@ -909,11 +932,10 @@ export async function runAgenticSearch(
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PHASE 4: Extract all screened URLs with URL Context
+    // PHASE 4: Extract product details via Tavily Extract + batched LLM
     // ═══════════════════════════════════════════════════════════
     reportStep({ step: "Extracting product details from websites", status: "running" });
 
-    const extractLimit = pLimit(25);
     // Browser sessions are expensive — cap at 3 concurrent runs regardless of extraction concurrency.
     // Gated on Browserbase credentials + package availability; becomes a no-op when absent.
     const cuFallbackLimit = pLimit(3);
@@ -923,207 +945,208 @@ export async function runAgenticSearch(
       try { await import(/* webpackIgnore: true */ "@browserbasehq/sdk"); } catch { cuEnabled = false; }
     }
 
-    // CU fallback promises collected separately from extraction so extraction
-    // slots don't block on browser sessions. Awaited collectively after Phase 4
-    // before Phase 5 (deep-score) reads the product data.
     const cuPromises: Promise<void>[] = [];
-
     const extractedByCategory: Record<string, Record<PriceTier, CandidateProduct[]>> = {};
 
     const totalToExtract = Object.values(screenedByCategory).reduce(
       (sum, tiers) => sum + Object.values(tiers).reduce((s, c) => s + c.length, 0), 0
     );
-    let extractedSoFar = 0;
 
-    const extractPromises: Promise<void>[] = [];
+    // Batch extraction: group all URLs for a category together with their
+    // pre-extracted rawContent from Tavily Search (skips re-extraction).
+    const extractBatchLimit = pLimit(5);
+    const extractBatchPromises: Promise<void>[] = [];
+    let extractedSoFar = 0;
 
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       extractedByCategory[category] = { budget: [], balanced: [], high_end: [] };
 
       for (const tier of PRICE_TIERS) {
         const candidates = tierResults[tier];
+        if (candidates.length === 0) continue;
 
-        for (const candidate of candidates) {
-          extractPromises.push(
-            extractLimit(async () => {
-              try {
-                // Extraction budget gate: stop extracting once we've consumed
-                // 55% of the total budget. This reserves headroom for deep-
-                // scoring, bundling, and validation downstream.
-                if (tokenBudget.used / tokenBudget.cap > 0.55) {
-                  tracer.traceFilter("extract", "", candidate.url, "extraction budget gate (>55% used)");
-                  extractedSoFar++;
-                  return;
-                }
-                if (isDomainBlocked(candidate.url)) {
-                  tracer.traceFilter("extract", "", candidate.url, "domain blocked (>80% sentinel rate)");
-                  extractedSoFar++;
-                  return;
-                }
-                const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
-                if (extractResult.tokensUsed) { tokenBudget.add(extractResult.tokensUsed); stats.tokensUsed += extractResult.tokensUsed; stats.tokensPerPhase.extract += extractResult.tokensUsed; }
-                if (!extractResult.success || !extractResult.data) {
-                  trackExtraction(candidate.url, true);
-                  tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
-                  extractedSoFar++;
-                  return;
-                }
-                const title = extractResult.data.title || "";
-                if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
-                  trackExtraction(candidate.url, true);
-                  tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
-                  extractedSoFar++;
-                  return;
-                }
-                trackExtraction(candidate.url, false);
-                // Confidence gate: skip products with no meaningful data
-                const hasSubstance = extractResult.data.title
-                  && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
-                if (!hasSubstance) {
-                  tracer.traceFilter("extract", "", candidate.url, "insufficient substance");
-                  extractedSoFar++;
-                  return;
-                }
-
-                // Category guard: reject products that don't match the
-                // requested category (e.g. a lint roller returned for a
-                // "vase" search). Quick-screen is URL-heuristic only; this
-                // is the first semantic check on actual product content.
-                const catCheck = await productMatchesCategoryAsync(
-                  category,
-                  extractResult.data.category,
-                  extractResult.data.title,
-                );
-                if (!catCheck.ok) {
-                  tracer.traceFilter("extract", "", candidate.url, `category mismatch: ${catCheck.reason}`);
-                  extractedSoFar++;
-                  return;
-                }
-
-                // Price range filter: skip if price is way outside tier range
-                const catBriefForPrice = brief.categories.find((c) => c.category === category);
-                const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
-                if (priceRange && extractResult.data.price) {
-                  if (extractResult.data.price > priceRange.max * 1.75) {
-                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} above 1.75x max $${priceRange.max}`);
-                    extractedSoFar++;
-                    return;
-                  }
-                  if (extractResult.data.price < priceRange.min * 0.4) {
-                    tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} below 0.4x min $${priceRange.min}`);
-                    extractedSoFar++;
-                    return;
-                  }
-                }
-
-                const product: CandidateProduct = {
-                  id: crypto.randomUUID(),
-                  room_id: ctx.roomId,
-                  search_session_id: null,
-                  title: extractResult.data.title || candidate.title,
-                  category: extractResult.data.category || category,
-                  retailer: extractResult.data.retailer || candidate.source,
-                  product_url: candidate.url,
-                  image_url: extractResult.data.image_url,
-                  local_image_path: null,
-                  price: extractResult.data.price,
-                  dimensions: extractResult.data.dimensions,
-                  materials: extractResult.data.materials,
-                  colors: extractResult.data.colors,
-                  description: extractResult.data.description,
-                  source_type: "agentic_search",
-                  metadata: {
-                    price_tier: tier,
-                    lifestyle_image_url: extractResult.data.lifestyle_image_url || null,
-                    visual_style_tags: extractResult.data.visual_style_tags || [],
-                    available_variants: extractResult.data.available_variants || [],
-                    // (r) Stock/availability info
-                    in_stock: extractResult.data.in_stock ?? null,
-                    stock_notes: extractResult.data.stock_notes || null,
-                  },
-                  status: "pending",
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                };
-
-                // ── Computer Use fallback (detached) ──
-                // JS-heavy retailer pages (West Elm, CB2, RH, etc.) often don't render
-                // price/dimension tables for text-only scrapers. Queue CU as an
-                // independent promise — don't block the extract slot waiting for
-                // a browser session. The CU promise mutates `product` in place
-                // and is awaited before Phase 5 reads product data.
-                if (cuEnabled && (!product.price || !product.dimensions)) {
-                  cuPromises.push(
-                    cuFallbackLimit(async () => {
-                      try {
-                        const verifyResult = await Promise.race([
-                          runProductVerifier({
-                            productUrl: candidate.url,
-                            expectedTitle: product.title ?? undefined,
-                            expectedColor: product.colors?.[0],
-                            maxTurns: 10,
-                          }),
-                          new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60_000)),
-                        ]);
-                        if (verifyResult === "timeout" || !verifyResult.product) return;
-                        const v = verifyResult.product;
-                        if (typeof v.price === "number") product.price = v.price;
-                        if (v.dimensions?.width_in || v.dimensions?.depth_in || v.dimensions?.height_in) {
-                          product.dimensions = {
-                            ...(v.dimensions.width_in != null ? { width: v.dimensions.width_in } : {}),
-                            ...(v.dimensions.depth_in != null ? { depth: v.dimensions.depth_in } : {}),
-                            ...(v.dimensions.height_in != null ? { height: v.dimensions.height_in } : {}),
-                            unit: "inches" as const,
-                          };
-                        }
-                        if (v.materials.length && !product.materials?.length) product.materials = v.materials;
-                        if (v.available_colors.length && !product.colors?.length) product.colors = v.available_colors;
-                        product.metadata = {
-                          ...(product.metadata ?? {}),
-                          cu_fallback: true,
-                          cu_turns: verifyResult.turns,
-                          in_stock: v.in_stock ?? null,
-                        };
-                        log.info("Computer use fallback enriched product", {
-                          phase: "extract",
-                          url: candidate.url,
-                          category,
-                          filledPrice: typeof v.price === "number",
-                          filledDimensions: Boolean(product.dimensions),
-                        });
-                      } catch (cuErr) {
-                        log.warn("Computer use fallback failed", {
-                          phase: "extract",
-                          url: candidate.url,
-                          error: cuErr instanceof Error ? cuErr.message : String(cuErr),
-                        });
-                      }
-                    })
-                  );
-                }
-
-                extractedByCategory[category][tier].push(product);
-                stats.totalExtracted++;
-                tracer.trace({ phase: "extract", action: "success", productId: product.id, url: candidate.url, category, tier });
-              } catch (err) {
-                tracer.traceError("extract", candidate.url, err);
-              }
-              extractedSoFar++;
-              // Report incremental progress every 5 extractions
-              if (extractedSoFar % 5 === 0 || extractedSoFar === totalToExtract) {
-                reportStep({
-                  step: "Extracting product details from websites",
-                  status: "running",
-                  data: { extracted: stats.totalExtracted, progress: extractedSoFar, total: totalToExtract },
-                });
-              }
-            })
-          );
+        // Budget gate: skip if we've already consumed 70% of the budget
+        if (tokenBudget.used / tokenBudget.cap > 0.70) {
+          for (const c of candidates) {
+            tracer.traceFilter("extract", "", c.url, "extraction budget gate (>70% used)");
+          }
+          extractedSoFar += candidates.length;
+          continue;
         }
+
+        // Filter domain-blocked URLs upfront
+        const eligibleCandidates = candidates.filter((c) => {
+          if (isDomainBlocked(c.url)) {
+            tracer.traceFilter("extract", "", c.url, "domain blocked (>80% sentinel rate)");
+            extractedSoFar++;
+            return false;
+          }
+          return true;
+        });
+        if (eligibleCandidates.length === 0) continue;
+
+        // Build pre-extracted content map from Tavily Search rawContent
+        const preExtracted = new Map<string, string>();
+        for (const c of eligibleCandidates) {
+          if (c.rawContent) preExtracted.set(c.url, c.rawContent);
+        }
+
+        extractBatchPromises.push(
+          extractBatchLimit(async () => {
+            const urls = eligibleCandidates.map((c) => c.url);
+            const batchResults = await extractFromUrlBatch(urls, category, ctx.designProfile, preExtracted);
+
+            let batchTokens = 0;
+            for (const candidate of eligibleCandidates) {
+              const extractResult = batchResults.get(candidate.url);
+              if (!extractResult) { extractedSoFar++; continue; }
+              if (extractResult.tokensUsed) {
+                batchTokens += extractResult.tokensUsed;
+              }
+
+              if (!extractResult.success || !extractResult.data) {
+                trackExtraction(candidate.url, true);
+                tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
+                extractedSoFar++;
+                continue;
+              }
+
+              const title = extractResult.data.title || "";
+              if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE") {
+                trackExtraction(candidate.url, true);
+                tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
+                extractedSoFar++;
+                continue;
+              }
+              trackExtraction(candidate.url, false);
+
+              const hasSubstance = extractResult.data.title
+                && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
+              if (!hasSubstance) {
+                tracer.traceFilter("extract", "", candidate.url, "insufficient substance");
+                extractedSoFar++;
+                continue;
+              }
+
+              const catCheck = await productMatchesCategoryAsync(
+                category,
+                extractResult.data.category,
+                extractResult.data.title,
+              );
+              if (!catCheck.ok) {
+                tracer.traceFilter("extract", "", candidate.url, `category mismatch: ${catCheck.reason}`);
+                extractedSoFar++;
+                continue;
+              }
+
+              const catBriefForPrice = brief.categories.find((c) => c.category === category);
+              const priceRange = catBriefForPrice?.tiers[tier]?.price_range;
+              if (priceRange && extractResult.data.price) {
+                if (extractResult.data.price > priceRange.max * 1.75) {
+                  tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} above 1.75x max $${priceRange.max}`);
+                  extractedSoFar++;
+                  continue;
+                }
+                if (extractResult.data.price < priceRange.min * 0.4) {
+                  tracer.traceFilter("extract", "", candidate.url, `price $${extractResult.data.price} below 0.4x min $${priceRange.min}`);
+                  extractedSoFar++;
+                  continue;
+                }
+              }
+
+              const product: CandidateProduct = {
+                id: crypto.randomUUID(),
+                room_id: ctx.roomId,
+                search_session_id: null,
+                title: extractResult.data.title || candidate.title,
+                category: extractResult.data.category || category,
+                retailer: extractResult.data.retailer || candidate.source,
+                product_url: candidate.url,
+                image_url: extractResult.data.image_url || candidate.imageUrl || null,
+                local_image_path: null,
+                price: extractResult.data.price,
+                dimensions: extractResult.data.dimensions,
+                materials: extractResult.data.materials,
+                colors: extractResult.data.colors,
+                description: extractResult.data.description,
+                source_type: "agentic_search",
+                metadata: {
+                  price_tier: tier,
+                  lifestyle_image_url: extractResult.data.lifestyle_image_url || null,
+                  visual_style_tags: extractResult.data.visual_style_tags || [],
+                  available_variants: extractResult.data.available_variants || [],
+                  in_stock: extractResult.data.in_stock ?? null,
+                  stock_notes: extractResult.data.stock_notes || null,
+                },
+                status: "pending",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+
+              // Computer Use fallback for JS-heavy retailer pages
+              if (cuEnabled && (!product.price || !product.dimensions)) {
+                cuPromises.push(
+                  cuFallbackLimit(async () => {
+                    try {
+                      const verifyResult = await Promise.race([
+                        runProductVerifier({
+                          productUrl: candidate.url,
+                          expectedTitle: product.title ?? undefined,
+                          expectedColor: product.colors?.[0],
+                          maxTurns: 10,
+                        }),
+                        new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60_000)),
+                      ]);
+                      if (verifyResult === "timeout" || !verifyResult.product) return;
+                      const v = verifyResult.product;
+                      if (typeof v.price === "number") product.price = v.price;
+                      if (v.dimensions?.width_in || v.dimensions?.depth_in || v.dimensions?.height_in) {
+                        product.dimensions = {
+                          ...(v.dimensions.width_in != null ? { width: v.dimensions.width_in } : {}),
+                          ...(v.dimensions.depth_in != null ? { depth: v.dimensions.depth_in } : {}),
+                          ...(v.dimensions.height_in != null ? { height: v.dimensions.height_in } : {}),
+                          unit: "inches" as const,
+                        };
+                      }
+                      if (v.materials.length && !product.materials?.length) product.materials = v.materials;
+                      if (v.available_colors.length && !product.colors?.length) product.colors = v.available_colors;
+                      product.metadata = {
+                        ...(product.metadata ?? {}),
+                        cu_fallback: true,
+                        cu_turns: verifyResult.turns,
+                        in_stock: v.in_stock ?? null,
+                      };
+                    } catch (cuErr) {
+                      log.warn("Computer use fallback failed", {
+                        phase: "extract", url: candidate.url,
+                        error: cuErr instanceof Error ? cuErr.message : String(cuErr),
+                      });
+                    }
+                  })
+                );
+              }
+
+              extractedByCategory[category][tier].push(product);
+              stats.totalExtracted++;
+              tracer.trace({ phase: "extract", action: "success", productId: product.id, url: candidate.url, category, tier });
+              extractedSoFar++;
+            }
+
+            tokenBudget.add(batchTokens);
+            stats.tokensUsed += batchTokens;
+            stats.tokensPerPhase.extract += batchTokens;
+
+            reportStep({
+              step: "Extracting product details from websites",
+              status: "running",
+              data: { extracted: stats.totalExtracted, progress: extractedSoFar, total: totalToExtract },
+            });
+          })
+        );
       }
     }
 
-    await Promise.all(extractPromises);
+    await Promise.all(extractBatchPromises);
 
     // CU fallback enriches price/dimensions on JS-heavy retailer pages.
     // Quick-score doesn't consult price/dimensions (title + description + materials

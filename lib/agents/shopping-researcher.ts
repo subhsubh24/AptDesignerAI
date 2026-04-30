@@ -2,12 +2,13 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
-import { SearchBriefResponseSchema, QuickScreenResponseSchema, SearchProductsResponseSchema } from "@/lib/types/schemas";
+import { SearchBriefResponseSchema, QuickScreenResponseSchema } from "@/lib/types/schemas";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
+import { tavilySearch } from "@/lib/ai/tavily";
 import type { PriceTier } from "@/lib/prompts/search-brief";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -49,7 +50,6 @@ const log = createLogger("shopping-researcher");
 /** Pre-computed Gemini-compatible schemas. */
 const SEARCH_BRIEF_GEMINI_SCHEMA = zodToGeminiSchema(SearchBriefResponseSchema);
 const QUICK_SCREEN_GEMINI_SCHEMA = zodToGeminiSchema(QuickScreenResponseSchema);
-const SEARCH_PRODUCTS_GEMINI_SCHEMA = zodToGeminiSchema(SearchProductsResponseSchema);
 
 interface QueryWithAngle {
   query: string;
@@ -78,6 +78,9 @@ export interface SearchCandidate {
   url: string;
   snippet: string;
   source: string;
+  relevanceScore?: number;
+  rawContent?: string;
+  imageUrl?: string;
 }
 
 const TIER_DOMAINS: Record<PriceTier, string[]> = {
@@ -393,170 +396,87 @@ export async function generateSearchBrief(
 }
 
 /**
- * Search the web for products using Gemini Google Search grounding.
- * Returns up to maxResults candidates per query.
+ * Search the web for products using Tavily Search API.
+ * Returns up to maxResults candidates per query with zero LLM token cost.
  *
- * When a category is provided, also generates targeted `site:` searches
- * against the best retailers for that category+tier from CATEGORY_RETAILERS.
+ * Uses `include_raw_content` to pre-fetch page text (skipping extraction
+ * for ~30-50% of products) and `include_images` for product images.
  */
 export async function searchProducts(
   query: string,
   maxResults: number = 10,
   tier?: PriceTier,
   category?: string,
-  roomImageUrls?: string[]
+  _roomImageUrls?: string[]
 ): Promise<AgentResult<SearchCandidate[]>> {
   const cached = getCachedQuery(query, tier, category, maxResults);
   if (cached) {
     return { success: true, data: cached, tokensUsed: 0 };
   }
 
-  const domains = tier
-    ? TIER_DOMAINS[tier]
-    : [...TIER_DOMAINS.budget, ...TIER_DOMAINS.balanced, ...TIER_DOMAINS.high_end];
-
-  // Build retailer focus list — prioritize category-specific retailers
-  let retailerFocus = "";
+  // Build domain allowlist: category-specific retailers first, then tier defaults
+  const includeDomains: string[] = [];
   if (category && tier) {
     const categoryKey = category.toLowerCase().replace(/\s+/g, "_");
     const retailers = CATEGORY_RETAILERS[categoryKey]?.[tier];
-    if (retailers) {
-      retailerFocus = `\nPRIORITY RETAILERS (search these first): ${retailers.join(", ")}`;
-    }
+    if (retailers) includeDomains.push(...retailers);
   }
-
-  // Single search call per query — retailer targeting baked into the prompt
-  const searchPrompt = `Search for this specific product and find actual product pages (not category pages) from these retailers: ${domains.join(", ")}.${retailerFocus}
-
-Search query: "${query}"
-
-Find at least ${maxResults} relevant product pages. Prioritize the PRIORITY RETAILERS above if listed. For each, provide title, URL, brief snippet, and retailer.
-
-Return ONLY a valid JSON object — no text before or after:
-{
-  "products": [
-    {
-      "title": "Product name",
-      "url": "https://...",
-      "snippet": "Brief description — price, material, color if visible (max 1 sentence)",
-      "source": "retailer domain"
-    }
-  ]
-}`;
+  const tierDomains = tier
+    ? TIER_DOMAINS[tier]
+    : [...TIER_DOMAINS.budget, ...TIER_DOMAINS.balanced, ...TIER_DOMAINS.high_end];
+  for (const d of tierDomains) {
+    if (!includeDomains.includes(d)) includeDomains.push(d);
+  }
+  // Tavily caps include_domains at 300
+  const domainList = includeDomains.slice(0, 300);
 
   try {
-    // Gemini 3 supports structured output alongside googleSearch grounding in
-    // the same call (new capability). We try the combined form first; if the
-    // SDK or model rejects it, fall back to free-text JSON parsing via
-    // existing error handling below.
-    let response;
-    try {
-      response = await geminiProvider.chat({
-        model: selectModel("search"),
-        system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        // Room images omitted from search calls — Google Search grounding is
-        // text-only; inline images add ~7.5K tokens per call with no benefit.
-        messages: [{ role: "user", content: searchPrompt }],
-        max_tokens: 64000,
-        seed: DETERMINISTIC_SEED,
-        tools: [{ googleSearch: {} }],
-        responseSchema: SEARCH_PRODUCTS_GEMINI_SCHEMA,
-        responseMimeType: "application/json",
-      });
-    } catch (schemaErr) {
-      // Circuit breaker: if the failure is 503/429/UNAVAILABLE, the model is
-      // under pressure — retrying with one knob removed will almost always
-      // hit the same limit and burn a second quota of input tokens. Bail fast.
-      // Check the numeric .status property first (ApiError shape) because the
-      // human-readable message ("Deadline expired …") doesn't contain the code.
-      const errStatus = (schemaErr as { status?: number })?.status;
-      const errMsg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
-      const isUpstreamPressure =
-        errStatus === 503 || errStatus === 429 ||
-        /\b(503|429)\b/.test(errMsg) ||
-        /overloaded|unavailable|deadline expired|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(errMsg);
-      if (isUpstreamPressure) {
-        log.warn("search call hit upstream pressure — skipping fallback retry", {
-          phase: "search", query, tier, category, status: errStatus, error: errMsg,
-        });
-        return { success: true, data: [], tokensUsed: 0 };
-      }
-      log.warn("structured+grounding call failed, falling back to text parsing", {
-        error: errMsg,
-      });
-      response = await geminiProvider.chat({
-        model: selectModel("search"),
-        system: "You are a product search assistant. Find specific product pages on furniture retailer websites. Only return actual product pages, not category or listing pages. Return ONLY JSON.",
-        messages: [{ role: "user", content: searchPrompt }],
-        max_tokens: 64000,
-        seed: DETERMINISTIC_SEED,
-        tools: [{ googleSearch: {} }],
-      });
-    }
+    const response = await tavilySearch({
+      query,
+      max_results: Math.min(maxResults, 20),
+      include_domains: domainList,
+      search_depth: tier === "high_end" ? "advanced" : "basic",
+      include_images: true,
+      include_raw_content: true,
+      country: "united states",
+      time_range: "year",
+    });
 
-    try {
-      const raw = response.content.trim();
-      let jsonObj: unknown;
+    const candidates: SearchCandidate[] = response.results.map((r) => {
+      let source = "";
       try {
-        jsonObj = JSON.parse(raw);
+        source = new URL(r.url).hostname.replace("www.", "");
       } catch {
-        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          jsonObj = JSON.parse(jsonMatch[1].trim());
-        } else {
-          const braceStart = raw.indexOf("{");
-          const braceEnd = raw.lastIndexOf("}");
-          if (braceStart !== -1 && braceEnd > braceStart) {
-            jsonObj = JSON.parse(raw.slice(braceStart, braceEnd + 1));
-          } else {
-            jsonObj = { products: [] };
-          }
-        }
+        source = r.url;
       }
-      const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-      const validated = SearchProductsResponseSchema.parse(jsonObj);
-      const candidates = validated.products.map((r) => ({
+
+      // Pick first product image from per-result images or global images
+      let imageUrl: string | undefined;
+      if (r.images && r.images.length > 0) {
+        imageUrl = r.images[0].url;
+      }
+
+      return {
         title: r.title,
         url: r.url,
-        snippet: r.snippet.slice(0, 500),
-        source: r.source,
-      }));
-      cacheQuery(query, tier, category, maxResults, candidates);
-      return { success: true, data: candidates, tokensUsed };
-    } catch {
-      const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
-      // Fallback: use grounding metadata sources
-      if (response.groundingMetadata?.sources) {
-        const candidates = response.groundingMetadata.sources
-          .filter((s) => s.uri)
-          .map((s) => {
-            let source = "";
-            try {
-              source = new URL(s.uri).hostname.replace("www.", "");
-            } catch {
-              source = s.uri;
-            }
-            return { title: s.title, url: s.uri, snippet: "", source };
-          });
-        cacheQuery(query, tier, category, maxResults, candidates);
-        return { success: true, data: candidates, tokensUsed };
-      }
-      return { success: true, data: [], tokensUsed };
-    }
-  } catch (outerErr) {
-    const outerStatus = (outerErr as { status?: number })?.status;
-    const outerMsg = outerErr instanceof Error ? outerErr.message : String(outerErr);
-    const isUpstreamPressure =
-      outerStatus === 503 || outerStatus === 429 ||
-      /\b(503|429)\b/.test(outerMsg) ||
-      /overloaded|unavailable|deadline expired|rate[\s-]?limit|resource[_\s-]?exhausted/i.test(outerMsg);
-    if (isUpstreamPressure) {
-      log.warn("search call hit upstream pressure", {
-        phase: "search", query, tier, category, status: outerStatus, error: outerMsg,
-      });
-      return { success: true, data: [], tokensUsed: 0 };
-    }
-    return { success: false, error: "Search failed" };
+        snippet: (r.content || "").slice(0, 500),
+        source,
+        relevanceScore: r.score,
+        rawContent: r.raw_content && r.raw_content.length > 500 ? r.raw_content : undefined,
+        imageUrl,
+      };
+    });
+
+    cacheQuery(query, tier, category, maxResults, candidates);
+    log.info("Tavily search returned candidates", {
+      phase: "search", query: query.slice(0, 60), tier, category,
+      results: candidates.length, withRawContent: candidates.filter((c) => c.rawContent).length,
+    });
+    return { success: true, data: candidates, tokensUsed: 0 };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log.error("Tavily search failed", { phase: "search", query, tier, category, error: errMsg });
+    return { success: false, error: `Search failed: ${errMsg}` };
   }
 }
 
@@ -660,7 +580,7 @@ export async function quickScreenCandidates(
 
       // Use 0-based local indices per batch (simpler, avoids global↔local conversion bugs)
       const candidateList = batch
-        .map((c, i) => `[${i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 120)}`)
+        .map((c, i) => `[${i}] "${c.title}" — ${c.source} — ${c.snippet.slice(0, 300)}`)
         .join("\n");
 
       const styleContext = designDirection

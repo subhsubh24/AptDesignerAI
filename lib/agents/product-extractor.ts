@@ -6,6 +6,7 @@ import { ExtractedProductSchema } from "@/lib/types/schemas";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC, DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
+import { tavilyExtract } from "@/lib/ai/tavily";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
@@ -382,54 +383,11 @@ function shouldTryStructuredScrapeFirst(url: string): boolean {
   }
 }
 
-/**
- * Domains where URL Context consistently 400s with INVALID_ARGUMENT.
- * For these, we skip the URL Context attempts entirely after structured
- * scrape fails — going straight to the plain-text fallback. Saves ~3s
- * of doomed retries per URL on these retailers.
- */
-const URL_CONTEXT_BLACKLIST = new Set([
-  "wayfair.com",
-]);
-
-function isUrlContextBlacklisted(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
-    for (const d of URL_CONTEXT_BLACKLIST) {
-      if (host === d || host.endsWith(`.${d}`)) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// Consider scraped context "sufficient" only when it includes at least a
-// Title AND one of (Price, Description). Otherwise fall through to URL Context.
-//
-// Two-phase: cheap regex check first (catches the labeled-fields case with
-// zero cost), then an LLM semantic check on the borderline case where the
-// regex says "no" — this catches pages whose JSON-LD names fields differently
-// (e.g., "Product Name" instead of "Title:") and would otherwise burn an
-// expensive URL Context call unnecessarily.
 function isScrapeContextSufficient(ctx: string): boolean {
   const hasTitle = /^Title:/m.test(ctx);
   const hasPrice = /^Price:/m.test(ctx);
   const hasDesc = /^Description:/m.test(ctx);
   return hasTitle && (hasPrice || hasDesc);
-}
-
-async function isScrapeContextSufficientAsync(ctx: string): Promise<boolean> {
-  if (isScrapeContextSufficient(ctx)) return true;
-  // LLM tiebreaker for the "regex said no but content might still be enough" case.
-  if (!ctx || ctx.length < 60) return false;
-  try {
-    const { isScrapeContextSufficientLLM } = await import("@/lib/ai/semantic-extract");
-    const llm = await isScrapeContextSufficientLLM(ctx);
-    return llm === true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -458,181 +416,229 @@ function parseAndValidateExtraction(raw: string): ExtractedProduct {
 }
 
 /**
- * Extract product info from a URL using Gemini URL Context.
- * Deep-crawls the product page: reads all content, examines product images,
- * checks color/finish variants, and captures lifestyle photography.
+ * Extract product info from a batch of URLs using Tavily Extract + batched LLM parsing.
  *
  * Strategy:
- *  1. Try with urlContext tool (lets Gemini fetch + read the page)
- *  2. If that 400s, retry with urlContext once (transient errors are common)
- *  3. If still failing, fall back to plain text prompt without urlContext
+ *  1. Check cache for each URL, partition into cached vs uncached
+ *  2. For uncached URLs with pre-extracted rawContent (from Tavily Search), skip Tavily Extract
+ *  3. Chunk remaining URLs into groups of 20 and call Tavily Extract
+ *  4. Supplement with JSON-LD scrape for known-clean retailers
+ *  5. Batch 5-8 products per LLM call for parsing
+ *  6. Validate images, cache, and return
  */
-export async function extractFromUrl(
-  url: string,
+export async function extractFromUrlBatch(
+  urls: string[],
+  category: string,
   designProfile?: DynamicDesignProfile,
-  roomImageUrls?: string[],
-): Promise<AgentResult<ExtractedProduct>> {
-  // Check cache first
-  const cached = getCachedExtraction(url);
-  if (cached) {
-    return { success: true, data: cached };
-  }
+  preExtractedContent?: Map<string, string>,
+): Promise<Map<string, AgentResult<ExtractedProduct>>> {
+  const results = new Map<string, AgentResult<ExtractedProduct>>();
+  if (urls.length === 0) return results;
 
   const model = selectModel("extraction");
   const system = getSystemPrompt(designProfile);
   const extractionPrompt = getExtractionPrompt();
 
-  const userContent = `${extractionPrompt}\n\nExtract product information from this URL: ${url}\n\nVisit the page, read all the content, examine all product images carefully, and check for available color/material variants.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+  // 1. Cache check
+  const uncachedUrls: string[] = [];
+  for (const url of urls) {
+    const cached = getCachedExtraction(url);
+    if (cached) {
+      results.set(url, { success: true, data: cached, tokensUsed: 0 });
+    } else {
+      uncachedUrls.push(url);
+    }
+  }
+  if (uncachedUrls.length === 0) return results;
 
-  // Room images are intentionally NOT sent during extraction:
-  // 1. urlContext tool + inline images = Gemini 400 INVALID_ARGUMENT.
-  // 2. Each image adds ~1500–2500 tokens at ultra_high resolution; across 100
-  //    extractions that burns ~600K tokens for marginal style-tag benefit.
-  //    The design profile (text) already carries style context. Deep-score
-  //    calls later send room images where vision actually matters.
-  // Kept as a no-op helper so fallback paths still compile unchanged.
-  const buildContent = (text: string): string => text;
+  // 2. Partition: URLs with pre-extracted content vs need Tavily Extract
+  const contentMap = new Map<string, string>();
+  const needsExtract: string[] = [];
+  for (const url of uncachedUrls) {
+    const raw = preExtractedContent?.get(url);
+    if (raw && raw.length > 500) {
+      contentMap.set(url, raw);
+    } else {
+      needsExtract.push(url);
+    }
+  }
 
-  // Attempt 0 (known-brittle retailers only): try HTML structured scrape first.
-  // These retailers ship clean JSON-LD Product schema — scraping is faster and
-  // more reliable than URL Context, which struggles with JS-heavy PDPs.
-  if (shouldTryStructuredScrapeFirst(url)) {
+  // 3. Tavily Extract for URLs without pre-extracted content (batches of 20)
+  const EXTRACT_BATCH_SIZE = 20;
+  for (let i = 0; i < needsExtract.length; i += EXTRACT_BATCH_SIZE) {
+    const chunk = needsExtract.slice(i, i + EXTRACT_BATCH_SIZE);
     try {
-      const pageContext = await scrapePageContext(url);
-      if (pageContext && await isScrapeContextSufficientAsync(pageContext)) {
-        const scrapeFirstContent = `${extractionPrompt}\n\nExtract product information for: ${url}\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
-
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: buildContent(scrapeFirstContent) }],
-          max_tokens: 64000,
-          seed: DETERMINISTIC_SEED,
-        });
-
-        const raw = response.content.trim();
-        if (raw) {
-          let parsed = parseAndValidateExtraction(raw);
-          parsed = await validateExtractedImages(parsed, url);
-          cacheExtraction(url, parsed);
-          log.debug("Extracted via structured scrape (known retailer)", { url });
-          return {
-            success: true,
-            data: parsed,
-            tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-            model: response.model,
-          };
+      const extractResponse = await tavilyExtract({
+        urls: chunk,
+        include_images: true,
+        query: `${category} product: title, price, dimensions, materials, colors`,
+        chunks_per_source: 5,
+        extract_depth: "basic",
+      });
+      for (const r of extractResponse.results) {
+        if (r.raw_content && r.raw_content.length > 100) {
+          contentMap.set(r.url, r.raw_content);
         }
       }
-    } catch (scrapeErr) {
-      log.debug("Structured-scrape-first path failed, falling through to URL Context", {
-        url,
-        error: scrapeErr instanceof Error ? scrapeErr.message : String(scrapeErr),
+      for (const f of extractResponse.failed_results) {
+        log.debug("Tavily extract failed for URL", { url: f.url, error: f.error });
+      }
+    } catch (err) {
+      log.warn("Tavily extract batch failed", {
+        urlCount: chunk.length, error: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
-  // For domains where URL Context consistently 400s with INVALID_ARGUMENT
-  // (Wayfair, etc.), throw early in both attempts so we jump to the
-  // plain-text fallback rather than burning ~3s on doomed retries.
-  const skipUrlContext = isUrlContextBlacklisted(url);
+  // 4. Supplement with JSON-LD scrape for known-clean retailers (parallel)
+  const scrapePromises: Promise<void>[] = [];
+  for (const url of uncachedUrls) {
+    if (shouldTryStructuredScrapeFirst(url)) {
+      scrapePromises.push(
+        scrapePageContext(url).then((ctx) => {
+          if (ctx && isScrapeContextSufficient(ctx)) {
+            const existing = contentMap.get(url);
+            if (existing) {
+              contentMap.set(url, `${ctx}\n\n---\n\n${existing}`);
+            } else {
+              contentMap.set(url, ctx);
+            }
+          }
+        }).catch(() => {}),
+      );
+    }
+  }
+  await Promise.all(scrapePromises);
 
-  // Attempt 1: with urlContext tool
-  try {
-    if (skipUrlContext) throw new Error("urlContext blacklisted for this domain");
-    const response = await geminiProvider.chat({
-      model,
-      system,
-      messages: [{ role: "user", content: buildContent(userContent) }],
-      max_tokens: 64000,
-      seed: DETERMINISTIC_SEED,
-      tools: [{ urlContext: {} }],
-    });
+  // 5. Batched LLM parsing — group 6 products per call
+  const LLM_BATCH = 6;
+  const urlsWithContent = uncachedUrls.filter((u) => contentMap.has(u));
+  const urlsWithoutContent = uncachedUrls.filter((u) => !contentMap.has(u) && !results.has(u));
 
-    const raw = response.content.trim();
-    if (!raw) throw new Error("Empty response from extraction");
+  let totalTokens = 0;
 
-    let parsed = parseAndValidateExtraction(raw);
-    parsed = await validateExtractedImages(parsed, url);
-    cacheExtraction(url, parsed);
-    return {
-      success: true,
-      data: parsed,
-      tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-      model: response.model,
-    };
-  } catch (attempt1Error) {
-    // Attempt 2: retry with urlContext after brief delay (transient errors)
-    log.debug("urlContext attempt 1 failed", { url, error: attempt1Error instanceof Error ? attempt1Error.message : String(attempt1Error) });
-    if (!skipUrlContext) await new Promise((r) => setTimeout(r, 1500));
+  for (let i = 0; i < urlsWithContent.length; i += LLM_BATCH) {
+    const batch = urlsWithContent.slice(i, i + LLM_BATCH);
+    const productBlocks = batch.map((url, idx) => {
+      const content = contentMap.get(url) ?? "";
+      return `--- PRODUCT ${idx + 1} ---\nURL: ${url}\n\n${content.slice(0, 8000)}\n`;
+    }).join("\n");
+
+    const prompt = `${extractionPrompt}
+
+Extract product information from EACH of the ${batch.length} products below.
+Return a JSON object with a "products" array containing one entry per product, in the same order.
+
+${productBlocks}
+
+Return ONLY valid JSON:
+{
+  "products": [
+    { "url": "...", "title": "...", "price": ..., "dimensions": ..., "materials": [...], "colors": [...], "category": "...", "description": "...", "image_url": "...", "lifestyle_image_url": "...", "visual_style_tags": [...], "available_variants": [...], "in_stock": ..., "stock_notes": "..." },
+    ...
+  ]
+}`;
+
     try {
-      if (skipUrlContext) throw new Error("urlContext blacklisted for this domain");
       const response = await geminiProvider.chat({
         model,
         system,
-        messages: [{ role: "user", content: buildContent(userContent) }],
+        messages: [{ role: "user", content: prompt }],
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
-        tools: [{ urlContext: {} }],
       });
 
-      const raw = response.content.trim();
-      if (!raw) throw new Error("Empty response from extraction (retry)");
+      const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+      totalTokens += tokens;
 
-      let parsed = parseAndValidateExtraction(raw);
-      parsed = await validateExtractedImages(parsed, url);
-      cacheExtraction(url, parsed);
-      return {
-        success: true,
-        data: parsed,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-        model: response.model,
-      };
-    } catch (attempt2Error) {
-      // Attempt 3: fall back to HTML scraping — fetch the raw page and extract
-      // JSON-LD Product schema + og meta ourselves, then pass as structured
-      // context to the model. This works better than URL slug inference for
-      // JS-heavy retailer pages (Target, AllModern, Joss & Main, etc.)
-      log.warn("urlContext failed, falling back to plain extraction", {
-        url,
-        error: attempt2Error instanceof Error ? attempt2Error.message : String(attempt2Error),
+      const raw = extractJsonObject(response.content);
+      const parsed = raw as { products?: unknown[] };
+      const products = Array.isArray(parsed?.products) ? parsed.products : [parsed];
+
+      for (let j = 0; j < batch.length; j++) {
+        const url = batch[j];
+        try {
+          const item = products[j];
+          if (!item) throw new Error("Missing product in batch response");
+          const validated = ExtractedProductSchema.parse(item) as ExtractedProduct;
+          const withImages = await validateExtractedImages(validated, url);
+          cacheExtraction(url, withImages);
+          results.set(url, { success: true, data: withImages, tokensUsed: Math.round(tokens / batch.length) });
+        } catch (parseErr) {
+          results.set(url, {
+            success: false,
+            error: parseErr instanceof Error ? parseErr.message : "Parse failed",
+          });
+        }
+      }
+    } catch (llmErr) {
+      log.warn("Batched LLM extraction failed", {
+        batchSize: batch.length,
+        error: llmErr instanceof Error ? llmErr.message : String(llmErr),
       });
-      try {
-        const pageContext = await scrapePageContext(url);
-        const contextBlock = pageContext
-          ? `\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.`
-          : `\n\nNote: The page could not be fetched. Extract what you can from the URL slug itself and set all fields conservatively.`;
-
-        const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}${contextBlock}\n\nReturn ONLY valid JSON, no markdown or extra text.`;
-
-        const response = await geminiProvider.chat({
-          model,
-          system,
-          messages: [{ role: "user", content: buildContent(fallbackContent) }],
-          max_tokens: 64000,
-          seed: DETERMINISTIC_SEED,
-        });
-
-        const raw = response.content.trim();
-        if (!raw) throw new Error("Empty response from fallback extraction");
-
-        let parsed = parseAndValidateExtraction(raw);
-        parsed = await validateExtractedImages(parsed, url);
-        cacheExtraction(url, parsed);
-        return {
-          success: true,
-          data: parsed,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens,
-          model: response.model,
-        };
-      } catch (fallbackError) {
-        return {
-          success: false,
-          error: fallbackError instanceof Error ? fallbackError.message : "Extraction failed (all attempts)",
-        };
+      for (const url of batch) {
+        if (!results.has(url)) {
+          results.set(url, { success: false, error: "Batch LLM extraction failed" });
+        }
       }
     }
   }
+
+  // 6. Fallback for URLs with no content — try scrape + single LLM call
+  for (const url of urlsWithoutContent) {
+    try {
+      const pageContext = await scrapePageContext(url);
+      const contextBlock = pageContext
+        ? `\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.`
+        : `\n\nNote: The page could not be fetched. Extract what you can from the URL slug itself and set all fields conservatively.`;
+
+      const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}${contextBlock}\n\nReturn ONLY valid JSON, no markdown or extra text.`;
+
+      const response = await geminiProvider.chat({
+        model,
+        system,
+        messages: [{ role: "user", content: fallbackContent }],
+        max_tokens: 64000,
+        seed: DETERMINISTIC_SEED,
+      });
+
+      const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
+      totalTokens += tokens;
+      let parsed = parseAndValidateExtraction(response.content.trim());
+      parsed = await validateExtractedImages(parsed, url);
+      cacheExtraction(url, parsed);
+      results.set(url, { success: true, data: parsed, tokensUsed: tokens, model: response.model });
+    } catch (fallbackErr) {
+      results.set(url, {
+        success: false,
+        error: fallbackErr instanceof Error ? fallbackErr.message : "Extraction failed",
+      });
+    }
+  }
+
+  log.info("Batch extraction complete", {
+    total: urls.length, cached: urls.length - uncachedUrls.length,
+    extracted: urlsWithContent.length, fallback: urlsWithoutContent.length,
+    tokensUsed: totalTokens,
+  });
+
+  return results;
+}
+
+/**
+ * Extract product info from a single URL — thin wrapper around extractFromUrlBatch.
+ */
+export async function extractFromUrl(
+  url: string,
+  designProfile?: DynamicDesignProfile,
+  _roomImageUrls?: string[],
+  preExtractedContent?: string,
+): Promise<AgentResult<ExtractedProduct>> {
+  const preExtracted = preExtractedContent
+    ? new Map([[url, preExtractedContent]])
+    : undefined;
+  const results = await extractFromUrlBatch([url], "general", designProfile, preExtracted);
+  return results.get(url) ?? { success: false, error: "Extraction returned no result" };
 }
 
 /**

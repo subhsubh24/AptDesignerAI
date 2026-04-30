@@ -447,8 +447,6 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           // function-call tools in one call (tool context circulation).
           tools: [
             { functionDeclarations: COORDINATOR_TOOLS },
-            { googleSearch: {} as Record<string, never> },
-            { urlContext: {} as Record<string, never> },
             { codeExecution: {} as Record<string, never> },
           ],
         });
