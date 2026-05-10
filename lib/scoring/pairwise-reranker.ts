@@ -11,7 +11,7 @@
  * C(N,2) pairs through the LLM in batched calls, count wins per product, and
  * re-rank by win count (tie-break: original deep score).
  */
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -196,7 +196,7 @@ Return a JSON array with one object per pair:
 ]`;
 
   try {
-    const response = await geminiProvider.chat({
+    const response = await getProvider("quick_score").chat({
       model: selectModel("quick_score"),
       system: "You are a furniture comparison expert. Be decisive — always pick a winner, even if close. Return ONLY valid JSON.",
       messages: [{ role: "user", content: prompt }],

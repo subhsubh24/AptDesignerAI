@@ -18,7 +18,7 @@
  * agent errors, the original prompt is used unchanged.
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
@@ -147,7 +147,7 @@ Issues: brief, user-facing descriptions of gaps. Max 5.`;
   try {
     const response = await withRetry(
       () =>
-        geminiProvider.chat({
+        getProvider("mockup_prompt").chat({
           model,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],

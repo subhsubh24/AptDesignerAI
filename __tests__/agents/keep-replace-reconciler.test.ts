@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/ai/gemini", () => ({
-  geminiProvider: { chat: vi.fn() },
+const mockChat = vi.fn();
+vi.mock("@/lib/ai/provider-factory", () => ({
+  getProvider: () => ({ chat: mockChat }),
 }));
 
 import { reconcileKeepReplace } from "@/lib/agents/keep-replace-reconciler";
-import { geminiProvider } from "@/lib/ai/gemini";
-
-const mockChat = geminiProvider.chat as unknown as ReturnType<typeof vi.fn>;
 
 function mockResponse(payload: object) {
   mockChat.mockResolvedValueOnce({

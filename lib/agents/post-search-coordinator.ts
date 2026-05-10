@@ -33,7 +33,7 @@
  * orchestrator's existing hardcoded post-search flow runs instead.
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -429,26 +429,17 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
       }
       let response;
       try {
-        response = await geminiProvider.chat({
+        const coordinatorTools = [
+          { functionDeclarations: COORDINATOR_TOOLS },
+        ];
+        response = await getProvider("validation", coordinatorTools).chat({
           model,
           system,
           messages,
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
-          // includeThoughts: surface the agent's reasoning so the SSE
-          // stream can show the user WHY each tool was called (transparency).
           thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
-          // Combine the coordinator's custom tools with built-in Google
-          // Search + URL Context + Code Execution so the agent can verify
-          // state signals against live retailer data (e.g., "does this
-          // price point exist at IKEA?") AND compute precise math
-          // (alignment deltas, budget allocations, coverage ratios)
-          // instead of estimating. Gemini 3 supports mixing built-in +
-          // function-call tools in one call (tool context circulation).
-          tools: [
-            { functionDeclarations: COORDINATOR_TOOLS },
-            { codeExecution: {} as Record<string, never> },
-          ],
+          tools: coordinatorTools,
         });
       } catch (err) {
         log.warn("Coordinator chat call failed — falling back to default flow", {

@@ -10,7 +10,7 @@
  */
 
 import { z } from "zod";
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -124,7 +124,7 @@ Now review the patched analysis. Flag only problems introduced by this edit.`;
 
   const result = await withRetry(
     async () => {
-      const response = await geminiProvider.chat({
+      const response = await getProvider("validation").chat({
         model: selectModel("validation"),
         system,
         messages: [{ role: "user", content: [{ type: "text", text: userPrompt }] }],

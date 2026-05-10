@@ -35,6 +35,10 @@ export const MODELS = {
   computerUse: "gemini-2.5-computer-use-preview-10-2025",
 } as const;
 
+export const DEEPSEEK_MODELS = {
+  text: "deepseek-v4-flash",
+} as const;
+
 export type TaskType =
   | "diagnosis"
   | "apartment_analysis"
@@ -56,6 +60,7 @@ export type TaskType =
 
 /** Route a task to the right model. Text tasks all share one model. */
 export function selectModel(task: TaskType): string {
+  const provider = process.env.AI_PROVIDER || "gemini";
   // Final-quality room mockup — use Nano Banana Pro (thinking always on)
   if (task === "mockup_image") return MODELS.imagePro;
   // Quick preview / thumbnail — use Nano Banana 2 (faster, cheaper)
@@ -63,5 +68,6 @@ export function selectModel(task: TaskType): string {
   if (task === "computer_use") {
     return process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
   }
+  if (provider === "deepseek") return DEEPSEEK_MODELS.text;
   return MODELS.text;
 }

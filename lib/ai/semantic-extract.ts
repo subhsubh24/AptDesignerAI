@@ -15,7 +15,7 @@
  * blow the per-run token budget. Latency is masked by `pLimit`-style
  * concurrency at callsites.
  */
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -40,7 +40,7 @@ async function semanticChat<T>(opts: {
   if (isDisabled()) return null;
   const model = selectModel("quick_score");
   try {
-    const call = geminiProvider.chat({
+    const call = getProvider("quick_score").chat({
       model,
       system: opts.system,
       messages: [{ role: "user", content: opts.user }],

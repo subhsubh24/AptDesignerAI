@@ -2,15 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CandidateProduct } from "@/lib/types/database";
 import type { ProductEvaluationResult } from "@/lib/types/scoring";
 
-// Mock Gemini provider before importing the module under test
-vi.mock("@/lib/ai/gemini", () => ({
-  geminiProvider: {
-    chat: vi.fn(),
-  },
+const mockChat = vi.fn();
+vi.mock("@/lib/ai/provider-factory", () => ({
+  getProvider: () => ({ chat: mockChat }),
 }));
 
 import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
-import { geminiProvider } from "@/lib/ai/gemini";
 
 function makeProduct(id: string, overrides: Partial<CandidateProduct> = {}): CandidateProduct {
   return {
@@ -67,7 +64,7 @@ describe("pairwiseRerank", () => {
       category: "coffee_table",
     });
     expect(result.length).toBe(2);
-    expect(vi.mocked(geminiProvider.chat)).not.toHaveBeenCalled();
+    expect(mockChat).not.toHaveBeenCalled();
   });
 
   it("re-ranks products based on pairwise win counts", async () => {
@@ -83,7 +80,7 @@ describe("pairwiseRerank", () => {
     ]);
 
     // Mock: B wins all its pairs — should come out on top despite lower deep score
-    vi.mocked(geminiProvider.chat).mockResolvedValue({
+    mockChat.mockResolvedValue({
       content: JSON.stringify([
         { pair_index: 0, winner: "B", confidence: 4, reason: "B is better" },
         { pair_index: 1, winner: "B", confidence: 4, reason: "B is better" },
@@ -92,7 +89,7 @@ describe("pairwiseRerank", () => {
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
       model: "gemini-3.1-flash-lite-preview",
       truncated: false,
-    } as unknown as Awaited<ReturnType<typeof geminiProvider.chat>>);
+    });
 
     // Depending on pair order, winner "B" means whichever product was placed at B position
     const result = await pairwiseRerank(products, evals, {
@@ -103,7 +100,7 @@ describe("pairwiseRerank", () => {
     // Structural check: got 3 products back
     expect(result.length).toBe(3);
     // Structural check: LLM was called
-    expect(vi.mocked(geminiProvider.chat)).toHaveBeenCalled();
+    expect(mockChat).toHaveBeenCalled();
   });
 
   it("falls back gracefully when LLM fails", async () => {
@@ -118,7 +115,7 @@ describe("pairwiseRerank", () => {
       ["c", makeEval(6)],
     ]);
 
-    vi.mocked(geminiProvider.chat).mockRejectedValue(new Error("API error"));
+    mockChat.mockRejectedValue(new Error("API error"));
 
     const result = await pairwiseRerank(products, evals, {
       roomType: "living_room",
@@ -137,12 +134,12 @@ describe("pairwiseRerank", () => {
       products.map((p, i) => [p.id, makeEval(9 - i * 0.3)])
     );
 
-    vi.mocked(geminiProvider.chat).mockResolvedValue({
+    mockChat.mockResolvedValue({
       content: JSON.stringify([]),
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
       model: "gemini-3.1-flash-lite-preview",
       truncated: false,
-    } as unknown as Awaited<ReturnType<typeof geminiProvider.chat>>);
+    });
 
     const result = await pairwiseRerank(products, evals, {
       roomType: "living_room",
@@ -162,12 +159,12 @@ describe("pairwiseRerank", () => {
       ["c", makeEval(6)],
     ]);
 
-    vi.mocked(geminiProvider.chat).mockResolvedValue({
+    mockChat.mockResolvedValue({
       content: '{"not": "an array"}',
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
       model: "gemini-3.1-flash-lite-preview",
       truncated: false,
-    } as unknown as Awaited<ReturnType<typeof geminiProvider.chat>>);
+    });
 
     const result = await pairwiseRerank(products, evals, {
       roomType: "living_room",

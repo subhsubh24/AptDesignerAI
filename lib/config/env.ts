@@ -14,7 +14,7 @@ const REQUIRED_PROD: { name: string; why: string }[] = [
   { name: "NEXT_PUBLIC_SUPABASE_URL", why: "Supabase project URL" },
   { name: "NEXT_PUBLIC_SUPABASE_ANON_KEY", why: "Supabase anon (browser) key" },
   { name: "SUPABASE_SERVICE_ROLE_KEY", why: "Service-role key for admin storage writes" },
-  { name: "GEMINI_API_KEY", why: "Gemini LLM access for every agent" },
+  { name: "GEMINI_API_KEY", why: "Gemini LLM access for vision agents, image gen, embeddings" },
 ];
 
 export class MissingEnvError extends Error {
@@ -37,6 +37,15 @@ export function assertProductionEnv(opts?: { alwaysEnforce?: boolean }): void {
   const enforce =
     opts?.alwaysEnforce === true || process.env.NODE_ENV === "production";
   if (!enforce) return;
-  const missing = REQUIRED_PROD.filter((r) => !process.env[r.name]);
+
+  const required = [...REQUIRED_PROD];
+  if (process.env.AI_PROVIDER === "deepseek") {
+    required.push({
+      name: "DEEPSEEK_API_KEY",
+      why: "DeepSeek V4 Flash for text-only agents (AI_PROVIDER=deepseek)",
+    });
+  }
+
+  const missing = required.filter((r) => !process.env[r.name]);
   if (missing.length > 0) throw new MissingEnvError(missing);
 }

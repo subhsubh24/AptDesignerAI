@@ -8,7 +8,7 @@
  * fails open (returns uncorrected output if the correction itself errors).
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -479,7 +479,7 @@ CORRECTION RULES:
 - The only allowed edits are: REMOVING items from what_should_go / what_works / what_it_needs, fixing pairing issues by adding required pairs, fixing missing fields on what_it_needs entries.
 - ONLY fix the specific issues — don't change things that are already correct.`;
 
-  const response = await geminiProvider.chat({
+  const response = await getProvider("scoring").chat({
     model,
     system: "You are a quality assurance agent for interior design recommendations. Check outputs for logical consistency. Be strict about furniture pairing and spatial feasibility. Return structured JSON.",
     messages: [{ role: "user", content: prompt }],
@@ -590,7 +590,7 @@ Return JSON:
 
 Only fix actual inconsistencies. Don't change subjective style choices.`;
 
-  const response = await geminiProvider.chat({
+  const response = await getProvider("scoring").chat({
     model,
     system: "You are a senior interior designer reviewing a room diagnosis for internal consistency. Be strict about palette/material/style coherence. Return structured JSON.",
     messages: [{ role: "user", content: prompt }],
@@ -616,7 +616,7 @@ export async function selfReviewExtraction(
   try {
     const model = selectModel("quick_score");
 
-    const response = await geminiProvider.chat({
+    const response = await getProvider("quick_score").chat({
       model,
       system: "You validate product extraction data. Check for obvious errors. Return JSON.",
       messages: [{

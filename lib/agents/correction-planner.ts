@@ -21,7 +21,7 @@
  * state. Adds ~40-80K tokens per correction iteration.
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
@@ -270,42 +270,18 @@ Use Google Search to verify what retailers are actually selling before generatin
 
 Search before writing queries. Queries grounded in real product listings perform ~2x better than queries invented from the design assessment alone.` : ""}`;
 
-  const useTools = input.enableTools !== false;
-
   try {
     const response = await withRetry(
       async () => {
-        try {
-          return await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 64000,
-            seed: DETERMINISTIC_SEED,
-            responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
-            responseMimeType: "application/json",
-            // Tools: Google Search to verify what retailers actually sell,
-            // URL Context to read flagged retailer pages, Code Execution
-            // to compute precise dimension math and budget allocations.
-            ...(useTools ? {
-              tools: [
-                { codeExecution: {} as Record<string, never> },
-              ],
-            } : {}),
-          });
-        } catch (err) {
-          if (!useTools) throw err;
-          log.warn("Structured plan call rejected — falling back to plain", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-          return await geminiProvider.chat({
-            model,
-            system,
-            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            max_tokens: 64000,
-            seed: DETERMINISTIC_SEED,
-          });
-        }
+        return await getProvider("validation").chat({
+          model,
+          system,
+          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+          max_tokens: 64000,
+          seed: DETERMINISTIC_SEED,
+          responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
+          responseMimeType: "application/json",
+        });
       },
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );

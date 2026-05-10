@@ -25,7 +25,7 @@
  * finds a specific, named contradiction. Failures fall open (return original).
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -144,7 +144,7 @@ OUTPUT JSON
   "decisions": ["short reason for each deletion or move; empty array if no changes"]
 }`;
 
-    const response = await geminiProvider.chat({
+    const response = await getProvider("scoring").chat({
       model,
       system:
         "You reconcile two interior-design agent outputs. You are conservative: trust Pass A's photo observations unless a specific contradiction with Pass B's shopping list or the user's keep list is identified. Return strict JSON.",
