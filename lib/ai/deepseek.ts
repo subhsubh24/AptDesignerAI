@@ -10,6 +10,7 @@ import { createLogger } from "@/lib/logging/logger";
 import { resolveSeed, resolveTemperature } from "./determinism";
 import { withRetry, isRetryableError } from "./retry";
 import { geminiSchemaToOpenAI } from "./openai-schema";
+import { DEEPSEEK_MODELS } from "./models";
 import type {
   AIProvider,
   AIMessage,
@@ -245,8 +246,10 @@ export const deepseekProvider: AIProvider = {
     const responseFormat = buildResponseFormat(responseSchema, responseMimeType);
     const enableThinking = shouldEnableThinking(thinkingConfig);
 
+    // Always use the DeepSeek model ID — callers pass a Gemini model name
+    // from selectModel() which stays Gemini-centric for vision agents.
     const body: Record<string, unknown> = {
-      model,
+      model: DEEPSEEK_MODELS.text,
       messages: openAIMessages,
       max_tokens,
       stream: false,
@@ -375,7 +378,7 @@ export const deepseekProvider: AIProvider = {
 
       return {
         content,
-        model,
+        model: DEEPSEEK_MODELS.text,
         usage: {
           input_tokens: data.usage?.prompt_tokens || 0,
           output_tokens: data.usage?.completion_tokens || 0,
