@@ -42,7 +42,7 @@ function getDeepSeek(): AIProvider {
 }
 
 export function getProvider(task: TaskType, tools?: GeminiTool[]): AIProvider {
-  const setting = process.env.AI_PROVIDER || "gemini";
+  const setting = process.env.AI_PROVIDER || "deepseek";
   if (setting === "gemini") return geminiProvider;
   if (GEMINI_ONLY_TASKS.has(task)) return geminiProvider;
   if (hasGeminiOnlyTool(tools)) return geminiProvider;

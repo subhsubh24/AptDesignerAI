@@ -39,10 +39,10 @@ export function assertProductionEnv(opts?: { alwaysEnforce?: boolean }): void {
   if (!enforce) return;
 
   const required = [...REQUIRED_PROD];
-  if (process.env.AI_PROVIDER === "deepseek") {
+  if (process.env.AI_PROVIDER !== "gemini") {
     required.push({
       name: "DEEPSEEK_API_KEY",
-      why: "DeepSeek V4 Flash for text-only agents (AI_PROVIDER=deepseek)",
+      why: "DeepSeek V4 Flash for text-only agents (default provider)",
     });
   }
 
