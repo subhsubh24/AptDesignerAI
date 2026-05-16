@@ -270,7 +270,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
 }> = {
   living_room: {
     essential: ["sofa", "area_rug", "coffee_table", "floor_lamp"],
-    standard: ["side_table", "throw_pillows", "media_console", "curtains", "table_lamp", "accent_chair"],
+    standard: ["side_table", "throw_pillows", "media_console", "table_lamp", "accent_chair"],
     finishing: ["wall_art", "plant", "throw_blanket", "vase", "tray", "decorative_objects", "bookshelf",
                 "candles", "baskets", "books_styled", "greenery_small", "frames", "poufs", "decorative_bowls"],
     minItemCount: 8,
@@ -278,7 +278,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   bedroom: {
     essential: ["bed", "nightstand", "area_rug", "table_lamp"],
-    standard: ["dresser", "curtains", "throw_pillows", "mirror", "second_nightstand"],
+    standard: ["dresser", "throw_pillows", "mirror", "second_nightstand"],
     finishing: ["plant", "wall_art", "throw_blanket", "decorative_objects", "bench",
                 "candles", "books_styled", "greenery_small", "frames", "tray_styling"],
     minItemCount: 7,
@@ -286,7 +286,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   dining_room: {
     essential: ["dining_table", "dining_chairs", "pendant_light"],
-    standard: ["area_rug", "sideboard", "curtains", "table_runner"],
+    standard: ["area_rug", "sideboard", "table_runner"],
     finishing: ["wall_art", "plant", "centerpiece", "candles", "decorative_bowl",
                 "baskets", "books_styled", "sculptures", "frames"],
     minItemCount: 6,
@@ -294,7 +294,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   home_office: {
     essential: ["desk", "desk_chair", "task_lamp"],
-    standard: ["bookshelf", "area_rug", "curtains", "storage"],
+    standard: ["bookshelf", "area_rug", "storage"],
     finishing: ["plant", "wall_art", "desk_accessories", "decorative_objects",
                 "candles", "books_styled", "greenery_small", "frames", "baskets"],
     minItemCount: 5,
@@ -310,7 +310,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   nursery: {
     essential: ["crib", "dresser", "area_rug", "table_lamp"],
-    standard: ["rocking_chair", "curtains", "storage"],
+    standard: ["rocking_chair", "storage"],
     finishing: ["wall_art", "plant", "decorative_objects", "mobile",
                 "books_styled", "poufs", "greenery_small", "frames"],
     minItemCount: 6,
@@ -318,7 +318,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   kitchen: {
     essential: ["bar_stools", "pendant_light"],
-    standard: ["kitchen_rug", "curtains", "storage_containers"],
+    standard: ["kitchen_rug", "storage_containers"],
     finishing: ["plant", "wall_art", "decorative_bowls", "cookbook_display",
                 "candles", "baskets", "tray_styling", "greenery_small"],
     minItemCount: 4,
@@ -326,7 +326,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   bathroom: {
     essential: ["bath_mat", "mirror", "storage"],
-    standard: ["curtains", "towel_rack", "plant"],
+    standard: ["towel_rack", "plant"],
     finishing: ["wall_art", "decorative_objects", "candles", "tray",
                 "baskets", "frames", "greenery_small"],
     minItemCount: 4,
@@ -334,7 +334,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   guest_room: {
     essential: ["bed", "nightstand", "table_lamp"],
-    standard: ["dresser", "area_rug", "curtains", "mirror"],
+    standard: ["dresser", "area_rug", "mirror"],
     finishing: ["wall_art", "plant", "throw_blanket", "decorative_objects",
                 "candles", "books_styled", "tray_styling", "frames"],
     minItemCount: 6,
@@ -342,7 +342,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
   },
   studio: {
     essential: ["sofa", "area_rug", "floor_lamp", "coffee_table", "desk"],
-    standard: ["bookshelf", "curtains", "throw_pillows", "side_table", "desk_chair"],
+    standard: ["bookshelf", "throw_pillows", "side_table", "desk_chair"],
     finishing: ["wall_art", "plant", "throw_blanket", "vase", "decorative_objects",
                 "candles", "baskets", "books_styled", "greenery_small", "frames", "poufs", "tray_styling"],
     minItemCount: 9,

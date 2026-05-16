@@ -669,11 +669,14 @@ Reference Pass 1's \`spatial_layout\`, \`window_door_positions\`, and \`outlet_p
 ✓ "Centered under the pendant, between the sofa and TV wall, long edge parallel to the sofa"
 ✓ "Left of the sofa, angled 15° toward the south window — outlet on south wall within 3ft"
 
+## SCOPE — NO WINDOW TREATMENTS
+Never recommend curtains, drapes, blinds, shades, valances, or any window covering. Window treatments are out of scope for this product — do not include them in what_it_needs under any category name (not "curtains", not "window_treatments", not "drapery"). If a window looks bare, solve it with other items (furniture placement, lighting, plants, wall art) instead.
+
 ## OUTPUT FORMAT (JSON only — no prose, no markdown fences)
 {
   "what_it_needs": [
     {
-      "category": "snake_case slug (area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, media_console, dining_table, dining_chairs, bookshelf, console_table, curtains, pendant_light, throw_blanket, plant, vase, tray)",
+      "category": "snake_case slug (area_rug, coffee_table, accent_chair, wall_art, throw_pillows, side_table, floor_lamp, table_lamp, storage_cabinet, credenza, media_console, dining_table, dining_chairs, bookshelf, console_table, pendant_light, throw_blanket, plant, vase, tray)",
       "search_title": "Highly specific search query — material + color + size + style + type",
       "description": "Why this item — what problem from Pass 1's diagnosis it solves. 2-3 sentences.",
       "priority": "high | medium | low",

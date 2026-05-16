@@ -173,7 +173,7 @@ Think step-by-step:
 1. For each baseline category, verify it's still needed given the keep/replace rules. If the user is keeping their sofa, don't include "sofa".
 2. Scan the diagnosis for UNSOLVED problems that the baseline list doesn't address. Common oversights:
    - "Room is dark" / dead lighting zones → needs floor_lamp, table_lamp, pendant_light, or sconce
-   - "No soft textures" / acoustic issues → needs area_rug, throw_pillow, throw_blanket, or curtains
+   - "No soft textures" / acoustic issues → needs area_rug, throw_pillow, or throw_blanket
    - "Empty walls" / no focal point → needs wall_art, mirror, or gallery_wall
    - "Dead corner" / spatial gap → needs accent_chair, plant, floor_lamp, or bookshelf at that location
    - "Cold/sterile" → needs organic materials: plant, wood_accent, textile

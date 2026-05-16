@@ -133,7 +133,7 @@ For each problem, be specific about WHAT and WHY.
 ### Step 4: DETERMINE what's MISSING
 Think like a designer completing a room. Common things people forget:
 - Layered lighting (floor lamp + table lamp + overhead)
-- Textiles (throw pillows, blankets, curtains)
+- Textiles (throw pillows, blankets)
 - Wall art/decor
 - Area rug (properly sized!)
 - Plants
@@ -167,7 +167,7 @@ Based on the existing finishes (floors, walls, fixed elements) AND how the clien
 - biggest_improvement_opportunities: List the real highest-impact changes — could be 2, could be 7. Rank by impact.
 - missing_furniture_categories: List ALL actually missing categories. Walk through ALL THREE TIERS:
   - ESSENTIAL: anchor furniture (sofa, bed, dining table), primary rug, primary lighting, main surfaces
-  - STANDARD: accent seating, secondary lighting, textiles (curtains, throw pillows, blankets), wall art, storage
+  - STANDARD: accent seating, secondary lighting, textiles (throw pillows, blankets), wall art, storage
   - FINISHING: plants, decorative objects, vases, trays, candles, books/display items
   Do NOT stop after listing the obvious large pieces. A well-furnished room has items from ALL three tiers.
 - color_issues: List **3-5 observations**. Map the actual colors you see.
