@@ -255,6 +255,7 @@ function isLikelyProductUrl(url: string): boolean {
 interface ReSearchCategoryInput {
   category: string;
   queriesByTier: { budget: string[]; balanced: string[]; high_end: string[] };
+  activeTiers: PriceTier[];
   ctx: AgentContext;
   brief: SearchBrief;
   tokenBudget: TokenBudget;
@@ -280,7 +281,7 @@ const DEPENDENT_CATEGORIES_SET = new Set([
 async function reSearchCategoryForCorrection(
   input: ReSearchCategoryInput
 ): Promise<{ added: number; products: CandidateProduct[] }> {
-  const { category, queriesByTier, ctx, brief, tokenBudget, stats, tracer, anchorSpecs, harmonyNeighbors, evaluations } = input;
+  const { category, queriesByTier, activeTiers, ctx, brief, tokenBudget, stats, tracer, anchorSpecs, harmonyNeighbors, evaluations } = input;
 
   if (tokenBudget.exceeded) return { added: 0, products: [] };
 
@@ -290,8 +291,8 @@ async function reSearchCategoryForCorrection(
   let addedCount = 0;
   const newCandidates: CandidateProduct[] = [];
 
-  // Phase 1: search every new query, per tier
-  for (const tier of ALL_PRICE_TIERS) {
+  // Phase 1: search every new query, per active tier only
+  for (const tier of activeTiers) {
     const queries = queriesByTier[tier] || [];
     if (queries.length === 0) continue;
     if (tokenBudget.exceeded) break;
@@ -2083,11 +2084,15 @@ export async function runAgenticSearch(
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
           // Tavily query length cap — long style descriptions trigger HTTP 400.
-          // Pull a short style hint from style_notes (first sentence, 80 chars max).
+          // Extract only the style label (e.g. "mid-century modern", "industrial"),
+          // not the full design rationale paragraph.
           const rawStyle = ctx.designDirection?.style_notes || "";
-          const firstSentence = rawStyle.split(/[.!?]/)[0] || rawStyle;
-          const styleHint = firstSentence.slice(0, 80).trim() || "modern apartment";
-          const backfillQuery = `${styleHint} ${wt.category.replace(/_/g, " ")} ${TIER_LABELS[wt.tier]}`;
+          const styleLabel = rawStyle
+            .split(/[.!?;:—–]/)[0]
+            .replace(/^(the goal is to|we aim to|shifting toward|pivoted? to)\s+/i, "")
+            .slice(0, 40)
+            .trim() || "modern";
+          const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleLabel} ${TIER_LABELS[wt.tier]}`;
           const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 
@@ -2710,6 +2715,7 @@ export async function runAgenticSearch(
             const result = await reSearchCategoryForCorrection({
               category,
               queriesByTier: queries,
+              activeTiers: PRICE_TIERS,
               ctx,
               brief,
               tokenBudget,
@@ -2910,6 +2916,7 @@ export async function runAgenticSearch(
             const result = await reSearchCategoryForCorrection({
               category: action.category,
               queriesByTier: action.queries_by_tier,
+              activeTiers: PRICE_TIERS,
               ctx,
               brief,
               tokenBudget,
