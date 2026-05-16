@@ -79,12 +79,12 @@ export const ORCHESTRATOR = {
 
   /** Per-tier candidate limits */
   candidates: {
-    topNForQuickScore: 8,
+    topNForQuickScore: 5,
     quickScoreMinThreshold: 4,
     quickScorePassThreshold: 6,
-    maxDeepScorePerTier: 12,
+    maxDeepScorePerTier: 8,
     topNFinal: 5,
-    alsoConsideredMax: 20,
+    alsoConsideredMax: 15,
     cartesianCap: 12,
     topPerCategoryForBundle: 3,
   },

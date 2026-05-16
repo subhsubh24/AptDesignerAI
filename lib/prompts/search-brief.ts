@@ -121,6 +121,13 @@ const TIER_RETAILERS: Record<PriceTier, string[]> = {
   ],
 };
 
+/** Map budget mode to the single price tier we search. */
+function budgetModeToTier(budgetMode: string): PriceTier {
+  if (budgetMode === "budget") return "budget";
+  if (budgetMode === "best_possible") return "high_end";
+  return "balanced";
+}
+
 export function getSearchBriefPrompt(
   roomType: string,
   missingCategories: string[],
@@ -248,33 +255,40 @@ export function getSearchBriefPrompt(
     ? `\n\n## CROSS-ROOM COHERENCE (other rooms in this apartment)\n${otherRoomsContext}\nIMPORTANT: Queries must surface products that COMPLEMENT the sibling rooms' palettes and materials. Reuse accent colors and repeat one or two signature materials (e.g. walnut, brass, boucle) across rooms — avoid introducing a wholly new palette or wood tone unless the design direction explicitly calls for contrast. Do NOT copy sibling rooms verbatim; the goal is a single cohesive home, not identical rooms.`
     : "";
 
+  const targetTier = budgetModeToTier(budgetMode);
+  const tierRetailers = TIER_RETAILERS[targetTier].join(", ");
+  const tierLabel = targetTier === "budget" ? "Budget" : targetTier === "high_end" ? "High End" : "Balanced";
+  const priceHint = targetTier === "budget"
+    ? 'Include price qualifiers like "under $200", "under $300" in queries.'
+    : targetTier === "high_end"
+    ? "Include retailer name to find specific premium products."
+    : 'Include price qualifiers like "under $800" in queries.';
+
   return `<role>
 You are a furniture search strategist generating Google search queries to find real, buyable products for a specific client's room. Your queries will be executed verbatim — they must return actual product pages, not category browse pages or generic lists.
 </role>
 
 <task>
-For each missing category, generate exactly 3 targeted search queries per price tier (budget / balanced / high_end). Each query must target a different angle so they surface genuinely different products. Quality over quantity — three razor-sharp queries beat five vague ones.
+For each missing category, generate exactly 3 targeted search queries for the **${tierLabel}** price tier. Each query must target a different angle so they surface genuinely different products. Quality over quantity — three razor-sharp queries beat five vague ones.
 </task>
 
 ## CONTEXT
 - Room type: ${roomType}
-- Default budget mode: ${budgetMode}
+- Budget mode: ${budgetMode} (search tier: ${tierLabel})
 - Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}${crossRoomSection}
 
 <reasoning_process>
 For each category, think through:
 1. What SPECIFICALLY is needed for this room? (exact size, material, color, style from the design direction)
-2. Which real brands and products fit each price tier?
+2. Which real brands and products fit the ${tierLabel} tier?
 3. Test each query mentally: "If I typed this into Google right now, would the first result be a real product page?" If no, rewrite.
 4. Would these 3 queries surface 3 genuinely different products? If two return the same results, rewrite one.
 </reasoning_process>
 
-## TIERS AND RETAILERS
-1. **Budget** — ${TIER_RETAILERS.budget.join(", ")}
-2. **Balanced** — ${TIER_RETAILERS.balanced.join(", ")}
-3. **High End** — ${TIER_RETAILERS.high_end.join(", ")}
+## TARGET TIER RETAILERS (${tierLabel})
+${tierRetailers}
 
-## 3 QUERY ANGLES (one per tier, each must surface different products)
+## 3 QUERY ANGLES (each must surface different products)
 Pick the 3 highest-yield angles for this category — avoid roundup/comparison queries which surface blog aggregators rather than product pages.
 1. **product_specific** — exact known product: "Article Seno walnut coffee table"
 2. **style_material** — style + material + color + size: "modern solid walnut coffee table tapered legs 48 inch"
@@ -295,11 +309,10 @@ BAD queries — generic, will return category pages:
   "affordable coffee tables" ← no specifics
 
 Rules:
-- Emit exactly 3 queries per tier — no more, no less
+- Emit exactly 3 queries for the ${tierLabel} tier — no more, no less
 - Include brand/retailer name + product type + material + color in product_specific and brand_collection queries
 - Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic
-- Include price qualifiers for budget ("under $200") and balanced ("under $800") tiers
-- For high end, include retailer name to find specific premium products
+- ${priceHint}
 - NEVER repeat the same search terms across different angles
 - Do NOT generate queries for replacements of any identified existing piece
 </constraints>
@@ -312,25 +325,23 @@ JSON only. No prose, no markdown fences.
     {
       "category": "category name",
       "tiers": {
-        "budget": {
+        "${targetTier}": {
           "search_queries": [
             { "query": "the search query", "angle": "product_specific | style_material | retailer_browse | comparison | brand_collection" }
           ],
           "price_range": { "min": number, "max": number }
-        },
-        "balanced": { ... same structure ... },
-        "high_end": { ... same structure ... }
+        }
       },
       "key_requirements": ["4-6 specific requirements — size, material, color, style, functional needs"]
     }
   ]
 }
 
-EXAMPLE for "coffee_table" in a warm modern living room:
+EXAMPLE for "coffee_table" in a warm modern living room (${tierLabel} tier):
 {
   "category": "coffee_table",
   "tiers": {
-    "budget": {
+    "${targetTier}": {
       "search_queries": [
         { "query": "IKEA Stockholm walnut coffee table", "angle": "product_specific" },
         { "query": "modern walnut coffee table with shelf under $200 48 inch", "angle": "style_material" },

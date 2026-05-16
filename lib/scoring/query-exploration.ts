@@ -15,7 +15,7 @@ import type { PriceTier } from "@/lib/prompts/search-brief";
 const log = createLogger("query-exploration");
 
 /** Probability of adding an exploration query per category×tier slot. */
-const EXPLORATION_RATE = 0.15;
+const EXPLORATION_RATE = 0.08;
 
 /** Style synonyms — broadens the search beyond the LLM's default framing */
 const STYLE_SYNONYMS: Record<string, string[]> = {

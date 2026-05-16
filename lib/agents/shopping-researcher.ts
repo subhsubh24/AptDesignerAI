@@ -266,11 +266,6 @@ const CATEGORY_RETAILERS: Record<string, Record<PriceTier, string[]>> = {
     balanced: ["westelm.com", "crateandbarrel.com", "cb2.com", "anthropologie.com", "mcgeeandco.com", "potterybarn.com", "etsy.com"],
     high_end: ["serenaandlily.com", "rh.com", "luluandgeorgia.com", "mcgeeandco.com", "abchome.com"],
   },
-  curtains: {
-    budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com"],
-    balanced: ["westelm.com", "crateandbarrel.com", "potterybarn.com", "cb2.com", "anthropologie.com", "ballarddesigns.com"],
-    high_end: ["serenaandlily.com", "rh.com", "potterybarn.com", "mcgeeandco.com", "rejuvenation.com"],
-  },
   // ── Wall Art & Decor ──────────────────────────────────────────
   wall_art: {
     budget: ["target.com", "society6.com", "amazon.com", "ikea.com", "icanvas.com", "desenio.com", "posterstore.com", "redbubble.com"],

@@ -96,12 +96,24 @@ export interface OrchestrationResult {
   trace?: ReturnType<PipelineTracer["getTrace"]>;
 }
 
-const PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
+const ALL_PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
 const TIER_LABELS: Record<PriceTier, string> = {
   budget: "Budget",
   balanced: "Balanced",
   high_end: "High End",
 };
+
+/**
+ * Map budget mode to a single search tier. Searching only the user's price
+ * level cuts Tavily queries by ~66% and downstream scoring proportionally.
+ */
+function getSearchTiers(budgetMode: string): PriceTier[] {
+  switch (budgetMode) {
+    case "budget": return ["budget"];
+    case "best_possible": return ["high_end"];
+    default: return ["balanced"];
+  }
+}
 
 // ─── Cartesian Product ────────────────────────────────────────
 
@@ -279,7 +291,7 @@ async function reSearchCategoryForCorrection(
   const newCandidates: CandidateProduct[] = [];
 
   // Phase 1: search every new query, per tier
-  for (const tier of PRICE_TIERS) {
+  for (const tier of ALL_PRICE_TIERS) {
     const queries = queriesByTier[tier] || [];
     if (queries.length === 0) continue;
     if (tokenBudget.exceeded) break;
@@ -493,6 +505,10 @@ export async function runAgenticSearch(
   const evaluations = new Map<string, ProductEvaluationResult>();
   const tracer = new PipelineTracer(crypto.randomUUID(), ctx.roomId);
   const tokenBudget = new TokenBudget(DEFAULT_TOKEN_CAP);
+
+  // Single-tier search: only search the user's budget level (~66% fewer queries)
+  const PRICE_TIERS = getSearchTiers(ctx.budgetMode);
+  log.info("Search tiers for this run", { budgetMode: ctx.budgetMode, tiers: PRICE_TIERS });
   const stats = {
     totalSearchQueries: 0,
     totalRawUrls: 0,
@@ -841,7 +857,7 @@ export async function runAgenticSearch(
     // HTTP wait, not CPU. More candidates → more survive the 8 post-extraction
     // filters (HTTP failures, sentinel titles, category mismatch, price range).
     // Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "35");
+    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "20");
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -1463,12 +1479,11 @@ export async function runAgenticSearch(
           return true;
         });
 
-        // Tier early-exit: if 3+ products already pass the 6.0 bar, deep-
-        // score only those (max 5). Otherwise fall back to top-8 to give
-        // sparse tiers a chance. Saves 40–60% of deep-score tokens on
-        // healthy tiers where we've already found enough winners.
+        // Cap deep-score to top-5 per category. With single-tier search the
+        // pool is already focused; 5 deep-scores per category keeps quality
+        // high while cutting token cost vs. the old top-8.
         const passThreshold = products.filter((p) => (quickScoresByProduct.get(p.id) || 0) >= 6);
-        const topN = products.slice(0, 8);
+        const topN = products.slice(0, 5);
         const toScore = passThreshold.length >= 3 ? passThreshold.slice(0, 5) : topN;
         totalToDeepScore += toScore.length;
 
@@ -2362,7 +2377,7 @@ export async function runAgenticSearch(
     // in-tier recommendation.
     // ═══════════════════════════════════════════════════════════
     if (ctx.fillAllTiers !== false) {
-      const PRICE_TIERS_LOCAL: PriceTier[] = ["budget", "balanced", "high_end"];
+      const PRICE_TIERS_LOCAL: PriceTier[] = PRICE_TIERS;
       const adjacentTiers: Record<PriceTier, PriceTier[]> = {
         budget: ["balanced", "high_end"],
         balanced: ["budget", "high_end"],
