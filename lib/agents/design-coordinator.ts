@@ -417,14 +417,23 @@ Begin. Call your first tool.`;
     const velocityExhausted = st.convergenceVelocity !== undefined && st.convergenceVelocity < 0.2;
     const allStabilized = st.stabilizedCount !== undefined && st.totalItems !== undefined &&
       st.stabilizedCount >= st.totalItems;
-    if (st.harmonyRoundsCompleted >= 1 && (allAboveTarget || velocityExhausted || allStabilized)) {
+    // Once the final assessment has run and reports no more rounds are
+    // warranted, the finalize decision is already made — skip the extra LLM
+    // turn that would just rubber-stamp it.
+    const finalAssessmentSettled = st.finalAssessmentComplete &&
+      !!st.finalAssessmentResult && !st.finalAssessmentResult.needsMoreRounds;
+    const harmonyConverged = st.harmonyRoundsCompleted >= 1 &&
+      (allAboveTarget || velocityExhausted || allStabilized);
+    if (finalAssessmentSettled || harmonyConverged) {
       log.info("Auto-finalize: convergence detected", {
         turn, allAboveTarget, velocityExhausted, allStabilized,
-        rounds: st.harmonyRoundsCompleted,
+        finalAssessmentSettled, rounds: st.harmonyRoundsCompleted,
       });
       return {
         success: true,
-        data: { finalized: true, reason: `Auto-finalize: ${allAboveTarget ? "all items ≥ 8.5" : velocityExhausted ? "velocity < 0.2" : "all stabilized"} after ${st.harmonyRoundsCompleted} round(s)` },
+        data: { finalized: true, reason: finalAssessmentSettled
+          ? "Auto-finalize: final assessment complete, no more rounds warranted"
+          : `Auto-finalize: ${allAboveTarget ? "all items ≥ 8.5" : velocityExhausted ? "velocity < 0.2" : "all stabilized"} after ${st.harmonyRoundsCompleted} round(s)` },
         tokensUsed: totalTokens,
         model,
       };

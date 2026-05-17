@@ -4,7 +4,7 @@
  * previous assessment and the new one.
  */
 
-import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { createLogger } from "@/lib/logging/logger";
@@ -61,7 +61,7 @@ Return ONLY the summary sentence(s) — no JSON, no quotes, no markdown.`;
   try {
     const result = await withRetry(
       async () => {
-        const response = await geminiProvider.chat({
+        const response = await getProvider("area_analysis").chat({
           model,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],

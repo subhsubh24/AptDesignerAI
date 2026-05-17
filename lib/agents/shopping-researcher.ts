@@ -617,31 +617,14 @@ Before rating, examine each URL:
 - 1: Definitely not relevant — review article, unrelated product, book/apparel/media, broken URL
 
 ## STEP 3: CALIBRATION ANCHORS — reference these when scoring
-Look at these calibrated examples. Use them to anchor your ratings — they define the scale.
+Anchor your ratings to these examples. The 3/4 boundary is the pass/fail line — weigh it most carefully.
+- **5** (clear product page): "Emmerson® Reclaimed Wood Dining Table" — westelm.com/products/emmerson-dining-table-h1567/ → /products/ path + SKU + exact product name + price/material in snippet.
+- **4** (likely product page, thin snippet): "Mid-Century Walnut Coffee Table" — article.com/product/2847/ → product path, generic snippet, still extractable. ALSO "Linen Slipcovered Sofa" — potterybarn.com/p/PB-comfort-square-arm-slipcovered-sofa/ → /p/ path, category match.
+- **3** (uncertain): "Shop All Sofas" with /products/shop-all-sofas/ → ambiguous listing vs curated page. ALSO a title with the category but a /category/livingroom/ URL path → probably a listing; pass only if the pool is thin.
+- **2** (listing / content / wrong type): "Sectional Sofas — West Elm" — westelm.com/shop/furniture/sectionals/ → /shop/ path = category listing. Also review roundups (/wirecutter/reviews/) and /b/ browse pages.
+- **1** (hard reject): "The Punishment of Gaza (Paperback)" — amazon.com/.../dp/1844673332/ → book. Also apparel, media, and retailer homepages.
 
-**Rating 5 (clear product page, strong category match, style-compatible):**
-- "Cloud Modular Sectional Sofa — Performance Boucle Ivory" — restorationhardware.com — "Starting at $4,295. Hand-crafted sectional in performance boucle..." → product page slug, ${category} match, price + material in snippet, style-specific descriptor.
-- "Emmerson® Reclaimed Wood Dining Table" — westelm.com/products/emmerson-dining-table-h1567/ → /products/ path + SKU + exact product name.
-
-**Rating 4 (likely product page, title matches, snippet thin):**
-- "Mid-Century Walnut Coffee Table" — article.com/product/2847/ → product path but snippet may be generic; still a product page worth extracting.
-- "Linen Slipcovered Sofa" — potterybarn.com/p/PB-comfort-square-arm-slipcovered-sofa/ → /p/ path, matches category, retailer credible.
-
-**Rating 3 (uncertain — could go either way):**
-- "Shop All Sofas" on a retailer with /products/shop-all-sofas/ in URL — ambiguous between listing and curated page.
-- Title contains category but URL path is /category/livingroom/ — probably a listing but worth passing if candidate pool is thin.
-
-**Rating 2 (listing / content / wrong type):**
-- "The 12 Best Sofas of 2026" — nytimes.com/wirecutter/reviews/best-sofas/ → review roundup, not a product page.
-- "Sectional Sofas — West Elm" — westelm.com/shop/furniture/sectionals/ → /shop/ path = category listing.
-- "Living Room Inspiration" — homedepot.com/b/Furniture-Living-Room-Furniture/N-5yc1vZc7sq → /b/ = browse listing.
-
-**Rating 1 (hard reject — not furniture/decor):**
-- "The Punishment of Gaza (Paperback)" — amazon.com/Punishment-Gaza/dp/1844673332/ → book, immediate reject.
-- "Beatles Abbey Road T-Shirt" — amazon.com/Beatles-Abbey-Road-Shirt/dp/B0xxx → apparel, immediate reject.
-- "West Elm | Modern Furniture, Home Decor" — westelm.com → retailer homepage, not a product.
-
-When your candidate matches one of these patterns closely, give the same rating. When uncertain between two ratings, pick the lower one — the downstream cost of a bad extraction far exceeds the cost of missing one borderline candidate.
+When uncertain between two ratings, pick the lower — a bad extraction costs more downstream than missing one borderline candidate.
 
 Return JSON:
 {

@@ -1,4 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
+import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
@@ -569,7 +570,7 @@ Return ONLY valid JSON:
 }`;
 
     try {
-      const response = await geminiProvider.chat({
+      const response = await getProvider("extraction").chat({
         model,
         system,
         messages: [{ role: "user", content: prompt }],
@@ -629,7 +630,7 @@ Return ONLY valid JSON:
 
       const fallbackContent = `${extractionPrompt}\n\nExtract product information for: ${url}\n\n## Page content extracted directly from ${url}:\n${pageContext}\n\nUse the above page content to fill in all fields accurately.\n\nReturn ONLY valid JSON, no markdown or extra text.`;
 
-      const response = await geminiProvider.chat({
+      const response = await getProvider("extraction").chat({
         model,
         system,
         messages: [{ role: "user", content: fallbackContent }],

@@ -426,8 +426,11 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
     let lastError: string | undefined;
     let attempt = 0;
     let wasTruncated = false;
+    // When cacheScope is set it already carries the floor plan + room photos,
+    // so omit them from the per-call message — otherwise every harmony round
+    // pays full input cost for the same images twice (cache + inline).
     const content: AIContentBlock[] = [
-      ...roomImages,
+      ...(context.cacheScope ? [] : roomImages),
       { type: "text", text: promptText },
     ];
     return withRetry(
@@ -635,7 +638,7 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
           const response = await geminiProvider.chat({
             model,
             system,
-            messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
+            messages: [{ role: "user", content: [...(context.cacheScope ? [] : roomImages), { type: "text", text: textBlock }] }],
             max_tokens: 16384,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
@@ -932,8 +935,11 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
     let lastError: string | undefined;
     let attempt = 0;
     let wasTruncated = false;
+    // When cacheScope is set it already carries the floor plan + room photos,
+    // so omit them from the per-call message — otherwise every harmony round
+    // pays full input cost for the same images twice (cache + inline).
     const content: AIContentBlock[] = [
-      ...roomImages,
+      ...(context.cacheScope ? [] : roomImages),
       { type: "text", text: promptText },
     ];
     return withRetry(
@@ -1110,7 +1116,7 @@ Based on the room context and per-item final scores above, your task is: holisti
           const response = await geminiProvider.chat({
             model,
             system,
-            messages: [{ role: "user", content: [...roomImages, { type: "text", text: textBlock }] }],
+            messages: [{ role: "user", content: [...(context.cacheScope ? [] : roomImages), { type: "text", text: textBlock }] }],
             max_tokens: 16384,
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",

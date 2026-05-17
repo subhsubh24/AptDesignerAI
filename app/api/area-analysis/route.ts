@@ -1194,7 +1194,7 @@ Use Google Search to verify current pricing and material availability when neede
     if (floorPlanImageUrl) {
       harmonyCacheBlocks.push({
         type: "text",
-        text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features, and orientation.",
+        text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features, and orientation. Use this as spatial ground truth for all spatial_fit scoring.",
       });
       harmonyCacheBlocks.push({ type: "image", source: { type: "url", url: floorPlanImageUrl } });
     }
