@@ -104,7 +104,12 @@ export async function POST(request: Request) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client type is complex
-async function runAnalysis(supabase: any, room_id: string, project_id: string | undefined): Promise<NextResponse> {
+export async function runAnalysis(
+  supabase: any,
+  room_id: string,
+  project_id: string | undefined,
+  options?: { forceRefresh?: boolean; extraDirection?: string },
+): Promise<NextResponse> {
   // Dedup: if a valid area-analysis already exists for this room, return it
   const { data: existingDiagnosis } = await supabase
     .from("room_diagnoses")
@@ -114,7 +119,7 @@ async function runAnalysis(supabase: any, room_id: string, project_id: string | 
     .limit(1)
     .maybeSingle();
 
-  if (existingDiagnosis) {
+  if (existingDiagnosis && !options?.forceRefresh) {
     const existingJson = existingDiagnosis.diagnosis_json as Record<string, unknown>;
     if (Array.isArray(existingJson.what_it_needs) && existingJson.what_it_needs.length > 0) {
       console.log(`[area-analysis] Returning existing analysis (dedup) for room ${room_id}`);
@@ -130,6 +135,15 @@ async function runAnalysis(supabase: any, room_id: string, project_id: string | 
     .single();
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+
+  // Refine-chat passes accumulated client direction. Merge it into user_context
+  // so the entire analysis (context parsing, prompt, validation) treats the
+  // chat refinements as authoritative client notes.
+  if (options?.extraDirection && options.extraDirection.trim()) {
+    room.user_context = [room.user_context, options.extraDirection]
+      .filter((s: unknown) => s && String(s).trim())
+      .join("\n\n");
+  }
 
   // Load project + other rooms in parallel (both need project_id which we have after room load)
   const effectiveProjectId = project_id || room.project_id;

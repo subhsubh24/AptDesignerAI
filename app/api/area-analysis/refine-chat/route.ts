@@ -1,26 +1,52 @@
 /**
  * Chat-style refinement endpoint.
  *
- * GET ?room_id=...  → list of refine_messages (chat history) + latest analysis
- * POST { room_id, content } → adds user message, generates patch + warnings,
- *                              applies patch, persists assistant message + new
- *                              room_diagnoses snapshot, returns updated state.
+ * GET ?room_id=...  → list of refine_messages (chat history)
+ * POST { room_id, content } → adds user message, then RE-RUNS the full area
+ *                              analysis with every chat refinement folded in
+ *                              as client direction. Persists the assistant
+ *                              message with a summary of what changed and
+ *                              returns the freshly analyzed room.
+ *
+ * The chat is the source of truth for refinement direction: each POST gathers
+ * all prior user messages and feeds them to the analysis, so the result is
+ * exactly what a fresh analysis would produce given those notes.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
-import { generateAnalysisPatch } from "@/lib/agents/refine-patcher";
-import { generateDesignerWarnings } from "@/lib/agents/designer-warnings";
-import { applyAnalysisPatch } from "@/lib/agents/apply-analysis-patch";
-import { parseUserContextAsync } from "@/lib/utils/parse-user-context";
-import type { AIContentBlock } from "@/lib/ai/provider";
-import type { AnalysisPatch, DesignerWarning } from "@/lib/types/database";
+import { runAnalysis } from "@/app/api/area-analysis/route";
+import { summarizeRefineChanges } from "@/lib/agents/refine-summarizer";
 
 const HISTORY_LIMIT = 10;
+
+/** Top-level analysis fields the focus page renders. */
+const TRACKED_FIELDS = [
+  "design_direction",
+  "style_name",
+  "recommended_palette",
+  "recommended_materials",
+  "recommended_textures",
+  "spatial_layout",
+  "lighting_conditions",
+  "what_works",
+  "what_should_go",
+  "what_it_needs",
+];
+
+function diffAnalysis(
+  oldA: Record<string, unknown>,
+  newA: Record<string, unknown>,
+): string[] {
+  const changed: string[] = [];
+  for (const f of TRACKED_FIELDS) {
+    if (JSON.stringify(oldA?.[f]) !== JSON.stringify(newA?.[f])) changed.push(f);
+  }
+  return changed;
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -50,62 +76,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "room_id and content required" }, { status: 400 });
   }
 
-  // Load room + project + latest diagnosis in parallel
-  const [{ data: room }, { data: existingMessages }] = await Promise.all([
-    supabase.from("rooms").select("*, room_images(*)").eq("id", room_id).single(),
-    supabase
-      .from("refine_messages")
-      .select("role, content")
-      .eq("room_id", room_id)
-      .order("created_at", { ascending: false })
-      .limit(HISTORY_LIMIT),
-  ]);
-
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("*")
+    .eq("id", room_id)
+    .single();
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
-  const [{ data: project }, { data: latestDiagnosis }] = await Promise.all([
-    supabase.from("projects").select("*").eq("id", room.project_id).single(),
-    supabase
-      .from("room_diagnoses")
-      .select("*")
-      .eq("room_id", room_id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const { data: latestDiagnosis } = await supabase
+    .from("room_diagnoses")
+    .select("diagnosis_json")
+    .eq("room_id", room_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (!latestDiagnosis) {
     return NextResponse.json(
       { error: "No analysis to refine. Run the initial assessment first." },
-      { status: 400 }
+      { status: 400 },
     );
   }
-
   const priorAnalysis = latestDiagnosis.diagnosis_json as Record<string, unknown>;
-  // Reverse to chronological order for the LLM
-  const history = (existingMessages || []).slice().reverse();
 
-  // Build room images as content blocks (cached via cacheScope in the patcher)
-  const roomImages: AIContentBlock[] = (room.room_images || [])
-    .map((img: { image_url: string }) => ({
-      type: "image" as const,
-      source: { type: "url" as const, url: img.image_url },
-    }));
-
-  const profile = buildDesignProfile(project);
-  const system = getSystemPrompt(profile);
-
-  // Resolve effective keep items
-  const parsedContext = room.user_context
-    ? await parseUserContextAsync(room.user_context)
-    : null;
-  const keepItems = [
-    ...((room.keep_items as string[] | null) || []),
-    ...(parsedContext?.additionalKeepItems || []),
-  ];
-
-  // Persist user message immediately (so the UI can echo it back even on
-  // a partial failure)
+  // Persist user message immediately so the UI can echo it even on failure.
   const { data: userMsg, error: userInsertErr } = await supabase
     .from("refine_messages")
     .insert({
@@ -119,7 +113,7 @@ export async function POST(request: NextRequest) {
   if (userInsertErr) {
     return NextResponse.json(
       { error: `Failed to record message: ${userInsertErr.message}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -130,120 +124,75 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    // ── Generate patch ────────────────────────────────────────────────
-    const cacheSessionKey = `refine-chat:${room_id}`;
-    const patchResult = await generateAnalysisPatch({
+    // Gather every refinement request (the just-inserted message included) so
+    // the re-analysis reflects the full conversation, not just the last line.
+    const { data: allUserMsgs } = await supabase
+      .from("refine_messages")
+      .select("content")
+      .eq("room_id", room_id)
+      .eq("role", "user")
+      .order("created_at", { ascending: true });
+
+    const directions: string[] = (allUserMsgs || [])
+      .map((m: { content: string }) => (m.content || "").trim())
+      .filter(Boolean);
+
+    const extraDirection = directions.length > 0
+      ? `ADDITIONAL DESIGN DIRECTION FROM CLIENT (refinements requested after the initial assessment — apply all of them; the LAST item is the most recent and highest priority):\n${directions.map((d) => `- ${d}`).join("\n")}`
+      : "";
+
+    // Re-run the full area analysis with the refinements folded in. This
+    // persists a new room_diagnoses row internally.
+    const analysisResponse = await runAnalysis(supabase, room_id, room.project_id, {
+      forceRefresh: true,
+      extraDirection,
+    });
+    const analysisData = await analysisResponse.json();
+    if (!analysisResponse.ok || analysisData.error || !analysisData.analysis) {
+      throw new Error(analysisData.error || "Re-analysis failed");
+    }
+    const newAnalysis = analysisData.analysis as Record<string, unknown>;
+
+    const changedFields = diffAnalysis(priorAnalysis, newAnalysis);
+
+    // Short client-facing summary of what changed.
+    const profile = buildDesignProfile(
+      (await supabase.from("projects").select("*").eq("id", room.project_id).single()).data,
+    );
+    const { summary, tokens: summaryTokens } = await summarizeRefineChanges({
       feedback: content,
       priorAnalysis,
-      history,
-      roomImages,
-      cacheSessionKey,
-      system,
-      keepItems,
+      newAnalysis,
+      system: getSystemPrompt(profile),
     });
 
-    let patchedAnalysis: Record<string, unknown> = priorAnalysis;
-    let changedFields: string[] = [];
-    let warnings: DesignerWarning[] = [];
-    let warningsTokens = 0;
-
-    if (patchResult.changed && patchResult.patch && Object.keys(patchResult.patch).length > 0) {
-      const applied = applyAnalysisPatch(priorAnalysis, patchResult.patch);
-      patchedAnalysis = applied.analysis;
-      changedFields = applied.changedFields;
-
-      // Skip the full area-analysis-validator here. It was designed for
-      // initial analysis and re-checks ALL items for keep_item_replaced,
-      // exclusion_violation, etc. — which strips items the patcher just
-      // added (e.g. "bookshelf decor" flagged as replacing kept bookshelf).
-      // The patcher already has keep items + exclusions in its prompt and
-      // produces changes that respect them.
-
-      // ── Designer warnings (advisory) ────────────────────────────────
-      // Only pass the items ADDED or CHANGED by this patch, not the full
-      // analysis. This prevents the LLM from flagging pre-existing items
-      // (e.g. "42-inch dining table creates a bottleneck" was already in
-      // the assessment before the user asked to "make it cozier").
-      const changedItemCategories = changedFields
-        .filter((f) => f.startsWith("what_it_needs."))
-        .map((f) => f.replace("what_it_needs.", ""));
-      const allNeeds = Array.isArray(patchedAnalysis.what_it_needs)
-        ? (patchedAnalysis.what_it_needs as Array<Record<string, unknown>>)
-        : [];
-      const changedItems = changedItemCategories.length > 0
-        ? allNeeds.filter((it) =>
-            changedItemCategories.some(
-              (cat) => String(it.category || "").toLowerCase().replace(/[\s-]+/g, "_") === cat,
-            ),
-          )
-        : [];
-      const warningAnalysis = {
-        ...patchedAnalysis,
-        what_it_needs: changedItems.length > 0 ? changedItems : patchedAnalysis.what_it_needs,
-      };
-      const warningsResult = await generateDesignerWarnings({
-        analysis: warningAnalysis,
-        changedFields,
-        feedback: content,
-        system,
-      });
-      warnings = warningsResult.warnings;
-      warningsTokens = warningsResult.tokens;
-
-      // Persist as new diagnosis row (immutable history)
-      await supabase.from("room_diagnoses").insert({
-        room_id,
-        diagnosis_json: patchedAnalysis,
-        design_direction_json: {
-          style_notes: (patchedAnalysis.design_direction as string) || "",
-          recommended_palette: (patchedAnalysis.recommended_palette as string[]) || [],
-          recommended_materials: (patchedAnalysis.recommended_materials as string[]) || [],
-          recommended_textures: (patchedAnalysis.recommended_textures as string[]) || [],
-          recommended_furniture_types: Array.isArray(patchedAnalysis.what_it_needs)
-            ? (patchedAnalysis.what_it_needs as Array<{ category: string }>).map((n) => n.category)
-            : [],
-        },
-        missing_categories: Array.isArray(patchedAnalysis.what_it_needs)
-          ? (patchedAnalysis.what_it_needs as Array<{ category: string }>).map((n) => n.category)
-          : [],
-        action_list: patchedAnalysis.what_it_needs || [],
-        model_used: selectModel("area_analysis"),
-      });
-    }
-
-    // Persist assistant message
     const { data: assistantMsg } = await supabase
       .from("refine_messages")
       .insert({
         room_id,
         user_id: user.id,
         role: "assistant",
-        content: patchResult.summary,
-        patch_json: (patchResult.patch as AnalysisPatch | null) || null,
-        warnings_json: warnings,
-        analysis_snapshot: patchResult.changed ? patchedAnalysis : null,
-        tokens_used: patchResult.tokens + warningsTokens,
+        content: summary,
+        patch_json: null,
+        warnings_json: [],
+        analysis_snapshot: newAnalysis,
+        tokens_used: summaryTokens,
       })
       .select()
       .single();
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
-      output_json: {
-        patch: patchResult.patch,
-        summary: patchResult.summary,
-        changed_fields: changedFields,
-        warnings,
-      },
-      tokens_used: patchResult.tokens + warningsTokens,
+      output_json: { summary, changed_fields: changedFields },
+      tokens_used: summaryTokens,
     });
 
     return NextResponse.json({
       user_message: userMsg,
       assistant_message: assistantMsg,
-      analysis: patchedAnalysis,
+      analysis: newAnalysis,
       changed_fields: changedFields,
-      warnings,
+      warnings: [],
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";

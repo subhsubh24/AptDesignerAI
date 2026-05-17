@@ -93,7 +93,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       room_id: roomId,
       user_id: "",
       role: "assistant",
-      content: "On it — updating the assessment…",
+      content: "Re-running the full room assessment with your changes — this takes a couple of minutes…",
       patch_json: null,
       warnings_json: null,
       analysis_snapshot: null,
