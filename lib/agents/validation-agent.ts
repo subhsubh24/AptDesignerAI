@@ -356,7 +356,7 @@ true if harmony_score ≤ 3 OR the user explicitly excluded the category / asked
 ### rationale (REQUIRED, chain-of-thought)
 For every item, walk through all 6 dims + overall in 7 steps.
 
-Use Code Execution for precise spatial calculations (clearances, rug coverage area, proportion ratios) rather than estimating.
+Use the PRE-COMPUTED MATH SCORES above as ground truth for spatial calculations (clearances, rug coverage area, proportion ratios) — do not estimate these values when math evidence is provided.
 
 ## FEW-SHOT EXAMPLES — calibration anchors
 Study these two entries. They define what 6.8 vs 9.6 look like so your sub-scores land on the same scale.
