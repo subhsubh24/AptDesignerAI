@@ -41,11 +41,14 @@ describe("selectModel", () => {
     expect(selectModel("image_generation")).toBe(MODELS.image);
   });
 
-  it("routes text tasks to the cheapest tier (base)", () => {
-    const textTasks = [
-      "diagnosis",
-      "apartment_analysis",
-      "area_analysis",
+  it("routes HIGH-thinking tasks to mid tier (flash-lite has no thinking support)", () => {
+    expect(selectModel("diagnosis")).toBe(TEXT_TIERS.mid);
+    expect(selectModel("apartment_analysis")).toBe(TEXT_TIERS.mid);
+    expect(selectModel("area_analysis")).toBe(TEXT_TIERS.mid);
+  });
+
+  it("routes cheap text tasks to base tier", () => {
+    const cheapTasks = [
       "extraction",
       "scoring",
       "bundle",
@@ -57,7 +60,7 @@ describe("selectModel", () => {
       "quick_score",
       "quick_screen",
     ] as const;
-    for (const task of textTasks) {
+    for (const task of cheapTasks) {
       expect(selectModel(task)).toBe(TEXT_TIERS.base);
     }
   });

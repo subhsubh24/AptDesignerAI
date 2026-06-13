@@ -95,12 +95,15 @@ export type TaskType =
   | "quick_screen"
   | "computer_use";
 
-/** Route a task to the right model. Defaults to the cheapest text tier. */
+/** Route a task to the right model. Defaults to the cheapest text tier.
+ *  Tasks that need HIGH thinking get the mid tier (flash-lite doesn't support thinking). */
 export function selectModel(task: TaskType): string {
   if (task === "mockup_image") return MODELS.imagePro;
   if (task === "mockup_image_fast" || task === "image_generation") return MODELS.image;
   if (task === "computer_use") {
     return process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
   }
+  const thinking = DEFAULT_THINKING[task];
+  if (thinking === "high" || thinking === "medium") return TEXT_TIERS.mid;
   return TEXT_TIERS.base;
 }

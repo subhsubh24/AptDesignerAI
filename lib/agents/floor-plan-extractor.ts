@@ -10,6 +10,7 @@
 // (bad image, parse error, network) they fall back to existing behavior.
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -158,7 +159,7 @@ export async function runFloorPlanExtraction(
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "high" },
+      thinkingConfig: thinkingFor("diagnosis"),
     });
 
     const raw = extractJsonObject<RawFloorPlan>(response.content);

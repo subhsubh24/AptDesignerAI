@@ -543,7 +543,12 @@ export const geminiProvider: AIProvider = {
     // Safety-net floor: callers set task-appropriate thinking via thinkingFor().
     // If a callsite forgets, fall back to "low" — cheap but functional.
     const effectiveThinkingConfig = thinkingConfig ?? { thinkingLevel: "low" };
-    config.thinkingConfig = effectiveThinkingConfig;
+    // gemini-2.5-flash-lite doesn't support thinking — strip to avoid 400.
+    if (model.includes("flash-lite")) {
+      log.debug("Stripping thinkingConfig for model without thinking support", { model });
+    } else {
+      config.thinkingConfig = effectiveThinkingConfig;
+    }
 
     if (responseModalities) {
       config.responseModalities = responseModalities;

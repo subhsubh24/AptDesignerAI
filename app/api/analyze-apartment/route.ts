@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -196,7 +197,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "high" },
+        thinkingConfig: thinkingFor("apartment_analysis"),
       });
 
       // Defensive parse: if the model returned empty/whitespace content
@@ -288,7 +289,7 @@ ${synthInput}
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "high" },
+      thinkingConfig: thinkingFor("apartment_analysis"),
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
     let synthParsed: Record<string, any> = { overall: "" };

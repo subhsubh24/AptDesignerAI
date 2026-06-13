@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { resolveImageBlock } from "@/lib/ai/resolve-image";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisAnalysisPrompt, getDiagnosisPlanPrompt } from "@/lib/prompts/diagnosis";
@@ -162,7 +163,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             seed,
             responseMimeType: "application/json",
             mediaResolution: "ultra_high",
-            thinkingConfig: { thinkingLevel: "high" },
+            thinkingConfig: thinkingFor("diagnosis"),
             cacheScope: cacheableBlocks.length > 0
               ? { sessionKey: roomSessionKey, content: cacheableBlocks }
               : undefined,
@@ -378,7 +379,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "high" },
+          thinkingConfig: thinkingFor("diagnosis"),
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
             : undefined,

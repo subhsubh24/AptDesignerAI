@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
@@ -520,7 +521,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           max_tokens: 16384,
           seed,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "high" },
+          thinkingConfig: thinkingFor("area_analysis"),
           cacheScope: contentBlocks.length > 0
             ? { sessionKey: areaSessionKey, content: contentBlocks }
             : undefined,
@@ -740,7 +741,7 @@ Use Google Search to verify current pricing and material availability when neede
       max_tokens: 32768,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "high" },
+      thinkingConfig: thinkingFor("area_analysis"),
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
@@ -845,8 +846,8 @@ Use Google Search to verify current pricing and material availability when neede
       input_tokens: passATokens.input,
       output_tokens: passATokens.output,
       thinking_tokens: passATokens.thinking,
-    }, { thinkingLevel: "high" });
-    recordUsage("pass-b", model, passBResponse.usage ?? {}, { thinkingLevel: "high" });
+    }, thinkingFor("area_analysis"));
+    recordUsage("pass-b", model, passBResponse.usage ?? {}, thinkingFor("area_analysis"));
 
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
       throw new Error(`AI Pass B missing required field "what_it_needs". Got keys: ${Object.keys(furnishing).join(", ")}.`);
@@ -1946,7 +1947,7 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
                   max_tokens: 32768,
                   seed: DETERMINISTIC_SEED,
                   responseMimeType: "application/json",
-                  thinkingConfig: { thinkingLevel: "high" },
+                  thinkingConfig: thinkingFor("area_analysis"),
                 });
                 const rerunItems = extractJsonObject(rerunResp.content);
                 const items = Array.isArray(rerunItems) ? rerunItems
