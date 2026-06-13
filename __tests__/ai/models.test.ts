@@ -6,6 +6,7 @@ import {
   defaultThinking,
   selectModel,
   selectModelTier,
+  isBaseTier,
 } from "@/lib/ai/models";
 
 describe("MODELS", () => {
@@ -91,6 +92,22 @@ describe("selectModelTier", () => {
     expect(selectModelTier("validation", "base")).toBe(TEXT_TIERS.base);
     expect(selectModelTier("validation", "mid")).toBe(TEXT_TIERS.mid);
     expect(selectModelTier("validation", "ceiling")).toBe(TEXT_TIERS.ceiling);
+  });
+});
+
+describe("isBaseTier", () => {
+  it("returns true for the base tier model", () => {
+    expect(isBaseTier(TEXT_TIERS.base)).toBe(true);
+  });
+
+  it("returns false for mid/ceiling tiers", () => {
+    expect(isBaseTier(TEXT_TIERS.mid)).toBe(false);
+    expect(isBaseTier(TEXT_TIERS.ceiling)).toBe(false);
+  });
+
+  it("returns false for image models", () => {
+    expect(isBaseTier(MODELS.image)).toBe(false);
+    expect(isBaseTier(MODELS.imagePro)).toBe(false);
   });
 });
 

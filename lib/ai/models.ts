@@ -97,6 +97,10 @@ export type TaskType =
 
 /** Route a task to the right model. Defaults to the cheapest text tier.
  *  Tasks that need HIGH thinking get the mid tier (flash-lite doesn't support thinking). */
+export function isBaseTier(model: string): boolean {
+  return model === TEXT_TIERS.base;
+}
+
 export function selectModel(task: TaskType): string {
   if (task === "mockup_image") return MODELS.imagePro;
   if (task === "mockup_image_fast" || task === "image_generation") return MODELS.image;

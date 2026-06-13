@@ -35,4 +35,18 @@ describe("provider floors (paired cheap-by-default guard)", () => {
     // And must NOT have reverted to a forced-high default.
     expect(src).not.toMatch(/thinkingConfig\s*\?\?\s*\{\s*thinkingLevel:\s*"high"\s*\}/);
   });
+
+  it("gemini: thinking strip uses exact base match, not substring", () => {
+    const src = readFileSync(join(__dirname, "..", "..", "lib", "ai", "gemini.ts"), "utf8");
+    // Must use isBaseTier() for exact matching, not model.includes("flash-lite")
+    // which would incorrectly match both base and mid tiers.
+    expect(src).not.toMatch(/model\.includes\(["']flash-lite["']\)/);
+    expect(src).toMatch(/isBaseTier\(model\)/);
+  });
+
+  it("gemini: upgrades base→mid when tools are present", () => {
+    const src = readFileSync(join(__dirname, "..", "..", "lib", "ai", "gemini.ts"), "utf8");
+    expect(src).toMatch(/tools\?\.length\s*&&\s*isBaseTier\(model\)/);
+    expect(src).toMatch(/TEXT_TIERS\.mid/);
+  });
 });

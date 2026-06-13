@@ -5,6 +5,7 @@ import path from "path";
 import pLimit from "p-limit";
 import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
+import { isBaseTier, TEXT_TIERS } from "@/lib/ai/models";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
@@ -405,6 +406,13 @@ export const geminiProvider: AIProvider = {
     // that sub-1.0 values can cause looping / degraded reasoning. We no
     // longer set a 0.3 fallback; if the caller doesn't pass a temperature,
     // we let Gemini 3 use its own default.
+    // gemini-2.5-flash-lite can't use tools (no tools+JSON mime, no tool-call
+    // circulation). Upgrade to the mid tier when the caller needs tools.
+    if (tools?.length && isBaseTier(model)) {
+      log.debug("Upgrading base model to mid for tool support", { from: model, to: TEXT_TIERS.mid });
+      model = TEXT_TIERS.mid;
+    }
+
     const effectiveTemperature = resolveTemperature(temperature);
     const effectiveSeed = resolveSeed(seed);
     const ai = getClient();
@@ -544,7 +552,8 @@ export const geminiProvider: AIProvider = {
     // If a callsite forgets, fall back to "low" — cheap but functional.
     const effectiveThinkingConfig = thinkingConfig ?? { thinkingLevel: "low" };
     // gemini-2.5-flash-lite doesn't support thinking — strip to avoid 400.
-    if (model.includes("flash-lite")) {
+    // (Exact base match: gemini-3.1-flash-lite-preview DOES support thinking.)
+    if (isBaseTier(model)) {
       log.debug("Stripping thinkingConfig for model without thinking support", { model });
     } else {
       config.thinkingConfig = effectiveThinkingConfig;
