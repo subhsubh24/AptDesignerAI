@@ -162,6 +162,7 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
             seed,
             responseMimeType: "application/json",
             mediaResolution: "ultra_high",
+            thinkingConfig: { thinkingLevel: "high" },
             cacheScope: cacheableBlocks.length > 0
               ? { sessionKey: roomSessionKey, content: cacheableBlocks }
               : undefined,
@@ -240,6 +241,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
+          thinkingConfig: { thinkingLevel: "low" },
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
             : undefined,
@@ -376,6 +378,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" },
           cacheScope: cacheableBlocks.length > 0
             ? { sessionKey: roomSessionKey, content: cacheableBlocks }
             : undefined,

@@ -346,6 +346,7 @@ export async function generateSearchBrief(
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
+          thinkingConfig: { thinkingLevel: "low" },
         });
 
         if (response.truncated) {
@@ -641,6 +642,7 @@ Return JSON:
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
+          thinkingConfig: { thinkingLevel: "minimal" },
         });
 
         const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;

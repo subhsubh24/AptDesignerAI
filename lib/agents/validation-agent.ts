@@ -241,6 +241,7 @@ export async function validateRoomHarmony(
     diagnosis?: DiagnosisData;
     designDirection?: DesignDirection;
     cacheScope?: { sessionKey: string; content: AIContentBlock[] };
+    thinkingConfig?: { thinkingLevel: "minimal" | "low" | "medium" | "high" };
   }
 ): Promise<AgentResult<HarmonyValidationResult>> {
   const model = selectModel("validation");
@@ -455,6 +456,7 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
           cacheScope: context.cacheScope,
+          thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
         });
 
         if (response.truncated) {
@@ -645,6 +647,7 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
             cacheScope: context.cacheScope,
+            thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -768,6 +771,7 @@ export async function performFinalAssessment(
     diagnosis?: DiagnosisData;
     designDirection?: DesignDirection;
     cacheScope?: { sessionKey: string; content: AIContentBlock[] };
+    thinkingConfig?: { thinkingLevel: "minimal" | "low" | "medium" | "high" };
   }
 ): Promise<AgentResult<FinalAssessmentResult>> {
   const model = selectModel("validation");
@@ -964,6 +968,7 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
           cacheScope: context.cacheScope,
+          thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
         });
 
         if (response.truncated) {
@@ -1123,6 +1128,7 @@ Based on the room context and per-item final scores above, your task is: holisti
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
             cacheScope: context.cacheScope,
+            thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;

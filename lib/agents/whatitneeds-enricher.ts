@@ -159,7 +159,7 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
       max_tokens: 16384,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: { thinkingLevel: "minimal" },
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },

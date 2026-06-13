@@ -103,6 +103,7 @@ export async function runProductIdentifier(
       seed: DETERMINISTIC_SEED,
       responseSchema: IDENTIFIER_SCHEMA,
       mediaResolution: "ultra_high",
+      thinkingConfig: { thinkingLevel: "low" },
       tools: [{ codeExecution: {} as Record<string, never> }],
     });
 

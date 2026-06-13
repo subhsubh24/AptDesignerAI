@@ -156,6 +156,7 @@ export async function extractRoomArchitecture(
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },

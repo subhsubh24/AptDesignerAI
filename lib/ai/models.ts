@@ -1,12 +1,49 @@
 /**
  * Model configuration for the AI pipeline.
  *
- * We run on a single text model (Gemini 3.1 Flash Lite) plus the image model.
- * Flash Lite at HIGH thinking matches Flash at LOW thinking in quality for our
- * tasks, at a fraction of the cost. HIGH is enforced as the default inside
- * `geminiProvider.chat` so callsites don't have to set it — they just call
- * `selectModel(task)` and get the right model.
+ * TEXT_TIERS defines a cost ladder: base (cheapest) → mid → ceiling (strongest).
+ * The default floor is base + task-appropriate thinking level. The escalation
+ * ladder (lib/agents/escalation-ladder.ts) steps up only when a deterministic
+ * verifier rejects the cheap output. Reasoning-heavy tasks (understanding,
+ * diagnosis, design-direction) keep HIGH thinking regardless of tier.
  */
+
+export const TEXT_TIERS = {
+  base: "gemini-2.5-flash-lite",
+  mid: "gemini-3.1-flash-lite-preview",
+  ceiling: process.env.TEXT_CEILING_MODEL || "gemini-3.1-flash-lite-preview",
+} as const;
+
+export type TextTier = keyof typeof TEXT_TIERS;
+
+export type ThinkingTier = "minimal" | "low" | "medium" | "high";
+
+export const DEFAULT_THINKING: Partial<Record<TaskType, ThinkingTier>> = {
+  apartment_analysis: "high",
+  area_analysis: "high",
+  diagnosis: "high",
+  validation: "low",
+  scoring: "low",
+  bundle: "low",
+  apartment_research: "low",
+  extraction: "minimal",
+  quick_score: "minimal",
+  quick_screen: "minimal",
+  search: "minimal",
+  search_brief: "low",
+  mockup_prompt: "low",
+};
+
+export function defaultThinking(task: TaskType): ThinkingTier {
+  return DEFAULT_THINKING[task] ?? "low";
+}
+
+export function selectModelTier(task: TaskType, tier: TextTier): string {
+  if (task === "mockup_image") return MODELS.imagePro;
+  if (task === "mockup_image_fast" || task === "image_generation") return MODELS.image;
+  if (task === "computer_use") return process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
+  return TEXT_TIERS[tier];
+}
 
 export const MODELS = {
   /** Unified text model for every non-image task. */
@@ -58,14 +95,12 @@ export type TaskType =
   | "quick_screen"
   | "computer_use";
 
-/** Route a task to the right model. Text tasks all share one model. */
+/** Route a task to the right model. Defaults to the cheapest text tier. */
 export function selectModel(task: TaskType): string {
-  // Final-quality room mockup — use Nano Banana Pro (thinking always on)
   if (task === "mockup_image") return MODELS.imagePro;
-  // Quick preview / thumbnail — use Nano Banana 2 (faster, cheaper)
   if (task === "mockup_image_fast" || task === "image_generation") return MODELS.image;
   if (task === "computer_use") {
     return process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
   }
-  return MODELS.text;
+  return TEXT_TIERS.base;
 }

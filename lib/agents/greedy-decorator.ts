@@ -254,6 +254,7 @@ export async function runDiagnosisExpansion(
         messages: [{ role: "user", content }],
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED + i,
+        thinkingConfig: { thinkingLevel: "low" },
         tools: [
           { googleSearch: {} as Record<string, never> },
           { codeExecution: {} as Record<string, never> },
@@ -321,6 +322,7 @@ export async function runDiagnosisExpansion(
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED + i,
+          thinkingConfig: { thinkingLevel: "low" },
           tools: [
             { googleSearch: {} as Record<string, never> },
             { codeExecution: {} as Record<string, never> },
@@ -522,6 +524,7 @@ async function runCritiquePass(args: {
       messages: [{ role: "user", content }],
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
+      thinkingConfig: { thinkingLevel: "low" },
       tools: [
         { codeExecution: {} as Record<string, never> },
       ],

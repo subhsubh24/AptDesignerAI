@@ -288,6 +288,7 @@ export async function evaluateBundle(
           max_tokens: maxTokens,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "low" },
         });
 
         const raw = extractJsonObject(response.content);
@@ -478,6 +479,7 @@ export async function generateBundleVibe(
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "low" },
         });
         const raw = extractJsonObject(response.content);
         const data = BundleVibeResponseSchema.parse(raw);

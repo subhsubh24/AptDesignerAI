@@ -507,6 +507,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
           max_tokens: 16384,
           seed,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" },
           cacheScope: contentBlocks.length > 0
             ? { sessionKey: areaSessionKey, content: contentBlocks }
             : undefined,
@@ -726,6 +727,7 @@ Use Google Search to verify current pricing and material availability when neede
       max_tokens: 32768,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "high" },
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
@@ -1918,6 +1920,7 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
                   max_tokens: 32768,
                   seed: DETERMINISTIC_SEED,
                   responseMimeType: "application/json",
+                  thinkingConfig: { thinkingLevel: "high" },
                 });
                 const rerunItems = extractJsonObject(rerunResp.content);
                 const items = Array.isArray(rerunItems) ? rerunItems

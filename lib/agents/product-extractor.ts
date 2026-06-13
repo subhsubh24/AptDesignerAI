@@ -577,6 +577,7 @@ Return ONLY valid JSON:
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "minimal" },
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -637,6 +638,7 @@ Return ONLY valid JSON:
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "minimal" },
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -722,6 +724,7 @@ export async function extractFromImage(
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
       mediaResolution: "high",
+      thinkingConfig: { thinkingLevel: "low" },
     });
 
     const validated = ExtractedProductSchema.parse(extractJsonObject(response.content)) as ExtractedProduct;

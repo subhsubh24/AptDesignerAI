@@ -267,6 +267,7 @@ async function disambiguateWithVision(
       messages: [{ role: "user", content: blocks }],
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
+      thinkingConfig: { thinkingLevel: "low" },
     });
 
     const raw = res.content.trim();
@@ -585,6 +586,7 @@ ${floorPlanSchema}`;
       messages: [{ role: "user", content: buildingContextPrompt }],
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
+      thinkingConfig: { thinkingLevel: "low" },
       tools: [{ googleSearch: {} }, { urlContext: {} }],
     });
 
@@ -610,6 +612,7 @@ ${floorPlanSchema}`;
         messages: [{ role: "user", content: floorPlanPrompt }],
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
+        thinkingConfig: { thinkingLevel: "low" },
         tools: [{ googleSearch: {} }, { urlContext: {} }],
       });
 
@@ -705,6 +708,7 @@ ${floorPlanSchema}`;
             messages: [{ role: "user", content: visionBlocks }],
             max_tokens: 64000,
             // No temperature override — Gemini 3 is optimized for its default (1.0).
+            thinkingConfig: { thinkingLevel: "low" },
           });
 
           const visionRaw = visionResponse.content.trim();
@@ -915,6 +919,7 @@ CONFIDENCE RULES:
           }],
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
+          thinkingConfig: { thinkingLevel: "low" },
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
           // latLng is routed into toolConfig.retrievalConfig by

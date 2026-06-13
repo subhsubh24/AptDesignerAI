@@ -203,6 +203,7 @@ Return a JSON array with one object per pair:
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "minimal" },
     });
 
     const parsed = extractJsonObject<PairResult[]>(response.content);

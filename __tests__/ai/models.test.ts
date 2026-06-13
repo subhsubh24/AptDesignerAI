@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { MODELS, selectModel } from "@/lib/ai/models";
+import {
+  MODELS,
+  TEXT_TIERS,
+  DEFAULT_THINKING,
+  defaultThinking,
+  selectModel,
+  selectModelTier,
+} from "@/lib/ai/models";
 
 describe("MODELS", () => {
   it("exposes text and image tiers", () => {
@@ -12,12 +19,20 @@ describe("MODELS", () => {
     expect(MODELS.image).toMatch(/^gemini-/);
   });
 
-  it("text tier is flash-lite (cheap tier)", () => {
-    expect(MODELS.text).toBe("gemini-3.1-flash-lite-preview");
-  });
-
   it("uses distinct models for text vs image", () => {
     expect(MODELS.text).not.toBe(MODELS.image);
+  });
+});
+
+describe("TEXT_TIERS", () => {
+  it("has base, mid, ceiling tiers", () => {
+    expect(TEXT_TIERS.base).toMatch(/^gemini-/);
+    expect(TEXT_TIERS.mid).toMatch(/^gemini-/);
+    expect(TEXT_TIERS.ceiling).toMatch(/^gemini-/);
+  });
+
+  it("base is cheaper than mid", () => {
+    expect(TEXT_TIERS.base).not.toBe(TEXT_TIERS.mid);
   });
 });
 
@@ -26,7 +41,7 @@ describe("selectModel", () => {
     expect(selectModel("image_generation")).toBe(MODELS.image);
   });
 
-  it("routes all text tasks to the unified text model", () => {
+  it("routes text tasks to the cheapest tier (base)", () => {
     const textTasks = [
       "diagnosis",
       "apartment_analysis",
@@ -43,7 +58,7 @@ describe("selectModel", () => {
       "quick_screen",
     ] as const;
     for (const task of textTasks) {
-      expect(selectModel(task)).toBe(MODELS.text);
+      expect(selectModel(task)).toBe(TEXT_TIERS.base);
     }
   });
 
@@ -58,6 +73,58 @@ describe("selectModel", () => {
       const result = selectModel(task);
       expect(result, `selectModel("${task}") should return a non-empty string`).toBeTruthy();
       expect(typeof result).toBe("string");
+    }
+  });
+});
+
+describe("selectModelTier", () => {
+  it("routes image tasks to image models regardless of tier", () => {
+    expect(selectModelTier("mockup_image", "base")).toBe(MODELS.imagePro);
+    expect(selectModelTier("mockup_image_fast", "mid")).toBe(MODELS.image);
+    expect(selectModelTier("image_generation", "ceiling")).toBe(MODELS.image);
+  });
+
+  it("routes text tasks to the requested tier", () => {
+    expect(selectModelTier("validation", "base")).toBe(TEXT_TIERS.base);
+    expect(selectModelTier("validation", "mid")).toBe(TEXT_TIERS.mid);
+    expect(selectModelTier("validation", "ceiling")).toBe(TEXT_TIERS.ceiling);
+  });
+});
+
+describe("defaultThinking", () => {
+  it("returns high for reasoning tasks", () => {
+    expect(defaultThinking("apartment_analysis")).toBe("high");
+    expect(defaultThinking("area_analysis")).toBe("high");
+    expect(defaultThinking("diagnosis")).toBe("high");
+  });
+
+  it("returns low for structured output tasks", () => {
+    expect(defaultThinking("validation")).toBe("low");
+    expect(defaultThinking("scoring")).toBe("low");
+    expect(defaultThinking("bundle")).toBe("low");
+  });
+
+  it("returns minimal for cheap tasks", () => {
+    expect(defaultThinking("extraction")).toBe("minimal");
+    expect(defaultThinking("quick_score")).toBe("minimal");
+    expect(defaultThinking("quick_screen")).toBe("minimal");
+    expect(defaultThinking("search")).toBe("minimal");
+  });
+
+  it("falls back to low for unknown tasks", () => {
+    expect(defaultThinking("mockup_image" as never)).toBe("low");
+  });
+});
+
+describe("DEFAULT_THINKING", () => {
+  it("covers all major text task types", () => {
+    const textTasks = [
+      "diagnosis", "apartment_analysis", "area_analysis",
+      "extraction", "scoring", "bundle", "validation",
+      "quick_score", "quick_screen", "search",
+    ];
+    for (const task of textTasks) {
+      expect(DEFAULT_THINKING).toHaveProperty(task);
     }
   });
 });

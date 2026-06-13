@@ -47,6 +47,7 @@ async function semanticChat<T>(opts: {
       max_tokens: opts.maxTokens ?? 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "minimal" },
     });
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`semantic-extract timeout (${opts.label})`)), SEMANTIC_CALL_TIMEOUT_MS)

@@ -158,6 +158,7 @@ export async function runFloorPlanExtraction(
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "high" },
     });
 
     const raw = extractJsonObject<RawFloorPlan>(response.content);

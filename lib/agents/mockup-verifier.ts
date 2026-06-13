@@ -112,6 +112,7 @@ Return JSON:
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
     });
 
     const result = extractJsonObject<MockupVerification>(response.content);

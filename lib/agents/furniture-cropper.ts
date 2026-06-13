@@ -138,6 +138,7 @@ export async function runFurnitureCropper(
         seed: DETERMINISTIC_SEED,
         responseSchema: FURNITURE_CROPS_SCHEMA,
         mediaResolution: "ultra_high",
+        thinkingConfig: { thinkingLevel: "low" },
         tools: [{ codeExecution: {} as Record<string, never> }],
       });
 

@@ -281,6 +281,7 @@ Search before writing queries. Queries grounded in real product listings perform
           seed: DETERMINISTIC_SEED,
           responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "low" },
         });
       },
       { isRetryable: isRetryableError, maxAttempts: 2 }

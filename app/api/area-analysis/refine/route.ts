@@ -249,6 +249,7 @@ ${JSON.stringify({
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "low" },
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
       interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
@@ -328,6 +329,7 @@ CRITICAL RULES:
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "low" },
     });
 
     if (response.truncated) {

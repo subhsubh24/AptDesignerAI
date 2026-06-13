@@ -217,7 +217,7 @@ function buildResponseFormat(
 function shouldEnableThinking(
   thinkingConfig?: { thinkingLevel?: string; includeThoughts?: boolean },
 ): boolean {
-  if (!thinkingConfig) return true; // match Gemini default of HIGH
+  if (!thinkingConfig) return false; // cheap floor: reasoning off unless explicitly requested
   const level = thinkingConfig.thinkingLevel;
   return level === "high" || level === "medium";
 }

@@ -194,6 +194,7 @@ Be harsh — use the full 0–1 range. 0.9+ only for clear wins (category fit AN
           seed: DETERMINISTIC_SEED,
           responseSchema: RERANK_GEMINI_SCHEMA,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "minimal" },
         }),
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );
