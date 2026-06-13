@@ -13,6 +13,7 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
+import { withCostLedger, recordUsage } from "@/lib/observability/cost-meter";
 import { parseUserContextAsync, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
 import { validateAreaAnalysisAsync } from "@/lib/agents/area-analysis-validator";
 import { selfReviewAreaAnalysis, filterUnanchoredItems } from "@/lib/agents/self-correction";
@@ -94,7 +95,19 @@ export async function POST(request: Request) {
     return existing;
   }
 
-  const work = runAnalysis(supabase, room_id, project_id);
+  const work = withCostLedger(async (summary) => {
+    const res = await runAnalysis(supabase, room_id, project_id);
+    const s = summary();
+    if (s.stageCount > 0) {
+      console.log(`[area-analysis] cost: ${s.totalTokens} tokens across ${s.stageCount} stages`, {
+        input: s.totalInputTokens,
+        output: s.totalOutputTokens,
+        thinking: s.totalThinkingTokens,
+        escalations: s.escalationCount,
+      });
+    }
+    return res;
+  });
   inFlightAnalyses.set(inflightKey, work);
   try {
     return await work;
@@ -827,6 +840,14 @@ Use Google Search to verify current pricing and material availability when neede
       },
     } as { usage: { input_tokens: number; output_tokens: number; thinking_tokens: number } };
 
+    // Cost observability: record the two generation passes (no-op if no ledger).
+    recordUsage("pass-a", model, {
+      input_tokens: passATokens.input,
+      output_tokens: passATokens.output,
+      thinking_tokens: passATokens.thinking,
+    }, { thinkingLevel: "high" });
+    recordUsage("pass-b", model, passBResponse.usage ?? {}, { thinkingLevel: "high" });
+
     if (!analysis.what_it_needs || !Array.isArray(analysis.what_it_needs)) {
       throw new Error(`AI Pass B missing required field "what_it_needs". Got keys: ${Object.keys(furnishing).join(", ")}.`);
     }
@@ -1287,6 +1308,11 @@ Use Google Search to verify current pricing and material availability when neede
       }
 
       const harmony = harmonyResult.data;
+
+      // Cost observability: one entry per harmony round (no-op if no ledger).
+      recordUsage(`harmony-round-${round}`, selectModel("validation"), {
+        output_tokens: harmonyResult.tokensUsed ?? 0,
+      }, { thinkingLevel: "low" });
 
       if (!harmony.item_scores || !Array.isArray(harmony.item_scores)) {
         if (round === 1) {

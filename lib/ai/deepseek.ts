@@ -214,7 +214,7 @@ function buildResponseFormat(
 
 // ─── Thinking Mode ───────────────────────────────────────────────
 
-function shouldEnableThinking(
+export function shouldEnableThinking(
   thinkingConfig?: { thinkingLevel?: string; includeThoughts?: boolean },
 ): boolean {
   if (!thinkingConfig) return false; // cheap floor: reasoning off unless explicitly requested
