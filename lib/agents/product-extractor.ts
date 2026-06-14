@@ -496,9 +496,16 @@ export async function extractFromUrlBatch(
       failedUrls.push(...chunk);
     }
 
-    // Advanced retry when basic mostly failed
+    // Advanced retry whenever basic left a meaningful number of URLs behind.
+    // Previously gated at successRate < 0.3 (only retry when MOSTLY failed),
+    // which silently dropped partial-failure batches — e.g. 4/8 or 3/7 success
+    // left 4 product URLs unextracted and killed whole categories (decor,
+    // dining_table) at the extract stage. Retrying at < 0.7 recovers those.
+    // Cost is Tavily credits (2/5 URLs vs 1), NOT LLM tokens — the downstream
+    // extraction LLM call only runs on URLs that actually return content, so
+    // this trades cheap search credits for materially better category coverage.
     const successRate = (chunk.length - failedUrls.length) / chunk.length;
-    if (failedUrls.length >= 2 && successRate < 0.3) {
+    if (failedUrls.length >= 2 && successRate < 0.7) {
       try {
         const retryResponse = await tavilyExtract({
           urls: failedUrls,

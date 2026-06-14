@@ -117,11 +117,6 @@ export interface OrchestrationResult {
 }
 
 const ALL_PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
-const TIER_LABELS: Record<PriceTier, string> = {
-  budget: "Budget",
-  balanced: "Balanced",
-  high_end: "High End",
-};
 
 /**
  * Map budget mode to a single search tier. Searching only the user's price
@@ -2109,9 +2104,13 @@ export async function runAgenticSearch(
           // Build a clean, keyword-based query from structured design direction
           // fields (materials, palette) — NOT from style_notes prose, which
           // leaks sentences like "pivot from the current sterile, monochro" into
-          // the query and returns 0 Tavily results every time.
+          // the query and returns 0 Tavily results every time. The price tier is
+          // NOT appended as text ("Balanced"/"Budget") — no product page contains
+          // that word, so it's pure noise to Tavily's semantic search. Tier is
+          // already enforced via the domain allowlist + price filter inside
+          // searchProducts(query, n, wt.tier, ...).
           const styleKeywords = extractBackfillKeywords(ctx.designDirection);
-          const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleKeywords} ${TIER_LABELS[wt.tier]}`;
+          const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleKeywords}`.trim();
           const searchResult = await searchProducts(backfillQuery, ORCHESTRATOR.maxResultsPerQuery, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 
@@ -2260,7 +2259,7 @@ export async function runAgenticSearch(
       );
 
       await Promise.all(backfillPromises);
-      reportStep({ step: `Backfilling ${weakTiers.length} weak tier(s)`, status: "completed" });
+      reportStep({ step: `Backfilling ${cappedWeakTiers.length} weak tier(s)`, status: "completed" });
 
       // Re-run bundle evaluation only for tiers that actually received new
       // strong products (not just every tier we tried to backfill).
