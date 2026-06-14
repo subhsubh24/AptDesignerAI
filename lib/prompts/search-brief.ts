@@ -265,7 +265,7 @@ export function getSearchBriefPrompt(
     : 'Include price qualifiers like "under $800" in queries.';
 
   return `<role>
-You are a furniture search strategist generating Google search queries to find real, buyable products for a specific client's room. Your queries will be executed verbatim — they must return actual product pages, not category browse pages or generic lists.
+You are a furniture search strategist generating web search queries to find real, buyable products for a specific client's room. Your queries will be executed on a semantic search engine (Tavily) — NOT Google. Tavily works best with descriptive keyword queries, not exact product names.
 </role>
 
 <task>
@@ -280,9 +280,9 @@ For each missing category, generate exactly 3 targeted search queries for the **
 <reasoning_process>
 For each category, think through:
 1. What SPECIFICALLY is needed for this room? (exact size, material, color, style from the design direction)
-2. Which real brands and products fit the ${tierLabel} tier?
-3. Test each query mentally: "If I typed this into Google right now, would the first result be a real product page?" If no, rewrite.
-4. Would these 3 queries surface 3 genuinely different products? If two return the same results, rewrite one.
+2. Which real retailers from the tier list carry this type of product?
+3. Test each query mentally: "Does this query use descriptive keywords a product page would contain?" If it uses an invented product name, rewrite.
+4. Would these 3 queries surface 3 genuinely different products? If two would return the same results, rewrite one.
 </reasoning_process>
 
 ## TARGET TIER RETAILERS (${tierLabel})
@@ -290,27 +290,30 @@ ${tierRetailers}
 
 ## 3 QUERY ANGLES (each must surface different products)
 Pick the 3 highest-yield angles for this category — avoid roundup/comparison queries which surface blog aggregators rather than product pages.
-1. **product_specific** — exact known product: "Article Seno walnut coffee table"
-2. **style_material** — style + material + color + size: "modern solid walnut coffee table tapered legs 48 inch"
-3. **retailer_browse** — specific retailer + filter: "West Elm coffee tables walnut under $800"
-Alternate angles (substitute when one of the above doesn't fit the category):
-- **brand_collection** — brand or designer collection: "Floyd The Coffee Table walnut"
+1. **retailer_browse** — retailer name + category + material + price cap: "West Elm coffee tables walnut under $800"
+2. **style_material** — style + material + color + size (NO brand names): "modern solid walnut coffee table tapered legs 48 inch"
+3. **product_specific** — ONLY use a real, well-known product name you are confident exists: "IKEA LACK coffee table" — NEVER fabricate a product name
 
 <constraints>
-GOOD queries — specific, will find product pages:
-  "Article Texa rug 8x10 cream wool"
-  "CB2 Dondra teak media console 64 inch"
-  "West Elm Mid-Century coffee table walnut under $600"
-  "Castlery Miso round dining table 47 inch"
+GOOD queries — descriptive keywords that match product page content:
+  "Crate & Barrel coffee tables walnut round under $700"
+  "Ruggable 8x10 rug washable neutral geometric under $500"
+  "Article dining table round walnut 36 inch under $700"
+  "modern solid walnut coffee table tapered legs 48 inch"
+  "West Elm sofas performance fabric under $1500"
 
-BAD queries — generic, will return category pages:
+BAD queries — will return zero results:
+  "Article Sven 72 inch sofa performance bouclé warm cream" ← fabricated product name
+  "CB2 Dondra teak media console 64 inch" ← fabricated product name
   "modern rugs" ← no size/material/color
   "TV stands" ← no style, no material, no retailer
   "affordable coffee tables" ← no specifics
 
 Rules:
 - Emit exactly 3 queries for the ${tierLabel} tier — no more, no less
-- Include brand/retailer name + product type + material + color in product_specific and brand_collection queries
+- CRITICAL: Do NOT invent product names. If you're not 100% certain a specific product exists (like "IKEA KALLAX" or "West Elm Mid-Century"), use a style_material or retailer_browse query instead.
+- retailer_browse queries: use retailer name + category + key material/style + price cap
+- style_material queries: describe the product with keywords (material, color, size, style) — no brand names
 - Use the design direction palette and materials in style_material queries — search for the RIGHT aesthetic
 - ${priceHint}
 - NEVER repeat the same search terms across different angles
@@ -343,9 +346,9 @@ EXAMPLE for "coffee_table" in a warm modern living room (${tierLabel} tier):
   "tiers": {
     "${targetTier}": {
       "search_queries": [
-        { "query": "IKEA Stockholm walnut coffee table", "angle": "product_specific" },
-        { "query": "modern walnut coffee table with shelf under $200 48 inch", "angle": "style_material" },
-        { "query": "Target threshold coffee tables wood under $250", "angle": "retailer_browse" }
+        { "query": "Crate & Barrel coffee tables walnut round under $400", "angle": "retailer_browse" },
+        { "query": "modern walnut coffee table with shelf 48 inch round", "angle": "style_material" },
+        { "query": "IKEA Stockholm walnut coffee table", "angle": "product_specific" }
       ],
       "price_range": { "min": 80, "max": 300 }
     }

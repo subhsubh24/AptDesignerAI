@@ -58,6 +58,21 @@ function tiebreakBundle(a: CandidateProduct[], b: CandidateProduct[]): number {
   return au.localeCompare(bu);
 }
 
+// ─── Backfill query helpers ────────────────────────────────────
+// Build clean search keywords from structured DesignDirection fields instead
+// of parsing style_notes prose (which leaks sentences into queries).
+function extractBackfillKeywords(dd?: { recommended_materials?: string[]; recommended_palette?: string[] }): string {
+  if (!dd) return "modern";
+  const material = dd.recommended_materials?.[0]
+    ?.split(/[,(]/)[0]
+    ?.trim();
+  const palette = dd.recommended_palette?.[0]
+    ?.replace(/\s*\(#[^)]+\).*/, "")
+    ?.trim();
+  const parts = [material, palette].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "modern";
+}
+
 // ─── Types ─────────────────────────────────────────────────────
 
 export interface OrchestrationStep {
@@ -2083,16 +2098,12 @@ export async function runAgenticSearch(
       const backfillSearchLimit = pLimit(8);
       const backfillPromises = weakTiers.map((wt) =>
         backfillSearchLimit(async () => {
-          // Tavily query length cap — long style descriptions trigger HTTP 400.
-          // Extract only the style label (e.g. "mid-century modern", "industrial"),
-          // not the full design rationale paragraph.
-          const rawStyle = ctx.designDirection?.style_notes || "";
-          const styleLabel = rawStyle
-            .split(/[.!?;:—–]/)[0]
-            .replace(/^(the goal is to|we aim to|shifting toward|pivoted? to)\s+/i, "")
-            .slice(0, 40)
-            .trim() || "modern";
-          const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleLabel} ${TIER_LABELS[wt.tier]}`;
+          // Build a clean, keyword-based query from structured design direction
+          // fields (materials, palette) — NOT from style_notes prose, which
+          // leaks sentences like "pivot from the current sterile, monochro" into
+          // the query and returns 0 Tavily results every time.
+          const styleKeywords = extractBackfillKeywords(ctx.designDirection);
+          const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleKeywords} ${TIER_LABELS[wt.tier]}`;
           const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 

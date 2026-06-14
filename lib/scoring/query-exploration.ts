@@ -123,15 +123,15 @@ export function generateExplorationQueries(
       }
     }
 
-    // Fallback: use an exploration modifier
+    // Fallback: use an exploration modifier + category only.
+    // Do NOT append directionLower — it's truncated prose from style_notes
+    // (e.g. "the goal is to pivot from the curr") and produces gibberish
+    // Tavily queries that always return 0 results.
     if (!explorationQuery) {
       const modIdx = Math.floor(simpleHash(`${roomId}:${category}:mod`) * EXPLORATION_MODIFIERS.length);
       const modifier = EXPLORATION_MODIFIERS[modIdx];
       const categoryName = category.replace(/_/g, " ");
-      // Keep concise — Tavily 400/429s on long queries.
-      explorationQuery = directionLower
-        ? `${modifier} ${categoryName} ${directionLower}`
-        : `${modifier} ${categoryName}`;
+      explorationQuery = `${modifier} ${categoryName}`;
     }
 
     explorationQueries.push({

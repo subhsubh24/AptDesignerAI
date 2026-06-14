@@ -391,6 +391,35 @@ export async function generateSearchBrief(
   }
 }
 
+// ─── Query sanitizer ──────────────────────────────────────────
+// Detects and cleans malformed search queries before they reach Tavily.
+// Prevents prose fragments from leaking into queries (backfill/exploration
+// paths historically concatenated truncated style_notes prose).
+const PROSE_PATTERNS = [
+  /\b(pivot|shift|transition|aim|goal is|moving toward|the current)\b/i,
+  /\b(we aim to|the goal is to|shifting toward|pivoted? to|pivot from)\b/i,
+  /\b(sterile|monochromatic|monochro|aesthetic that|scheme to)\b/i,
+];
+
+function sanitizeSearchQuery(query: string): string | null {
+  if (!query || typeof query !== "string") return null;
+  let clean = query.trim();
+  if (clean.length > 120) clean = clean.slice(0, 120).trim();
+  // Strip hex color codes — not useful for search
+  clean = clean.replace(/\s*\(#[A-Fa-f0-9]{3,8}\)/g, "");
+  // Strip percentage annotations (e.g. "— dominant (50%)")
+  clean = clean.replace(/\s*—\s*\w+\s*\(\d+%\)/g, "");
+  clean = clean.replace(/\s+/g, " ").trim();
+  for (const pattern of PROSE_PATTERNS) {
+    if (pattern.test(clean)) {
+      log.warn("Rejected prose-contaminated search query", { query: clean });
+      return null;
+    }
+  }
+  if (clean.length < 5) return null;
+  return clean;
+}
+
 /**
  * Search the web for products using Tavily Search API.
  * Returns up to maxResults candidates per query with zero LLM token cost.
@@ -405,6 +434,12 @@ export async function searchProducts(
   category?: string,
   _roomImageUrls?: string[]
 ): Promise<AgentResult<SearchCandidate[]>> {
+  const sanitized = sanitizeSearchQuery(query);
+  if (!sanitized) {
+    return { success: true, data: [], tokensUsed: 0 };
+  }
+  query = sanitized;
+
   const cached = getCachedQuery(query, tier, category, maxResults);
   if (cached) {
     return { success: true, data: cached, tokensUsed: 0 };
