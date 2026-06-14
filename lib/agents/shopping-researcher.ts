@@ -343,7 +343,7 @@ export async function generateSearchBrief(
           model,
           system,
           messages: [{ role: "user", content: withRoomImages(prompt + retryHint, roomImageUrls) }],
-          max_tokens: 64000,
+          max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
           thinkingConfig: { thinkingLevel: "low" },
@@ -593,7 +593,7 @@ export async function quickScreenCandidates(
     return { success: true, data: [], tokensUsed: 0 };
   }
 
-  const BATCH_SIZE = 30;
+  const BATCH_SIZE = 15;
   const batches: SearchCandidate[][] = [];
   for (let i = 0; i < prefiltered.length; i += BATCH_SIZE) {
     batches.push(prefiltered.slice(i, i + BATCH_SIZE));
@@ -615,7 +615,7 @@ export async function quickScreenCandidates(
         .join("\n");
 
       const styleContext = designDirection
-        ? `\nDesign direction: ${designDirection.style_notes}. Palette: ${designDirection.recommended_palette?.join(", ") || "flexible"}. Materials: ${designDirection.recommended_materials?.join(", ") || "flexible"}.\nPenalize products that clearly clash with this direction (e.g. wrong style family).`
+        ? `\nDesign direction: Palette: ${designDirection.recommended_palette?.slice(0, 3).join(", ") || "flexible"}. Materials: ${designDirection.recommended_materials?.slice(0, 3).join(", ") || "flexible"}.\nPenalize products that clearly clash with this direction.`
         : "";
 
       const prompt = `## SEARCH CONTEXT
@@ -674,7 +674,7 @@ Return JSON:
           model: selectModel("quick_screen"),
           system: "You are a product page classifier. Be strict — only pass candidates that are likely actual product pages for the requested category. Return ONLY the JSON ratings array.",
           messages: [{ role: "user", content: withRoomImages(prompt, roomImageUrls) }],
-          max_tokens: 64000,
+          max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
           thinkingConfig: { thinkingLevel: "minimal" },

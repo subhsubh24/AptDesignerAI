@@ -244,7 +244,7 @@ Overall alignment score: how well does this set deliver on the assessment? Targe
           model,
           system,
           messages: [{ role: "user", content }],
-          max_tokens: 64000,
+          max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
           responseMimeType: "application/json",

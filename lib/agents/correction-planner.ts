@@ -277,7 +277,7 @@ Search before writing queries. Queries grounded in real product listings perform
           model,
           system,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-          max_tokens: 64000,
+          max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
           responseMimeType: "application/json",

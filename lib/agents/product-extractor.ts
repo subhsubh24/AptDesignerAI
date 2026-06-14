@@ -551,7 +551,7 @@ export async function extractFromUrlBatch(
     const batch = urlsWithContent.slice(i, i + LLM_BATCH);
     const productBlocks = batch.map((url, idx) => {
       const content = contentMap.get(url) ?? "";
-      return `--- PRODUCT ${idx + 1} ---\nURL: ${url}\n\n${content.slice(0, 8000)}\n`;
+      return `--- PRODUCT ${idx + 1} ---\nURL: ${url}\n\n${content.slice(0, 4000)}\n`;
     }).join("\n");
 
     const prompt = `${extractionPrompt}
@@ -574,7 +574,7 @@ Return ONLY valid JSON:
         model,
         system,
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 64000,
+        max_tokens: 16000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "minimal" },
@@ -635,7 +635,7 @@ Return ONLY valid JSON:
         model,
         system,
         messages: [{ role: "user", content: fallbackContent }],
-        max_tokens: 64000,
+        max_tokens: 16000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "minimal" },
@@ -720,8 +720,7 @@ export async function extractFromImage(
       model,
       system,
       messages: [{ role: "user", content }],
-      max_tokens: 64000,
-      // No temperature override — Gemini 3 is optimized for its default (1.0).
+      max_tokens: 16000,
       responseMimeType: "application/json",
       mediaResolution: "high",
       thinkingConfig: { thinkingLevel: "low" },

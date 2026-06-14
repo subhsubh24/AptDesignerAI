@@ -190,7 +190,7 @@ Be harsh — use the full 0–1 range. 0.9+ only for clear wins (category fit AN
           model,
           system: "You are a concise product-listing relevance scorer. Output strict JSON only.",
           messages: [{ role: "user", content }],
-          max_tokens: 64000,
+          max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseSchema: RERANK_GEMINI_SCHEMA,
           responseMimeType: "application/json",

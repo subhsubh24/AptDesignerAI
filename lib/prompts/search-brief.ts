@@ -167,8 +167,8 @@ export function getSearchBriefPrompt(
     ? [
         designDirection.recommended_palette?.length && `Target palette: ${designDirection.recommended_palette.join(", ")}`,
         designDirection.recommended_materials?.length && `Target materials: ${designDirection.recommended_materials.join(", ")}`,
-        designDirection.recommended_textures?.length && `Target textures: ${designDirection.recommended_textures.join(", ")}`,
-        designDirection.style_notes && `Style: ${designDirection.style_notes}`,
+        designDirection.recommended_textures?.length && `Target textures: ${designDirection.recommended_textures.slice(0, 3).join(", ")}`,
+        designDirection.style_notes && `Style: ${designDirection.style_notes.split(/[.!?]/)[0].slice(0, 80)}`,
       ].filter(Boolean).join("\n")
     : null;
 

@@ -165,7 +165,7 @@ export async function scoreProduct(
     product.colors?.length && `Colors: ${product.colors.join(", ")}`,
     visualTags.length > 0 && `Visual style (from product images): ${visualTags.join(", ")}`,
     availableVariants.length > 0 && `Other available options: ${availableVariants.join(", ")}`,
-    product.description && `Description: ${product.description}`,
+    product.description && `Description: ${product.description.slice(0, 200)}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -240,7 +240,7 @@ export async function scoreProduct(
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 64000,
+          max_tokens: 32000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           mediaResolution: "ultra_high",
@@ -468,7 +468,7 @@ export async function scoreProducts(
           product.colors?.length && `Colors: ${product.colors.join(", ")}`,
           visualTags.length > 0 && `Visual style: ${visualTags.join(", ")}`,
           availableVariants.length > 0 && `Other options: ${availableVariants.join(", ")}`,
-          product.description && `Description: ${product.description}`,
+          product.description && `Description: ${product.description.slice(0, 200)}`,
         ]
           .filter(Boolean)
           .join("\n");
@@ -557,7 +557,7 @@ Return JSON ONLY matching this shape (no prose, no markdown fences):
               model,
               system,
               messages: [{ role: "user", content: retryContent }],
-              max_tokens: 64000,
+              max_tokens: 32000,
               seed: DETERMINISTIC_SEED,
               responseMimeType: "application/json",
               mediaResolution: "ultra_high",
@@ -859,7 +859,7 @@ Return JSON:
               model: selectModel("quick_score"),
               system: "You are a quick product screener for interior design. Score products on style fit and value. Be strict — a 7+ means genuinely good. If product images are provided, use them to verify style, color, and material claims. Return ONLY the JSON scores, no explanations.",
               messages: [{ role: "user", content: [...qsContent, { type: "text" as const, text: retryHint }] }],
-              max_tokens: 64000,
+              max_tokens: 32000,
               seed: DETERMINISTIC_SEED,
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
               mediaResolution: "ultra_high",

@@ -89,6 +89,27 @@ export const ORCHESTRATOR = {
     topPerCategoryForBundle: 3,
   },
 
+  /** Tavily max results per search query (default 5; was 10) */
+  maxResultsPerQuery: Number(process.env.MAX_RESULTS_PER_QUERY || "5"),
+
+  /** Max URLs to extract per (category, tier) — default 12; was 20 */
+  maxExtractPerCatTier: Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "12"),
+
+  /** Max weak tiers to backfill before diminishing returns */
+  maxBackfillTiers: Number(process.env.MAX_BACKFILL_TIERS || "3"),
+
+  /** Max candidates extracted per backfill weak tier */
+  backfillExtractCap: Number(process.env.BACKFILL_EXTRACT_CAP || "3"),
+
+  /** Max bundle combos evaluated by LLM (each ~17K tokens) */
+  maxBundleEvals: Number(process.env.MAX_BUNDLE_EVALS || "6"),
+
+  /** Budget thresholds for progressive degradation */
+  budgetGates: {
+    skipPairwise: 0.75,
+    skipBackfill: 0.65,
+  },
+
   /** Backfill triggers when strong products < this count */
   backfillStrongThreshold: 3,
   /** Minimum final_item_score for backfill products to be kept */

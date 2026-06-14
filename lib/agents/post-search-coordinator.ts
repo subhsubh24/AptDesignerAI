@@ -436,7 +436,7 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           model,
           system,
           messages,
-          max_tokens: 64000,
+          max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
           tools: coordinatorTools,

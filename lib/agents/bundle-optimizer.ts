@@ -476,7 +476,7 @@ export async function generateBundleVibe(
           model,
           system,
           messages: [{ role: "user", content: retryContent }],
-          max_tokens: 64000,
+          max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           thinkingConfig: { thinkingLevel: "low" },

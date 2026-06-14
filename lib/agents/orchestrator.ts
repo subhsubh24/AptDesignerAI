@@ -321,7 +321,7 @@ async function reSearchCategoryForCorrection(
 
     for (const query of queries) {
       if (tokenBudget.exceeded) break;
-      const searchRes = await searchProducts(query, 8, tier, correctionCategory, ctx.imageUrls);
+      const searchRes = await searchProducts(query, ORCHESTRATOR.maxResultsPerQuery, tier, correctionCategory, ctx.imageUrls);
       if (searchRes.tokensUsed) {
         tokenBudget.add(searchRes.tokensUsed);
         stats.tokensUsed += searchRes.tokensUsed;
@@ -344,8 +344,7 @@ async function reSearchCategoryForCorrection(
       return true;
     });
 
-    // Cap per tier to prevent runaway cost
-    const topCandidates = uniqueCandidates.slice(0, 8);
+    const topCandidates = uniqueCandidates.slice(0, ORCHESTRATOR.maxResultsPerQuery);
 
     // Phase 2: extract
     for (const cand of topCandidates) {
@@ -720,7 +719,7 @@ export async function runAgenticSearch(
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
         tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
-        const result = await searchProducts(task.query, 10, task.tier, task.category, ctx.imageUrls);
+        const result = await searchProducts(task.query, ORCHESTRATOR.maxResultsPerQuery, task.tier, task.category, ctx.imageUrls);
         const candidates = result.success ? (result.data || []) : [];
         if (result.tokensUsed) {
           tokenBudget.add(result.tokensUsed);
@@ -878,7 +877,7 @@ export async function runAgenticSearch(
     // HTTP wait, not CPU. More candidates → more survive the 8 post-extraction
     // filters (HTTP failures, sentinel titles, category mismatch, price range).
     // Override via env.
-    const maxExtractPerCatTier = Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "20");
+    const maxExtractPerCatTier = ORCHESTRATOR.maxExtractPerCatTier;
     let totalCapped = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
@@ -1582,16 +1581,16 @@ export async function runAgenticSearch(
     // Progressive degradation: if budget is tight, shed expensive phases
     // instead of aborting entirely.
     const budgetPct = tokenBudget.used / tokenBudget.cap;
-    const skipPairwise = budgetPct > 0.85;
-    const skipBackfill = budgetPct > 0.75;
+    const skipPairwise = budgetPct > ORCHESTRATOR.budgetGates.skipPairwise;
+    const skipBackfill = budgetPct > ORCHESTRATOR.budgetGates.skipBackfill;
     if (skipPairwise) {
-      log.info("Budget >85% — skipping pairwise re-rank to preserve budget for validation/bundling", {
+      log.info(`Budget >${Math.round(ORCHESTRATOR.budgetGates.skipPairwise * 100)}% — skipping pairwise re-rank to preserve budget for validation/bundling`, {
         tokensUsed: stats.tokensUsed, budgetPct: Math.round(budgetPct * 100),
       });
       (stats as Record<string, unknown>).bottlenecks = [...((stats as Record<string, unknown>).bottlenecks as string[] || []), "Pairwise re-rank skipped (budget conservation)"];
     }
     if (skipBackfill) {
-      log.info("Budget >75% — skipping backfill to preserve budget for validation/bundling", {
+      log.info(`Budget >${Math.round(ORCHESTRATOR.budgetGates.skipBackfill * 100)}% — skipping backfill to preserve budget for validation/bundling`, {
         tokensUsed: stats.tokensUsed, budgetPct: Math.round(budgetPct * 100),
       });
     }
@@ -1895,10 +1894,7 @@ export async function runAgenticSearch(
       }
       combos = prefiltered.kept;
 
-      // Final cap on LLM bundle evaluations after prefilter (override via MAX_BUNDLE_EVALS).
-      // Each eval costs ~17K tokens; this prevents the bundle phase from
-      // dominating the budget when prefilter passes too many borderline combos.
-      const maxBundleEvals = Number(process.env.MAX_BUNDLE_EVALS || "10");
+      const maxBundleEvals = ORCHESTRATOR.maxBundleEvals;
       if (combos.length > maxBundleEvals) {
         combos.sort((a, b) => {
           const avgA = a.reduce((s, p) => s + (evaluations.get(p.id)?.final_item_score || 0), 0) / a.length;
@@ -2085,11 +2081,18 @@ export async function runAgenticSearch(
       }
     }
 
-    if (weakTiers.length > 0 && !tokenBudget.exceeded && !skipBackfill) {
+    const cappedWeakTiers = weakTiers.slice(0, ORCHESTRATOR.maxBackfillTiers);
+    if (cappedWeakTiers.length > 0 && !tokenBudget.exceeded && !skipBackfill) {
+      if (cappedWeakTiers.length < weakTiers.length) {
+        log.info("Capped backfill weak tiers", {
+          total: weakTiers.length, capped: cappedWeakTiers.length,
+          dropped: weakTiers.slice(ORCHESTRATOR.maxBackfillTiers).map(t => `${t.category}/${t.tier}`),
+        });
+      }
       reportStep({
-        step: `Backfilling ${weakTiers.length} weak tier(s)`,
+        step: `Backfilling ${cappedWeakTiers.length} weak tier(s)`,
         status: "running",
-        data: { weakTiers: weakTiers.map((t) => `${t.category}/${t.tier}`) },
+        data: { weakTiers: cappedWeakTiers.map((t) => `${t.category}/${t.tier}`) },
       });
 
       // Track tiers that actually received new strong products; only THOSE
@@ -2101,7 +2104,7 @@ export async function runAgenticSearch(
       // Run targeted backfill searches for weak tiers. Reduced concurrency
       // to avoid Tavily 429 rate limits on bursty backfill bursts.
       const backfillSearchLimit = pLimit(8);
-      const backfillPromises = weakTiers.map((wt) =>
+      const backfillPromises = cappedWeakTiers.map((wt) =>
         backfillSearchLimit(async () => {
           // Build a clean, keyword-based query from structured design direction
           // fields (materials, palette) — NOT from style_notes prose, which
@@ -2109,15 +2112,14 @@ export async function runAgenticSearch(
           // the query and returns 0 Tavily results every time.
           const styleKeywords = extractBackfillKeywords(ctx.designDirection);
           const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleKeywords} ${TIER_LABELS[wt.tier]}`;
-          const searchResult = await searchProducts(backfillQuery, 10, wt.tier, wt.category, ctx.imageUrls);
+          const searchResult = await searchProducts(backfillQuery, ORCHESTRATOR.maxResultsPerQuery, wt.tier, wt.category, ctx.imageUrls);
           if (!searchResult.success || !searchResult.data) return;
 
           const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));
           const deduped = deduplicateCandidates(filtered);
 
-          // Phase 1 — extract top 5 backfill candidates in parallel.
           const extracted: CandidateProduct[] = [];
-          for (const candidate of deduped.slice(0, 5)) {
+          for (const candidate of deduped.slice(0, ORCHESTRATOR.backfillExtractCap)) {
             try {
               const extractResult = await extractFromUrl(candidate.url, ctx.designProfile, ctx.imageUrls);
               if (!extractResult.success || !extractResult.data) continue;
