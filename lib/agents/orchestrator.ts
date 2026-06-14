@@ -107,6 +107,11 @@ export interface OrchestrationResult {
     conversionRates?: Record<string, number>;
     bottlenecks?: string[];
     driftWarnings?: string[];
+    categoryFunnel?: Record<string, {
+      raw: number; deduped: number; screened: number;
+      extracted: number; quickScored: number; deepScored: number; final: number;
+      yield: string;
+    }>;
   };
   trace?: ReturnType<PipelineTracer["getTrace"]>;
 }
@@ -3049,6 +3054,35 @@ export async function runAgenticSearch(
     // Log per-phase token breakdown for cost analysis
     log.info("Token usage by phase", { phase: "stats", tokensPerPhase: stats.tokensPerPhase, totalTokens: stats.tokensUsed });
 
+    // ── Per-category funnel instrumentation ────────────────────
+    // Shows queries→results→dedup→screen→extract→scored→final for
+    // each category so we can compare before/after search tuning.
+    const categoryFunnel: Record<string, {
+      raw: number; deduped: number; screened: number;
+      extracted: number; quickScored: number; deepScored: number; final: number;
+      yield: string;
+    }> = {};
+    const allCategories = new Set([
+      ...Object.keys(searchResultsByCategory),
+      ...Object.keys(candidatesByCategory),
+    ]);
+    for (const cat of allCategories) {
+      const raw = PRICE_TIERS.reduce((s, t) => s + (searchResultsByCategory[cat]?.[t]?.length || 0), 0);
+      const deduped = PRICE_TIERS.reduce((s, t) => s + (dedupedByCategory[cat]?.[t]?.length || 0), 0);
+      const screened = PRICE_TIERS.reduce((s, t) => s + (screenedByCategory[cat]?.[t]?.length || 0), 0);
+      const extractedProducts = PRICE_TIERS.reduce((s, t) => s + (extractedByCategory[cat]?.[t]?.length || 0), 0);
+      const allExtracted = PRICE_TIERS.flatMap(t => extractedByCategory[cat]?.[t] || []);
+      const qScored = allExtracted.filter(p => quickScoresByProduct.has(p.id)).length;
+      const dScored = allExtracted.filter(p => evaluations.has(p.id)).length;
+      const final = (candidatesByCategory[cat] || []).length;
+      categoryFunnel[cat] = {
+        raw, deduped, screened, extracted: extractedProducts,
+        quickScored: qScored, deepScored: dScored, final,
+        yield: raw > 0 ? `${Math.round((final / raw) * 100)}%` : "0%",
+      };
+    }
+    log.info("Per-category search funnel", { phase: "funnel", categoryFunnel });
+
     // ═══════════════════════════════════════════════════════════
     // Live confidence — deterministic math over current picks.
     // Replaces the AI validation agent's confidence (which converges
@@ -3139,7 +3173,7 @@ export async function runAgenticSearch(
         validation: validationData,
         requirementAudit,
         categoryPlan: agenticCategoryPlan,
-        stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message) },
+        stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message), categoryFunnel },
         trace: tracer.getTrace(),
       },
     };
