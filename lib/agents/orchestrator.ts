@@ -117,7 +117,8 @@ export interface OrchestrationResult {
     driftWarnings?: string[];
     categoryFunnel?: Record<string, {
       raw: number; deduped: number; screened: number;
-      extracted: number; quickScored: number; deepScored: number; final: number;
+      extracted: number; snippetFallbacks: number;
+      quickScored: number; deepScored: number; final: number;
       yield: string;
     }>;
   };
@@ -3165,7 +3166,8 @@ export async function runAgenticSearch(
     // each category so we can compare before/after search tuning.
     const categoryFunnel: Record<string, {
       raw: number; deduped: number; screened: number;
-      extracted: number; quickScored: number; deepScored: number; final: number;
+      extracted: number; snippetFallbacks: number;
+      quickScored: number; deepScored: number; final: number;
       yield: string;
     }> = {};
     const allCategories = new Set([
@@ -3176,18 +3178,28 @@ export async function runAgenticSearch(
       const raw = PRICE_TIERS.reduce((s, t) => s + (searchResultsByCategory[cat]?.[t]?.length || 0), 0);
       const deduped = PRICE_TIERS.reduce((s, t) => s + (dedupedByCategory[cat]?.[t]?.length || 0), 0);
       const screened = PRICE_TIERS.reduce((s, t) => s + (screenedByCategory[cat]?.[t]?.length || 0), 0);
-      const extractedProducts = PRICE_TIERS.reduce((s, t) => s + (extractedByCategory[cat]?.[t]?.length || 0), 0);
       const allExtracted = PRICE_TIERS.flatMap(t => extractedByCategory[cat]?.[t] || []);
+      const extractedProducts = allExtracted.length;
+      const snippetFallbacks = allExtracted.filter(p => (p.metadata as Record<string, unknown> | null)?.snippet_fallback).length;
       const qScored = allExtracted.filter(p => quickScoresByProduct.has(p.id)).length;
       const dScored = allExtracted.filter(p => evaluations.has(p.id)).length;
       const final = (candidatesByCategory[cat] || []).length;
       categoryFunnel[cat] = {
-        raw, deduped, screened, extracted: extractedProducts,
+        raw, deduped, screened, extracted: extractedProducts, snippetFallbacks,
         quickScored: qScored, deepScored: dScored, final,
         yield: raw > 0 ? `${Math.round((final / raw) * 100)}%` : "0%",
       };
     }
     log.info("Per-category search funnel", { phase: "funnel", categoryFunnel });
+
+    // Log domain extraction success rates for debugging retailer routing
+    const domainSummary = Object.entries(domainExtractionStats)
+      .filter(([, s]) => s.attempts >= 2)
+      .sort(([, a], [, b]) => (b.successes / b.attempts) - (a.successes / a.attempts))
+      .map(([d, s]) => `${d}: ${s.successes}/${s.attempts} (${Math.round(100 * s.successes / s.attempts)}%)`);
+    if (domainSummary.length > 0) {
+      log.info("Domain extraction success rates", { phase: "funnel", domains: domainSummary });
+    }
 
     // ═══════════════════════════════════════════════════════════
     // Live confidence — deterministic math over current picks.
