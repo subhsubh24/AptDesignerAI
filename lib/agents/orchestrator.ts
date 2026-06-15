@@ -31,6 +31,7 @@ import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
 import { mergeTriedQueries } from "./loop-memory";
+import { selectExtractionCandidates } from "./extraction-gate";
 import { productMatchesCategoryAsync } from "@/lib/validation/category-match";
 import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
@@ -687,11 +688,20 @@ export async function runAgenticSearch(
       angle: string;
     }> = [];
 
+    let accessoryQueriesTrimmed = 0;
     for (const categoryBrief of brief.categories) {
+      // Accessory/soft-goods categories get a tighter query budget — they're
+      // abundant and low-stakes, so the brief's 3rd query mostly burns Tavily
+      // credits for 0 extractable yield.
+      const queryCap = ORCHESTRATOR.accessoryCategories.has(categoryBrief.category)
+        ? ORCHESTRATOR.accessoryQueryCap
+        : Infinity;
       for (const tier of PRICE_TIERS) {
         const tierBrief = categoryBrief.tiers[tier];
         if (!tierBrief) continue;
-        for (const queryObj of tierBrief.search_queries) {
+        const queries = tierBrief.search_queries.slice(0, queryCap);
+        accessoryQueriesTrimmed += tierBrief.search_queries.length - queries.length;
+        for (const queryObj of queries) {
           searchTasks.push({
             category: categoryBrief.category,
             tier,
@@ -700,6 +710,11 @@ export async function runAgenticSearch(
           });
         }
       }
+    }
+    if (accessoryQueriesTrimmed > 0) {
+      log.info("Trimmed accessory-category search queries", {
+        phase: "search", trimmed: accessoryQueriesTrimmed, cap: ORCHESTRATOR.accessoryQueryCap,
+      });
     }
 
     // Inject exploration queries: alternative style synonyms and boutique
@@ -876,30 +891,43 @@ export async function runAgenticSearch(
 
     await Promise.all(screenPromises);
 
-    // Hard cap on screened candidates per (category, tier) before extraction.
-    // Extraction is parallelized with 20 concurrent workers — we can afford to
-    // attempt many more URLs per tier since most of the wall-clock time is
-    // HTTP wait, not CPU. More candidates → more survive the 8 post-extraction
-    // filters (HTTP failures, sentinel titles, category mismatch, price range).
-    // Override via env.
-    const maxExtractPerCatTier = ORCHESTRATOR.maxExtractPerCatTier;
+    // Extraction gate: rank + cap screened candidates per (category, tier)
+    // before extraction. Candidates that already carry raw content from Tavily
+    // Search extract for FREE and reliably (kept generously); no-content
+    // candidates cost a Tavily Extract credit and fail often (kept tightly).
+    // Both sorted by relevance so we attempt the most promising first. This is
+    // the primary lever against the ~50%-of-tokens extraction cost — the old
+    // naive slice(0, cap) kept arbitrary candidates and routinely dropped the
+    // free/reliable ones in favor of expensive failing ones.
     let totalCapped = 0;
+    let rawKept = 0;
+    let noContentKept = 0;
     for (const [category, tierResults] of Object.entries(screenedByCategory)) {
       for (const tier of PRICE_TIERS) {
         const cands = tierResults[tier];
-        if (cands.length > maxExtractPerCatTier) {
-          const dropped = cands.slice(maxExtractPerCatTier);
-          screenedByCategory[category][tier] = cands.slice(0, maxExtractPerCatTier);
-          totalCapped += dropped.length;
-          for (const d of dropped) {
-            tracer.traceFilter("screen", "", d.url, `capped at ${maxExtractPerCatTier}/tier`);
+        if (cands.length === 0) continue;
+        const kept = selectExtractionCandidates(
+          cands, ORCHESTRATOR.extractRawContentCap, ORCHESTRATOR.extractNoContentCap,
+        );
+        rawKept += kept.filter((c) => c.rawContent).length;
+        noContentKept += kept.filter((c) => !c.rawContent).length;
+        if (kept.length < cands.length) {
+          totalCapped += cands.length - kept.length;
+          const keptUrls = new Set(kept.map((c) => c.url));
+          for (const d of cands) {
+            if (!keptUrls.has(d.url)) {
+              tracer.traceFilter("screen", "", d.url, "extraction gate (low relevance / no content)");
+            }
           }
         }
+        screenedByCategory[category][tier] = kept;
       }
     }
     if (totalCapped > 0) {
-      log.info("Capped screened candidates before extraction", {
-        phase: "screen", cap: maxExtractPerCatTier, dropped: totalCapped,
+      log.info("Extraction gate capped candidates", {
+        phase: "screen", dropped: totalCapped,
+        rawContentKept: rawKept, noContentKept,
+        rawCap: ORCHESTRATOR.extractRawContentCap, noContentCap: ORCHESTRATOR.extractNoContentCap,
       });
     }
 

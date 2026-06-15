@@ -95,6 +95,16 @@ export const ORCHESTRATOR = {
   /** Max URLs to extract per (category, tier) — default 12; was 20 */
   maxExtractPerCatTier: Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "12"),
 
+  /**
+   * Extraction gate caps per (category, tier). Candidates that already carry
+   * raw content from Tavily Search extract for free and reliably, so we keep
+   * more of them; no-content candidates cost a Tavily Extract credit and fail
+   * often, so we keep only the few highest-relevance ones. This is the primary
+   * lever for cutting extraction tokens + Tavily credits without hurting yield.
+   */
+  extractRawContentCap: Number(process.env.EXTRACT_RAW_CONTENT_CAP || "8"),
+  extractNoContentCap: Number(process.env.EXTRACT_NO_CONTENT_CAP || "4"),
+
   /** Max weak tiers to backfill before diminishing returns */
   maxBackfillTiers: Number(process.env.MAX_BACKFILL_TIERS || "3"),
 
@@ -103,6 +113,20 @@ export const ORCHESTRATOR = {
 
   /** Max bundle combos evaluated by LLM (each ~17K tokens) */
   maxBundleEvals: Number(process.env.MAX_BUNDLE_EVALS || "6"),
+
+  /**
+   * Accessory / soft-goods categories get fewer search queries than the brief
+   * generates. They're abundant and low-stakes (a vase or throw doesn't need
+   * 3 razor-sharp queries), and they rarely produce extractable product pages,
+   * so the extra queries mostly burn Tavily credits for 0 yield. Anchors and
+   * furniture keep the full brief.
+   */
+  accessoryQueryCap: Number(process.env.ACCESSORY_QUERY_CAP || "2"),
+  accessoryCategories: new Set<string>([
+    "throw_pillows", "throw_pillow", "throw_blanket", "vase", "decor",
+    "bookshelf_decor", "plant", "candle", "tray", "coasters", "bookends",
+    "decorative_objects", "wall_decor",
+  ]),
 
   /** Budget thresholds for progressive degradation */
   budgetGates: {

@@ -429,8 +429,19 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
       }
       let response;
       try {
+        // Don't offer idempotent tools that already ran. The broad backfill and
+        // fill-empty-tiers phases run BEFORE the coordinator, so their handlers
+        // just no-op — but the coordinator otherwise burns whole turns (each a
+        // full LLM round-trip) re-calling them. Removing them from the toolset
+        // makes the wasted call impossible instead of relying on the prompt.
+        const turnState = input.state();
+        const availableTools = COORDINATOR_TOOLS.filter((t) => {
+          if (t.name === "run_backfill" && turnState.backfillRun) return false;
+          if (t.name === "fill_empty_tiers" && turnState.tiersFilledRun) return false;
+          return true;
+        });
         const coordinatorTools = [
-          { functionDeclarations: COORDINATOR_TOOLS },
+          { functionDeclarations: availableTools },
         ];
         response = await getProvider("validation", coordinatorTools).chat({
           model,
