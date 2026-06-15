@@ -37,6 +37,7 @@ export interface AgentContext {
    */
   priorTriedQueries?: Record<string, string[]>;
   priorAuditHistory?: Array<{ alignment: number; coverage: number; diagnosisSolving: number }>;
+  priorDomainStats?: Record<string, { attempts: number; successes: number }>;
 
   // Full apartment + building context — passed to system prompt for all agents
   designProfile?: DynamicDesignProfile;

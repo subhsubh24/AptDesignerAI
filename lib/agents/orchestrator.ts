@@ -32,6 +32,12 @@ import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
 import { mergeTriedQueries } from "./loop-memory";
 import { selectExtractionCandidates } from "./extraction-gate";
+import { buildSnippetProduct } from "./snippet-fallback";
+import {
+  trackDomainResult,
+  mergeDomainStats,
+  type DomainStatsMap,
+} from "./domain-router";
 import { productMatchesCategoryAsync } from "@/lib/validation/category-match";
 import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
@@ -124,6 +130,7 @@ export interface OrchestrationResult {
   loopMemory?: {
     triedQueries: Record<string, string[]>;
     auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }>;
+    domainStats: DomainStatsMap;
   };
 }
 
@@ -296,6 +303,7 @@ interface ReSearchCategoryInput {
   anchorSpecs: Record<string, string>;
   harmonyNeighbors: Array<{ category: string; spec: string }>;
   evaluations: Map<string, ProductEvaluationResult>;
+  domainExtractionStats?: DomainStatsMap;
 }
 
 const DEPENDENT_CATEGORIES_SET = new Set([
@@ -327,7 +335,7 @@ async function reSearchCategoryForCorrection(
 
     for (const query of queries) {
       if (tokenBudget.exceeded) break;
-      const searchRes = await searchProducts(query, ORCHESTRATOR.maxResultsPerQuery, tier, correctionCategory, ctx.imageUrls);
+      const searchRes = await searchProducts(query, ORCHESTRATOR.maxResultsPerQuery, tier, correctionCategory, ctx.imageUrls, input.domainExtractionStats);
       if (searchRes.tokensUsed) {
         tokenBudget.add(searchRes.tokensUsed);
         stats.tokensUsed += searchRes.tokensUsed;
@@ -526,6 +534,7 @@ export async function runAgenticSearch(
   categoryHints?: Record<string, string>
 ): Promise<AgentResult<OrchestrationResult>> {
   domainSentinelStats.clear();
+  const domainExtractionStats: DomainStatsMap = {};
   const steps: OrchestrationStep[] = [];
   const candidatesByCategory: Record<string, CandidateProduct[]> = {};
   const evaluations = new Map<string, ProductEvaluationResult>();
@@ -739,7 +748,7 @@ export async function runAgenticSearch(
     const searchPromises = searchTasks.map((task) =>
       searchLimit(async () => {
         tracer.trace({ phase: "search", action: "query", category: task.category, tier: task.tier, metadata: { query: task.query, angle: task.angle } });
-        const result = await searchProducts(task.query, ORCHESTRATOR.maxResultsPerQuery, task.tier, task.category, ctx.imageUrls);
+        const result = await searchProducts(task.query, ORCHESTRATOR.maxResultsPerQuery, task.tier, task.category, ctx.imageUrls, domainExtractionStats);
         const candidates = result.success ? (result.data || []) : [];
         if (result.tokensUsed) {
           tokenBudget.add(result.tokensUsed);
@@ -1075,7 +1084,18 @@ export async function runAgenticSearch(
 
               if (!extractResult.success || !extractResult.data) {
                 trackExtraction(candidate.url, true);
+                trackDomainResult(domainExtractionStats, candidate.url, false);
                 tracer.traceError("extract", candidate.url, extractResult.error || "extraction failed");
+                // Snippet fallback for accessory categories — recover a minimal
+                // product from the search result instead of discarding entirely.
+                if (ORCHESTRATOR.accessoryCategories.has(category)) {
+                  const fallback = buildSnippetProduct(candidate, category, tier, ctx.roomId);
+                  if (fallback) {
+                    extractedByCategory[category][tier].push(fallback);
+                    stats.totalExtracted++;
+                    tracer.trace({ phase: "extract", action: "snippet_fallback", url: candidate.url, category, tier });
+                  }
+                }
                 extractedSoFar++;
                 continue;
               }
@@ -1083,11 +1103,22 @@ export async function runAgenticSearch(
               const title = extractResult.data.title || "";
               if (!title || title === "PAGE_NOT_ACCESSIBLE" || title === "NOT_A_PRODUCT_PAGE" || title === "PRODUCT_DATA_UNAVAILABLE") {
                 trackExtraction(candidate.url, true);
+                trackDomainResult(domainExtractionStats, candidate.url, false);
                 tracer.traceFilter("extract", "", candidate.url, `sentinel title: ${title || "empty"}`);
+                // Snippet fallback for accessory categories
+                if (ORCHESTRATOR.accessoryCategories.has(category)) {
+                  const fallback = buildSnippetProduct(candidate, category, tier, ctx.roomId);
+                  if (fallback) {
+                    extractedByCategory[category][tier].push(fallback);
+                    stats.totalExtracted++;
+                    tracer.trace({ phase: "extract", action: "snippet_fallback", url: candidate.url, category, tier });
+                  }
+                }
                 extractedSoFar++;
                 continue;
               }
               trackExtraction(candidate.url, false);
+              trackDomainResult(domainExtractionStats, candidate.url, true);
 
               const hasSubstance = extractResult.data.title
                 && (extractResult.data.price || extractResult.data.materials?.length || extractResult.data.description);
@@ -2149,7 +2180,7 @@ export async function runAgenticSearch(
           // searchProducts(query, n, wt.tier, ...).
           const styleKeywords = extractBackfillKeywords(ctx.designDirection);
           const backfillQuery = `${wt.category.replace(/_/g, " ")} ${styleKeywords}`.trim();
-          const searchResult = await searchProducts(backfillQuery, ORCHESTRATOR.maxResultsPerQuery, wt.tier, wt.category, ctx.imageUrls);
+          const searchResult = await searchProducts(backfillQuery, ORCHESTRATOR.maxResultsPerQuery, wt.tier, wt.category, ctx.imageUrls, domainExtractionStats);
           if (!searchResult.success || !searchResult.data) return;
 
           const filtered = searchResult.data.filter((c) => c.url && isLikelyProductUrl(c.url));
@@ -2560,6 +2591,16 @@ export async function runAgenticSearch(
     const auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }> =
       ctx.priorAuditHistory ? [...ctx.priorAuditHistory] : [];
 
+    // Seed domain extraction stats from prior session so retailer routing
+    // can deprioritize chronically-failing domains from the very first query.
+    if (ctx.priorDomainStats) {
+      const merged = mergeDomainStats(domainExtractionStats, ctx.priorDomainStats);
+      for (const [k, v] of Object.entries(merged)) domainExtractionStats[k] = v;
+      log.info("Seeded domain stats from prior session", {
+        domains: Object.keys(ctx.priorDomainStats).length,
+      });
+    }
+
     const runAudit = async (withGrounding = false): Promise<RequirementValidationResult | undefined> => {
       if (tokenBudget.exceeded || missingCategories.length === 0) return undefined;
 
@@ -2799,6 +2840,7 @@ export async function runAgenticSearch(
               anchorSpecs,
               harmonyNeighbors,
               evaluations,
+              domainExtractionStats,
             });
             candidatesByCategory[category] = candidatesByCategory[category] || [];
             candidatesByCategory[category].push(...result.products);
@@ -3000,6 +3042,7 @@ export async function runAgenticSearch(
               anchorSpecs,
               harmonyNeighbors,
               evaluations,
+              domainExtractionStats,
             });
             // Merge new products into the main candidate set
             candidatesByCategory[action.category] = candidatesByCategory[action.category] || [];
@@ -3248,7 +3291,7 @@ export async function runAgenticSearch(
         categoryPlan: agenticCategoryPlan,
         stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message), categoryFunnel },
         trace: tracer.getTrace(),
-        loopMemory: { triedQueries: triedQueriesByCategory, auditHistory },
+        loopMemory: { triedQueries: triedQueriesByCategory, auditHistory, domainStats: domainExtractionStats },
       },
     };
   } catch (error) {

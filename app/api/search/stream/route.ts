@@ -79,7 +79,7 @@ export async function POST(request: Request) {
   // starting. Best-effort — a fresh room simply has no prior session.
   const { data: priorSession } = await supabase
     .from("search_sessions")
-    .select("tried_queries_json, audit_history_json")
+    .select("tried_queries_json, audit_history_json, stats_json")
     .eq("room_id", room_id)
     .eq("status", "completed")
     .order("completed_at", { ascending: false, nullsFirst: false })
@@ -224,6 +224,7 @@ export async function POST(request: Request) {
     budgetDollars: typeof room.budget_dollars === "number" ? room.budget_dollars : undefined,
     priorTriedQueries: (priorSession?.tried_queries_json as Record<string, string[]>) || undefined,
     priorAuditHistory: (priorSession?.audit_history_json as Array<{ alignment: number; coverage: number; diagnosisSolving: number }>) || undefined,
+    priorDomainStats: ((priorSession?.stats_json as Record<string, unknown>)?.domain_stats as Record<string, { attempts: number; successes: number }>) || undefined,
     imageUrls,
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
@@ -419,6 +420,7 @@ export async function POST(request: Request) {
             stats_json: {
               trace_summary: result.data.trace?.summary || null,
               tokens_used: result.data.stats.tokensUsed,
+              domain_stats: result.data.loopMemory?.domainStats ?? null,
             },
             tried_queries_json: result.data.loopMemory?.triedQueries ?? null,
             audit_history_json: result.data.loopMemory?.auditHistory ?? null,

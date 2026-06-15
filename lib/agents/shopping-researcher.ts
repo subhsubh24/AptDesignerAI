@@ -15,6 +15,7 @@ import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DesignDirection } from "@/lib/types/database";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { getCachedQuery, cacheQuery, getCachedScreen, cacheScreen } from "./search-cache";
+import { prioritizeDomains, type DomainStatsMap } from "./domain-router";
 
 /**
  * Max number of room photos to attach to researcher/reranker/extractor calls.
@@ -433,7 +434,8 @@ export async function searchProducts(
   maxResults: number = 10,
   tier?: PriceTier,
   category?: string,
-  _roomImageUrls?: string[]
+  _roomImageUrls?: string[],
+  domainStats?: DomainStatsMap,
 ): Promise<AgentResult<SearchCandidate[]>> {
   const sanitized = sanitizeSearchQuery(query);
   if (!sanitized) {
@@ -459,8 +461,13 @@ export async function searchProducts(
   for (const d of tierDomains) {
     if (!includeDomains.includes(d)) includeDomains.push(d);
   }
+  // Reorder by extraction success rate: high-success domains first,
+  // chronically-failing domains removed entirely.
+  const routed = domainStats
+    ? prioritizeDomains(includeDomains, domainStats)
+    : includeDomains;
   // Tavily caps include_domains at 300
-  const domainList = includeDomains.slice(0, 300);
+  const domainList = routed.slice(0, 300);
 
   try {
     const response = await tavilySearch({
