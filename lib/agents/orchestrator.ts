@@ -1546,11 +1546,15 @@ export async function runAgenticSearch(
           return (scoreB - scoreA) || tiebreakProduct(a, b);
         });
 
-        // Filter out low-confidence products (quick score confidence < 4)
-        // and products with no image — deep-score is vision-based, so a
-        // null image_url means the LLM is scoring a blank prompt and
-        // wasting tokens on a product it can't evaluate.
+        // Filter out low-confidence products (quick score confidence < 4),
+        // products with no image (deep-score is vision-based), and
+        // snippet-fallback products (minimal data, not worth deep-scoring).
         products = products.filter((p) => {
+          const meta = p.metadata as Record<string, unknown> | null;
+          if (meta?.snippet_fallback) {
+            tracer.traceFilter("quick_score", p.id, p.product_url || "", "snippet_fallback — skip deep-score");
+            return false;
+          }
           const qs = quickScoresByProduct.get(p.id);
           if (qs !== undefined && qs < 4) {
             tracer.traceFilter("quick_score", p.id, p.product_url || "", `quickScore ${qs} < 4`);

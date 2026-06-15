@@ -88,12 +88,13 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
   budget: [
     // Big-box & mass market
     "ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com",
-    "overstock.com", "homedepot.com", "lowes.com",
+    "overstock.com", "homedepot.com", "lowes.com", "costco.com", "menards.com",
     // Budget home decor
     "worldmarket.com", "hm.com", "zarahome.com", "kirklands.com",
-    "athome.com", "biglots.com",
+    "athome.com", "biglots.com", "tuftandneedle.com",
     // Budget furniture brands
     "ashleyfurniture.com", "mybobs.com", "roomstogo.com", "walkeredison.com",
+    "structube.com", "homary.com",
     // Budget rug specialists
     "rugsusa.com", "boutiquerugs.com", "nuloom.com", "wellwoven.com", "esalerugs.com",
     // Budget art & decor
@@ -112,6 +113,7 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
     "sixpenny.com", "floyddetroit.com", "insideweather.com",
     "interior-define.com", "polyandbark.com", "albanypark.com",
     "sabai.design", "benchmademodern.com", "maidenhome.com",
+    "roveconcepts.com", "scandinaviandesigns.com",
     // Department stores (home)
     "macys.com", "nordstrom.com", "bloomingdales.com",
     // Mid-range home decor
@@ -136,7 +138,7 @@ const TIER_DOMAINS: Record<PriceTier, string[]> = {
     "roomandboard.com", "dwr.com",
     // Designer brands
     "jonathanadler.com", "kellywearstler.com", "bludot.com",
-    "industrywest.com", "hem.com", "dims.com",
+    "industrywest.com", "hem.com", "dims.com", "roveconcepts.com",
     // European luxury
     "ligne-roset.com", "roche-bobois.com", "bebitalia.com",
     "cassina.com", "hay.com", "muuto.com", "fermliving.com",
@@ -298,6 +300,44 @@ const CATEGORY_RETAILERS: Record<string, Record<PriceTier, string[]>> = {
     budget: ["ikea.com", "target.com", "amazon.com", "wayfair.com", "walmart.com"],
     balanced: ["cb2.com", "westelm.com", "crateandbarrel.com", "anthropologie.com", "allmodern.com", "ballarddesigns.com"],
     high_end: ["rh.com", "serenaandlily.com", "arhaus.com", "rejuvenation.com", "jonathanadler.com", "perigold.com"],
+  },
+  // ── Bedroom ──────────────────────────────────────────────────
+  nightstand: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "ashleyfurniture.com", "overstock.com"],
+    balanced: ["article.com", "westelm.com", "cb2.com", "castlery.com", "crateandbarrel.com", "allmodern.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "serenaandlily.com", "dwr.com", "perigold.com"],
+  },
+  dresser: {
+    budget: ["ikea.com", "wayfair.com", "amazon.com", "ashleyfurniture.com", "roomstogo.com", "overstock.com"],
+    balanced: ["article.com", "westelm.com", "crateandbarrel.com", "castlery.com", "cb2.com", "allmodern.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "bludot.com", "perigold.com"],
+  },
+  bed_frame: {
+    budget: ["ikea.com", "wayfair.com", "amazon.com", "ashleyfurniture.com", "tuftandneedle.com", "roomstogo.com"],
+    balanced: ["article.com", "westelm.com", "castlery.com", "cb2.com", "floyddetroit.com", "crateandbarrel.com", "thuma.co"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "roveconcepts.com", "perigold.com"],
+  },
+  // ── Additional Seating ───────────────────────────────────────
+  ottoman: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "worldmarket.com", "overstock.com"],
+    balanced: ["article.com", "cb2.com", "westelm.com", "crateandbarrel.com", "joybird.com", "anthropologie.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "jonathanadler.com", "perigold.com"],
+  },
+  bench: {
+    budget: ["ikea.com", "wayfair.com", "target.com", "amazon.com", "overstock.com"],
+    balanced: ["cb2.com", "westelm.com", "article.com", "crateandbarrel.com", "allmodern.com"],
+    high_end: ["roomandboard.com", "rh.com", "arhaus.com", "dwr.com", "bludot.com", "perigold.com"],
+  },
+  // ── Decor & Accessories ──────────────────────────────────────
+  candle: {
+    budget: ["target.com", "amazon.com", "ikea.com", "hm.com", "worldmarket.com"],
+    balanced: ["cb2.com", "anthropologie.com", "westelm.com", "etsy.com", "mcgeeandco.com"],
+    high_end: ["abchome.com", "jonathanadler.com", "serenaandlily.com", "luluandgeorgia.com"],
+  },
+  decorative_objects: {
+    budget: ["target.com", "ikea.com", "amazon.com", "worldmarket.com", "hm.com"],
+    balanced: ["cb2.com", "westelm.com", "anthropologie.com", "mcgeeandco.com", "etsy.com"],
+    high_end: ["serenaandlily.com", "jonathanadler.com", "luluandgeorgia.com", "abchome.com", "rh.com"],
   },
 };
 
