@@ -21,6 +21,23 @@ export interface AgentContext {
   sourcingMode: string;
   imageUrls: string[];
 
+  /**
+   * Total dollar budget for the room (rooms.budget_dollars), if the user set
+   * one. Coarse budgetMode ("budget"/"balanced"/"high_end") still drives tier
+   * selection; this is the hard ceiling the loop keeps the bundle total under
+   * and surfaces to the search brief so it doesn't shop above budget.
+   */
+  budgetDollars?: number;
+
+  /**
+   * Loop "working memory" seeded from the most recent completed search session
+   * for this room. Lets a re-run or refine-chat skip queries already tried last
+   * time and see the prior alignment trend instead of cold-starting. Assembled
+   * by the search route from search_sessions; undefined on a room's first run.
+   */
+  priorTriedQueries?: Record<string, string[]>;
+  priorAuditHistory?: Array<{ alignment: number; coverage: number; diagnosisSolving: number }>;
+
   // Full apartment + building context — passed to system prompt for all agents
   designProfile?: DynamicDesignProfile;
 

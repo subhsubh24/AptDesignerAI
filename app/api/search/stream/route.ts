@@ -74,6 +74,18 @@ export async function POST(request: Request) {
 
   const designProfile = buildDesignProfile(project);
 
+  // Load loop memory from the most recent completed session for this room so
+  // the new run seeds itself (tried queries + audit trend) instead of cold-
+  // starting. Best-effort — a fresh room simply has no prior session.
+  const { data: priorSession } = await supabase
+    .from("search_sessions")
+    .select("tried_queries_json, audit_history_json")
+    .eq("room_id", room_id)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
   // Create search session
   const { data: session } = await supabase
     .from("search_sessions")
@@ -209,6 +221,9 @@ export async function POST(request: Request) {
     priorities: room.priorities || [],
     budgetMode: room.budget_mode,
     sourcingMode: room.sourcing_mode,
+    budgetDollars: typeof room.budget_dollars === "number" ? room.budget_dollars : undefined,
+    priorTriedQueries: (priorSession?.tried_queries_json as Record<string, string[]>) || undefined,
+    priorAuditHistory: (priorSession?.audit_history_json as Array<{ alignment: number; coverage: number; diagnosisSolving: number }>) || undefined,
     imageUrls,
     designProfile,
     diagnosis: diagnosis?.diagnosis_json || undefined,
@@ -391,15 +406,22 @@ export async function POST(request: Request) {
         }
 
         // Update search session — persist trace summary for post-run debugging
+        // AND the loop working memory (tried queries + audit trend) so the NEXT
+        // run on this room seeds from it instead of cold-starting. (stats_json,
+        // not metadata — search_sessions has no metadata column; the old write
+        // silently failed.)
         await supabase
           .from("search_sessions")
           .update({
             status: "completed",
+            completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            metadata: {
+            stats_json: {
               trace_summary: result.data.trace?.summary || null,
               tokens_used: result.data.stats.tokensUsed,
             },
+            tried_queries_json: result.data.loopMemory?.triedQueries ?? null,
+            audit_history_json: result.data.loopMemory?.auditHistory ?? null,
           })
           .eq("id", session?.id);
 

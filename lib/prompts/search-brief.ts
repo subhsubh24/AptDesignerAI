@@ -146,7 +146,8 @@ export function getSearchBriefPrompt(
   outletPositions?: string,
   identifiedContext?: string,
   designProfile?: DynamicDesignProfile,
-  otherRoomsContext?: string
+  otherRoomsContext?: string,
+  budgetDollars?: number
 ): string {
   // Separate floor plan context from per-category hints
   const floorPlanHint = categoryHints?.["_floor_plan"];
@@ -264,6 +265,12 @@ export function getSearchBriefPrompt(
     ? "Include retailer name to find specific premium products."
     : 'Include price qualifiers like "under $800" in queries.';
 
+  // Hard dollar budget (optional). The coarse tier above sets per-item price
+  // bands; this constrains the WHOLE set so the loop doesn't shop above budget.
+  const budgetSection = budgetDollars
+    ? `\n- TOTAL ROOM BUDGET: $${budgetDollars.toLocaleString()} across ${missingCategories.length} categor${missingCategories.length === 1 ? "y" : "ies"} (≈$${Math.round(budgetDollars / Math.max(1, missingCategories.length)).toLocaleString()} average/item). The combined cost of one pick per category MUST stay at or under $${budgetDollars.toLocaleString()}. Spend the budget where it matters: bias price qualifiers DOWN for secondary items (lamps, decor, pillows, plants) so anchors (sofa, sectional, bed, rug, dining table) can absorb more of it.`
+    : "";
+
   return `<role>
 You are a furniture search strategist generating web search queries to find real, buyable products for a specific client's room. Your queries will be executed on a semantic search engine (Tavily) — NOT Google. Tavily works best with descriptive keyword queries, not exact product names.
 </role>
@@ -274,7 +281,7 @@ For each missing category, generate exactly 3 targeted search queries for the **
 
 ## CONTEXT
 - Room type: ${roomType}
-- Budget mode: ${budgetMode} (search tier: ${tierLabel})
+- Budget mode: ${budgetMode} (search tier: ${tierLabel})${budgetSection}
 - Categories to search: ${missingCategories.join(", ")}${buildDesignProfileSection(designProfile)}${hintsSection}${floorPlanSection}${designSection}${diagnosisSection}${environmentSection}${prioritiesSection}${keepSection}${replaceSection}${spatialSection}${summarySection}${userContextSection}${identifiedSection}${crossRoomSection}
 
 <reasoning_process>

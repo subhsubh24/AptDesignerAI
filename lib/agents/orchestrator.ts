@@ -30,6 +30,7 @@ import { checkForDrift, getScoreDistributionSummary } from "@/lib/scoring/drift-
 import { pairwiseRerank } from "@/lib/scoring/pairwise-reranker";
 import { selectByMMR } from "@/lib/scoring/mmr-reranker";
 import { generateExplorationQueries } from "@/lib/scoring/query-exploration";
+import { mergeTriedQueries } from "./loop-memory";
 import { productMatchesCategoryAsync } from "@/lib/validation/category-match";
 import { computeBundleMathScores } from "@/lib/validation/bundle-math";
 import { ORCHESTRATOR } from "@/lib/config/pipeline";
@@ -114,6 +115,15 @@ export interface OrchestrationResult {
     }>;
   };
   trace?: ReturnType<PipelineTracer["getTrace"]>;
+  /**
+   * Loop working memory to persist for the next run. The route writes this to
+   * the search_sessions row so a subsequent run/refinement seeds itself from it
+   * (ctx.priorTriedQueries / ctx.priorAuditHistory) instead of cold-starting.
+   */
+  loopMemory?: {
+    triedQueries: Record<string, string[]>;
+    auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }>;
+  };
 }
 
 const ALL_PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
@@ -649,7 +659,7 @@ export async function runAgenticSearch(
       ctx.keepItems, ctx.replaceItems, ctx.spatialLayout, ctx.roomSummary,
       ctx.userContext, ctx.diagnosis as Record<string, unknown> | undefined,
       ctx.lightingConditions, ctx.windowDoorPositions, ctx.outletPositions,
-      ctx.identifiedContext, ctx.imageUrls, ctx.otherRoomsContext
+      ctx.identifiedContext, ctx.imageUrls, ctx.otherRoomsContext, ctx.budgetDollars
     );
     if (!briefResult.success || !briefResult.data) {
       reportStep({ step: "Generating intensive search brief", status: "failed", data: { error: briefResult.error } });
@@ -2501,6 +2511,27 @@ export async function runAgenticSearch(
       triedQueriesByCategory[catBrief.category] = qs.filter(Boolean);
     }
 
+    // Carry over queries tried in the prior session (seeded by the route from
+    // search_sessions.tried_queries_json). Merged case-insensitively so a
+    // re-run / refine-chat doesn't re-issue queries that already ran last time.
+    if (ctx.priorTriedQueries) {
+      const before = Object.values(triedQueriesByCategory).reduce((s, q) => s + q.length, 0);
+      const merged = mergeTriedQueries(triedQueriesByCategory, ctx.priorTriedQueries);
+      for (const cat of Object.keys(merged)) triedQueriesByCategory[cat] = merged[cat];
+      const after = Object.values(triedQueriesByCategory).reduce((s, q) => s + q.length, 0);
+      log.info("Seeded tried-queries from prior session", {
+        priorCategories: Object.keys(ctx.priorTriedQueries).length,
+        carriedOver: after - before,
+      });
+    }
+
+    // Alignment trend across audit runs. Seeded from the prior session's trend
+    // (ctx.priorAuditHistory) so the coordinator can reason about cross-run
+    // progress — "did the last refinement actually move alignment?" — not just
+    // within-run deltas. Both branches below append this run's audits.
+    const auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }> =
+      ctx.priorAuditHistory ? [...ctx.priorAuditHistory] : [];
+
     const runAudit = async (withGrounding = false): Promise<RequirementValidationResult | undefined> => {
       if (tokenBudget.exceeded || missingCategories.length === 0) return undefined;
 
@@ -2573,9 +2604,8 @@ export async function runAgenticSearch(
     if (ORCHESTRATOR.enablePostSearchCoordinator && requirementAudit) {
       reportStep({ step: "Coordinator (agentic post-search)", status: "running" });
 
-      // Track the alignment trend across audit runs so the coordinator
-      // can detect stall/regression and stop iterating.
-      const auditHistory: Array<{ alignment: number; coverage: number; diagnosisSolving: number }> = [];
+      // Append this run's first audit to the (possibly prior-seeded) trend so
+      // the coordinator can detect stall/regression and stop iterating.
       if (requirementAudit) {
         auditHistory.push({
           alignment: requirementAudit.overall_alignment,
@@ -3130,7 +3160,21 @@ export async function runAgenticSearch(
               .map((f) => `${f.title}: ${f.reason}`)
           : [];
 
-        const mergedIssues = [...requirementIssues, ...liveIssues, ...priorFlags].slice(0, 10);
+        // Budget guard: when the room has a hard dollar budget, the recommended
+        // set (one top pick per category) must total at or under it. An overage
+        // becomes a surfaced issue so confidence reflects the budget miss rather
+        // than silently recommending a bundle the user can't afford.
+        const budgetIssues: string[] = [];
+        if (ctx.budgetDollars && topPicks.length > 0) {
+          const bundleTotal = topPicks.reduce((s, p) => s + (p.price || 0), 0);
+          if (bundleTotal > ctx.budgetDollars) {
+            budgetIssues.push(
+              `Recommended set totals $${Math.round(bundleTotal).toLocaleString()}, over the $${ctx.budgetDollars.toLocaleString()} room budget by $${Math.round(bundleTotal - ctx.budgetDollars).toLocaleString()}`,
+            );
+          }
+        }
+
+        const mergedIssues = [...budgetIssues, ...requirementIssues, ...liveIssues, ...priorFlags].slice(0, 10);
 
         // Blend live bundle-math confidence with the requirement-audit
         // alignment score. Both are 0-10; the audit reflects how well the
@@ -3176,6 +3220,7 @@ export async function runAgenticSearch(
         categoryPlan: agenticCategoryPlan,
         stats: { ...stats, conversionRates, bottlenecks, driftWarnings: driftWarnings.map((w) => w.message), categoryFunnel },
         trace: tracer.getTrace(),
+        loopMemory: { triedQueries: triedQueriesByCategory, auditHistory },
       },
     };
   } catch (error) {
