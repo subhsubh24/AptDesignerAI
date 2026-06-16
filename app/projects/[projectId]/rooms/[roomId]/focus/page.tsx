@@ -1129,7 +1129,7 @@ export default function FocusPage() {
                     <div className="flex-1 min-w-0">
                       <span className={cn(
                         "text-sm",
-                        isDone && "text-emerald-700 font-medium",
+                        isDone && "text-emerald-700 dark:text-emerald-400 font-medium",
                         isActive && "text-foreground font-medium",
                         !isDone && !isActive && "text-muted-foreground/60"
                       )}>

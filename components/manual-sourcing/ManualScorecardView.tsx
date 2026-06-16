@@ -249,23 +249,23 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
 
             {result.best_combination.analysis && (
               <div className="grid sm:grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded bg-emerald-50">
-                  <span className="font-medium text-emerald-700">Strongest: </span>
+                <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40">
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Strongest: </span>
                   {result.best_combination.analysis.strongest_aspect}
                 </div>
-                <div className="p-2 rounded bg-amber-50">
-                  <span className="font-medium text-amber-700">Weakest: </span>
+                <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/40">
+                  <span className="font-medium text-amber-700 dark:text-amber-300">Weakest: </span>
                   {result.best_combination.analysis.weakest_aspect}
                 </div>
                 {result.best_combination.analysis.what_feels_missing !== "Nothing" && (
-                  <div className="p-2 rounded bg-blue-50">
-                    <span className="font-medium text-blue-700">Missing: </span>
+                  <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/40">
+                    <span className="font-medium text-blue-700 dark:text-blue-300">Missing: </span>
                     {result.best_combination.analysis.what_feels_missing}
                   </div>
                 )}
                 {result.best_combination.analysis.what_should_be_swapped_first !== "Nothing" && (
-                  <div className="p-2 rounded bg-purple-50">
-                    <span className="font-medium text-purple-700">Swap first: </span>
+                  <div className="p-2 rounded bg-purple-50 dark:bg-purple-950/40">
+                    <span className="font-medium text-purple-700 dark:text-purple-300">Swap first: </span>
                     {result.best_combination.analysis.what_should_be_swapped_first}
                   </div>
                 )}
@@ -407,7 +407,7 @@ function ProductScorecard({
           <div className="flex items-center gap-2">
             <p className="font-medium text-sm truncate">{product.title || "Unknown"}</p>
             {isBestPick && (
-              <Badge className="bg-emerald-100 text-emerald-700 text-[10px] shrink-0">
+              <Badge className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] shrink-0">
                 Best Pick
               </Badge>
             )}
@@ -475,7 +475,7 @@ function ProductScorecard({
             <div className="grid sm:grid-cols-2 gap-3 text-xs">
               {product.reasoning.top_reasons?.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-medium text-emerald-700">Strengths</p>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">Strengths</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.top_reasons.map((r, i) => (
                       <li key={i}>+ {r}</li>
@@ -485,7 +485,7 @@ function ProductScorecard({
               )}
               {product.reasoning.risks?.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-medium text-amber-700">Risks</p>
+                  <p className="font-medium text-amber-700 dark:text-amber-400">Risks</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.risks.map((r, i) => (
                       <li key={i}>- {r}</li>
@@ -495,7 +495,7 @@ function ProductScorecard({
               )}
               {product.reasoning.suggestions?.length > 0 && (
                 <div className="space-y-1 sm:col-span-2">
-                  <p className="font-medium text-blue-700">Suggestions</p>
+                  <p className="font-medium text-blue-700 dark:text-blue-400">Suggestions</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.suggestions.map((s, i) => (
                       <li key={i}>{s}</li>
