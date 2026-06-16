@@ -16,6 +16,7 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
+import { PageTransition } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
 
 interface SavedDesignFull {
@@ -110,7 +111,7 @@ export default function SavedDesignDetailPage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <PageTransition className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -190,7 +191,7 @@ export default function SavedDesignDetailPage() {
           {assessment.what_works.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Keep
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Keep
               </h3>
               <ul className="space-y-1">
                 {assessment.what_works.map((item, i) => (
@@ -275,6 +276,6 @@ export default function SavedDesignDetailPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageTransition>
   );
 }

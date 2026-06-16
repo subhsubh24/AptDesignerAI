@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { PageTransition } from "@/components/ui/motion";
 
 export default function RoomSetupPage() {
   const params = useParams();
@@ -86,7 +87,7 @@ export default function RoomSetupPage() {
   if (!room) return <div className="py-8 text-center text-muted-foreground">Loading...</div>;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <PageTransition className="max-w-3xl mx-auto space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -223,6 +224,6 @@ export default function RoomSetupPage() {
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
-    </div>
+    </PageTransition>
   );
 }
