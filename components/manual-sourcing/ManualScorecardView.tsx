@@ -20,7 +20,7 @@ import {
   DollarSign,
   Shield,
 } from "lucide-react";
-import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -137,18 +137,16 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
       {/* ── Overall Score ─── */}
       <Card className={cn(
         "border-2",
-        result.overall_score >= 8 ? "border-emerald-300 bg-emerald-50/50" :
-        result.overall_score >= 6 ? "border-blue-300 bg-blue-50/50" :
-        "border-amber-300 bg-amber-50/50"
+        result.overall_score >= 8 ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30" :
+        result.overall_score >= 6 ? "border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/30" :
+        "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30"
       )}>
         <CardContent className="pt-6 pb-5">
           <div className="flex items-center gap-6">
             <div className="text-center">
               <div className={cn(
                 "text-5xl font-bold",
-                result.overall_score >= 8 ? "text-emerald-600" :
-                result.overall_score >= 6 ? "text-blue-600" :
-                "text-amber-600"
+                getScoreColor(result.overall_score)
               )}>
                 {result.overall_score.toFixed(1)}
               </div>

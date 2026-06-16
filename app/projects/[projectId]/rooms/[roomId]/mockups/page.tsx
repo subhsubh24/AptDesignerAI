@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles, X, Maximize2, Download } from "lucide-react";
 import { ShareButton } from "@/components/ui/share-button";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
 
 interface Mockup {
@@ -98,7 +99,7 @@ export default function MockupsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <PageTransition className="space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -168,9 +169,10 @@ export default function MockupsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 animate-stagger-children">
+        <StaggerList className="grid gap-6 md:grid-cols-2">
           {mockups.map((mockup) => (
-            <Card key={mockup.id} variant="interactive" className="overflow-hidden animate-fade-in-up">
+            <StaggerItem key={mockup.id}>
+            <Card variant="interactive" className="overflow-hidden">
               {mockup.result_image_url ? (
                 <div
                   className="aspect-video w-full overflow-hidden bg-muted relative cursor-pointer group"
@@ -237,8 +239,9 @@ export default function MockupsPage() {
                 )}
               </CardContent>
             </Card>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerList>
       )}
 
       {/* Fullscreen Lightbox */}
@@ -249,7 +252,7 @@ export default function MockupsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageTransition>
   );
 }
 

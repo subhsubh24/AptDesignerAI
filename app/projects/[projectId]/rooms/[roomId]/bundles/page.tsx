@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Plus, Sparkles, LayoutGrid } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
+import { PageTransition } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
 
 // Pure SVG radar chart component
@@ -67,7 +68,7 @@ function RadarChart({ scores }: { scores: { label: string; value: number }[] }) 
             y={labelPoint.y}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="text-[7px] fill-muted-foreground"
+            className="text-[8px] fill-muted-foreground font-medium"
           >
             {s.label}
           </text>
@@ -184,7 +185,7 @@ export default function BundlesPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <PageTransition className="space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -261,7 +262,8 @@ export default function BundlesPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Product carousel */}
-                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x">
+                  <div className="relative">
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 snap-x scrollbar-hide">
                     {products.map((product) => (
                       <div key={product.id} className="shrink-0 w-28 snap-start space-y-2">
                         {product.image_url && (
@@ -284,6 +286,10 @@ export default function BundlesPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                  {products.length > 3 && (
+                    <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-card to-transparent pointer-events-none" />
+                  )}
                   </div>
 
                   {evaluation && (
@@ -378,6 +384,6 @@ export default function BundlesPage() {
           })}
         </div>
       )}
-    </div>
+    </PageTransition>
   );
 }

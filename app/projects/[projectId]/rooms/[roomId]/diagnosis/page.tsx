@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight, RotateCcw, Sparkles, Search } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
 import { IdentifiedProductPill } from "@/components/rooms/identified-product-pill";
 
@@ -188,7 +189,7 @@ export default function DiagnosisPage() {
   const actions = diagnosis?.action_list;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <PageTransition className="max-w-4xl mx-auto space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -555,6 +556,7 @@ export default function DiagnosisPage() {
 
           {/* Sticky Continue Button */}
           <div className="sticky bottom-4 mt-8 z-10">
+            <div className="absolute -top-12 left-0 right-0 h-12 fade-to-bg" />
             <div className="glass rounded-2xl border shadow-warm-md p-4 flex items-center justify-between">
               <div className="text-sm">
                 <span className="font-medium">Diagnosis complete</span>
@@ -570,6 +572,6 @@ export default function DiagnosisPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageTransition>
   );
 }

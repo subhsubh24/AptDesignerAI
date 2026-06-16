@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download } from "lucide-react";
 
 interface SavedDesignItem {
@@ -54,6 +55,7 @@ export default function SavedDesignsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this saved design? This can't be undone.")) return;
     setDeleting(id);
     const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
     if (res.ok) {
@@ -63,7 +65,7 @@ export default function SavedDesignsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
+    <PageTransition className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
@@ -101,9 +103,10 @@ export default function SavedDesignsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <StaggerList className="grid gap-4 sm:grid-cols-2">
           {designs.map((design) => (
-            <Card key={design.id} className="group hover:shadow-md transition-shadow overflow-hidden">
+            <StaggerItem key={design.id}>
+            <Card className="group hover:shadow-md transition-shadow overflow-hidden">
               {design.thumbnail_url && (
                 <div className="h-36 overflow-hidden bg-muted">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -159,9 +162,10 @@ export default function SavedDesignsPage() {
                 </div>
               </CardContent>
             </Card>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerList>
       )}
-    </div>
+    </PageTransition>
   );
 }

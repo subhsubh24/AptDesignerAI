@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, ExternalLink, Download, Star } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
 
 interface PickProduct {
@@ -70,7 +71,7 @@ export default function PicksPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
+    <PageTransition className="max-w-5xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
@@ -90,10 +91,10 @@ export default function PicksPage() {
               <button
                 onClick={() => setRoomFilter("all")}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                  "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                   roomFilter === "all"
-                    ? "bg-foreground text-background border-foreground"
-                    : "border-muted-foreground/30 hover:border-foreground/50"
+                    ? "border-accent-warm bg-accent-warm text-white shadow-sm"
+                    : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                 )}
               >
                 All rooms
@@ -103,10 +104,10 @@ export default function PicksPage() {
                   key={r.id}
                   onClick={() => setRoomFilter(r.id)}
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                     roomFilter === r.id
-                      ? "bg-foreground text-background border-foreground"
-                      : "border-muted-foreground/30 hover:border-foreground/50"
+                      ? "border-accent-warm bg-accent-warm text-white shadow-sm"
+                      : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >
                   {r.name}
@@ -140,11 +141,12 @@ export default function PicksPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StaggerList className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((p) => {
             const score = p.product_evaluations?.[0]?.final_item_score;
             return (
-              <Card key={p.id} className="overflow-hidden group hover:shadow-md transition-shadow">
+              <StaggerItem key={p.id}>
+              <Card className="overflow-hidden group hover:shadow-md transition-shadow">
                 {p.image_url && (
                   <div className="h-40 overflow-hidden bg-muted">
                     <img
@@ -193,10 +195,11 @@ export default function PicksPage() {
                   </div>
                 </CardContent>
               </Card>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
-    </div>
+    </PageTransition>
   );
 }

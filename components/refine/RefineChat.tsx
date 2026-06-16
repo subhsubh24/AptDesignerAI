@@ -267,8 +267,8 @@ function ChatMessage({ message }: { message: RefineMessage }) {
 
 function DesignerWarningCard({ warning }: { warning: DesignerWarning }) {
   const styles = {
-    high: "bg-destructive/10 border-destructive/30 text-destructive",
-    medium: "bg-amber-100 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+    high: "bg-destructive/10 border-destructive/30 text-destructive dark:bg-destructive/20 dark:border-destructive/40",
+    medium: "bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
     low: "bg-muted border-border text-muted-foreground",
   } as const;
 
@@ -277,9 +277,9 @@ function DesignerWarningCard({ warning }: { warning: DesignerWarning }) {
       <div className="flex items-start gap-2">
         <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="font-medium">{warning.message}</p>
+          <p className="font-semibold">{warning.message}</p>
           {warning.suggestion && (
-            <p className="mt-1 opacity-80">→ {warning.suggestion}</p>
+            <p className="mt-1 opacity-90">→ {warning.suggestion}</p>
           )}
         </div>
       </div>

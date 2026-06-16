@@ -278,7 +278,7 @@ export default async function RoomPage({
                       "group transition-all duration-300",
                       step.available && !isNext && "hover:shadow-md hover:-translate-y-0.5 cursor-pointer",
                       isNext && "shadow-warm-sm hover:shadow-warm-md hover:-translate-y-0.5 cursor-pointer border-l-accent-warm",
-                      !step.available && "opacity-40"
+                      !step.available && "opacity-60 grayscale-[30%]"
                     )}
                   >
                     <CardContent className="p-4 md:p-5">

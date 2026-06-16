@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, GitCompare, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
+import { PageTransition } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
 
@@ -121,7 +122,7 @@ export default function ComparePage() {
   }
 
   return (
-    <div className="space-y-8">
+    <PageTransition className="space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -242,7 +243,7 @@ export default function ComparePage() {
                                 <div
                                   className={cn(
                                     "score-bar-fill",
-                                    score >= 8 ? "bg-emerald-500" : score >= 6 ? "bg-amber-500" : "bg-rose-500"
+                                    getScoreBgColor(score)
                                   )}
                                   style={{ width: `${score * 10}%` }}
                                 />
@@ -327,7 +328,7 @@ export default function ComparePage() {
                             <div
                               className={cn(
                                 "score-bar-fill",
-                                score >= 8 ? "bg-emerald-500" : score >= 6 ? "bg-amber-500" : "bg-rose-500"
+                                getScoreBgColor(score)
                               )}
                               style={{ width: `${score * 10}%` }}
                             />
@@ -345,6 +346,6 @@ export default function ComparePage() {
           </div>
         </>
       )}
-    </div>
+    </PageTransition>
   );
 }

@@ -33,6 +33,8 @@ import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingF
 import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
 import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
+import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-colors";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -81,14 +83,7 @@ interface ProductResult {
   }>;
 }
 
-type PriceTier = "budget" | "balanced" | "high_end";
 type Step = "analyzing" | "analysis" | "vision" | "sourcing" | "results" | "mockup" | "manual_sourcing" | "manual_results";
-
-const TIER_LABELS: Record<PriceTier, string> = {
-  budget: "Budget",
-  balanced: "Mid-Range",
-  high_end: "Luxury",
-};
 
 // ─── Search phase labels for live progress ──────────────────────
 
@@ -676,7 +671,7 @@ export default function FocusPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12 px-4">
+    <PageTransition className="max-w-5xl mx-auto space-y-8 pb-12 px-4">
       {/* Header */}
       <div>
         <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
@@ -806,13 +801,13 @@ export default function FocusPage() {
             <CardContent className="space-y-6">
               <div>
                 <h3 className="font-semibold text-sm mb-3">What to get</h3>
-                <div className="space-y-3">
+                <StaggerList className="space-y-3">
                   {(areaAnalysis.what_it_needs || []).map((item, i) => {
                     const mockupUrl = itemMockups[item.category];
                     const loading = itemMockupsLoading[item.category];
                     const isExpanded = expandedMockup === item.category;
                     return (
-                      <div key={i} className="rounded-xl bg-muted/50 overflow-hidden">
+                      <StaggerItem key={i} className="rounded-xl bg-muted/50 overflow-hidden">
                         <div className="flex items-start gap-3 p-3">
                           <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
                           <div className="flex-1 min-w-0">
@@ -858,15 +853,15 @@ export default function FocusPage() {
                             <p className="text-xs text-muted-foreground mt-1.5">AI-generated visualization of the recommended product</p>
                           </div>
                         )}
-                      </div>
+                      </StaggerItem>
                     );
                   })}
-                </div>
+                </StaggerList>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-emerald-700">Keep</h3>
+                  <h3 className="font-semibold text-sm mb-2 text-emerald-700 dark:text-emerald-400">Keep</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {(areaAnalysis.what_works || []).map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />{item}</li>
@@ -874,7 +869,7 @@ export default function FocusPage() {
                   </ul>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-amber-700">Replace or remove</h3>
+                  <h3 className="font-semibold text-sm mb-2 text-amber-700 dark:text-amber-400">Replace or remove</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {(areaAnalysis.what_should_go || []).map((item, i) => (
                       <li key={i} className="flex items-start gap-2"><ThumbsDown className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />{item}</li>
@@ -1313,7 +1308,7 @@ export default function FocusPage() {
           }
         />
       )}
-    </div>
+    </PageTransition>
   );
 }
 
@@ -1448,16 +1443,10 @@ function RecommendationTable({
       <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-3">
         {(["budget", "balanced", "high_end"] as PriceTier[]).map((tier) => (
           <div key={tier} className="flex flex-col items-center gap-0.5">
-            <span className={cn("text-[10px] font-semibold uppercase tracking-wide",
-              tier === "budget" ? "text-emerald-700" :
-              tier === "balanced" ? "text-blue-700" : "text-purple-700"
-            )}>
+            <span className={cn("text-[10px] font-semibold uppercase tracking-wide", TIER_COLORS[tier].text)}>
               {TIER_LABELS[tier]}
             </span>
-            <span className={cn("text-base font-bold tabular-nums",
-              tier === "budget" ? "text-emerald-700" :
-              tier === "balanced" ? "text-blue-700" : "text-purple-700"
-            )}>
+            <span className={cn("text-base font-bold tabular-nums", TIER_COLORS[tier].text)}>
               {tierTotals[tier] > 0 ? `$${tierTotals[tier].toLocaleString()}` : "—"}
             </span>
           </div>
@@ -1472,18 +1461,18 @@ function RecommendationTable({
               <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3 w-[200px]">Item</th>
               <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">Why</th>
               <th className="text-center text-xs font-semibold px-4 py-3 w-[140px]">
-                <div className="flex items-center justify-center gap-1.5 text-emerald-700">
-                  <DollarSign className="h-3.5 w-3.5" /> Budget
+                <div className={cn("flex items-center justify-center gap-1.5", TIER_COLORS.budget.text)}>
+                  <DollarSign className="h-3.5 w-3.5" /> {TIER_LABELS.budget}
                 </div>
               </th>
               <th className="text-center text-xs font-semibold px-4 py-3 w-[140px]">
-                <div className="flex items-center justify-center gap-1.5 text-blue-700">
-                  <TrendingUp className="h-3.5 w-3.5" /> Mid-Range
+                <div className={cn("flex items-center justify-center gap-1.5", TIER_COLORS.balanced.text)}>
+                  <TrendingUp className="h-3.5 w-3.5" /> {TIER_LABELS.balanced}
                 </div>
               </th>
               <th className="text-center text-xs font-semibold px-4 py-3 w-[140px]">
-                <div className="flex items-center justify-center gap-1.5 text-purple-700">
-                  <Crown className="h-3.5 w-3.5" /> Luxury
+                <div className={cn("flex items-center justify-center gap-1.5", TIER_COLORS.high_end.text)}>
+                  <Crown className="h-3.5 w-3.5" /> {TIER_LABELS.high_end}
                 </div>
               </th>
             </tr>
@@ -1518,13 +1507,13 @@ function RecommendationTable({
           <tfoot>
             <tr className="border-t bg-muted/50">
               <td className="px-4 py-3 font-semibold text-sm" colSpan={2}>Estimated Total</td>
-              <td className="px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+              <td className={cn("px-4 py-3 text-center text-sm font-semibold", TIER_COLORS.budget.text)}>
                 ${tierTotals.budget.toLocaleString()}
               </td>
-              <td className="px-4 py-3 text-center text-sm font-semibold text-blue-700">
+              <td className={cn("px-4 py-3 text-center text-sm font-semibold", TIER_COLORS.balanced.text)}>
                 ${tierTotals.balanced.toLocaleString()}
               </td>
-              <td className="px-4 py-3 text-center text-sm font-semibold text-purple-700">
+              <td className={cn("px-4 py-3 text-center text-sm font-semibold", TIER_COLORS.high_end.text)}>
                 ${tierTotals.high_end.toLocaleString()}
               </td>
             </tr>
@@ -1551,11 +1540,7 @@ function RecommendationTable({
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className={cn("text-[10px]",
-                          tier === "budget" ? "text-emerald-700 border-emerald-200" :
-                          tier === "balanced" ? "text-blue-700 border-blue-200" :
-                          "text-purple-700 border-purple-200"
-                        )}>
+                        <Badge variant="outline" className={cn("text-[10px]", TIER_COLORS[tier].badge)}>
                           {TIER_LABELS[tier]}
                         </Badge>
                         {product.price && <span className="text-xs font-medium">${product.price}</span>}
@@ -1608,10 +1593,7 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
   }
 
   const eval0 = product.product_evaluations?.[0];
-  const tierColorClass =
-    tier === "budget" ? "text-emerald-700" :
-    tier === "balanced" ? "text-blue-700" :
-    "text-purple-700";
+  const tierColorClass = TIER_COLORS[tier].text;
 
   // When fillEmptyTiers borrowed this product from an adjacent tier, the
   // metadata is tagged. Render a compact "→ [origin]" stub instead of a

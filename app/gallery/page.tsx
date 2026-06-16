@@ -145,17 +145,17 @@ export default function GalleryPage() {
           </div>
         </section>
 
-        {/* Style filter chips (visual only for now) */}
+        {/* Style tags (decorative) */}
         <section className="max-w-5xl mx-auto px-6 md:px-8 pb-8">
           <div className="flex flex-wrap gap-2 justify-center">
             {STYLE_TABS.map((tab, i) => (
               <div
                 key={tab}
                 className={cn(
-                  "px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer",
+                  "px-4 py-1.5 rounded-full text-sm font-medium",
                   i === 0
-                    ? "bg-foreground text-background"
-                    : "bg-card border text-muted-foreground hover:text-foreground hover:bg-muted",
+                    ? "bg-accent-warm text-white"
+                    : "bg-card border text-muted-foreground",
                 )}
               >
                 {tab}

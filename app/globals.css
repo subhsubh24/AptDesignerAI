@@ -294,6 +294,10 @@ body {
   animation: slideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Hide scrollbar for carousel-like containers */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
 /* Staggered children entrance */
 .animate-stagger-children > *:nth-child(1) { animation-delay: 0ms; }
 .animate-stagger-children > *:nth-child(2) { animation-delay: 60ms; }
@@ -426,25 +430,36 @@ body {
 
 /* ─── Typography Scale ─── */
 .text-display {
-  font-size: clamp(2.5rem, 5vw, 3.75rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
+  font-size: clamp(2.75rem, 6vw, 4.25rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
 }
 
 .text-headline {
-  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-size: clamp(1.875rem, 3.5vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+}
+
+.text-title {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
 .text-caption {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+}
+
+.text-balance {
+  text-wrap: balance;
 }
 
 /* Custom scrollbar */
@@ -474,7 +489,42 @@ body {
   }
 }
 
-/* Smooth page transitions */
-main {
-  animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Fade gradient before sticky footers */
+.fade-to-bg {
+  background: linear-gradient(to top, var(--background) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+.fade-to-bg-card {
+  background: linear-gradient(to top, var(--card) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Smooth page transitions — respect reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  main {
+    animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+/* Reduce animations for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Empty state illustration wrapper */
+.empty-state-icon {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-warm) 8%, transparent), color-mix(in srgb, var(--accent-warm) 3%, transparent));
+}
+
+/* Warm focus ring for interactive elements */
+.focus-warm:focus-visible {
+  outline: 2px solid var(--accent-warm);
+  outline-offset: 2px;
 }

@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { ScoreBarCompact } from "@/components/ui/score-display";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
@@ -50,21 +52,6 @@ interface ProductWithEval {
     value_fit_score: number;
     reasoning: { top_reasons: string[]; risks: string[]; suggestions: string[] };
   }>;
-}
-
-function ScoreBar({ score, label }: { score: number; label: string }) {
-  const color = score >= 8 ? "bg-emerald-500" : score >= 6 ? "bg-amber-500" : "bg-rose-500";
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={cn("font-semibold tabular-nums", getScoreColor(score))}>{score.toFixed(0)}</span>
-      </div>
-      <div className="score-bar">
-        <div className={cn("score-bar-fill", color)} style={{ width: `${score * 10}%` }} />
-      </div>
-    </div>
-  );
 }
 
 export default function ProductsPage() {
@@ -208,7 +195,7 @@ export default function ProductsPage() {
   const detailEval = detailProduct?.product_evaluations?.[0];
 
   return (
-    <div className="space-y-6">
+    <PageTransition className="space-y-6">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -359,17 +346,17 @@ export default function ProductsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-stagger-children">
+        <StaggerList className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProducts.map((product) => {
             const evaluation = product.product_evaluations?.[0];
             const isShortlisted = product.status === "shortlisted" || product.status === "accepted";
 
             return (
+              <StaggerItem key={product.id}>
               <Card
-                key={product.id}
                 variant="interactive"
                 className={cn(
-                  "overflow-hidden group animate-fade-in-up",
+                  "overflow-hidden group",
                   isShortlisted && "ring-2 ring-accent-warm/30"
                 )}
                 onClick={() => setSelectedProduct(product)}
@@ -425,10 +412,10 @@ export default function ProductsPage() {
 
                       {/* Score bars */}
                       <div className="space-y-1.5">
-                        <ScoreBar score={evaluation.style_fit_score} label="Style" />
-                        <ScoreBar score={evaluation.palette_fit_score} label="Palette" />
-                        <ScoreBar score={evaluation.scale_fit_score} label="Scale" />
-                        <ScoreBar score={evaluation.cohesion_fit_score} label="Cohesion" />
+                        <ScoreBarCompact score={evaluation.style_fit_score} label="Style" />
+                        <ScoreBarCompact score={evaluation.palette_fit_score} label="Palette" />
+                        <ScoreBarCompact score={evaluation.scale_fit_score} label="Scale" />
+                        <ScoreBarCompact score={evaluation.cohesion_fit_score} label="Cohesion" />
                       </div>
 
                       {evaluation.reasoning.top_reasons[0] && (
@@ -498,9 +485,10 @@ export default function ProductsPage() {
                   </div>
                 </CardContent>
               </Card>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
 
       {/* Product Detail Dialog */}
@@ -570,7 +558,7 @@ export default function ProductsPage() {
                         { label: "Cohesion Fit", score: detailEval.cohesion_fit_score },
                         { label: "Value Fit", score: detailEval.value_fit_score },
                       ].map((s) => (
-                        <ScoreBar key={s.label} score={s.score} label={s.label} />
+                        <ScoreBarCompact key={s.label} score={s.score} label={s.label} />
                       ))}
                     </div>
 
@@ -630,6 +618,6 @@ export default function ProductsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageTransition>
   );
 }

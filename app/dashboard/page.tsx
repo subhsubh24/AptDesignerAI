@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autocomplete";
 import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
+import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -353,58 +354,62 @@ export default function DashboardPage() {
   // ─── Step: Welcome ─────────────────────────────────────────────
   if (step === "welcome") {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-20 animate-fade-in-up">
-        <div className="text-center space-y-8">
-          <div className="flex justify-center">
+      <PageTransition className="max-w-2xl mx-auto px-4 py-20">
+        <StaggerList className="text-center space-y-8">
+          <StaggerItem className="flex justify-center">
             <div className="h-20 w-20 rounded-3xl bg-secondary flex items-center justify-center shadow-sm animate-float">
               <LogoMark className="h-10 w-10 text-foreground" />
             </div>
-          </div>
-          <div className="space-y-3">
+          </StaggerItem>
+          <StaggerItem className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-2">
               Let&apos;s design your apartment
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-balance">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
             <p className="text-lg text-muted-foreground max-w-md mx-auto leading-relaxed">
               A few minutes of photos and notes, and we&apos;ll hand you a fully
               furnished apartment — every piece chosen for your space.
             </p>
-          </div>
+          </StaggerItem>
 
           {/* Quick what-to-expect strip */}
-          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
-            {[
-              { n: "01", label: "Layout & location", hint: "30 sec" },
-              { n: "02", label: "Photos & floor plan", hint: "3 min" },
-              { n: "03", label: "Your designs", hint: "2 min" },
-            ].map((s) => (
-              <div key={s.n} className="rounded-xl border bg-card p-3 text-left">
-                <div className="text-[10px] font-bold text-accent-warm">{s.n}</div>
-                <div className="text-xs font-semibold mt-0.5">{s.label}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">~{s.hint}</div>
-              </div>
-            ))}
-          </div>
+          <StaggerItem>
+            <StaggerList className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
+              {[
+                { n: "01", label: "Layout & location", hint: "30 sec" },
+                { n: "02", label: "Photos & floor plan", hint: "3 min" },
+                { n: "03", label: "Your designs", hint: "2 min" },
+              ].map((s) => (
+                <StaggerItem key={s.n} className="rounded-xl border bg-card p-3 text-left hover:shadow-sm transition-shadow">
+                  <div className="text-[10px] font-bold text-accent-warm">{s.n}</div>
+                  <div className="text-xs font-semibold mt-0.5">{s.label}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">~{s.hint}</div>
+                </StaggerItem>
+              ))}
+            </StaggerList>
+          </StaggerItem>
 
-          <Button
-            size="xl"
-            variant="warm"
-            className="mt-4"
-            onClick={() => setStep("layout")}
-          >
-            Start designing
-            <ChevronRight className="h-5 w-5 ml-2" />
-          </Button>
-          <p className="text-xs text-muted-foreground">Free forever on one room. No credit card.</p>
-        </div>
-      </div>
+          <StaggerItem>
+            <Button
+              size="xl"
+              variant="warm"
+              className="mt-4"
+              onClick={() => setStep("layout")}
+            >
+              Start designing
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </Button>
+            <p className="text-xs text-muted-foreground mt-3">Free forever on one room. No credit card.</p>
+          </StaggerItem>
+        </StaggerList>
+      </PageTransition>
     );
   }
 
   // ─── Step: Layout (Bed/Bath) ──────────────────────────────────
   if (step === "layout") {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
+      <PageTransition className="max-w-2xl mx-auto px-4 py-12">
         <StepHeader
           step={1}
           total={3}
@@ -491,7 +496,7 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
-      </div>
+      </PageTransition>
     );
   }
 
@@ -519,7 +524,7 @@ export default function DashboardPage() {
     const locationLabel = [neighborhood, city, state].filter(Boolean).join(", ");
 
     return (
-      <div className="max-w-2xl mx-auto px-4 py-12 animate-fade-in-up">
+      <PageTransition className="max-w-2xl mx-auto px-4 py-12">
         <StepHeader
           step={2}
           total={3}
@@ -597,7 +602,7 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
-      </div>
+      </PageTransition>
     );
   }
 
@@ -651,7 +656,7 @@ export default function DashboardPage() {
 
   if (step === "setup") {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
+      <PageTransition className="max-w-3xl mx-auto px-4 py-12">
         <StepHeader
           step={3}
           total={3}
@@ -812,7 +817,7 @@ export default function DashboardPage() {
             <ArrowRight className="h-5 w-5" />
           </Button>
         </div>
-      </div>
+      </PageTransition>
     );
   }
 
@@ -823,7 +828,7 @@ export default function DashboardPage() {
     const showBuildingStep = !!buildingName && !buildingResearch;
 
     return (
-      <div className="max-w-xl mx-auto px-4 py-20 text-center animate-fade-in-up">
+      <PageTransition className="max-w-xl mx-auto px-4 py-20 text-center">
         {/* Animated loading indicator */}
         <div className="relative inline-flex h-20 w-20 items-center justify-center mx-auto">
           <div className="absolute inset-0 rounded-full bg-accent-warm/15 animate-ping" />
@@ -854,7 +859,7 @@ export default function DashboardPage() {
         <p className="text-xs text-muted-foreground mt-8 italic">
           This usually takes a minute. Grab a coffee — we&apos;re almost there.
         </p>
-      </div>
+      </PageTransition>
     );
   }
 
@@ -886,7 +891,7 @@ export default function DashboardPage() {
     };
 
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 animate-fade-in-up">
+      <PageTransition className="max-w-3xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium mb-4">
             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1027,7 +1032,7 @@ export default function DashboardPage() {
             </Card>
           </div>
         )}
-      </div>
+      </PageTransition>
     );
   }
 
