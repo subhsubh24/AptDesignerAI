@@ -10,8 +10,8 @@
 
 export const TEXT_TIERS = {
   base: "gemini-2.5-flash-lite",
-  mid: "gemini-3.1-flash-lite-preview",
-  ceiling: process.env.TEXT_CEILING_MODEL || "gemini-3.1-flash-lite-preview",
+  mid: "gemini-3.1-flash-lite",
+  ceiling: process.env.TEXT_CEILING_MODEL || "gemini-3.5-flash",
 } as const;
 
 export type TextTier = keyof typeof TEXT_TIERS;
@@ -47,22 +47,22 @@ export function selectModelTier(task: TaskType, tier: TextTier): string {
 
 export const MODELS = {
   /** Unified text model for every non-image task. */
-  text: "gemini-3.1-flash-lite-preview",
+  text: "gemini-3.1-flash-lite",
   /**
-   * Nano Banana 2 — Gemini 3.1 Flash Image Preview.
+   * Nano Banana 2 — Gemini 3.1 Flash Image (GA).
    * High-efficiency image generation: fast, high-volume, supports 4K,
    * image search grounding, up to 14 reference images. thinkingLevel can
    * be set to "high" to match Pro quality at lower cost.
    */
-  image: "gemini-3.1-flash-image-preview",
+  image: "gemini-3.1-flash-image",
   /**
-   * Nano Banana Pro — Gemini 3 Pro Image Preview.
+   * Nano Banana Pro — Gemini 3 Pro Image (GA).
    * Professional asset production: thinking always on (can't disable),
    * generates up to 4K, best for complex instructions, multi-reference
    * composition, and interior design mockups where quality is paramount.
    * Use for final-quality room mockups shown to users.
    */
-  imagePro: "gemini-3-pro-image-preview",
+  imagePro: "gemini-3-pro-image",
   /**
    * Computer Use (browser-control agent). Preview-only — supports a subset
    * of models distinct from the regular text model. The env override

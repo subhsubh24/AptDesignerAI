@@ -118,10 +118,17 @@ export function truncateContext(
  * These are conservative estimates leaving room for output tokens.
  */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gemini-2.5-flash-lite": 800_000,
+  "gemini-3.1-flash-lite": 800_000,
+  "gemini-3.1-flash-image": 800_000,
+  // Ceiling tier — near-Pro intelligence with a 1M-token context window,
+  // used only when the escalation ladder steps up from the flash-lite tiers.
+  "gemini-3.5-flash": 1_000_000,
+  // Legacy preview IDs — retained so any cached/in-flight references that
+  // still carry the old identifiers get a correct budget instead of the
+  // 100k fallback.
   "gemini-3.1-flash-lite-preview": 800_000,
   "gemini-3.1-flash-image-preview": 800_000,
-  // Legacy — retained for any hardcoded references; current pipeline runs
-  // on flash-lite with thinking levels instead of switching to flash.
   "gemini-3-flash-preview": 800_000,
 };
 

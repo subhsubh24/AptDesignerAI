@@ -494,11 +494,11 @@ Every material must read as physically real — the weight of natural linen, the
 </material_fidelity>
 ${groundingSystemNote}`;
 
-    // Nano Banana Pro (gemini-3-pro-image-preview) is the default for final
+    // Nano Banana Pro (gemini-3-pro-image) is the default for final
     // room mockups — thinking always on, 4K capable, professional asset
     // production quality. If Pro is unavailable, fall back to Nano Banana 2
     // with thinkingLevel: "high" to match Pro's composition reasoning.
-    const imageModel = selectModel("mockup_image"); // → gemini-3-pro-image-preview
+    const imageModel = selectModel("mockup_image"); // → gemini-3-pro-image
     const isProModel = imageModel.includes("pro");
 
     const requestedLevel = options.thinkingLevel || "high";

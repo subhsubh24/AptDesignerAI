@@ -87,7 +87,7 @@ describe("pairwiseRerank", () => {
         { pair_index: 2, winner: "C", confidence: 3, reason: "C over A" },
       ]),
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3.1-flash-lite",
       truncated: false,
     });
 
@@ -137,7 +137,7 @@ describe("pairwiseRerank", () => {
     mockChat.mockResolvedValue({
       content: JSON.stringify([]),
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3.1-flash-lite",
       truncated: false,
     });
 
@@ -162,7 +162,7 @@ describe("pairwiseRerank", () => {
     mockChat.mockResolvedValue({
       content: '{"not": "an array"}',
       usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3.1-flash-lite",
       truncated: false,
     });
 

@@ -552,7 +552,7 @@ export const geminiProvider: AIProvider = {
     // If a callsite forgets, fall back to "low" — cheap but functional.
     const effectiveThinkingConfig = thinkingConfig ?? { thinkingLevel: "low" };
     // gemini-2.5-flash-lite doesn't support thinking — strip to avoid 400.
-    // (Exact base match: gemini-3.1-flash-lite-preview DOES support thinking.)
+    // (Exact base match: the mid/ceiling tiers DO support thinking.)
     if (isBaseTier(model)) {
       log.debug("Stripping thinkingConfig for model without thinking support", { model });
     } else {

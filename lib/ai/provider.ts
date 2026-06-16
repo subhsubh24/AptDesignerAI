@@ -235,7 +235,7 @@ export interface AIProvider {
     mediaResolution?: "low" | "medium" | "high" | "ultra_high";
     /**
      * Image generation config — only honored by image-capable models
-     * (gemini-3.1-flash-image-preview / Nano Banana 2). Controls output
+     * (gemini-3.1-flash-image / Nano Banana 2). Controls output
      * resolution and aspect ratio.
      */
     imageConfig?: ImageConfig;

@@ -254,7 +254,7 @@ export const SCALE_RELATIONS_CONFIG = {
  */
 export const IMAGE_GENERATION_CONFIG = {
   /**
-   * Default output resolution for Nano Banana Pro (gemini-3-pro-image-preview).
+   * Default output resolution for Nano Banana Pro (gemini-3-pro-image).
    * 2K is the recommended default for room mockups — sharp enough for full-screen
    * preview without the cost/latency of 4K. Use 4K for premium export.
    */
