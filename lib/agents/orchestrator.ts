@@ -739,6 +739,27 @@ export async function runAgenticSearch(
       searchTasks.push(eq);
     }
 
+    // Inject breadth queries: one generic keyword-based query per
+    // (category, tier) using the same logic as the backfill phase. This
+    // ensures every cell gets a broad "category + style" query alongside
+    // the LLM's specific ones, reducing the need for post-hoc backfill.
+    const styleKeywords = extractBackfillKeywords(ctx.designDirection);
+    const seenBreadth = new Set<string>();
+    for (const categoryBrief of brief.categories) {
+      for (const tier of PRICE_TIERS) {
+        const key = `${categoryBrief.category}|${tier}`;
+        if (seenBreadth.has(key)) continue;
+        seenBreadth.add(key);
+        const breadthQuery = `${categoryBrief.category.replace(/_/g, " ")} ${styleKeywords}`.trim();
+        searchTasks.push({
+          category: categoryBrief.category,
+          tier,
+          query: breadthQuery,
+          angle: "breadth",
+        });
+      }
+    }
+
     stats.totalSearchQueries = searchTasks.length;
 
     // Tavily rate limit: 100 RPM dev, 1000 RPM prod — keep concurrency moderate
