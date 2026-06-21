@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, ArrowRight, Paperclip, Lightbulb } from "lucide-react";
 import { PageTransition } from "@/components/ui/motion";
 
 export default function RoomSetupPage() {
@@ -33,6 +34,8 @@ export default function RoomSetupPage() {
   const [keepItems, setKeepItems] = useState("");
   const [replaceItems, setReplaceItems] = useState("");
   const [priorities, setPriorities] = useState("");
+  const [userContext, setUserContext] = useState("");
+  const [referenceImages, setReferenceImages] = useState<{ id: string; url: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -47,12 +50,18 @@ export default function RoomSetupPage() {
         setKeepItems((data.keep_items || []).join(", "));
         setReplaceItems((data.replace_items || []).join(", "));
         setPriorities((data.priorities || []).join(", "));
-        setImages(
-          (data.room_images || []).map((img: { id: string; image_url: string }) => ({
-            id: img.id,
-            url: img.image_url,
-          }))
-        );
+        setUserContext(data.user_context || "");
+        const roomImgs: { id: string; url: string }[] = [];
+        const refImgs: { id: string; url: string }[] = [];
+        for (const img of (data.room_images || []) as { id: string; image_url: string; image_type: string }[]) {
+          if (img.image_type === "detail") {
+            refImgs.push({ id: img.id, url: img.image_url });
+          } else {
+            roomImgs.push({ id: img.id, url: img.image_url });
+          }
+        }
+        setImages(roomImgs);
+        setReferenceImages(refImgs);
       }
     }
     load();
@@ -71,6 +80,7 @@ export default function RoomSetupPage() {
           keep_items: keepItems.split(",").map((s) => s.trim()).filter(Boolean),
           replace_items: replaceItems.split(",").map((s) => s.trim()).filter(Boolean),
           priorities: priorities.split(",").map((s) => s.trim()).filter(Boolean),
+          user_context: userContext.trim() || null,
         }),
       });
       router.push(`/projects/${projectId}/rooms/${roomId}`);
@@ -82,6 +92,10 @@ export default function RoomSetupPage() {
 
   const handleImageUploaded = (image: { url: string; path: string; id: string }) => {
     setImages((prev) => [...prev, { id: image.id, url: image.url }]);
+  };
+
+  const handleReferenceUploaded = (image: { url: string; path: string; id: string }) => {
+    setReferenceImages((prev) => [...prev, { id: image.id, url: image.url }]);
   };
 
   if (!room) return <div className="py-8 text-center text-muted-foreground">Loading...</div>;
@@ -210,6 +224,58 @@ export default function RoomSetupPage() {
               placeholder="e.g., comfort, style, hosting, evening ambience"
               value={priorities}
               onChange={(e) => setPriorities(e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-amber-500" />
+            Anything else?
+          </CardTitle>
+          <CardDescription>
+            Share inspiration, context, or reference images — anything that helps us
+            understand your vision. A Pinterest board screenshot, a photo of a sofa
+            layout you love, notes about how you use the space.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-2">
+            <Label>Notes & context</Label>
+            <Textarea
+              placeholder={'e.g. "I host dinner parties most weekends" or "The yoga mat won\'t be there — ignore it" or "I love the warm tones in this Japandi cafe I visited"'}
+              value={userContext}
+              onChange={(e) => setUserContext(e.target.value)}
+              className="min-h-[100px] resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              Lifestyle details, things to ignore in photos, style references — all helpful.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5">
+              <Paperclip className="h-3.5 w-3.5" />
+              Reference images
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Inspiration photos, layout sketches, furniture you&apos;re eyeing — drag them in.
+            </p>
+            {referenceImages.length > 0 && (
+              <div className="grid grid-cols-3 gap-3">
+                {referenceImages.map((img) => (
+                  <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
+                    <img src={img.url} alt="" className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
+            <ImageUploadZone
+              roomId={roomId}
+              imageType="detail"
+              onUploadComplete={handleReferenceUploaded}
             />
           </div>
         </CardContent>

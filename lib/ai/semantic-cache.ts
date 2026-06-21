@@ -19,6 +19,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { cosineSimilarity } from "./embeddings";
+import { DETERMINISTIC } from "./determinism";
 import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("semantic-cache");
@@ -89,6 +90,7 @@ export async function semanticLookup<V>(
   text: string,
   options: SemanticCacheOptions = {}
 ): Promise<{ value: V; similarity: number } | null> {
+  if (DETERMINISTIC) return null;
   if (process.env.ENABLE_SEMANTIC_CACHE !== "1") return null;
   if (!text || text.trim().length === 0) return null;
 
@@ -141,6 +143,7 @@ export async function semanticStore<V>(
   value: V,
   options: SemanticCacheOptions = {}
 ): Promise<void> {
+  if (DETERMINISTIC) return;
   if (process.env.ENABLE_SEMANTIC_CACHE !== "1") return;
   if (!text || text.trim().length === 0) return;
 
