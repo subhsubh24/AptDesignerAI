@@ -345,8 +345,9 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
+        <p className="text-sm text-muted-foreground animate-pulse">Loading your space...</p>
       </div>
     );
   }

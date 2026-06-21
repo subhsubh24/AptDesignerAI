@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Plus, Sparkles, LayoutGrid } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
-import { PageTransition } from "@/components/ui/motion";
+import { PageTransition, ScrollReveal } from "@/components/ui/motion";
+import { SkeletonBundleCard } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 
 // Pure SVG radar chart component
@@ -178,14 +179,22 @@ export default function BundlesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
+      <div className="max-w-4xl mx-auto space-y-6 py-8 px-4">
+        <div className="space-y-3">
+          <div className="skeleton-pulse h-8 w-32 rounded-lg" />
+          <div className="skeleton-pulse h-4 w-56 rounded-lg" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <SkeletonBundleCard key={i} />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <PageTransition className="space-y-8">
+    <PageTransition className="space-y-6 sm:space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -225,15 +234,16 @@ export default function BundlesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6 animate-stagger-children">
-          {bundles.map((bundle) => {
+        <div className="space-y-4 sm:space-y-6">
+          {bundles.map((bundle, idx) => {
             const evaluation = bundle.bundle_evaluations?.[0];
             const products = bundle.product_bundle_items?.map(
               (item) => item.candidate_products
             ) || [];
 
             return (
-              <Card key={bundle.id} variant="elevated" className="overflow-hidden animate-fade-in-up">
+              <ScrollReveal key={bundle.id} delay={idx * 0.08}>
+              <Card variant="elevated" className="overflow-hidden">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{bundle.name || "Untitled Bundle"}</CardTitle>
@@ -380,6 +390,7 @@ export default function BundlesPage() {
                   )}
                 </CardContent>
               </Card>
+              </ScrollReveal>
             );
           })}
         </div>

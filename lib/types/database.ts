@@ -84,6 +84,7 @@ export interface Room {
   priorities: string[];
   keep_items: string[];
   replace_items: string[];
+  user_context: string | null;
   status: RoomStatus;
   created_at: string;
   updated_at: string;

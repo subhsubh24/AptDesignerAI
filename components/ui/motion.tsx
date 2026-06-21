@@ -1,7 +1,8 @@
 "use client";
 
 import { forwardRef } from "react";
-import { motion, type HTMLMotionProps, type Variants, AnimatePresence } from "framer-motion";
+import { motion, useInView, type HTMLMotionProps, type Variants, AnimatePresence } from "framer-motion";
+import { useRef } from "react";
 
 const springSnappy = { type: "spring" as const, stiffness: 400, damping: 25 };
 const springBouncy = { type: "spring" as const, stiffness: 300, damping: 20 };
@@ -153,3 +154,48 @@ export const CardHover = forwardRef<HTMLDivElement, CardHoverProps>(
   )
 );
 CardHover.displayName = "CardHover";
+
+interface ScrollRevealProps {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}
+
+export function ScrollReveal({ children, className, delay = 0 }: ScrollRevealProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-60px" });
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 24 }}
+      animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+      transition={{ ...springGentle, delay }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+interface ScrollStaggerProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function ScrollStagger({ children, className }: ScrollStaggerProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+
+  return (
+    <motion.div
+      ref={ref}
+      variants={staggerContainer}
+      initial="hidden"
+      animate={inView ? "visible" : "hidden"}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}

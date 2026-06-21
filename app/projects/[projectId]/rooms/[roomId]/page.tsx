@@ -233,7 +233,7 @@ export default async function RoomPage({
           const isLast = i === steps.length - 1;
 
           return (
-            <div key={step.title} className="relative flex gap-4 md:gap-6">
+            <div key={step.title} className="relative flex gap-3 sm:gap-4 md:gap-6">
               {/* Timeline connector */}
               <div className="flex flex-col items-center shrink-0">
                 {/* Circle */}

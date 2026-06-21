@@ -13,7 +13,7 @@ const cardVariants = cva(
         glass:
           "glass border-border/40 shadow-sm",
         interactive:
-          "shadow-sm hover:shadow-lg hover:-translate-y-1 cursor-pointer active:scale-[0.99] active:transition-none transition-all duration-300 ease-out",
+          "shadow-sm hover:shadow-lg hover:-translate-y-1 cursor-pointer active:scale-[0.99] active:transition-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-300 ease-out",
         accent:
           "shadow-sm border-l-4 border-l-accent-warm",
       },

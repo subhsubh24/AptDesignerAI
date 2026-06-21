@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, GitCompare, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
-import { PageTransition } from "@/components/ui/motion";
+import { PageTransition, ScrollReveal } from "@/components/ui/motion";
+import { SkeletonCompareRow } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
 
@@ -115,14 +116,22 @@ export default function ComparePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
+      <div className="max-w-5xl mx-auto space-y-6 py-8 px-4">
+        <div className="space-y-3">
+          <div className="skeleton-pulse h-8 w-48 rounded-lg" />
+          <div className="skeleton-pulse h-4 w-64 rounded-lg" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCompareRow key={i} />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <PageTransition className="space-y-8">
+    <PageTransition className="space-y-6 sm:space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}

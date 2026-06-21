@@ -98,10 +98,29 @@ export default function RoomSetupPage() {
     setReferenceImages((prev) => [...prev, { id: image.id, url: image.url }]);
   };
 
-  if (!room) return <div className="py-8 text-center text-muted-foreground">Loading...</div>;
+  if (!room) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-8 py-8 px-4">
+        <div className="space-y-3">
+          <div className="skeleton-pulse h-8 w-40 rounded-lg" />
+          <div className="skeleton-pulse h-4 w-72 rounded-lg" />
+        </div>
+        <div className="rounded-2xl border bg-card p-6 space-y-4">
+          <div className="skeleton-pulse h-5 w-32" />
+          <div className="skeleton-pulse h-40 rounded-xl" />
+        </div>
+        <div className="rounded-2xl border bg-card p-6 space-y-4">
+          <div className="skeleton-pulse h-5 w-28" />
+          <div className="skeleton-pulse h-10 rounded-lg" />
+          <div className="skeleton-pulse h-10 rounded-lg" />
+          <div className="skeleton-pulse h-10 rounded-lg" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <PageTransition className="max-w-3xl mx-auto space-y-8">
+    <PageTransition className="max-w-3xl mx-auto space-y-6 sm:space-y-8 px-4 sm:px-0">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}
@@ -125,7 +144,7 @@ export default function RoomSetupPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {images.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               {images.map((img) => (
                 <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
                   <img src={img.url} alt="" className="h-full w-full object-cover" />
@@ -264,7 +283,7 @@ export default function RoomSetupPage() {
               Inspiration photos, layout sketches, furniture you&apos;re eyeing — drag them in.
             </p>
             {referenceImages.length > 0 && (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {referenceImages.map((img) => (
                   <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
                     <img src={img.url} alt="" className="h-full w-full object-cover" />

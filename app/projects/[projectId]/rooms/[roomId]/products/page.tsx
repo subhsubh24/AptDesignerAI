@@ -23,7 +23,8 @@ import {
 import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import { ScoreBarCompact } from "@/components/ui/score-display";
-import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { PageTransition, StaggerList, StaggerItem, CardHover } from "@/components/ui/motion";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
@@ -318,15 +319,9 @@ export default function ProductsPage() {
 
       {/* Product Grid */}
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-2xl border bg-card overflow-hidden">
-              <div className="aspect-square skeleton-pulse" />
-              <div className="p-4 space-y-3">
-                <div className="skeleton-pulse h-4 w-3/4" />
-                <div className="skeleton-pulse h-3 w-1/2" />
-              </div>
-            </div>
+            <SkeletonCard key={i} />
           ))}
         </div>
       ) : filteredProducts.length === 0 ? (
@@ -346,18 +341,19 @@ export default function ProductsPage() {
           </CardContent>
         </Card>
       ) : (
-        <StaggerList className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <StaggerList className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProducts.map((product) => {
             const evaluation = product.product_evaluations?.[0];
             const isShortlisted = product.status === "shortlisted" || product.status === "accepted";
 
             return (
               <StaggerItem key={product.id}>
+              <CardHover>
               <Card
                 variant="interactive"
                 className={cn(
-                  "overflow-hidden group",
-                  isShortlisted && "ring-2 ring-accent-warm/30"
+                  "overflow-hidden group focus-visible:ring-2 focus-visible:ring-ring",
+                  isShortlisted && "ring-2 ring-accent-warm"
                 )}
                 onClick={() => setSelectedProduct(product)}
               >
@@ -378,7 +374,7 @@ export default function ProductsPage() {
                     )}
                   </div>
                 )}
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="p-3 sm:p-4 space-y-3">
                   <div>
                     <h3 className="font-semibold text-sm line-clamp-2">
                       {product.title || "Untitled Product"}
@@ -485,6 +481,7 @@ export default function ProductsPage() {
                   </div>
                 </CardContent>
               </Card>
+              </CardHover>
               </StaggerItem>
             );
           })}

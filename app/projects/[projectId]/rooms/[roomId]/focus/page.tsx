@@ -34,7 +34,7 @@ import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual
 import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-colors";
-import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { PageTransition, StaggerList, StaggerItem, ScrollReveal } from "@/components/ui/motion";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -1217,11 +1217,13 @@ export default function FocusPage() {
           {products.length === 0 ? (
             <Card className="border-dashed"><CardContent className="py-12 text-center"><p className="text-muted-foreground">No products found yet. Try running a search.</p></CardContent></Card>
           ) : (
-            <RecommendationTable
-              products={products}
-              onGenerateMockup={handleGenerateMockup}
-              generatingMockup={generatingMockup}
-            />
+            <ScrollReveal>
+              <RecommendationTable
+                products={products}
+                onGenerateMockup={handleGenerateMockup}
+                generatingMockup={generatingMockup}
+              />
+            </ScrollReveal>
           )}
 
           {/* Actions — primary CTA first, secondary inline, tertiary as link */}

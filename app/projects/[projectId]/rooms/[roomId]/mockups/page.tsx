@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles, X, Maximize2, Download } from "lucide-react";
 import { ShareButton } from "@/components/ui/share-button";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 
 interface Mockup {
@@ -92,14 +93,22 @@ export default function MockupsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-accent-warm" />
+      <div className="max-w-4xl mx-auto space-y-6 py-8 px-4">
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Skeleton key={i} className="aspect-[4/3] rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <PageTransition className="space-y-8">
+    <PageTransition className="space-y-6 sm:space-y-8">
       <div>
         <Link
           href={`/projects/${projectId}/rooms/${roomId}`}

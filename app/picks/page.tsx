@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, ExternalLink, Download, Star } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 
 interface PickProduct {
@@ -124,8 +125,10 @@ export default function PicksPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <Card className="border-dashed">

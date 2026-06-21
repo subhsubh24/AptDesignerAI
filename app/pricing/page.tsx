@@ -112,7 +112,7 @@ export default function PricingPage() {
 
         {/* Tiers */}
         <section className="max-w-6xl mx-auto px-6 md:px-8 pb-20">
-          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-3 md:gap-6 lg:gap-8">
             {TIERS.map((tier) => (
               <div
                 key={tier.name}

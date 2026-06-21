@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download } from "lucide-react";
 
 interface SavedDesignItem {
@@ -86,8 +87,10 @@ export default function SavedDesignsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : designs.length === 0 ? (
         <Card className="border-dashed">
@@ -146,7 +149,7 @@ export default function SavedDesignsPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2 sm:gap-2.5 mt-3">
                   <Link href={`/saved/${design.id}`} className="flex-1">
                     <Button variant="outline" size="sm" className="w-full text-xs">
                       View
