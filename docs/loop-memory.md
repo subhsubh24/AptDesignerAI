@@ -152,8 +152,48 @@ PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents app
 
 ### Rotation guide for next run
 - **Next high-value areas**: 
-  - OG meta tags for the `/shared/[token]` page (high impact for social sharing, low complexity — pure SSR metadata)
+  - OG meta tags for the `/shared/[token]` page (high impact for social sharing, low complexity — pure SSR metadata) ← DONE THIS RUN
   - Latency/cost optimization in the analysis pipeline
   - "Fast time-to-first-wow": streaming progress indicators or skeleton states
 - **Avoid**: More test coverage additions until the owner signals this is needed.
 - **Watch for**: PENDING_OPS.md items — the owner needs to run migration 015 before share links work in production Supabase.
+
+---
+
+## Run 2026-06-23 (fifth run)
+
+### State on entry
+- 876 tests passing, 5 merged PRs (color-math, set-math+bundle-math, product-math+material-math, share links).
+- Loop-memory explicitly flagged OG meta tags for `/shared/[token]` as the next priority.
+- Share page was shipped last run as a `"use client"` component with client-side fetch; had no OG tags.
+
+### Area served this run
+**Feature / Social / SEO** — OG and Twitter Card meta tags for the public share page.
+
+### What was done
+- Converted `app/shared/[token]/page.tsx` from a `"use client"` client component (useParams + useEffect fetch) to a Next.js 16 server component with `generateMetadata()`. Dynamic title, description (from design direction or room description, truncated to 155 chars), and image (mockup_url or thumbnail_url) are emitted as `og:title`, `og:description`, `og:image`, `twitter:card`, `twitter:image`.
+- Extracted the found-design UI into `app/shared/[token]/SharedDesignView.tsx` (client component) to preserve framer-motion animations.
+- Created `app/shared/[token]/not-found.tsx` — Next.js calls this + returns HTTP 404 when `notFound()` is invoked, replacing the old inline 200 not-found render.
+- Created `app/shared/[token]/loading.tsx` — Loader2 spinner for the navigation loading transition.
+- `React.cache` wraps the DB query to deduplicate across `generateMetadata` and the page render within a single request.
+- Zero new LLM calls; zero per-request cost increase.
+
+### Lessons learned
+
+1. **`notFound()` from `next/navigation` returns `never` — use it for 404s.** Rendering an inline "not found" JSX block in a server component returns HTTP 200 with the 404 UI, which is a correctness regression (crawlers index it as valid content). Always call `notFound()` for true 404s; put the UI in a co-located `not-found.tsx`.
+
+2. **OG image `width`/`height` should not be hardcoded if the actual dimensions are unknown.** Social crawlers (Facebook, LinkedIn) use declared dimensions to pre-size image boxes. Declaring 1200×630 for images that are actually thumbnails causes cropping/ratio bugs. Omit `width`/`height` when dimensions are not known at render time — crawlers handle undeclared dimensions by measuring the actual image.
+
+3. **`React.cache` from "react" correctly deduplicates across `generateMetadata` + page render in Next.js 15/16.** Next.js documentation explicitly states this pattern. Reviewer A flagged it as wrong (separate async contexts), but this was the reviewer hallucinating incorrect framework behavior. Cite Next.js docs, not reviewer intuition.
+
+4. **Unsafe casts on `snapshot` fields from the DB need a runtime guard.** The `SharedDesign` type declares `assessment` as required, but the DB returns `snapshot` as `any` (memory store or Supabase JSONB). An early `if (!assessment) return null;` guard in the client component prevents crashes on partial/legacy rows.
+
+5. **The PRIORITY_STYLES raw-Tailwind pattern pre-exists in `saved/[id]/page.tsx`.** Both reviewers flagged it but agreed it should not block this PR since it's not newly introduced. Future refactor: move to `Badge` CVA variants.
+
+### Merge outcome
+PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents approved (1 fix cycle).
+
+### Rotation guide for next run
+- **Under-served areas**: Latency improvements (pipeline caching, streaming), "Fast time-to-first-wow" UX improvements, new features from VISION.md (floor-plan parsing, more room support).
+- **Avoid**: More OG/SEO changes (done for now), test coverage (well-served).
+- **Improvements noted but deferred**: Migrate PRIORITY_STYLES to `Badge` CVA variants (both `saved/[id]/page.tsx` and `SharedDesignView.tsx`), add `metadataBase` to root layout for proper relative OG URL resolution.
