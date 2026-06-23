@@ -197,3 +197,37 @@ PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents app
 - **Under-served areas**: Latency improvements (pipeline caching, streaming), "Fast time-to-first-wow" UX improvements, new features from VISION.md (floor-plan parsing, more room support).
 - **Avoid**: More OG/SEO changes (done for now), test coverage (well-served).
 - **Improvements noted but deferred**: Migrate PRIORITY_STYLES to `Badge` CVA variants (both `saved/[id]/page.tsx` and `SharedDesignView.tsx`), add `metadataBase` to root layout for proper relative OG URL resolution.
+
+---
+
+## Run 2026-06-23 (sixth run)
+
+### State on entry
+- 876 tests passing, 6 merged PRs.
+- Loop memory rotation guide: "under-served areas — latency improvements."
+- No sequential-fetch issues had been addressed yet.
+
+### Area served this run
+**Latency / Performance** — dashboard returning-user load time.
+
+### What was done
+- `app/dashboard/page.tsx`: Converted per-room image fetch from sequential `for` loop to `Promise.all`. For a user with 3–4 rooms, this reduces dashboard `loadExisting()` wall-clock time by ~3–4×. Each `/api/rooms/${id}/images` call is independent; all results are keyed by `room_type` (no ordering dependency). JavaScript single-threaded event loop makes concurrent object writes safe.
+- Fixed a pre-existing ESLint `react/no-unescaped-entities` error (`we'll` → `we&apos;ll`) that would have caused CI to fail on the touched file.
+
+### Lessons learned
+
+1. **Pre-existing lint errors surface when you touch a file.** ESLint in CI only runs on touched files. If you touch a file that already had a lint error, CI will fail. Always run `npx eslint <file>` before committing and fix pre-existing errors in the same commit.
+
+2. **`Promise.all` on plain-object writes is safe in single-threaded JS.** Concurrent async arms writing to `obj[key]` (different keys) or setting a boolean to `true` are always safe — JS has no shared-memory parallelism. Reviewer A's analysis confirmed all six safety questions.
+
+3. **`hasAnalysis` flag order is load-bearing in a subtle way.** Moving it *before* the `await fetch(...)` inside each callback is fine because `room.status` is synchronously available. But the key insight: after `Promise.all` resolves, `hasAnalysis` holds the OR of all rooms' statuses, which is exactly what we want.
+
+4. **loadExisting() pattern is common in other client pages.** Check `app/saved/page.tsx`, `app/picks/page.tsx` for similar sequential-fetch patterns that could be parallelized in future runs.
+
+### Merge outcome
+PR #7, auto-merge enabled. Both reviewer subagents approved on first pass.
+
+### Rotation guide for next run
+- **Under-served areas**: Pipeline caching or streaming improvements; new features from VISION.md (floor-plan parsing improvements, more room support); `picks/page.tsx` or `saved/page.tsx` UX improvements.
+- **Deferred**: PRIORITY_STYLES → Badge CVA variants refactor; `metadataBase` in root layout (low-priority — OG images use absolute external URLs).
+- **Watch for**: Similar sequential-fetch patterns in other client pages.
