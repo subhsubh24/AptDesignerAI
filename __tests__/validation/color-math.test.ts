@@ -56,6 +56,14 @@ describe("hslToRgb", () => {
     expect(b).toBeCloseTo(0, 3);
   });
 
+  it("covers the h<120 branch (yellow-green region, h=60)", () => {
+    // h=60 yellow: r=c+m=1, g=c+m=1, b=m=0
+    const [r, g, b] = hslToRgb(60, 100, 50);
+    expect(r).toBeCloseTo(1, 3);
+    expect(g).toBeCloseTo(1, 3);
+    expect(b).toBeCloseTo(0, 3);
+  });
+
   it("covers the h>=300 branch (magenta region)", () => {
     const [r, g, b] = hslToRgb(300, 100, 50);
     expect(r).toBeCloseTo(1, 3);
@@ -63,18 +71,18 @@ describe("hslToRgb", () => {
     expect(b).toBeCloseTo(1, 3);
   });
 
-  it("covers the h>=180 (cyan) and h>=240 (blue-magenta) branches", () => {
-    // h=180 cyan: R=0, G=1, B=1
-    const [r180, g180, b180] = hslToRgb(180, 100, 50);
-    expect(r180).toBeCloseTo(0, 3);
-    expect(g180).toBeCloseTo(1, 3);
-    expect(b180).toBeCloseTo(1, 3);
+  it("covers the h>=180 branch (cyan, h=180)", () => {
+    const [r, g, b] = hslToRgb(180, 100, 50);
+    expect(r).toBeCloseTo(0, 3);
+    expect(g).toBeCloseTo(1, 3);
+    expect(b).toBeCloseTo(1, 3);
+  });
 
-    // h=270 (blue-magenta): R=0.5, G=0, B=1
-    const [r270, g270, b270] = hslToRgb(270, 100, 50);
-    expect(r270).toBeCloseTo(0.5, 2);
-    expect(b270).toBeCloseTo(1, 3);
-    expect(g270).toBeCloseTo(0, 3);
+  it("covers the h>=240 branch (blue-magenta, h=270)", () => {
+    const [r, g, b] = hslToRgb(270, 100, 50);
+    expect(r).toBeCloseTo(0.5, 2);
+    expect(g).toBeCloseTo(0, 3);
+    expect(b).toBeCloseTo(1, 3);
   });
 });
 
@@ -335,18 +343,24 @@ describe("computeColorHarmony", () => {
   });
 
   it("detects pair conflicts for perceptually incompatible unrelated colors", () => {
-    // "navy" (dark blue) and "terracotta" (warm orange-brown) are unrelated hues
-    // with very high Delta-E — should register as a conflict
+    // ivory (h=50, s=50, l=93) vs hunter green (h=115, s=50, l=25):
+    // hue angle ≈ 95° → "unrelated"; Delta-E ≈ 57.7 → exceeds the 50 threshold
     const result = computeColorHarmony(
-      { recommended_palette: ["navy", "terracotta", "burnt orange"] },
+      { recommended_palette: ["ivory", "hunter green"] },
       {}
     );
-    // Score should be penalized
+    // The function must actually detect the conflict, not just return a lower score
+    expect(result.pair_conflicts.length).toBeGreaterThan(0);
+    expect(result.pair_conflicts[0].color1).toBeDefined();
+    expect(result.pair_conflicts[0].deltaE).toBeGreaterThan(50);
+
+    // Score must be strictly lower than a conflict-free neutral palette
     const noConflictResult = computeColorHarmony(
       { recommended_palette: ["cream", "warm beige", "taupe"] },
       {}
     );
-    expect(result.palette_harmony).toBeLessThanOrEqual(noConflictResult.palette_harmony);
+    expect(noConflictResult.pair_conflicts).toHaveLength(0);
+    expect(result.palette_harmony).toBeLessThan(noConflictResult.palette_harmony);
   });
 
   it("populates per_item_color_fit for items with color specs", () => {
