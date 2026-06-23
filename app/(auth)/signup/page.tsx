@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 
 export default function SignupPage() {
@@ -157,6 +157,17 @@ export default function SignupPage() {
                   Sign in
                 </Link>
               </p>
+              <p className="text-xs text-muted-foreground/70 text-center mt-4 leading-relaxed">
+                By creating an account, you agree to our{" "}
+                <Link href="/terms" className="underline underline-offset-2 hover:text-muted-foreground">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="underline underline-offset-2 hover:text-muted-foreground">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -168,7 +179,7 @@ export default function SignupPage() {
         <div className="absolute inset-0 texture-noise" />
         <div className="relative flex flex-col items-center justify-center p-12 text-center">
           <div className="space-y-6 max-w-sm">
-            <div className="text-6xl">🏠</div>
+            <Home className="h-12 w-12 text-accent-warm/60 mx-auto" />
             <h2 className="text-headline text-foreground">
               Join hundreds of{" "}
               <span className="text-gradient-warm">happy renters</span>

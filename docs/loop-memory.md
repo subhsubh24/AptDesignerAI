@@ -349,3 +349,36 @@ PR #10, auto-merge enabled. Both reviewer subagents approved first pass.
 - **`metadataBase` in root layout**: Very low value — OG images are already absolute URLs. Skip unless there's nothing else.
 - **Pipeline improvements**: Any latency left is in the AI pipeline (area analysis, harmony loop). Touching these is higher-risk; verify the cost contract carefully.
 - **Avoid**: Sequential-query micro-optimizations. The easy wins are done. Don't invent work just to justify a run — a quiet no-op run is success.
+
+---
+
+## Run 2026-06-23 (tenth run)
+
+### State on entry
+- 876 tests passing, 10 merged PRs.
+- Loop memory rotation guide: "avoid sequential-query micro-optimizations", "consider fast time-to-first-wow feature".
+- Investigated signup page and found two unaddressed VISION.md violations.
+
+### Area served this run
+**UI / Design quality + Store-readiness** — signup page fixes.
+
+### What was done
+- Replaced `🏠` emoji with Lucide `Home` icon in the signup page right panel. This is the same class of violation fixed in run 9 on the dashboard page — the signup page was missed. `Home` icon follows the exact same pattern already used on the login page.
+- Added Terms of Service + Privacy Policy consent line below the signup form (`text-xs text-muted-foreground/70`). Both `/terms` and `/privacy` pages already exist. Standard App Store requirement (Apple guideline 5.1.1) for apps collecting user data.
+
+### Lessons learned
+
+1. **The "fixed in run 9" emoji cleanup was incomplete.** Run 9 fixed emoji in `getRoomSections()` inside `dashboard/page.tsx`, but the signup page's aspirational panel had a standalone `🏠` emoji that was missed. When fixing a design bar violation class, audit all files in the same scope.
+
+2. **Auth pages deserve a design + compliance audit each run.** Login and signup are conversion-critical surfaces. The login page already had the `Home` Lucide icon and proper trust signals; the signup page lagged behind. Going forward: if the login page is touched or audited, do the same for signup.
+
+3. **Store-readiness gaps are value-bar-clearing.** Consent language at signup is a hard requirement for App Store approval under Apple guideline 5.1.1. The existing /privacy and /terms pages were never surfaced to users at the moment of signup.
+
+4. **Both reviewers approved first pass.** Clean, narrow change with no logic impact.
+
+### Rotation guide for next run
+- **The app is now well-polished for its current scope.** 11 PRs shipped today covering: test coverage, features (share links, OG meta), performance (parallel fetches, dead fetch removal, parallel queries), UI (emoji removal, Lucide icons), and store-readiness (consent language).
+- **Genuine remaining work**: "Fast time-to-first-wow" feature (reduce onboarding friction or time to first analysis result); pipeline latency improvements (higher risk, requires profiling); remaining untested math modules (`proportion-math`, `spatial-math`, `harmony-math`) — but loop memory says "avoid test coverage additions."
+- **Strongly consider a no-op next run.** The loop has been extremely active. There is a real risk of churn if the next run invents marginal work. Only ship if something clearly and concretely clears the value bar.
+- **`metadataBase` in root layout**: Still low value — skip.
+- **Avoid**: More UI tweaks without a specific design bar violation to fix, more test coverage additions, more sequential-query micro-optimizations.
