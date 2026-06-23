@@ -28,6 +28,28 @@ not a spreadsheet with photos.
   requirement because the checkers must be trustworthy.
 - **Mobile-first, low-friction UX.** Touch targets, skeleton/loading states,
   micro-interactions; nothing that makes a phone user pinch-zoom or wait blind.
+- **Does NOT look vibe-coded.** The UI must read as an intentionally designed
+  product, not generated scaffolding. See "The design bar" below — this is a
+  hard quality bar, not a nice-to-have.
+
+## The design bar (do NOT look vibe-coded)
+A Gen-Z/millennial audience spots generic AI-generated UI instantly and bounces.
+Every UI change must clear this bar:
+- **Use the design system, never ad-hoc styles.** Reuse the existing tokens,
+  components, and spacing scale (the warm-editorial system, CVA variants,
+  framer-motion primitives). No one-off hex colors, no random `gap`/`p-` values,
+  no inline magic numbers where a token exists.
+- **No default/template look.** Avoid stock unstyled shadcn defaults left as-is,
+  centered-everything hero blandness, purple-gradient-on-white slop, emoji used
+  as iconography, or three competing accent colors. Consistent type scale,
+  deliberate hierarchy, generous and *consistent* whitespace.
+- **Polish is the point.** Real empty/loading/error states, hover/press
+  feedback, considered transitions, dark-mode parity, and accessible contrast +
+  focus states. Pixel alignment and optical balance matter.
+- **Taste test.** Before shipping a UI change, ask: would this look at home in a
+  well-designed editorial app, or does it look like a generated demo? If the
+  latter, it does not ship. When unsure whether a visual change clears the bar,
+  treat it as human-only and open a PR rather than auto-merging.
 
 ## Hard constraints (never trade away — see AGENTS.md + .claude/rules)
 - **LLM cost contract.** Cheapest tier by default; explicit `thinkingConfig` on
