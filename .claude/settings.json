@@ -15,5 +15,18 @@
       "Bash(git log:*)",
       "WebFetch(domain:github.com)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-ratchet-tests.sh"
+          }
+        ]
+      }
+    ]
   }
 }
