@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
+import { assembleRoomSceneGraph } from "@/lib/agents/scene-assembler";
 import {
   runDiagnosisExpansion,
   type ExpansionBudget,
@@ -181,6 +182,15 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     otherRoomsContext,
   };
 
+  // Multi-view scene assembly runs concurrently with diagnosis — both read the
+  // same photos, so this adds holistic cross-angle understanding at ~zero extra
+  // latency. Best-effort: a failure never blocks the diagnosis (scene_graph_json
+  // is just left null). Awaited just before the DB insert below.
+  const sceneGraphPromise = assembleRoomSceneGraph(ctx).catch((err) => {
+    log.warn("scene assembly threw — continuing without scene graph", { room_id, error: String(err) });
+    return { success: false as const, error: String(err) };
+  });
+
   const result = await runRoomDiagnosis(ctx, profile);
 
   if (!result.success || !result.data) {
@@ -330,6 +340,20 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     }
   }
 
+  // Resolve the concurrent scene-assembly result (best-effort — null on failure).
+  const sceneResult = await sceneGraphPromise;
+  const sceneGraph = sceneResult.success && "data" in sceneResult ? sceneResult.data ?? null : null;
+  const sceneGraphTokens = sceneResult.success && "tokensUsed" in sceneResult ? sceneResult.tokensUsed ?? 0 : 0;
+  if (sceneGraph) {
+    log.info("Scene graph assembled", {
+      room_id,
+      objects: sceneGraph.objects.length,
+      duplicatesMerged: sceneGraph.reconciled_duplicate_count,
+      coverage: sceneGraph.coverage.estimated_coverage,
+      gaps: sceneGraph.coverage.gaps.length,
+    });
+  }
+
   // Save diagnosis (with expanded action_list + expansion_log)
   const { data: diagnosis, error: saveError } = await supabase
     .from("room_diagnoses")
@@ -341,6 +365,7 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
       action_list: expandedActionList,
       model_used: result.model,
       expansion_log: expansionLog,
+      scene_graph_json: sceneGraph,
       // Quality tracking columns (migration 010) — enable DB few-shot retrieval.
       // design_direction_label left null for now (schema lacks a label field).
       room_type: room.room_type ?? null,
@@ -370,7 +395,7 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
         wasModified: validation.wasModified,
       },
     },
-    tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens,
+    tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens + sceneGraphTokens,
   });
 
   return NextResponse.json({

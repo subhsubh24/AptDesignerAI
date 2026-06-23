@@ -589,3 +589,58 @@ export type IdentifiedProductVerified = z.infer<typeof IdentifiedProductVerified
 export type IdentifiedProductEnriched = z.infer<typeof IdentifiedProductEnrichedSchema>;
 export type RetrievalPrior = z.infer<typeof RetrievalPriorSchema>;
 export type BoundingBox = z.infer<typeof BoundingBoxSchema>;
+
+// ─── Room Scene Graph (raw multi-view assembly output) ─────────────────
+//
+// What the scene-assembler VLM call emits BEFORE deterministic reconciliation
+// (lib/agents/scene-reconciliation.ts) dedups it into a RoomSceneGraph. Objects
+// reference photos by `image_index` (position in the input array) rather than
+// echoing long URLs — far more reliable. The model is asked to merge the same
+// physical object across angles, but we never trust that alone: VLMs are still
+// unreliable at cross-view correspondence, so reconciliation runs on top.
+
+/** One observation of an object in a single photo, by photo index. */
+export const SceneObservationSchema = z.object({
+  image_index: z.coerce.number().int().min(0),
+  view: z.string().default(""),
+  bounding_box: BoundingBoxSchema.nullable().default(null),
+});
+
+/** A physical object as the model reports it (may still contain cross-view
+ *  duplicates that reconciliation merges). */
+export const SceneObjectRawSchema = z.object({
+  category: z.string().min(1).catch("unknown"),
+  label: z.string().default(""),
+  observed_in: z.array(SceneObservationSchema).default([]),
+  materials: stringArray,
+  colors: stringArray,
+  dimensions: IdentifiedProductDimensionsSchema.nullable().default(null),
+  placement: z.string().default(""),
+  disposition: z.enum(["keep", "replace", "unknown"]).catch("unknown").default("unknown"),
+  condition: z.string().default(""),
+  confidence: z.coerce.number().min(0).max(1).catch(0.5).default(0.5),
+});
+
+export const SceneRelationRawSchema = z.object({
+  subject: z.string().default(""),
+  relation: z.string().default(""),
+  object: z.string().default(""),
+});
+
+export const SceneCoverageRawSchema = z.object({
+  walls_observed: stringArray,
+  gaps: stringArray,
+  estimated_coverage: z.coerce.number().min(0).max(1).catch(0.5).default(0.5),
+  suggested_shots: stringArray,
+}).default({ walls_observed: [], gaps: [], estimated_coverage: 0.5, suggested_shots: [] });
+
+export const RoomSceneGraphResponseSchema = z.object({
+  summary: z.string().default(""),
+  objects: z.array(SceneObjectRawSchema).default([]),
+  relations: z.array(SceneRelationRawSchema).default([]),
+  coverage: SceneCoverageRawSchema,
+});
+
+export type SceneObjectRaw = z.infer<typeof SceneObjectRawSchema>;
+export type SceneRelationRaw = z.infer<typeof SceneRelationRawSchema>;
+export type RoomSceneGraphResponse = z.infer<typeof RoomSceneGraphResponseSchema>;

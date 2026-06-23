@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
+import { assembleRoomSceneGraph } from "@/lib/agents/scene-assembler";
 import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
 import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -171,6 +172,13 @@ export async function POST(request: Request) {
           extractedFloorPlan,
         };
 
+        // Multi-view scene assembly — runs concurrently with diagnosis (both
+        // read the same photos). Best-effort; awaited just before the insert.
+        const sceneGraphPromise = assembleRoomSceneGraph(ctx).catch((err) => {
+          log.warn("scene assembly threw — continuing without scene graph", { room_id, error: String(err) });
+          return { success: false as const, error: String(err) };
+        });
+
         // Step 3: Running AI diagnosis
         sendEvent("step", { step: "Running AI diagnosis", status: "running", detail: "Analyzing layout, materials, lighting, and proportions" });
 
@@ -278,6 +286,18 @@ export async function POST(request: Request) {
         });
         sendEvent("step", { step: "Expanding action list", status: "done", detail: `Added ${expansion.expandedActionList.length - (diagnosisData.action_list?.length ?? 0)} item(s)` });
 
+        // Resolve concurrent scene assembly (best-effort — null on failure).
+        const sceneResult = await sceneGraphPromise;
+        const sceneGraph = sceneResult.success && "data" in sceneResult ? sceneResult.data ?? null : null;
+        const sceneGraphTokens = sceneResult.success && "tokensUsed" in sceneResult ? sceneResult.tokensUsed ?? 0 : 0;
+        if (sceneGraph) {
+          sendEvent("step", {
+            step: "Understanding the whole space",
+            status: "done",
+            detail: `Pieced together ${sceneGraph.source_image_urls.length} photos → ${sceneGraph.objects.length} objects${sceneGraph.coverage.gaps.length ? `, ${sceneGraph.coverage.gaps.length} unseen area(s)` : ""}`,
+          });
+        }
+
         // Step 6: Saving results
         sendEvent("step", { step: "Saving diagnosis", status: "running" });
 
@@ -291,6 +311,7 @@ export async function POST(request: Request) {
             action_list: expansion.expandedActionList,
             model_used: result.model,
             expansion_log: expansion.expansionLog,
+            scene_graph_json: sceneGraph,
             room_type: room.room_type ?? null,
             action_list_count: expansion.expandedActionList.length,
           })
@@ -314,7 +335,7 @@ export async function POST(request: Request) {
             ...diagnosisData as unknown as Record<string, unknown>,
             _validation: { issues: validation.issues, wasModified: validation.wasModified },
           },
-          tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens,
+          tokens_used: (result.tokensUsed ?? 0) + identifiedProductsTokens + sceneGraphTokens,
         });
 
         sendEvent("step", { step: "Saving diagnosis", status: "done" });

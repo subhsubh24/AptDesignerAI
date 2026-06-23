@@ -11,8 +11,9 @@ import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight,
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
-import type { DiagnosisData, DesignDirection, ActionItem } from "@/lib/types/database";
+import type { DiagnosisData, DesignDirection, ActionItem, RoomSceneGraph } from "@/lib/types/database";
 import { IdentifiedProductPill } from "@/components/rooms/identified-product-pill";
+import { SceneCoverageCard } from "@/components/rooms/scene-coverage-card";
 
 interface DiagnosisStep {
   step: string;
@@ -50,6 +51,7 @@ export default function DiagnosisPage() {
     design_direction_json: DesignDirection;
     action_list: ActionItem[];
     missing_categories: string[];
+    scene_graph_json?: RoomSceneGraph | null;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export default function DiagnosisPage() {
             design_direction_json: data.diagnosis.design_direction_json,
             action_list: data.diagnosis.action_list ?? [],
             missing_categories: data.diagnosis.missing_categories ?? [],
+            scene_graph_json: data.diagnosis.scene_graph_json ?? null,
           });
         }
       } catch {
@@ -313,6 +316,15 @@ export default function DiagnosisPage() {
                 <p className="text-muted-foreground leading-relaxed">{d.current_vibe_summary}</p>
               </CardContent>
             </Card>
+
+            {/* Multi-view coverage — what we pieced together across all photos,
+                and which angles are still missing */}
+            {diagnosis?.scene_graph_json && (
+              <SceneCoverageCard
+                graph={diagnosis.scene_graph_json}
+                setupHref={`/projects/${projectId}/rooms/${roomId}/setup`}
+              />
+            )}
 
             {/* What's Working / Not Working */}
             <div className="grid gap-4 md:grid-cols-2">

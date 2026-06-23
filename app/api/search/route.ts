@@ -6,6 +6,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import type { AgentContext } from "@/lib/agents/types";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
+import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
 import type { IdentifiedProduct } from "@/lib/types/database";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
@@ -134,7 +135,15 @@ export async function POST(request: Request) {
   // search + evaluate agents. Empty string when no usable identifications, so
   // the downstream prompts stay byte-for-byte equivalent for pre-feature rows.
   const identifiedProducts = (diagnosisJson?.identified_products as IdentifiedProduct[] | undefined) ?? [];
-  const identifiedContext = buildIdentifiedPiecesBlock(identifiedProducts);
+  // Multi-view scene graph: a deduped inventory of what's already in the room
+  // (one entry per real object, reconciled across all angles). Folded into the
+  // same context channel so search agents see the full existing-furniture
+  // picture and don't re-suggest what's there. Empty when no graph → byte-equivalent.
+  const sceneGraph = (diagnosis?.scene_graph_json as import("@/lib/types/database").RoomSceneGraph | null | undefined) ?? null;
+  const sceneInventory = formatSceneGraphForPrompt(sceneGraph);
+  const identifiedContext = [buildIdentifiedPiecesBlock(identifiedProducts), sceneInventory]
+    .filter(Boolean)
+    .join("\n\n");
   // Category blocklist — don't re-suggest something the user already owns.
   const identifiedCategories = new Set(
     identifiedProducts

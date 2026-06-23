@@ -7,6 +7,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
+import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
 
 /**
  * SSE streaming search endpoint.
@@ -242,6 +243,12 @@ export async function POST(request: Request) {
     lightingConditions: lightingConditions || undefined,
     windowDoorPositions: windowDoorPositions || undefined,
     outletPositions: outletPositions || undefined,
+    // Deduped multi-view inventory of existing furniture — gives search agents
+    // the full cross-angle picture so they don't re-suggest what's already there.
+    identifiedContext:
+      formatSceneGraphForPrompt(
+        (diagnosis?.scene_graph_json as import("@/lib/types/database").RoomSceneGraph | null | undefined) ?? null,
+      ) || undefined,
     fillAllTiers: fillAllTiers !== false,
     recommendationMockups,
   };

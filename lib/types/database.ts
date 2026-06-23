@@ -110,6 +110,9 @@ export interface RoomDiagnosis {
   model_used: string | null;
   /** Greedy expansion decision log — null when expansion was skipped */
   expansion_log?: DecoratorDecision[] | null;
+  /** Multi-view holistic scene graph (migration 014) — null on pre-feature
+   *  rows or when scene assembly was skipped/failed. Read as optional. */
+  scene_graph_json?: RoomSceneGraph | null;
   created_at: string;
 }
 
@@ -551,4 +554,104 @@ export interface RefineMessage {
   analysis_snapshot: Record<string, unknown> | null;
   tokens_used: number;
   created_at: string;
+}
+
+// ─── Room Scene Graph (multi-view holistic understanding) ──────────────
+//
+// A user may shoot the same kitchen from five angles. Pass A sees all the
+// photos at once, but historically emitted FREEFORM text observations, so the
+// same island shot from two angles became two unlinked notes. The scene graph
+// is the reconciled, persistent answer to "what is physically in this room" —
+// ONE canonical object per real object, with every photo it was seen in linked
+// back to it, plus the room's spatial layout and how well the photos cover it.
+//
+// Built by lib/agents/scene-assembler.ts (multi-image VLM call) and then
+// deterministically deduped by lib/agents/scene-reconciliation.ts. Persisted in
+// room_diagnoses.scene_graph_json (migration 014). Downstream readers MUST treat
+// it as optional (absent on pre-feature rows or when assembly was skipped).
+
+/** A single observation of an object in ONE specific photo. */
+export interface SceneObjectObservation {
+  /** URL of the room photo this observation came from. */
+  image_url: string;
+  /** Normalized bounding box (0..1) within that photo, if localizable. */
+  bounding_box?: IdentifiedProductBoundingBox | null;
+  /** The angle/view this photo represents, in the model's words
+   *  ("wide shot from doorway", "close-up of sink wall"). Free text. */
+  view?: string;
+}
+
+/** A canonical physical object in the room, reconciled across every photo it
+ *  appears in. One real sofa seen from three angles = ONE SceneObject with
+ *  three entries in `observed_in`. */
+export interface SceneObject {
+  /** Deterministic slug id (category + ordinal), e.g. "sofa_1". */
+  id: string;
+  category: string;            // "sofa", "kitchen_island", "pendant_light"
+  label: string;               // human label, e.g. "grey 3-seat sectional"
+  /** Every photo this object was seen in (deduped across angles). */
+  observed_in: SceneObjectObservation[];
+  materials?: string[];
+  colors?: string[];
+  dimensions?: IdentifiedProductDimensions | null;
+  /** Rough placement ("against north wall", "kitchen NE corner"). */
+  placement?: string;
+  /** Whether the user wants to keep it, inferred + reconciled with keep/replace. */
+  disposition?: "keep" | "replace" | "unknown";
+  condition?: string;
+  /** 0..1 — overall confidence in this object's existence/attributes. */
+  confidence: number;
+  /** True when reconciliation merged ≥2 raw observations into this node. */
+  merged_from_multiple_views?: boolean;
+  /** Free-text note where two views disagreed (e.g. color under different light). */
+  cross_view_notes?: string;
+}
+
+/** A spatial relationship between two canonical objects, or an object and a wall. */
+export interface SpatialRelation {
+  /** SceneObject.id or a wall/direction token. */
+  subject_id: string;
+  /** "left_of", "above", "facing", "on", "adjacent_to", "in_corner", … */
+  relation: string;
+  object_id: string;
+}
+
+/** Which surfaces/areas of the room the photos actually covered, and what's
+ *  still unseen — so we can ask the user for the missing angles. */
+export interface CoverageReport {
+  /** Walls (by direction/label) visible in at least one photo. */
+  walls_observed: string[];
+  /** Walls / corners / areas NOT visible in any photo. */
+  gaps: string[];
+  /** 0..1 estimate of how much of the room is visually covered. */
+  estimated_coverage: number;
+  /** Actionable prompts ("Add a photo of the wall behind the camera"). */
+  suggested_shots: string[];
+}
+
+/** Holistic, multi-view understanding of one room: a single canonical object
+ *  inventory + spatial layout + coverage, reconciled across ALL photos. The
+ *  persistent "what is in this space" model every downstream stage reads
+ *  instead of re-deriving it from freeform text. */
+export interface RoomSceneGraph {
+  /** Schema version for forward-compat migration of persisted blobs. */
+  version: number;
+  /** ISO timestamp — injected by the caller; never generated in deterministic paths. */
+  assembled_at?: string;
+  room_type: string;
+  /** One-paragraph holistic read of the whole space (across all angles). */
+  summary: string;
+  /** Canonical, deduped object inventory. */
+  objects: SceneObject[];
+  /** Spatial relationships between objects/walls. */
+  relations: SpatialRelation[];
+  /** Photo coverage of the room. */
+  coverage: CoverageReport;
+  /** Source photo URLs the graph was assembled from (order = input order). */
+  source_image_urls: string[];
+  /** How many raw observations reconciliation merged away (dedup count). */
+  reconciled_duplicate_count: number;
+  /** True when floor-plan grounding reconciled/adjusted spatial facts. */
+  floor_plan_grounded?: boolean;
+  model_used?: string;
 }
