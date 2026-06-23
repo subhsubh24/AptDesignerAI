@@ -114,3 +114,46 @@ PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents app
 - **Pivot away from test coverage.** The core validation pipeline now has tests. Next run should address something from VISION.md: faster time-to-first-wow, a retention feature (save/revisit designs), or a latency/cost optimisation (pipeline caching, model tier tuning).
 - **Remaining untested validation modules**: `proportion-math.ts`, `spatial-math.ts` (sub-module), `harmony-math.ts` (orchestrator — needs mocking). These can wait.
 - **Design bar**: any UI change must clear the "warm-editorial" bar before shipping. Open a PR for human review rather than auto-merging visual changes.
+
+---
+
+## Run 2026-06-23 (fourth run)
+
+### State on entry
+- 876 tests passing, 3 merged PRs (color-math, set-math+bundle-math, product-math+material-math).
+- Loop memory explicitly said to pivot to feature/UX/latency — test coverage rotation complete.
+- VISION.md "share" retention feature was unimplemented despite the ShareButton component existing.
+
+### Area served this run
+**Feature / Retention** — public share links for saved designs.
+
+### What was done
+- `supabase/migrations/015_saved_designs_sharing.sql`: adds `share_token TEXT UNIQUE` + `is_public BOOLEAN` columns and RLS policy.
+- `app/api/saved-designs/[id]/route.ts`: PATCH method generates `randomBytes(16).toString("hex")` share token when enabling, preserves it when disabling. Guards: ownership via `user_id` filter + `!updated` null-check catches TOCTOU window.
+- `app/api/shared/[token]/route.ts`: public GET endpoint (no auth) — queries by `share_token AND is_public = true`. Omits `user_id` from response.
+- `app/shared/[token]/page.tsx`: editorial public page with sticky logo header, design direction pull-quote, what_it_needs cards, keep/replace sections, product picks, and a warm CTA to signup.
+- `app/saved/[id]/page.tsx`: Share/Shared toggle button, share link panel with copy-link + Make private controls. `origin` state initialized in `useEffect` to avoid SSR hydration mismatch.
+- `PENDING_OPS.md` created: documents the migration for the owner to apply when connecting real Supabase.
+
+### Lessons learned
+
+1. **In-memory store update returns `{ data: null }` when 0 rows match.** The memory store `execute()` for updates returns `{ data: rows[0] | null, error: null }`. Always check `!updated` (data null) in addition to `error` to catch TOCTOU windows. Reviewer A caught this.
+
+2. **`typeof window !== "undefined"` in derived state causes hydration mismatch.** Next.js App Router SSR's "use client" components on the server. Any computed value that differs between SSR and client renders (e.g. `window.location.origin`) must be initialized via `useEffect` state to avoid React hydration mismatches. Pattern: `const [origin, setOrigin] = useState(""); useEffect(() => setOrigin(window.location.origin), []);`.
+
+3. **Migration + PENDING_OPS pattern works well.** Writing the migration SQL and documenting it in PENDING_OPS.md lets the code ship now while the owner applies the migration when connecting a real Supabase instance. The in-memory store handles the feature in dev without it.
+
+4. **Two-reviewer pattern caught both issues.** Reviewer A found correctness bugs; Reviewer B cleared design/spend/safety. The split is healthy — Reviewer B might have missed the TOCTOU issue; Reviewer A might have missed the RLS policy concern.
+
+5. **Public share page is a marketing surface.** The `/shared/[token]` page is shown to non-users (via share links). The CTA "Try it free" on the page is an acquisition funnel entry. Future improvement: add OG meta tags (`og:image`, `og:title`, `og:description`) to make shares look good when pasted into iMessage/Slack/Twitter.
+
+### Merge outcome
+PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents approved (Reviewer A approved after 1 fix cycle).
+
+### Rotation guide for next run
+- **Next high-value areas**: 
+  - OG meta tags for the `/shared/[token]` page (high impact for social sharing, low complexity — pure SSR metadata)
+  - Latency/cost optimization in the analysis pipeline
+  - "Fast time-to-first-wow": streaming progress indicators or skeleton states
+- **Avoid**: More test coverage additions until the owner signals this is needed.
+- **Watch for**: PENDING_OPS.md items — the owner needs to run migration 015 before share links work in production Supabase.
