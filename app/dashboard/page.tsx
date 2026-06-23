@@ -152,12 +152,6 @@ export default function DashboardPage() {
             setRoomImages(images);
 
             if (hasAnalysis) {
-              // Jump to room selection
-              const summaryRes = await fetch(`/api/analyze-apartment?project_id=${project.id}`);
-              if (summaryRes.ok) {
-                const data = await summaryRes.json();
-                setApartmentSummary(data.summary);
-              }
               setStep("room_select");
             } else if (Object.keys(images).some((k) => (images[k]?.length || 0) > 0)) {
               setStep("setup");

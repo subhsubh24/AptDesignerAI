@@ -4,6 +4,7 @@ One line per autonomous loop run. Most recent first.
 
 | Date | Area | Change | Outcome |
 |------|------|--------|---------|
+| 2026-06-23 | Latency / Performance | Remove dead blocking `GET /api/analyze-apartment` fetch from dashboard `loadExisting()`: `apartmentSummary` state was never read in any render path; removing the fetch eliminates one Supabase round-trip that blocked `setLoading(false)` for every returning user with diagnosed rooms | PR #8 (auto-merge enabled) |
 | 2026-06-23 | Latency / Performance | Parallelize per-room image fetches in dashboard `loadExisting()`: convert sequential `for` loop to `Promise.all` — 3–4× faster dashboard load for returning users with 3–4 rooms; also fix pre-existing ESLint unescaped-apostrophe error | PR #7 (auto-merge enabled) |
 | 2026-06-23 | Feature / Social / SEO | Add OG + Twitter Card meta tags to `/shared/[token]`: convert page from client-side fetch to server component with `generateMetadata()` (dynamic title/description/image per design); `not-found.tsx` for HTTP 404; `loading.tsx` for navigation state; zero new LLM calls | PR #6 (auto-merge enabled) |
 | 2026-06-23 | Feature / Retention | Add public share links for saved designs: PATCH `/api/saved-designs/[id]` generates a 128-bit share token; public `GET /api/shared/[token]` endpoint (no auth); public `/shared/[token]` editorial page with CTA; share toggle UI in saved design detail page; DB migration for real Supabase | PR #5 (auto-merge enabled) |
