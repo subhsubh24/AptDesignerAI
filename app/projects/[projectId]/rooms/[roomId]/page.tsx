@@ -42,27 +42,19 @@ export default async function RoomPage({
 
   if (error || !room) notFound();
 
-  // Fetch counts for status display
-  const { data: productsData } = await supabase
-    .from("candidate_products")
-    .select("id, status")
-    .eq("room_id", roomId);
+  // Fetch counts in parallel — all three are independent of each other
+  const [{ data: productsData }, { data: bundlesData }, { data: mockupsData }] =
+    await Promise.all([
+      supabase.from("candidate_products").select("id, status").eq("room_id", roomId),
+      supabase.from("product_bundles").select("id").eq("room_id", roomId),
+      supabase.from("room_mockups").select("id").eq("room_id", roomId),
+    ]);
 
   const productCount = productsData?.length ?? 0;
   const shortlistedCount = productsData?.filter(
     (p: { status: string }) => p.status === "shortlisted" || p.status === "accepted"
   ).length ?? 0;
-
-  const { data: bundlesData } = await supabase
-    .from("product_bundles")
-    .select("id")
-    .eq("room_id", roomId);
   const bundleCount = bundlesData?.length ?? 0;
-
-  const { data: mockupsData } = await supabase
-    .from("room_mockups")
-    .select("id")
-    .eq("room_id", roomId);
   const mockupCount = mockupsData?.length ?? 0;
 
   const hasImages = room.room_images && room.room_images.length > 0;
