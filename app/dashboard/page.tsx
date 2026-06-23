@@ -131,9 +131,12 @@ export default function DashboardPage() {
             let hasAnalysis = false;
 
             const statuses: Record<string, string> = {};
-            for (const room of rooms) {
+            await Promise.all(rooms.map(async (room: { id: string; room_type: string; status: string }) => {
               ids[room.room_type] = room.id;
               statuses[room.room_type] = room.status ?? "setup";
+              if (["diagnosed", "sourcing", "completed"].includes(room.status)) {
+                hasAnalysis = true;
+              }
               const imgRes = await fetch(`/api/rooms/${room.id}/images`);
               if (imgRes.ok) {
                 const imgs = await imgRes.json();
@@ -143,10 +146,7 @@ export default function DashboardPage() {
                   path: img.storage_path,
                 }));
               }
-              if (["diagnosed", "sourcing", "completed"].includes(room.status)) {
-                hasAnalysis = true;
-              }
-            }
+            }));
             setRoomIds(ids);
             setRoomStatuses(statuses);
             setRoomImages(images);
@@ -780,7 +780,7 @@ export default function DashboardPage() {
                 <span className="text-xs font-normal text-muted-foreground/60 normal-case tracking-normal ml-1">— would help with design</span>
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
-                Drop in a floor plan image or PDF and we'll pull room dimensions, wall features, and layout — so every piece we pick fits exactly where it belongs.
+                Drop in a floor plan image or PDF and we&apos;ll pull room dimensions, wall features, and layout — so every piece we pick fits exactly where it belongs.
               </p>
               <FloorPlanUploadZone projectId={projectId} />
             </div>
