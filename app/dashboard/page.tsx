@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Camera, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage } from "lucide-react";
+import { Loader2, Camera, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage, Home, Sofa, UtensilsCrossed, BedDouble, Bath, type LucideIcon } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
 import { LogoMark } from "@/components/ui/logo-mark";
@@ -15,36 +15,36 @@ import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
-  const sections: { key: string; label: string; icon: string }[] = [];
+  const sections: { key: string; label: string; icon: LucideIcon }[] = [];
 
   if (bedrooms === 0) {
     // Studio
-    sections.push({ key: "main_room", label: "Main Room", icon: "🏠" });
+    sections.push({ key: "main_room", label: "Main Room", icon: Home });
   } else {
-    sections.push({ key: "living_room", label: "Living Room / Dining", icon: "🛋️" });
+    sections.push({ key: "living_room", label: "Living Room / Dining", icon: Sofa });
   }
 
-  sections.push({ key: "kitchen", label: "Kitchen", icon: "🍳" });
+  sections.push({ key: "kitchen", label: "Kitchen", icon: UtensilsCrossed });
 
   if (bedrooms === 0) {
     // Studio — no separate bedroom
   } else if (bedrooms === 1) {
-    sections.push({ key: "bedroom", label: "Bedroom", icon: "🛏️" });
+    sections.push({ key: "bedroom", label: "Bedroom", icon: BedDouble });
   } else {
     for (let i = 1; i <= Math.min(bedrooms, 3); i++) {
       sections.push({
         key: i === 1 ? "bedroom" : `bedroom_${i}`,
         label: i === 1 ? "Primary Bedroom" : `Bedroom ${i}`,
-        icon: "🛏️",
+        icon: BedDouble,
       });
     }
   }
 
   if (bathrooms >= 1) {
-    sections.push({ key: "bathroom", label: bathrooms > 1 ? "Primary Bathroom" : "Bathroom", icon: "🚿" });
+    sections.push({ key: "bathroom", label: bathrooms > 1 ? "Primary Bathroom" : "Bathroom", icon: Bath });
   }
   for (let i = 2; i <= Math.min(bathrooms, 3); i++) {
-    sections.push({ key: `bathroom_${i}`, label: `Bathroom ${i}`, icon: "🚿" });
+    sections.push({ key: `bathroom_${i}`, label: `Bathroom ${i}`, icon: Bath });
   }
 
   return sections;
@@ -968,7 +968,7 @@ export default function DashboardPage() {
                 <div className="absolute bottom-0 left-0 right-0 p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xl">{section.icon}</span>
+                      <section.icon className="h-5 w-5 text-white" />
                       <h3 className="font-semibold text-white text-lg">{section.label}</h3>
                     </div>
                     {!isSelected && (
@@ -1086,7 +1086,7 @@ function RoomUploadSection({
   onUpload,
   onRemove,
 }: {
-  section: { key: string; label: string; icon: string };
+  section: { key: string; label: string; icon: LucideIcon };
   images: UploadedImage[];
   onUpload: (files: File[]) => void;
   onRemove: (imageId: string) => void;
@@ -1107,7 +1107,7 @@ function RoomUploadSection({
     <Card className="transition-all duration-200 hover:shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-secondary flex items-center justify-center text-lg">{section.icon}</div>
+          <div className="h-9 w-9 rounded-xl bg-secondary flex items-center justify-center"><section.icon className="h-5 w-5 text-muted-foreground" /></div>
           <CardTitle className="text-base flex-1">{section.label}</CardTitle>
           {images.length > 0 && (
             <Badge variant="success">
