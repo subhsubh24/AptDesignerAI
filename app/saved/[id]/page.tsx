@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Share2,
+  Check,
+  Lock,
+  Globe,
 } from "lucide-react";
 import { PageTransition } from "@/components/ui/motion";
 import { cn } from "@/lib/utils/cn";
@@ -27,6 +31,8 @@ interface SavedDesignFull {
   project_id: string | null;
   room_id: string | null;
   thumbnail_url: string | null;
+  share_token: string | null;
+  is_public: boolean;
   snapshot: {
     assessment: {
       what_it_needs: Array<{
@@ -78,6 +84,13 @@ export default function SavedDesignDetailPage() {
   const [design, setDesign] = useState<SavedDesignFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [isPublic, setIsPublic] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => { setOrigin(window.location.origin); }, []);
 
   useEffect(() => {
     fetch(`/api/saved-designs/${id}`)
@@ -85,7 +98,11 @@ export default function SavedDesignDetailPage() {
         if (!r.ok) throw new Error("Not found");
         return r.json();
       })
-      .then((data: SavedDesignFull) => setDesign(data))
+      .then((data: SavedDesignFull) => {
+        setDesign(data);
+        setShareToken(data.share_token ?? null);
+        setIsPublic(data.is_public ?? false);
+      })
       .catch(() => router.push("/saved"))
       .finally(() => setLoading(false));
   }, [id, router]);
@@ -95,6 +112,40 @@ export default function SavedDesignDetailPage() {
     const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
     if (res.ok) router.push("/saved");
     setDeleting(false);
+  };
+
+  const handleToggleShare = async (enable: boolean) => {
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/saved-designs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: enable }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { share_token: string | null; is_public: boolean };
+        setShareToken(data.share_token ?? null);
+        setIsPublic(data.is_public);
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  // origin is set in a useEffect to avoid hydration mismatch (window is unavailable during SSR)
+  const shareUrl = shareToken && origin ? `${origin}/shared/${shareToken}` : null;
+
+  const handleCopyLink = async () => {
+    if (!shareUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: design?.title ?? "My room design", url: shareUrl });
+        return;
+      } catch { /* user cancelled */ }
+    }
+    await navigator.clipboard.writeText(shareUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   if (loading || !design) {
@@ -144,11 +195,50 @@ export default function SavedDesignDetailPage() {
               </Button>
             </Link>
           )}
+          {/* Share toggle */}
+          <Button
+            variant={isPublic ? "warm-outline" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => handleToggleShare(!isPublic)}
+            disabled={sharing}
+          >
+            {sharing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isPublic ? (
+              <Globe className="h-3.5 w-3.5" />
+            ) : (
+              <Share2 className="h-3.5 w-3.5" />
+            )}
+            {isPublic ? "Shared" : "Share"}
+          </Button>
           <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDelete} disabled={deleting}>
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>
         </div>
       </div>
+
+      {/* Share panel — visible when sharing is enabled */}
+      {isPublic && shareUrl && (
+        <div className="flex items-center gap-2 p-3 rounded-xl border border-accent-warm/30 bg-accent-warm/5">
+          <Globe className="h-4 w-4 text-accent-warm shrink-0" />
+          <p className="text-xs text-muted-foreground flex-1 truncate">{shareUrl}</p>
+          <Button variant="warm-ghost" size="sm" className="shrink-0 gap-1" onClick={handleCopyLink}>
+            {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+            {linkCopied ? "Copied!" : "Copy link"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-xs text-muted-foreground gap-1"
+            onClick={() => handleToggleShare(false)}
+            disabled={sharing}
+          >
+            <Lock className="h-3 w-3" />
+            Make private
+          </Button>
+        </div>
+      )}
 
       {/* Mockup image */}
       {assessment.mockup_url && (
