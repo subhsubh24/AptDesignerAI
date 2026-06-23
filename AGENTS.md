@@ -13,6 +13,10 @@ redundant.
 - CI runs all of the above; it must be green before merge.
 
 ## LLM cost contract (load-bearing — do not regress)
+<important if="touching provider/model selection, a .chat() call, thinkingConfig, escalation, gemini.ts, deepseek.ts, or the harness-ratchet/provider-floors tests">
+Full reasoning + the test ratchets: `.claude/rules/llm-cost-contract.md`. These
+rules are guarded by tests by design — add config, never relax the test.
+</important>
 - **Cheapest by default.** Text tasks default to `TEXT_TIERS.base`
   (`gemini-2.5-flash-lite`). Providers default to cheap thinking: Gemini → `low`,
   DeepSeek → reasoning off. Never restore a forced-HIGH global default.
@@ -30,6 +34,10 @@ redundant.
   guarded by `__tests__/ai/provider-floors.test.ts`.
 
 ## Determinism
+<important if="adding/modifying any LLM call, agent loop, sampling/sort/tiebreak, or cache">
+Full checklist of what silently breaks reproducibility:
+`.claude/rules/determinism.md`.
+</important>
 - All LLM calls pass `seed: DETERMINISTIC_SEED`. Thread seeds through new loops;
   `npm run check:determinism` must stay green.
 
