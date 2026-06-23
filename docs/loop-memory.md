@@ -310,3 +310,42 @@ PR #7, auto-merge enabled. Both reviewer subagents approved on first pass.
 - **Under-served areas**: Pipeline caching or streaming improvements; new features from VISION.md (floor-plan parsing improvements, more room support); `picks/page.tsx` or `saved/page.tsx` UX improvements.
 - **Deferred**: PRIORITY_STYLES → Badge CVA variants refactor; `metadataBase` in root layout (low-priority — OG images use absolute external URLs).
 - **Watch for**: Similar sequential-fetch patterns in other client pages.
+
+---
+
+## Run 2026-06-23 (ninth run)
+
+### State on entry
+- 876 tests passing, 9 merged PRs.
+- Loop memory rotation guide: room overview page had 3 sequential server-side Supabase queries that could be `Promise.all`'d.
+- Local default branch was stale; had to `git fetch` + `git rebase` to pick up merged PRs before running tests.
+
+### Area served this run
+**Latency / Performance** — room overview server component sequential query optimization.
+
+### What was done
+Converted 3 sequential independent Supabase queries in `app/projects/[projectId]/rooms/[roomId]/page.tsx` to `Promise.all`:
+- `candidate_products` (id, status) — for productCount and shortlistedCount
+- `product_bundles` (id) — for bundleCount
+- `room_mockups` (id) — for mockupCount
+
+The room overview page is the navigation hub users return to every session. The three queries were stacking ~40ms end-to-end; with `Promise.all` they run concurrently, saving ~2 round-trips of latency on every page load.
+
+### Lessons learned
+
+1. **Always `git fetch` and rebase the feature branch before running the test suite.** The local default branch was stale; tests showed 687 passing instead of 876 until rebased. The test count mismatch is a reliable signal that the branch base is stale.
+
+2. **Supabase JS client `Promise.all` is safe.** The client is stateless per query builder — each `.from(...).select(...).eq(...)` chain creates an independent `PostgrestFilterBuilder`. Concurrent execution via `Promise.all` introduces no shared state. Supabase query errors resolve as `{ data: null, error }` rather than rejecting, so `Promise.all` cannot be blown up by a query-level DB error.
+
+3. **The loop is running out of easy latency wins.** This was the last explicitly flagged sequential-query opportunity. Future latency work would require profiling actual user traces or looking at the AI pipeline (harmony loop, search parallelism), which is higher-risk.
+
+4. **Both reviewers approved first pass.** Clean structural improvement with no logic changes.
+
+### Merge outcome
+PR #10, auto-merge enabled. Both reviewer subagents approved first pass.
+
+### Rotation guide for next run
+- **New feature area**: VISION.md mentions "fast time-to-first-wow" — could a lighter onboarding path (pre-fill or skip early steps) reduce time to first result? This would be a larger feature; evaluate carefully against the value bar.
+- **`metadataBase` in root layout**: Very low value — OG images are already absolute URLs. Skip unless there's nothing else.
+- **Pipeline improvements**: Any latency left is in the AI pipeline (area analysis, harmony loop). Touching these is higher-risk; verify the cost contract carefully.
+- **Avoid**: Sequential-query micro-optimizations. The easy wins are done. Don't invent work just to justify a run — a quiet no-op run is success.

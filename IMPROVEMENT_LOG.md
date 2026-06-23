@@ -3,6 +3,7 @@
 One line per autonomous loop run. Most recent first.
 
 | Date | Area | Change | Outcome |
+| 2026-06-23 | Latency / Performance | Parallelize room overview count queries (`candidate_products`, `product_bundles`, `room_mockups`) with `Promise.all` — eliminates 2 stacked sequential server-side round-trips on the room journey hub page, cutting TTFB by ~40ms per visit | PR #10 (auto-merge enabled) |
 |------|------|--------|---------|
 | 2026-06-23 | UI / Design quality | Replace emoji iconography (🏠🛋️🍳🛏️🚿) in dashboard room-select and photo-upload steps with Lucide icon components (Home, Sofa, UtensilsCrossed, BedDouble, Bath): fixes explicit VISION.md design bar violation ("emoji used as iconography") in the primary onboarding flow | PR #9 (auto-merge enabled) |
 | 2026-06-23 | Latency / Performance | Remove dead blocking `GET /api/analyze-apartment` fetch from dashboard `loadExisting()`: `apartmentSummary` state was never read in any render path; removing the fetch eliminates one Supabase round-trip that blocked `setLoading(false)` for every returning user with diagnosed rooms | PR #8 (auto-merge enabled) |
