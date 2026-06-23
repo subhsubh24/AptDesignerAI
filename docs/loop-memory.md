@@ -75,3 +75,42 @@ PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents app
 - **Remaining untested validation modules**: `material-math.ts`, `proportion-math.ts`, `spatial-math.ts` (sub-module for `parseDimensions`, room coverage, per-item spatial), `product-math.ts` (scale fit, palette fit, value fit, proportion fit for individual products). `harmony-math.ts` still deferred (requires mocking 10+ sub-modules).
 - **Non-engineering areas under-served**: UX/latency improvements, new features (the app's VISION.md calls for "fast time-to-first-wow" and "reasons to come back"). Consider a feature addition next rotation to avoid over-indexing on test coverage.
 - **Loop-memory file location**: always write to `docs/loop-memory.md`, NOT `.claude/loop-memory.md`. The `.claude/` directory triggers a permission prompt in headless CI.
+
+---
+
+## Run 2026-06-23 (third run)
+
+### State on entry
+- 810 tests passing, 2 merged PRs (color-math, set-math+bundle-math).
+- Rotation guide from prior run explicitly flagged `product-math.ts` and `material-math.ts` as highest-priority untested modules.
+- loop-memory lesson: "Consider a feature addition next rotation to avoid over-indexing on test coverage."
+
+### Area served this run
+**Engineering quality** — test coverage for the two largest untested validation modules in the scoring pipeline.
+
+### What was done
+Added 66 tests (+876 total, up from 810) across two new test files:
+- `__tests__/validation/product-math.test.ts` (517 lines, ~60 tests): `computeProductMathScores` (6 scoring axes: scale, palette, material, value, proportion, lifestyle) + `formatProductMathForPrompt`. Covers output shape/bounds, weighted-sum formula, scale range checks + cm→inch conversion + room-footprint check, palette Delta-E scoring, material property-space matching + wood species + metal temperature conflicts, value vs. tier price range, proportion/height targets, lifestyle flag gating.
+- `__tests__/validation/material-math.test.ts` (346 lines, ~30 tests): `computeMaterialBalance`. Covers defaults, wood-species conflict detection (≤2 species = OK, ≥3 = penalised progressively), metal finish warm/cool separation, soft-to-hard ratio against room-type ideal bands (living room [40-60%], bedroom [50-70%]), material property variance for distribution balance, and cross-room apartment-wide constraints.
+
+One fix applied mid-loop after peer review:
+- Non-null assertion in material-math test collapsed into a direct `.some(/3 wood species/)` assertion.
+- Metal conflict isolation improved: both comparison branches now use the same product and `recommendedMaterials`, varying only `roomMetalFinishes`.
+
+### Lessons learned
+
+1. **Reviewer hallucination on non-existent assertion.** Reviewer A (first pass) flagged a "definite test failure" — alleged assertion `expect(prompt).toMatch(/Lifestyle fit.*1\.00/i)` against a base fixture without `lifestyle_axes`. That assertion did not exist. Always re-read the actual file before acting on a reviewer's reported line number; reviewers working from diffs can miscount lines.
+
+2. **lookupMaterial substring matching stores multi-word combos.** When `computeMaterialBalance` tokenises `what_it_needs` specs, two-word combos like "solid maple" get pushed into `allMaterialNames` as "solid maple" (not "maple"). `identifyWoodSpecies` then checks `"solid maple".includes("maple")` → true, so the species is correctly found. But `SOFT_MATERIALS.has("solid maple")` is false even though "solid maple" resolved via substring. Keep soft-item tests using single-word specs ("velvet", "oak") to avoid this ambiguity.
+
+3. **Test isolation requires holding ALL inputs constant.** The metal-conflict comparison initially varied both the product material AND the `recommendedMaterials`, making it impossible to isolate the penalty. Fix: hold product and `recommendedMaterials` constant; vary only `roomMetalFinishes` (warm = conflict, cool = no conflict).
+
+4. **Three pure-test PRs in a row is enough.** Remaining untested modules (`proportion-math`, `spatial-math`, `harmony-math`) are either covered by integration tests or require heavy mock setup. Next run should pivot to a product/UX/latency improvement rather than more unit tests.
+
+### Merge outcome
+PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents approved (Reviewer A approved after fixes; Reviewer B approved first pass).
+
+### Rotation guide for next run
+- **Pivot away from test coverage.** The core validation pipeline now has tests. Next run should address something from VISION.md: faster time-to-first-wow, a retention feature (save/revisit designs), or a latency/cost optimisation (pipeline caching, model tier tuning).
+- **Remaining untested validation modules**: `proportion-math.ts`, `spatial-math.ts` (sub-module), `harmony-math.ts` (orchestrator — needs mocking). These can wait.
+- **Design bar**: any UI change must clear the "warm-editorial" bar before shipping. Open a PR for human review rather than auto-merging visual changes.
