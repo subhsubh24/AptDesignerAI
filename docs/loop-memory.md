@@ -200,6 +200,45 @@ PR opened with auto-merge enabled (CI-gated squash). Both reviewer subagents app
 
 ---
 
+## Run 2026-06-23 (seventh run)
+
+### State on entry
+- 876 tests passing, 7 merged PRs.
+- Loop memory rotation guide: "Under-served areas — Pipeline caching or streaming improvements."
+- Noted: sequential fetches in picks/saved pages — but on inspection those pages only make a single fetch each. False lead.
+- Performed full audit of all major pages (focus, diagnosis, dashboard, projects, room, bundles, compare, setup, gallery, pricing, FAQ) and API routes.
+
+### Area served this run
+**Latency / Performance** — dead blocking fetch in dashboard `loadExisting()`.
+
+### What was done
+Removed the `GET /api/analyze-apartment?project_id=...` fetch from `loadExisting()` in `app/dashboard/page.tsx`. This fetch was loading apartment summary data into the `apartmentSummary` React state, but that state value was NEVER consumed in any render path. The eslint-disable comment even acknowledged this: "value consumed in future iteration." The GET was a pure Supabase read (no side effects). Removing it eliminates one blocking round-trip that delayed `setLoading(false)` for every returning user with diagnosed rooms.
+
+The `setApartmentSummary` setter is still used in `handleAnalyze` (the new-user onboarding POST flow), since that flow already makes the POST for its side effect. The state variable declaration remains (with its eslint-disable comment) for the eventual UI feature.
+
+### Lessons learned
+
+1. **Dead data pre-fetches accumulate silently.** The `apartmentSummary` state was added ahead of a planned feature ("value consumed in future iteration") but the feature never shipped. The fetch blocked every returning-user dashboard load with no visible benefit. Look for this pattern: state variables with `setX(data.something)` but no reads of `X` in the render.
+
+2. **CLAUDE.md notes about "sequential-fetch patterns in other client pages" were a false lead.** `picks/page.tsx` and `saved/page.tsx` each make only a SINGLE fetch — there's no sequential loop to parallelize. Don't trust the rotation note; verify in code first.
+
+3. **The app is now well-built end-to-end.** All major pages (focus, diagnosis, dashboard, projects, room, compare, bundles, gallery, pricing, FAQ) are solid with good UX, streaming progress, and the design system. The remaining gap areas are subtle: dead state variables, missing image error fallbacks, emoji icons in the room_select step.
+
+4. **Emoji icons on room cards** (`{section.icon}` at line 977 in dashboard) — uses 🏠, 🛋️, 🍳, 🛏️, 🚿. VISION.md says "avoid emoji as iconography." In the room_select step the emoji appears overlaid on a real room photo. Deferred — would require changing `getRoomSections()` to return Lucide icon components instead of strings.
+
+5. **The `apartmentSummary` state variable** still exists with its dead eslint-disable comment. The state declaration + `handleAnalyze` setter could be cleaned up in a future run (dead state costs nothing at runtime).
+
+### Merge outcome
+PR #8, auto-merge enabled. Both reviewer subagents approved on first pass.
+
+### Rotation guide for next run
+- **Room overview page** (`/projects/[projectId]/rooms/[roomId]/page.tsx`): makes 3 sequential server-side Supabase queries (products count, bundles count, mockups count) that could be parallelized with `Promise.all`. Server-side savings ~20-60ms. Consider this if value bar can be cleared.
+- **Dead state cleanup**: Remove `apartmentSummary` state declaration and `handleAnalyze` setter call (both safe to remove as value is never read). Very low complexity, low-medium value.
+- **Emoji icons**: Replace emoji strings in `getRoomSections()` with Lucide icon components. Medium complexity UI change; clears VISION.md design bar.
+- **Avoid**: More latency micro-optimizations unless impact is clearly significant. The loop has been heavy on latency this run cycle.
+
+---
+
 ## Run 2026-06-23 (sixth run)
 
 ### State on entry
