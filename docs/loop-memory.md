@@ -239,6 +239,46 @@ PR #8, auto-merge enabled. Both reviewer subagents approved on first pass.
 
 ---
 
+## Run 2026-06-23 (eighth run)
+
+### State on entry
+- 876 tests passing, 8 merged PRs.
+- Loop memory rotation guide: emoji icons (🏠🛋️🍳🛏️🚿) in `getRoomSections()` violate VISION.md design bar ("emoji used as iconography"), appear in room-select and photo-upload steps.
+
+### Area served this run
+**UI / Design quality** — replace emoji iconography with Lucide icons in primary onboarding flow.
+
+### What was done
+- Updated `getRoomSections()` in `app/dashboard/page.tsx`:
+  - Changed `icon: string` type to `icon: LucideIcon`
+  - 🏠 → `Home`, 🛋️ → `Sofa`, 🍳 → `UtensilsCrossed`, 🛏️ → `BedDouble`, 🚿 → `Bath`
+- Updated `RoomUploadSection` prop type: `icon: string` → `icon: LucideIcon`
+- Updated 2 render sites: room-select card (white icon on dark overlay) and upload card header (muted-foreground icon in secondary bg container)
+- Added inline `type LucideIcon` import from lucide-react
+
+### Lessons learned
+
+1. **`<section.icon />` (dot-notation JSX) is fully valid React.** JSX member expressions (`obj.prop`) are always treated as component references regardless of capitalization. No need to destructure into a capitalized variable.
+
+2. **`type LucideIcon` as inline import type modifier works cleanly.** TypeScript 4.5+ inline `import { ..., type LucideIcon }` syntax strips the type binding from the runtime bundle. The type covers `className` through `SVGAttributes`, so no casting needed.
+
+3. **VISION.md design bar violations are value-bar-clearing.** Both reviewers correctly identified this as substantive (core onboarding flow, target audience is design-literate), not cosmetic churn. The key test: is there an explicit prohibition + a high-traffic location + a clear user-perception impact?
+
+4. **Lucide icons available in 0.577.0**: `Home`, `Sofa`, `UtensilsCrossed`, `BedDouble`, `Bath` — all confirmed present. `Shower` (vs `ShowerHead`, `Bath`) is NOT in this version.
+
+5. **Pre-existing ESLint warnings on `<img>` and `useCallback` deps in dashboard page are unchanged.** Do not fix them in a future run unless that's the stated goal — fixing unrelated pre-existing warnings adds noise to the diff.
+
+### Merge outcome
+PR #9, auto-merge enabled. Both reviewer subagents approved first pass.
+
+### Rotation guide for next run
+- **Room overview page parallel queries** (`/projects/[projectId]/rooms/[roomId]/page.tsx`): still has 3 sequential Supabase queries (products, bundles, mockups) that are independent of each other and could be `Promise.all`'d for ~20-60ms server-side speedup. Modest but real.
+- **`metadataBase` in root layout**: OG images use full external URLs so this is low-priority, but it's a correctness improvement.
+- **Avoid**: More design bar / iconography changes — the main flow is now clean. Don't over-index on UI polish.
+- **New feature candidates**: "Fast time-to-first-wow" — could there be a faster path from signup to first design result? Check the initial analysis pipeline for obvious latency wins.
+
+---
+
 ## Run 2026-06-23 (sixth run)
 
 ### State on entry
