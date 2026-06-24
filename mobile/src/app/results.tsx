@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
-import { consumePendingImageUri, consumePendingRoomType } from '@/state/photo-session';
+import { peekPendingImageUri, peekPendingRoomType } from '@/state/photo-session';
 
 interface AnalysisResult {
   summary: string;
@@ -24,30 +24,26 @@ interface AnalysisResult {
 
 type Stage = 'uploading' | 'analyzing' | 'done' | 'error';
 
-async function uploadAndAnalyze(
-  imageUri: string,
-  roomType: string,
-): Promise<AnalysisResult> {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !sessionData.session) {
-    throw new Error('Not authenticated');
-  }
-  const token = sessionData.session.access_token;
-  const userId = sessionData.session.user.id;
+function mimeTypeForExt(ext: string): string {
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
 
+async function uploadImage(imageUri: string, token: string, userId: string): Promise<string> {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!supabaseUrl) throw new Error('App configuration error: Supabase URL not set.');
 
-  // Upload image to Supabase Storage via REST — FormData is the most reliable
-  // approach on React Native for file:// / content:// URIs
   const ext = imageUri.split('.').pop()?.toLowerCase() ?? 'jpg';
   const filename = `${userId}/${Date.now()}.${ext}`;
+  const mimeType = mimeTypeForExt(ext);
 
   const formData = new FormData();
   formData.append('file', {
     uri: imageUri,
     name: filename.split('/').pop(),
-    type: 'image/jpeg',
+    type: mimeType,
   } as unknown as Blob);
 
   const uploadResp = await fetch(
@@ -67,10 +63,13 @@ async function uploadAndAnalyze(
     throw new Error(`Upload failed (${uploadResp.status}): ${text}`);
   }
 
-  const publicUrl = `${supabaseUrl}/storage/v1/object/public/room-photos/${filename}`;
+  return `${supabaseUrl}/storage/v1/object/public/room-photos/${filename}`;
+}
 
-  // Call the mobile analyze endpoint
+async function analyzeRoom(publicUrl: string, roomType: string, token: string): Promise<AnalysisResult> {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  if (!apiUrl) throw new Error('App configuration error: API URL not set.');
+
   const analyzeResp = await fetch(`${apiUrl}/api/mobile/analyze`, {
     method: 'POST',
     headers: {
@@ -94,19 +93,26 @@ export default function ResultsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
 
-  const [imageUri] = useState<string | null>(consumePendingImageUri);
-  const [roomType] = useState<string>(() => consumePendingRoomType() ?? 'living_room');
+  // peek (non-consuming) so back → room-type → results remounts correctly
+  const [imageUri] = useState<string | null>(peekPendingImageUri);
+  const [roomType] = useState<string>(() => peekPendingRoomType() ?? 'living_room');
   const [stage, setStage] = useState<Stage>('uploading');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const run = useCallback(async (uri: string, rt: string) => {
     try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error('Not authenticated');
+      const token = sessionData.session.access_token;
+      const userId = sessionData.session.user.id;
+
       setStage('uploading');
-      // Brief pause so the UI renders the uploading label before the heavy work
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      const publicUrl = await uploadImage(uri, token, userId);
+
       setStage('analyzing');
-      const result = await uploadAndAnalyze(uri, rt);
+      const result = await analyzeRoom(publicUrl, rt, token);
+
       setAnalysis(result);
       setStage('done');
     } catch (err) {
@@ -120,9 +126,10 @@ export default function ResultsScreen() {
     if (imageUri) {
       run(imageUri, roomType);
     } else {
-      setErrorMsg('No image found. Please go back and select a photo.');
+      setErrorMsg('No image found — please go back and select a photo.');
       setStage('error');
     }
+    // imageUri and roomType are stable (set once from module store on mount)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -137,11 +144,9 @@ export default function ResultsScreen() {
               <ThemedText style={{ fontSize: 16, color: colors.textSecondary }}>← Back</ThemedText>
             </Pressable>
             <ThemedText type="title">Design Analysis</ThemedText>
-            {roomType ? (
-              <ThemedText type="small" style={{ color: colors.mutedForeground }}>
-                {roomLabel}
-              </ThemedText>
-            ) : null}
+            <ThemedText type="small" style={{ color: colors.mutedForeground }}>
+              {roomLabel}
+            </ThemedText>
           </ThemedView>
 
           {/* Room photo */}
@@ -166,11 +171,13 @@ export default function ResultsScreen() {
             <ThemedView style={[styles.loadingCard, { borderColor: colors.border }]}>
               <ActivityIndicator color={colors.accent} />
               <ThemedText type="default" style={{ color: colors.mutedForeground }}>
-                {stage === 'uploading' ? 'Uploading your photo…' : 'Analyzing your room with AI…'}
+                {stage === 'uploading' ? 'Uploading your photo…' : 'Analysing your room with AI…'}
               </ThemedText>
-              <ThemedText type="small" style={{ color: colors.mutedForeground, opacity: 0.7 }}>
-                {stage === 'analyzing' ? 'This usually takes 15–30 seconds.' : ''}
-              </ThemedText>
+              {stage === 'analyzing' ? (
+                <ThemedText type="small" style={{ color: colors.mutedForeground, opacity: 0.7 }}>
+                  This usually takes 15–30 seconds.
+                </ThemedText>
+              ) : null}
             </ThemedView>
           )}
 
@@ -195,7 +202,19 @@ export default function ResultsScreen() {
                     Try Again
                   </ThemedText>
                 </Pressable>
-              ) : null}
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => router.push('/photo')}
+                >
+                  <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
+                    Pick a Photo
+                  </ThemedText>
+                </Pressable>
+              )}
             </ThemedView>
           )}
 
