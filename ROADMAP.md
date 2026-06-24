@@ -115,7 +115,7 @@ these are true and verified in CI:
       A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
       added — A5 is a Track A requirement and is not yet built.)
 - [ ] Track B complete: Expo app builds via EAS, core journey works natively,
-      not a thin wrapper, clears the design bar. **[B1 scaffold done; B2-B5 in progress]**
+      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture done (PR #26); B2 upload+AI+saved+polish in progress; B3-B5 pending]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
