@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,6 +26,7 @@ export default function RoomTypeScreen() {
 
   const handleSelect = useCallback(
     (value: string) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setPendingRoomType(value);
       router.push('/results');
     },

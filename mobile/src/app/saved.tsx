@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -83,6 +85,26 @@ export default function SavedDesignsScreen() {
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
   const { state, reload } = useSavedDesigns();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Clear the pull-to-refresh spinner once the data settles
+  useEffect(() => {
+    if (state.status !== 'loading') {
+      setIsRefreshing(false);
+    }
+  }, [state.status]);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    reload();
+  }, [reload]);
+
+  const handleRetry = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    reload();
+  }, [reload]);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -95,7 +117,17 @@ export default function SavedDesignsScreen() {
           )}
         </ThemedView>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
+        >
           {state.status === 'loading' && (
             <>
               <SkeletonCard colors={colors} />
@@ -115,7 +147,7 @@ export default function SavedDesignsScreen() {
                   styles.actionButton,
                   { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                 ]}
-                onPress={reload}
+                onPress={handleRetry}
               >
                 <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>Try again</ThemedText>
               </Pressable>
