@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { hasProEntitlement, FREE_SAVE_LIMIT } from "@/lib/entitlements/server";
 
 const ROOM_TYPES = new Set([
   "living_room", "bedroom", "kitchen", "bathroom", "dining_room",
@@ -72,6 +73,29 @@ export async function POST(request: NextRequest) {
         headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs ?? 60000) / 1000)) },
       },
     );
+  }
+
+  // Server-side entitlement gate: enforce FREE_SAVE_LIMIT for non-Pro users.
+  // We check entitlements BEFORE parsing the body so we don't waste cycles on
+  // validation for a request that will be rejected anyway.
+  // hasProEntitlement() returns false when REVENUECAT_SECRET_KEY is unset (dev),
+  // so in that case we also count existing saves to enforce the limit.
+  const authedClientForCount = createClient(supabaseUrl, supabaseKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { count: existingSaveCount } = await authedClientForCount
+    .from("saved_designs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  if ((existingSaveCount ?? 0) >= FREE_SAVE_LIMIT) {
+    const isPro = await hasProEntitlement(user.id);
+    if (!isPro) {
+      return NextResponse.json(
+        { error: "Free save limit reached. Upgrade to Pro to save unlimited designs.", subscription_required: true },
+        { status: 403 },
+      );
+    }
   }
 
   let body: { room_type?: unknown; analysis?: unknown; thumbnail_url?: unknown };
