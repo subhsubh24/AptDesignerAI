@@ -49,7 +49,7 @@ const TIERS: Tier[] = [
     period: "one-time",
     highlight: true,
     cta: "Design my apartment",
-    href: "/signup",
+    href: "/billing/upgrade?tier=apartment",
     features: [
       "Unlimited rooms in one apartment",
       "Cross-room style coherence",
@@ -67,7 +67,7 @@ const TIERS: Tier[] = [
     price: "$49",
     period: "/month",
     cta: "Start pro",
-    href: "/signup",
+    href: "/billing/upgrade?tier=pro",
     features: [
       "Everything in Apartment",
       "Unlimited apartments & projects",
