@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -63,7 +63,7 @@ export default function RoomTypeScreen() {
                     {hint}
                   </ThemedText>
                 </ThemedView>
-                <ThemedText style={{ color: colors.mutedForeground, fontSize: 18 }}>›</ThemedText>
+                <View style={[styles.chevron, { borderColor: colors.mutedForeground }]} />
               </Pressable>
             ))}
           </ThemedView>
@@ -107,5 +107,12 @@ const styles = StyleSheet.create({
   optionText: {
     gap: Spacing.half,
     flex: 1,
+  },
+  chevron: {
+    width: 7,
+    height: 7,
+    borderTopWidth: 1.5,
+    borderRightWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
   },
 });

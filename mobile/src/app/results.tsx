@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -326,9 +326,12 @@ export default function ResultsScreen() {
                     What to Keep
                   </ThemedText>
                   {analysis.what_works.map((item) => (
-                    <ThemedText key={item} type="default" style={styles.listItem}>
-                      ✓ {item}
-                    </ThemedText>
+                    <ThemedView key={item} style={styles.listRow}>
+                      <View style={[styles.listDot, { backgroundColor: colors.accent }]} />
+                      <ThemedText type="default" style={[styles.listItemText, { color: colors.mutedForeground }]}>
+                        {item}
+                      </ThemedText>
+                    </ThemedView>
                   ))}
                 </ThemedView>
               )}
@@ -340,9 +343,12 @@ export default function ResultsScreen() {
                     What to Remove
                   </ThemedText>
                   {analysis.what_should_go.map((item) => (
-                    <ThemedText key={item} type="default" style={styles.listItem}>
-                      ✕ {item}
-                    </ThemedText>
+                    <ThemedView key={item} style={styles.listRow}>
+                      <View style={[styles.listDot, { backgroundColor: colors.destructive }]} />
+                      <ThemedText type="default" style={[styles.listItemText, { color: colors.mutedForeground }]}>
+                        {item}
+                      </ThemedText>
+                    </ThemedView>
                   ))}
                 </ThemedView>
               )}
@@ -446,9 +452,22 @@ const styles = StyleSheet.create({
   cardContent: {
     lineHeight: 22,
   },
-  listItem: {
-    lineHeight: 22,
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
     paddingVertical: Spacing.half,
+  },
+  listDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 8,
+    flexShrink: 0,
+  },
+  listItemText: {
+    flex: 1,
+    lineHeight: 22,
   },
   chipRow: {
     flexDirection: 'row',
