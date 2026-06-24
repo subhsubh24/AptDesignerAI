@@ -26,6 +26,13 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "AptDesignerAI accesses your photos to analyze your room and create a design.",
+          "cameraPermission": "AptDesignerAI uses your camera to photograph your room for design analysis."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",

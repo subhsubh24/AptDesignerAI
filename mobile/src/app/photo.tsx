@@ -1,93 +1,225 @@
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { setPendingImageUri } from '@/state/photo-session';
 
 export default function PhotoCaptureScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
 
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+
+  // Android: recover the picker result if the OS killed the app mid-pick
+  useEffect(() => {
+    ImagePicker.getPendingResultAsync().then((result) => {
+      if (result && 'canceled' in result && !result.canceled && result.assets.length > 0) {
+        setSelectedImageUri(result.assets[0].uri);
+      }
+    });
+  }, []);
+
+  const pickFromGallery = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      if (!permission.canAskAgain) {
+        Alert.alert(
+          'Permission denied',
+          'AptDesignerAI needs photo library access. Please enable it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Permission needed',
+          'AptDesignerAI needs access to your photo library to select a room photo.',
+          [{ text: 'OK' }]
+        );
+      }
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setSelectedImageUri(result.assets[0].uri);
+    }
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      if (!permission.canAskAgain) {
+        Alert.alert(
+          'Permission denied',
+          'AptDesignerAI needs camera access. Please enable it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Permission needed',
+          'AptDesignerAI needs camera access to photograph your room.',
+          [{ text: 'OK' }]
+        );
+      }
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.85,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setSelectedImageUri(result.assets[0].uri);
+    }
+  }, []);
+
+  const handleAnalyze = useCallback(() => {
+    if (!selectedImageUri) return;
+    setPendingImageUri(selectedImageUri);
+    router.push('/results');
+  }, [router, selectedImageUri]);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <ThemedText style={{ fontSize: 16 }}>← Back</ThemedText>
-          </Pressable>
-          <ThemedText type="title">Capture Your Room</ThemedText>
-        </ThemedView>
+        <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
+          <ThemedView style={styles.header}>
+            <Pressable onPress={() => router.back()} hitSlop={12}>
+              <ThemedText style={{ fontSize: 16, color: colors.textSecondary }}>← Back</ThemedText>
+            </Pressable>
+            <ThemedText type="title">Capture Your Room</ThemedText>
+          </ThemedView>
 
-        <ThemedView style={styles.previewContainer}>
-          <ThemedView
+          {/* Photo preview / placeholder */}
+          <Pressable
             style={[
               styles.preview,
-              {
-                backgroundColor: colors.muted,
-                borderColor: colors.border,
-              },
+              { backgroundColor: colors.muted, borderColor: colors.border },
+              selectedImageUri ? styles.previewFilled : null,
             ]}
+            onPress={pickFromGallery}
           >
-            <ThemedText type="default" style={styles.previewText}>
-              Camera Preview
-            </ThemedText>
-            <ThemedText type="small" style={styles.previewHint}>
-              (Camera integration coming in phase B2)
-            </ThemedText>
+            {selectedImageUri ? (
+              <Image
+                source={{ uri: selectedImageUri }}
+                style={styles.previewImage}
+                contentFit="cover"
+                transition={200}
+              />
+            ) : (
+              <ThemedView style={styles.previewPlaceholder}>
+                <ThemedView
+                  style={[
+                    styles.cameraIconBox,
+                    { borderColor: colors.mutedForeground },
+                  ]}
+                />
+                <ThemedText type="default" style={{ color: colors.mutedForeground, textAlign: 'center' }}>
+                  Tap to choose a photo
+                </ThemedText>
+                <ThemedText type="small" style={{ color: colors.mutedForeground, textAlign: 'center', opacity: 0.7 }}>
+                  or use the buttons below
+                </ThemedText>
+              </ThemedView>
+            )}
+          </Pressable>
+
+          {/* Tips (shown before image is selected) */}
+          {!selectedImageUri && (
+            <ThemedView style={styles.tipsContainer}>
+              <ThemedText type="subtitle" style={styles.tipsTitle}>
+                Tips for best results
+              </ThemedText>
+              {[
+                'Capture the full room with good lighting',
+                'Include walls, floor, and key furniture',
+                'Take photos from multiple angles',
+                'Avoid strong shadows or backlighting',
+              ].map((tip) => (
+                <ThemedText key={tip} type="default" style={styles.tip}>
+                  · {tip}
+                </ThemedText>
+              ))}
+            </ThemedView>
+          )}
+
+          {/* Action buttons */}
+          <ThemedView style={styles.buttonContainer}>
+            {selectedImageUri ? (
+              <>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={handleAnalyze}
+                >
+                  <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
+                    Analyze This Room
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                  onPress={() => setSelectedImageUri(null)}
+                >
+                  <ThemedText style={{ color: colors.text }}>Choose a different photo</ThemedText>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={pickFromGallery}
+                >
+                  <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
+                    Choose from Library
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                  onPress={takePhoto}
+                >
+                  <ThemedText style={{ color: colors.text }}>Take a Photo</ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [styles.skipButton, { opacity: pressed ? 0.6 : 1 }]}
+                  onPress={() => router.push('/')}
+                >
+                  <ThemedText style={{ color: colors.textSecondary, fontSize: 14 }}>
+                    Skip for now
+                  </ThemedText>
+                </Pressable>
+              </>
+            )}
           </ThemedView>
-        </ThemedView>
-
-        <ThemedView style={styles.instructionsContainer}>
-          <ThemedText type="subtitle" style={styles.instructionsTitle}>
-            Tips for best results
-          </ThemedText>
-          <ThemedText type="default" style={styles.instructionItem}>
-            • Capture the full room with good lighting
-          </ThemedText>
-          <ThemedText type="default" style={styles.instructionItem}>
-            • Take photos from multiple angles
-          </ThemedText>
-          <ThemedText type="default" style={styles.instructionItem}>
-            • Include furniture and existing décor
-          </ThemedText>
-          <ThemedText type="default" style={styles.instructionItem}>
-            • Avoid shadows and backlighting
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedView style={styles.buttonContainer}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.captureButton,
-              {
-                backgroundColor: colors.accent,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-            onPress={() => router.push('/results')}
-          >
-            <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
-              Take Photo
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.skipButton,
-              {
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            onPress={() => router.push('/')}
-          >
-            <ThemedText style={{ color: colors.text }}>Skip for now</ThemedText>
-          </Pressable>
-        </ThemedView>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -101,53 +233,70 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
     maxWidth: MaxContentWidth,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.four,
+    paddingBottom: BottomTabInset + Spacing.three,
+    gap: Spacing.three,
   },
   header: {
     gap: Spacing.two,
-    paddingVertical: Spacing.two,
-  },
-  previewContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  preview: {
-    aspectRatio: 1,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  previewText: {
-    fontSize: 16,
-  },
-  previewHint: {
-    opacity: 0.6,
-  },
-  instructionsContainer: {
-    gap: Spacing.two,
     paddingVertical: Spacing.three,
   },
-  instructionsTitle: {
+  preview: {
+    aspectRatio: 4 / 3,
+    borderRadius: Spacing.three,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  previewFilled: {
+    borderWidth: 0,
+  },
+  previewImage: {
+    flex: 1,
+  },
+  previewPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  cameraIconBox: {
+    width: 48,
+    height: 36,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  tipsContainer: {
+    gap: Spacing.two,
+  },
+  tipsTitle: {
     marginBottom: Spacing.one,
   },
-  instructionItem: {
+  tip: {
     lineHeight: 22,
   },
   buttonContainer: {
     gap: Spacing.two,
-    paddingVertical: Spacing.three,
+    paddingVertical: Spacing.two,
   },
-  captureButton: {
+  primaryButton: {
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.four,
     borderRadius: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  secondaryButton: {
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
   skipButton: {
     paddingVertical: Spacing.two,
