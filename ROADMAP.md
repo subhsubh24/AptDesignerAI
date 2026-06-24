@@ -72,13 +72,15 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 - C1. Subscription model: monthly + annual tiers, a free trial, and a clear
   free→paid moment that lands on **real value** (a beautiful, trustworthy result),
   not a nag. Free tier limited by genuine COGS (per-design inference cost).
-- C2. Billing integration: App Store / Play in-app purchase via **RevenueCat**
+- [x] C2. Billing integration: App Store / Play in-app purchase via **RevenueCat**
   (cross-platform entitlements) on mobile; Stripe (or RC web billing) on web.
   Build the code; **live keys / production billing config stay human-applied**
-  (recorded in `PENDING_OPS.md`).
-- C3. Paywall UI (web + native) that clears the design bar; restore-purchases,
+  (recorded in `PENDING_OPS.md`). **(PR #42 — RC SDK, logIn/logOut lifecycle)**
+- [x] C3. Paywall UI (web + native) that clears the design bar; restore-purchases,
   manage-subscription, and entitlement gating wired through one source of truth.
-- C4. Server-side entitlement checks (never trust the client) feeding usage limits.
+  **(PR #42 — live Offerings, purchasePackage, restorePurchases, user-cancel)**
+- [x] C4. Server-side entitlement checks (never trust the client) feeding usage limits.
+  **(PR #43 — hasProEntitlement(), FREE_SAVE_LIMIT=3, fail-open on RC outage)**
 
 ### Track D — Store readiness & compliance (the acceptance bar)
 - D1. Legal: privacy policy + terms of service pages (web-hosted, linked in both
@@ -93,8 +95,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 ### Track E — Marketing engine (separate from the app; build + stage)
 - E1. **Waitlist landing page** (own route or static site): brand, hero, value
   prop, email capture, "coming to App Store / Play" CTA. Clears the design bar.
-- E2. Brand kit: name/wordmark (working name: *AptDesignerAI* — rename-able),
+- [x] E2. Brand kit: name/wordmark (working name: *AptDesignerAI* — rename-able),
   palette already exists, social avatars/banners, OG images.
+  **(PR #44 — docs/brand-kit.md + public/wordmark.svg)**
 - E3. Content + ASO: launch copy, FAQ, a few SEO articles / "how it works",
   app-store description variants, screenshots with captions.
 - E4. Owned-channel drafts: scheduled-post drafts (X/IG/TikTok/Reddit), an email
@@ -118,10 +121,12 @@ these are true and verified in CI:
       not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) pending CI; saved designs + offline/error states + gestures/haptics/skeletons pending; B4-B5 pending]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
+      **[C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43); C1 subscription model scaffold + web billing pending]**
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
       **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability + screenshots pending]**
 - [ ] Track E1–E3 complete: waitlist page + brand kit + ASO/store copy staged.
+      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 ASO/SEO articles pending]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 

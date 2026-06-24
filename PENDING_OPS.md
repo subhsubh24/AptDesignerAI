@@ -6,6 +6,32 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### RevenueCat keys — mobile + server (added 2026-06-24, PRs #42 + #43 — set before EAS build and before production Vercel deploy)
+
+PR #42 (C2/C3 RevenueCat mobile SDK) and PR #43 (C4 server-side entitlement check) require two separate keys.
+
+**Mobile (EAS / local dev):** Add to `mobile/.env.local` (gitignored) and to EAS environment variables:
+```
+EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY=<your-rc-public-sdk-key>
+```
+- Find this in your RevenueCat dashboard → Project → API Keys → Public SDK keys → iOS / Android key.
+- When absent: the paywall UI shows (hardcoded prices) but purchases and restore are no-ops. `isPro` is always false. Graceful degradation — safe for local dev.
+- When present: live Offerings are fetched, real purchases go through the App Store / Play Store.
+
+**Server (Vercel env vars):** Add to Vercel project environment variables (Production + Preview):
+```
+REVENUECAT_SECRET_KEY=<your-rc-secret-key>
+```
+- Find this in your RevenueCat dashboard → Project → API Keys → Secret API keys.
+- This is a server-only key — **never use EXPO_PUBLIC_ prefix** or it leaks to the client bundle.
+- When absent: `hasProEntitlement()` logs a console.error and returns `true` (fail-open) — free-tier save limit is not enforced. Fix by setting the key.
+- When present: save limit is enforced for non-Pro users (FREE_SAVE_LIMIT = 3).
+
+Verify:
+1. Mobile: build with key set → "Start Free Trial" reaches the OS purchase dialog
+2. Server: Pro subscriber with ≥3 saves → POST `/api/mobile/saved-designs` succeeds (HTTP 201)
+3. Server: Free user with ≥3 saves → POST returns HTTP 403 `{ subscription_required: true }`
+
 ### Mobile env vars — Supabase + API URL (added 2026-06-24, updated PR #32 — set before EAS build or local dev on device)
 PR #28 (B2 mobile auth) and PR #32 (B2 photo upload + AI analysis) require these env vars.
 Create `mobile/.env.local` (gitignored) with:
