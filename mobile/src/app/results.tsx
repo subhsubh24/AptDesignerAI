@@ -9,7 +9,9 @@ import { ThemedView } from '@/components/themed-view';
 import { PaywallSheet } from '@/components/paywall-sheet';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useEntitlements } from '@/hooks/use-entitlements';
 import { useFreeSaveQuota } from '@/hooks/use-free-quota';
+import { useSession } from '@/hooks/use-session';
 import { supabase } from '@/lib/supabase';
 import { peekPendingImageUri, peekPendingRoomType } from '@/state/photo-session';
 
@@ -105,7 +107,11 @@ export default function ResultsScreen() {
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [showPaywall, setShowPaywall] = useState(false);
-  const { isLoading: quotaLoading, canSave, markSaved } = useFreeSaveQuota();
+  const { session } = useSession();
+  const { isPro, refresh: refreshEntitlements } = useEntitlements(session?.user.id);
+  const { isLoading: quotaLoading, canSave: freeQuotaOk, markSaved } = useFreeSaveQuota();
+  // Pro users have unlimited saves; free users are limited by the AsyncStorage quota.
+  const canSave = isPro || freeQuotaOk;
 
   const run = useCallback(async (uri: string, rt: string) => {
     try {
@@ -379,7 +385,11 @@ export default function ResultsScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <PaywallSheet visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
+      <PaywallSheet
+        visible={showPaywall}
+        onDismiss={() => setShowPaywall(false)}
+        onPurchaseSuccess={() => { void refreshEntitlements(); }}
+      />
     </ThemedView>
   );
 }
