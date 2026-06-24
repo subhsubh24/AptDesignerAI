@@ -593,3 +593,72 @@ PR #26 (B2 photo-capture) opened with auto-merge (SQUASH) enabled. TypeScript cl
 - **mobile CI ESLint gate still broken on main** (PR #15 merged with failing `mobile` job). The fix (`mobile/eslint.config.mjs` with expo flat config) was described in run 12 notes; it should be landed before CI is relied upon for mobile PRs.
 - **Track D remaining:** D2 (App Privacy/Data Safety content), D3 (store assets: icon, screenshots, ASO copy), D4 (pre-submission stability). Safe to advance in parallel with B2.
 - **Migration 017 still pending:** Owner must apply `supabase/migrations/017_waitlist.sql` before waitlist submissions persist in production.
+
+---
+
+## Run 2026-06-24 (Run 15)
+
+### State on entry
+- 876 tests passing. PRs #26 (B2 photo), #28 (B2 auth), #29 (B3 brand), #30 (D2/D3) merged or pending.
+- Rotation guide (run 14): "B2 continues — next up: photo upload to backend + AI analysis + real results."
+- Results screen showed static placeholder cards with "AI analysis coming soon" copy.
+
+### Area served this run
+**Track B2 (mobile upload + AI analysis + real results)** — two file-disjoint PRs on separate branches.
+
+### What was done
+
+**PR #32 — B2 backend: POST /api/mobile/analyze**
+- Mobile-specific room analysis endpoint; no project/room DB records required
+- Bearer JWT auth via `supabase.auth.getUser(token)` (no cookies — mobile Supabase session)
+- SSRF guard: `image_url` must be `https:` on the project's own Supabase Storage hostname
+- Room type allowlist (10 types): unknown values fall back to `living_room`
+- try/catch on `request.json()` → 400 on malformed body
+- try/catch around `withCostLedger` → structured 500 on LLM errors
+- Array field validation on AI response (palette, materials, textures, what_works, what_should_go) before returning to client
+- Cost contract: `thinkingFor("area_analysis")` (HIGH, allowed for Pass A) + `selectModel("area_analysis")` (mid tier) + `DETERMINISTIC_SEED` + `withCostLedger` + `recordUsage`
+- Rate limited at RATE_LIMITS.areaAnalysis (3 req / 5 min per user)
+- Reviewer A caught 5 blocking issues: SSRF, missing JSON parse try/catch, no withCostLedger error handler, fragile recordUsage opts shape, no array field validation. All fixed before merge.
+- Reviewer B approved with non-blocking notes.
+
+**PR #33 — B2 mobile UX: room type picker + real upload/analyze/results flow**
+- `photo-session.ts`: replaced consume-once pattern with `peek` (non-destructive reads) — solves back-nav data-loss bug where re-mounting results.tsx after back→room-type→forward got null imageUri
+- `photo.tsx`: `handleAnalyze` now routes to `/room-type` before `/results`
+- `room-type.tsx` (new): 6-option picker (living room, bedroom, kitchen, bathroom, dining room, home office) matching the API allowlist
+- `results.tsx` full rewrite:
+  - Splits `uploadImage()` + `analyzeRoom()` so stage labels are accurate (upload runs during "uploading", AI call during "analyzing")
+  - MIME type derived from file extension (png/webp/jpeg) not hardcoded as jpeg
+  - Guards for unconfigured EXPO_PUBLIC_SUPABASE_URL + EXPO_PUBLIC_API_URL
+  - Displays all 8 AI output fields: style_name (heading), summary, design_direction, palette chips, materials+textures chips, what_works checklist, what_should_go checklist
+  - "Try Again" on transient errors (image still available); "Pick a Photo" button routes to /photo when imageUri is null
+- `PENDING_OPS.md`: documented EXPO_PUBLIC_API_URL env var and room-photos Supabase Storage bucket + RLS INSERT policy
+- Reviewer A caught 3 blocking issues: hardcoded MIME type, empty-string URL guards, back-navigation data-loss bug. All fixed.
+- Reviewer B caught 2 issues: stage machine lie (both phases showed under wrong label), back-nav data loss. Both same fixes.
+
+### Lessons learned
+
+1. **SSRF on image_url passed to Gemini is a real risk.** The Gemini SDK fetches image URLs server-side. An authenticated attacker can supply `http://169.254.169.254/` (AWS IMDS) or any internal URL. Always validate that `image_url` belongs to the project's own Supabase Storage host before passing it to any model provider. Reject anything that isn't `https:` on the known hostname.
+
+2. **Consume-once patterns break on back→forward navigation in expo-router.** The original `useState(consumePendingImageUri)` pattern (calling the function as a lazy initializer) cleared the store on first mount. If the user went back from results to room-type and then forward again, a new results instance mounted and `consumePendingImageUri()` returned null. Fix: switch to `peek` (non-destructive read) and rely on the upstream setter (`setPendingImageUri` in photo.tsx) to update the store for new forward passes.
+
+3. **Stage machine labels must match actual work.** The original `run()` set `'uploading'`, slept 50ms, then set `'analyzing'` and called `uploadAndAnalyze` (which did both). Result: the user saw "Analyzing your room with AI…" for the entire 15–30 seconds including the upload. Split the work: `uploadImage()` runs under `'uploading'`, `analyzeRoom()` runs under `'analyzing'`.
+
+4. **Derive MIME type from the actual file extension, not hardcode.** `expo-image-picker` can return PNG and WEBP files. Sending them to Supabase Storage with `Content-Type: image/jpeg` causes CDN to serve them with the wrong header. Map ext → mime type at the upload site.
+
+5. **Two-reviewer split is effective for both security and UX.** Reviewer A (correctness/security) caught the SSRF and the back-nav data loss on the backend PR; Reviewer B (UX/value) caught the stage machine lie on the mobile PR. Neither reviewer found all issues; together they caught everything.
+
+6. **Guard both env var emptiness AND URL parse-ability.** If `EXPO_PUBLIC_SUPABASE_URL` is unset, `fetch('' + path)` throws a networking error with an opaque message ("Failed to fetch"). Explicit `if (!supabaseUrl) throw new Error('App configuration error...')` gives developers a clear error to act on instead of a mystery network failure.
+
+### Merge outcome
+PR #32 (backend) + PR #33 (mobile UX) opened with auto-merge (SQUASH) enabled. 876 tests passing. Both PRs reviewed by two independent subagents; all REQUEST_CHANGES issues resolved before push.
+
+### Rotation guide for next run
+- **B2 remaining after PRs #32/#33:** saved designs persistence (mobile), offline/error states, gestures, haptics, skeleton loaders. Plan for 1-2 more runs to complete full B2.
+- **PENDING_OPS action required before end-to-end B2 test:**
+  1. Set `EXPO_PUBLIC_API_URL` in `mobile/.env.local` + EAS secrets
+  2. Create `room-photos` Supabase Storage bucket (public) + RLS INSERT policy (see PENDING_OPS.md for exact SQL)
+- **Track A5 (live eval suite) still blocked.** Needs real publicly-accessible room photo URLs. Owner must supply CDN-hosted images.
+- **Track C (RevenueCat/subscription) is next unstarted track** after B2 completes. C1-C4 all pending.
+- **D4 (stability + screenshots) deferred** until B2 upload+AI is verifiably working so screenshots show real AI content.
+- **Migration 017 still pending** — owner must `supabase db push` when PR #22 merges.
+- **Avoid:** Track A web changes unless a regression surfaces. Mobile CI ESLint gate status — verify PRs #32/#33 pass before starting more mobile work.
