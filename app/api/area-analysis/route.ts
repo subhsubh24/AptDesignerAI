@@ -117,8 +117,8 @@ export async function POST(request: Request) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client type is complex
 export async function runAnalysis(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client type is complex
   supabase: any,
   room_id: string,
   project_id: string | undefined,

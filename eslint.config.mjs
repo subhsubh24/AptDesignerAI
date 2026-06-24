@@ -14,6 +14,15 @@ const eslintConfig = defineConfig([
       "no-console": "error",
     },
   },
+  // Mobile app (Expo / React Native) — allow require() for static assets, ignore alt-text on images
+  {
+    files: ["mobile/**/*.ts", "mobile/**/*.tsx", "mobile/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "jsx-a11y/alt-text": "off",
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
