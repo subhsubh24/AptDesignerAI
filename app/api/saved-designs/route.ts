@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
+import { hasProEntitlementWeb, FREE_SAVE_LIMIT_WEB } from "@/lib/entitlements/web";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -115,6 +116,24 @@ export async function POST(request: NextRequest) {
     .eq("user_id", userId)
     .eq("room_id", room_id)
     .maybeSingle();
+
+  // Gate new saves for free-tier users. Re-saving an already-saved room (UPDATE path) is always allowed.
+  if (!existing) {
+    const { count: saveCount } = await supabase
+      .from("saved_designs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if ((saveCount ?? 0) >= FREE_SAVE_LIMIT_WEB) {
+      const hasPro = await hasProEntitlementWeb(userId);
+      if (!hasPro) {
+        return NextResponse.json(
+          { error: "Free save limit reached. Upgrade to Pro to save unlimited designs.", subscription_required: true },
+          { status: 403 },
+        );
+      }
+    }
+  }
 
   let result;
   if (existing) {
