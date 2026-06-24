@@ -124,6 +124,7 @@ export default function SavedDesignsScreen() {
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
               tintColor={colors.accent}
+              colors={[colors.accent]}
             />
           }
         >
