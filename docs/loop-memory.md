@@ -432,3 +432,56 @@ PR #15 opened with auto-merge enabled (SQUASH). Both independent reviewers appro
 - **Track C (Monetization) waiting:** Subscription model, RevenueCat integration, paywall UI, server-side entitlement checks. Depends on stable B2 baseline; not priority until core mobile journey is working.
 - **Avoid:** Sequential micro-optimizations on web (already done). Don't invent churn on Track A; web app is polished.
 - **Caution:** Moving from web-only to multi-platform work increases complexity. Each PR now requires both web and mobile gates to pass. Keep changes small and file-disjoint.
+
+---
+
+## Run 2026-06-24 (twelfth run)
+
+### State on entry
+- 876 tests passing. PR #15 (Track B1 Expo scaffold) merged by owner.
+- Loop memory (run 11) rotation guide: advance Track D (store readiness) + Track E (marketing engine) in parallel with B2.
+- PR #15 had a mobile CI failure (eslint module not found) that was flagged in the previous session but not fully resolved before the owner merged manually.
+
+### Area served this run
+**Store-readiness (Track D1) + Marketing engine (Track E1)** — two file-disjoint PRs shipped in a single run.
+
+### What was done
+
+**PR #23 — Track D1: in-app account deletion (Apple 5.1.1(v) compliance)**
+- `DELETE /api/user/delete`: authenticates via server Supabase client, then calls `admin.auth.admin.deleteUser(userId)` via service-role client. Cascade chain: `auth.users → profiles → projects → rooms/room_data` and `auth.users → saved_designs` (all ON DELETE CASCADE per migrations 001 + 011). Returns 503 if admin client unavailable.
+- `app/account/page.tsx`: two-step typed confirmation (must type `"delete my account"` exactly). Calls DELETE endpoint, signs out, redirects to `/`. Uses Card + Button design system components.
+- `app/account/layout.tsx`: server component auth-guard + AppShell wrapper (same pattern as `/dashboard`).
+- Topbar: "Account settings" link (Settings icon) added to desktop dropdown + mobile drawer.
+
+**PR #22 — Track E1: waitlist landing page**
+- `app/waitlist/page.tsx`: server component with MarketingHeader/Footer, hero section, 4-perk cards (Smartphone, Map, Zap, Star), bottom CTA to /signup. Same design token set as FAQ/pricing pages.
+- `app/waitlist/waitlist-form.tsx`: client component with 5 UX states (idle, loading, success, duplicate, error). Typed confirmation, no redirect.
+- `POST /api/waitlist`: email validation (regex + 254-char cap), IP rate-limit (5 req/15 min, in-memory token bucket), admin client insert, `23505` unique-constraint → friendly `alreadySubscribed` response.
+- `supabase/migrations/017_waitlist.sql`: RLS enabled, NO policy (service-role only).
+- `lib/supabase/middleware.ts`: added `/waitlist` + `/api/waitlist` to public-path exemptions so the page works for unauthenticated visitors and survives the eventual `proxy.ts → middleware.ts` rename.
+
+### Lessons learned
+
+1. **Mobile CI failure pattern — ESLint 9 traverses to root config.** When `expo lint` runs in `mobile/`, ESLint 9 traverses parent directories and finds the root's `eslint.config.mjs`. That config imports `eslint` from the root `node_modules`, which isn't installed in mobile CI. Fix: create `mobile/eslint.config.mjs` with a proper flat config (imports from `eslint-config-expo/flat`) so ESLint stops traversal at `mobile/`. For PR #15 the owner merged despite the mobile CI failure; the mobile gate will be re-broken on main until this is fixed.
+
+2. **eslint-config-expo version alignment (SDK 52+).** Since Expo SDK 52, `eslint-config-expo` follows SDK version numbering. For SDK 56: use `eslint-config-expo: ^56.0.0`, NOT `^8.0.0` (which caps below `9.0.0` and never resolves to the SDK-56-aligned package). First CI fix attempt used wrong version; second attempt with `^56.0.0` + `eslint: ^9.0.0` was correct.
+
+3. **Public waitlist endpoints need middleware exemptions before `proxy.ts → middleware.ts` rename.** The current middleware lives in `proxy.ts` (wrong name for Next.js) and is entirely inactive. When it's eventually renamed to `middleware.ts`, any new public route (waitlist page, waitlist API) will break without an explicit exemption in `PUBLIC_PATHS` / `PUBLIC_API_PATHS`. Reviewer A caught this. Always add exemptions for intentionally-public routes in the same PR that introduces them.
+
+4. **In-memory rate limiting is acceptable for a single-instance deployment.** For the waitlist endpoint (the only permanently-unauthenticated write endpoint), a Map-based token bucket (IP → {count, resetAt}) is sufficient. The RATE_WINDOW_MS and RATE_LIMIT constants should be tuned if multi-instance deployment is introduced; swap for Upstash Redis at that point.
+
+5. **Two-reviewer split caught different layers.** Reviewer A found the middleware public-path omission (would break the feature when middleware activates) and the missing rate limiting on the only permanently-public write endpoint. Reviewer B approved design/copy/UX quality. Neither would have caught both.
+
+6. **`23505` unique constraint → friendly duplicate UX (not an error).** For a public waitlist, returning `{alreadySubscribed: true}` on a duplicate email is the right UX: the user may be re-entering after a page refresh or a different device, and "already saved" is friendly. This is not an enumeration risk in the same sense as an account-existence check; the list is a marketing capture table, not a secret identity set.
+
+### Merge outcome
+PR #22 (waitlist/E1) and PR #23 (account deletion/D1) opened, CI pending. Both reviewer subagents approved (Reviewer B first pass; Reviewer A approved after 2 blocking fixes: middleware exemptions + rate limiting). Bookkeeping PR #XX opened in the same run.
+
+### Rotation guide for next run
+- **Unresolved: mobile CI gate is broken on main.** PR #15 was merged with a failing `mobile` job. The fix is a `mobile/eslint.config.mjs` with expo flat config (stops ESLint traversal to root). Create a dedicated PR for this fix to restore the CI gate before B2 work begins.
+- **Track D1 completion:** Privacy policy + terms already live; account deletion in PR #23 (pending). If PR #23 merges, D1 is fully complete. Tick the checkbox in next bookkeeping PR.
+- **Track E1 completion:** Waitlist page in PR #22 (pending). If it merges, E1 is done. Tick in next bookkeeping PR.
+- **Track B2 is next large milestone:** Real camera integration, photo upload from native, AI analysis stub, product browsing native UI. Larger scope — plan carefully, expect 2-3 runs.
+- **Track D remaining:** D2 (App Privacy/Data Safety content), D3 (store assets: icon, screenshots, ASO copy), D4 (pre-submission stability). Can be done in parallel with B2.
+- **Avoid:** More Track A web work unless a regression surfaces. The web app is stable.
+- **Migration 017 pending:** Owner must apply `supabase/migrations/017_waitlist.sql` before waitlist submissions persist in production.

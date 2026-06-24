@@ -6,7 +6,15 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
-_None queued._
+### 017_waitlist.sql (added 2026-06-24 — apply when PR #22 merges)
+Creates the `waitlist_emails` table (email capture for iOS/Android waitlist). RLS enabled with NO policy — service-role only.
+
+```sql
+-- Already in supabase/migrations/017_waitlist.sql
+-- Apply via: supabase db push
+-- Verify: \d waitlist_emails  →  id, email (UNIQUE), source, created_at
+--         SELECT count(*) FROM pg_policies WHERE tablename = 'waitlist_emails';  →  0 (correct)
+```
 
 ## Applied
 
