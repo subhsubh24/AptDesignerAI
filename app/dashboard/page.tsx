@@ -12,6 +12,7 @@ import { LogoMark } from "@/components/ui/logo-mark";
 import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autocomplete";
 import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { trackEvent } from "@/lib/analytics";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -314,6 +315,7 @@ export default function DashboardPage() {
 
       // Phase 2: Analyze apartment photos (uses building research as context)
       setAnalyzePhase("photos");
+      trackEvent("analysis_started");
       const res = await fetch("/api/analyze-apartment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -324,6 +326,7 @@ export default function DashboardPage() {
         const data = await res.json();
         setApartmentSummary(data.summary);
         setAnalyzePhase("done");
+        trackEvent("analysis_complete");
         setStep("room_select");
       } else {
         setStep("setup");

@@ -37,6 +37,7 @@ import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-color
 import { PageTransition, StaggerList, StaggerItem, ScrollReveal } from "@/components/ui/motion";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
+import { trackEvent } from "@/lib/analytics";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -484,6 +485,7 @@ export default function FocusPage() {
         body: JSON.stringify({ room_id: roomId, project_id: projectId, stage }),
       });
       if (res.ok) {
+        trackEvent("design_saved", { stage });
         setSavedStage(stage);
       }
     } catch {

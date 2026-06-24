@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { UpgradeCheckoutButton } from "./upgrade-checkout-button";
+import { UpgradeViewTracker } from "./upgrade-tracker";
 
 export const metadata: Metadata = {
   title: "Upgrade — AptDesigner",
@@ -59,6 +60,7 @@ export default async function UpgradePage({ searchParams }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <UpgradeViewTracker tier={tier} />
       <MarketingHeader />
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-6 md:px-8 py-16 md:py-24">

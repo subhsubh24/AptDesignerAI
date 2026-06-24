@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 interface Props {
   tier: "apartment" | "pro";
@@ -15,6 +16,7 @@ export function UpgradeCheckoutButton({ tier }: Props) {
   async function handleCheckout() {
     setLoading(true);
     setError(null);
+    trackEvent("checkout_started", { tier });
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",

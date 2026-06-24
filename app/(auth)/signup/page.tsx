@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SignupPage() {
   const supabase = createClient();
@@ -44,6 +45,7 @@ export default function SignupPage() {
       setError((error as { message: string })?.message || "Signup failed");
       setLoading(false);
     } else {
+      trackEvent("signup_complete");
       setSuccess(true);
       setLoading(false);
     }
