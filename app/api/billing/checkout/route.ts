@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const successUrl = `${origin}/billing/checkout-success?tier=${tier}`;
-  const cancelUrl = `${origin}/billing/checkout-cancel`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://aptdesigner.app";
+  const successUrl = `${appUrl}/billing/checkout-success?tier=${tier}`;
+  const cancelUrl = `${appUrl}/billing/checkout-cancel`;
 
   try {
     const { sessionId, url } = await createCheckoutSession({

@@ -154,8 +154,9 @@ export function extractBillingInfoFromEvent(event: Stripe.Event): {
         stripeSubscriptionId: sub.id,
         tier,
         status: statusMap[sub.status] ?? "cancelled",
-        // billing_cycle_anchor is the next renewal date — use as period end proxy.
-        currentPeriodEnd: new Date(sub.billing_cycle_anchor * 1000),
+        // The dahlia API removed current_period_end from the Subscription object.
+        // Entitlement gating relies on `status`; period end is left null here.
+        currentPeriodEnd: null,
         userId,
       };
     }

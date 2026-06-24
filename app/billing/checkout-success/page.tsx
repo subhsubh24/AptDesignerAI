@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
@@ -38,8 +38,8 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
       <main className="flex-1 flex items-center justify-center px-6 py-24">
         <div className="max-w-lg w-full text-center">
-          <div className="w-16 h-16 rounded-full bg-accent-warm/15 flex items-center justify-center mx-auto mb-8">
-            <div className="w-6 h-6 rounded-full bg-accent-warm/60" />
+          <div className="flex justify-center mb-8">
+            <CheckCircle className="h-16 w-16 text-accent-warm" strokeWidth={1.25} />
           </div>
 
           <h1 className="text-3xl font-bold tracking-tight mb-4">{copy.headline}</h1>
