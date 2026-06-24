@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+import { hasProEntitlement } from "@/lib/entitlements/server";
+
 /**
  * GET /api/mobile/entitlements
  *
- * Returns subscription tier for the authenticated user. Currently stubs 'free'
- * for all users. RevenueCat integration: replace the stub with a server-side
- * receipt validation call using the user's RevenueCat app user ID.
+ * Returns the subscription tier for the authenticated user by calling the
+ * RevenueCat REST API server-side. Uses REVENUECAT_SECRET_KEY (never the
+ * client SDK key) so the result can be trusted for server-side gating.
  *
- * See PENDING_OPS.md for the RevenueCat setup steps required before go-live.
+ * The RC app user ID is the Supabase user UUID (set by _layout.tsx via
+ * Purchases.logIn(session.user.id)).
+ *
+ * Live key: set REVENUECAT_SECRET_KEY in Vercel env — see PENDING_OPS.md.
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("Authorization");
@@ -29,14 +34,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // RevenueCat integration point (Track C Phase 2):
-  //   const rcCustomer = await fetchRevenueCatCustomer(user.id);
-  //   const isPro = rcCustomer.entitlements.active['pro'] != null;
-  //   return NextResponse.json({ tier: isPro ? 'pro' : 'free', ... });
+  // The RC app user ID mirrors the Supabase user ID (set on logIn in _layout.tsx)
+  const isPro = await hasProEntitlement(user.id);
 
   return NextResponse.json({
-    tier: "free",
-    canSaveDesigns: false,
+    tier: isPro ? "pro" : "free",
+    isPro,
+    canSaveDesigns: isPro,
     canAnalyze: true,
   });
 }

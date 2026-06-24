@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { hasProEntitlement, FREE_SAVE_LIMIT } from "@/lib/entitlements/server";
 
 const ROOM_TYPES = new Set([
   "living_room", "bedroom", "kitchen", "bathroom", "dining_room",
@@ -74,6 +75,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Reuse one authed client for both the count check and the insert.
+  const authedClient = createClient(supabaseUrl, supabaseKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  // Server-side entitlement gate: enforce FREE_SAVE_LIMIT for non-Pro users.
+  // Checked before body parsing so rejected requests skip validation work.
+  const { count: existingSaveCount } = await authedClient
+    .from("saved_designs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  if ((existingSaveCount ?? 0) >= FREE_SAVE_LIMIT) {
+    const isPro = await hasProEntitlement(user.id);
+    if (!isPro) {
+      return NextResponse.json(
+        { error: "Free save limit reached. Upgrade to Pro to save unlimited designs.", subscription_required: true },
+        { status: 403 },
+      );
+    }
+  }
+
   let body: { room_type?: unknown; analysis?: unknown; thumbnail_url?: unknown };
   try {
     body = await request.json() as typeof body;
@@ -134,11 +157,6 @@ export async function POST(request: NextRequest) {
       source: "mobile",
     },
   };
-
-  // Insert via authed client so RLS auth.uid() = user_id is satisfied
-  const authedClient = createClient(supabaseUrl, supabaseKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
 
   const { data, error } = await authedClient
     .from("saved_designs")
