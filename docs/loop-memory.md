@@ -485,3 +485,49 @@ PR #22 (waitlist/E1) and PR #23 (account deletion/D1) opened, CI pending. Both r
 - **Track D remaining:** D2 (App Privacy/Data Safety content), D3 (store assets: icon, screenshots, ASO copy), D4 (pre-submission stability). Can be done in parallel with B2.
 - **Avoid:** More Track A web work unless a regression surfaces. The web app is stable.
 - **Migration 017 pending:** Owner must apply `supabase/migrations/017_waitlist.sql` before waitlist submissions persist in production.
+
+---
+
+## Run 2026-06-24 (thirteenth run)
+
+### State on entry
+- 876 tests passing. PRs #22 (waitlist/E1) and #23 (account deletion/D1) pending CI from run 12.
+- ROADMAP: Track B1 done. B2 (real camera/photo flow) is next large milestone. Rotation guide from run 12 called out broken mobile CI gate (ESLint traversal issue) as highest-priority blocker before B2.
+- A5 (live eval suite) noted as incomplete and needed for Track A to be complete.
+
+### Area served this run
+**Track B2 — native mobile photo selection (partial: photo capture + preview).**
+
+Track A5 (live eval suite) was considered but blocked: requires real publicly-accessible room photo URLs for gold cases, and no CDN URLs exist in the codebase. Deferred.
+
+### What was done
+
+**PR #26 — B2 photo capture + preview**
+- `mobile/src/app/photo.tsx`: replaced stub ("Camera Preview, coming in B2") with real expo-image-picker flow. Gallery + camera pickers, live 4:3 preview, dashed-box icon placeholder (no emoji), conditional UI (pre/post selection), permission handling with `canAskAgain` check and `Linking.openSettings()` on permanent denial, Android back-stack recovery via `getPendingResultAsync` on mount, `mediaTypes: ImagePicker.MediaTypeOptions.Images` (prevents silent video-URI failure).
+- `mobile/src/app/results.tsx`: replaces stub with photo display — `<Image>` card rendered from module store URI, plus three placeholder AI analysis cards with updated copy.
+- `mobile/src/state/photo-session.ts` (new): module-level store (`setPendingImageUri` / `consumePendingImageUri`) passes the image URI out-of-band, avoiding `content://` URI encoding corruption through expo-router params on Android.
+- `mobile/app.json`: added `expo-image-picker` plugin with OS permission strings.
+- `mobile/package.json`: added `expo-image-picker: ~56.0.18`.
+
+### Lessons learned
+
+1. **`expo-image-picker`'s `getPendingResultAsync` return type is a union — must type-guard before accessing `.canceled`.** The return type is `ImagePickerResult | ImagePickerErrorResult | null`. `ImagePickerErrorResult` has only `{code, message, exception}`, no `canceled` field. The guard `'canceled' in result` correctly discriminates. After `!result.canceled`, TypeScript narrows to `ImagePickerSuccessResult` where `assets` is guaranteed non-null.
+
+2. **Always restrict `mediaTypes` to `Images` when you expect still photos.** Omitting it defaults to `MediaTypeOptions.All` (images + videos). Selecting a video silently breaks `<Image>` preview and poisons any AI pipeline expecting a still photo. One option, easy to miss.
+
+3. **Module-level store is the right pattern for short-lived cross-screen URI handoffs on Android.** Router params are URL-encoded; `content://` URIs with `%`-sequences can be double-encoded on Android. A module singleton (single JS thread, clear consume-on-read) avoids that entirely. The `useState(consumePendingImageUri)` lazy-initializer pattern calls the function exactly once on first render.
+
+4. **Two reviewers caught different issues.** Reviewer A (round 1) caught: `getPendingResultAsync` missing, router param URI encoding issue, no "Go to Settings" on permanent denial. Reviewer B (round 2, after fixes) caught: missing `mediaTypes` constraint allowing video selection. Both were blocking production bugs; neither reviewer found the same thing as the other.
+
+5. **`expo install` unavailable in this environment (network proxy).** Correct package version (`~56.0.18`) found by reading `mobile/node_modules/expo/bundledNativeModules.json` directly.
+
+### Merge outcome
+PR #26 (B2 photo-capture) opened with auto-merge (SQUASH) enabled. TypeScript clean; 876 tests passing.
+
+### Rotation guide for next run
+- **B2 continues — next up: photo upload to backend + real AI analysis.** Photo capture is done. The flow currently stops at a static results screen with placeholder cards. Next B2 increment: upload the selected image from mobile (multipart POST or Supabase storage), call the room-diagnosis pipeline, and render real output.
+- **B2 remaining scope:** upload, AI analysis call, results rendering, saved designs, offline/error states, gestures, haptics, skeletons. Plan for 2-3 more runs to complete B2.
+- **A5 (live eval suite) still blocked.** Requires real publicly-accessible room photo URLs. Options: (a) embed a few permanent public URLs from a CDN the owner controls, (b) use public-domain interior photo URLs known to be stable. This needs owner input — cannot be resolved autonomously.
+- **mobile CI ESLint gate still broken on main** (PR #15 merged with failing `mobile` job). The fix (`mobile/eslint.config.mjs` with expo flat config) was described in run 12 notes; it should be landed before CI is relied upon for mobile PRs.
+- **Track D remaining:** D2 (App Privacy/Data Safety content), D3 (store assets: icon, screenshots, ASO copy), D4 (pre-submission stability). Safe to advance in parallel with B2.
+- **Migration 017 still pending:** Owner must apply `supabase/migrations/017_waitlist.sql` before waitlist submissions persist in production.
