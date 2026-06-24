@@ -134,7 +134,8 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 - [x] E4. Owned-channel drafts: scheduled-post drafts (X/IG/TikTok/Reddit), an email
   welcome sequence for the waitlist. **Staged as drafts** — see Human Core.
   **(PR #49 — docs/email-welcome-sequence.md + docs/social-drafts.md)**
-- E5. Analytics/attribution scaffolding so launch spend is measurable.
+- [x] E5. Analytics/attribution scaffolding so launch spend is measurable.
+  **(PR #58 — @vercel/analytics + <Analytics /> page views + 7 typed funnel events with call sites + docs/analytics.md)**
 - E6. **Launch-ready growth engine (marketing must hit 100%, not just "staged").**
   Beyond E1–E5, build everything a real launch needs, staged and ready to flip on:
   full content calendar + a batch of ready-to-post drafts per channel; the complete
@@ -160,7 +161,7 @@ ALL of these are true and verified in CI:
       A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
       added — A5 is a Track A requirement and is not yet built.)
 - [ ] Track B complete: Expo app builds via EAS, core journey works natively,
-      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) pending CI; saved designs + offline/error states + gestures/haptics/skeletons pending; B4-B5 pending]**
+      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) + B2 saved designs (PR #37) done; B3 push notifications + deep links + ESLint gate fix done (PR #56); B4 polish done (PRs #46, #47); B5 parity pending]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
       **[C1 Stripe billing done (PR #50); web enforcement wired (PR #52); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43)]**
@@ -170,7 +171,7 @@ ALL of these are true and verified in CI:
 - [ ] **Marketing = 100% (Track E COMPLETE, E1–E6):** waitlist + brand + site/SEO +
       ASO package + content calendar + full email lifecycle + owned-channel campaigns
       + referral/share loops + analytics — all BUILT and STAGED, launch-ready.
-      **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5/E6 pending]**
+      **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 pending]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 - [ ] **Confidence statement:** you can honestly state that the product would be
