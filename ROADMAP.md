@@ -91,9 +91,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 The loop **stops building new features and opens ONE issue titled
 `FACTORY: ready for submission`** (with the Human Core checklist below) when ALL of
 these are true and verified in CI:
-- [ ] Track A complete: web app reliable, on-design, secure (RLS clean).
+- [x] Track A complete: web app reliable, on-design, secure (RLS clean).
 - [ ] Track B complete: Expo app builds via EAS, core journey works natively,
-      not a thin wrapper, clears the design bar.
+      not a thin wrapper, clears the design bar. **[B1 scaffold done; B2-B5 in progress]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
