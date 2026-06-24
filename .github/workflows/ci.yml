@@ -30,6 +30,36 @@ jobs:
       - name: Determinism
         run: npx --yes tsx scripts/check-determinism.ts
 
+  # Mobile gate — the Expo app lives in /mobile and is built incrementally by the
+  # autonomous loop (which cannot edit .github/, so this job is added by a human).
+  # It runs the mobile type/lint/test gate when /mobile exists and passes trivially
+  # before it does, so it is safe as a required check from day one.
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Mobile gate (type/lint/test when /mobile exists)
+        run: |
+          if [ ! -f mobile/package.json ]; then
+            echo "No /mobile app yet — mobile gate is a no-op (passes)."
+            exit 0
+          fi
+          cd mobile
+          echo "Installing mobile deps..."
+          npm install --no-audit --no-fund
+          if [ -f tsconfig.json ]; then
+            echo "Type-checking..."
+            npx tsc --noEmit
+          else
+            echo "No tsconfig.json yet — skipping type check."
+          fi
+          npm run -s lint --if-present
+          npm test --if-present
+
   # Non-blocking quality signal. Lint currently has pre-existing errors and the
   # Next build needs real env, so these are informational (continue-on-error)
   # rather than merge-gating. New code still stays lint-clean because the loop
