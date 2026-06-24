@@ -9,6 +9,11 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { withCostLedger, recordUsage } from "@/lib/observability/cost-meter";
 import type { AIContentBlock } from "@/lib/ai/provider";
 
+const ROOM_TYPES = new Set([
+  "living_room", "bedroom", "kitchen", "bathroom", "dining_room",
+  "home_office", "nursery", "laundry_room", "garage", "basement",
+]);
+
 /**
  * POST /api/mobile/analyze
  *
@@ -55,62 +60,97 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json() as { image_url?: unknown; room_type?: unknown };
+  let body: { image_url?: unknown; room_type?: unknown };
+  try {
+    body = await request.json() as { image_url?: unknown; room_type?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const { image_url, room_type } = body;
   if (!image_url || typeof image_url !== "string") {
     return NextResponse.json({ error: "image_url is required" }, { status: 400 });
   }
 
-  const roomTypeName = (typeof room_type === "string" && room_type.trim())
-    ? room_type.trim()
-    : "living_room";
+  // SSRF guard: image_url must be an https URL on our own Supabase Storage host
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(image_url);
+  } catch {
+    return NextResponse.json({ error: "image_url is not a valid URL" }, { status: 400 });
+  }
+  const supabaseHost = new URL(supabaseUrl).hostname;
+  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== supabaseHost) {
+    return NextResponse.json({ error: "image_url must be a Supabase Storage URL" }, { status: 400 });
+  }
 
-  return withCostLedger(async (summary) => {
-    const model = selectModel("area_analysis");
+  const roomTypeName =
+    typeof room_type === "string" && ROOM_TYPES.has(room_type.trim())
+      ? room_type.trim()
+      : "living_room";
 
-    const contentBlocks: AIContentBlock[] = [
-      { type: "image", source: { type: "url", url: image_url } },
-    ];
+  try {
+    return await withCostLedger(async (summary) => {
+      const model = selectModel("area_analysis");
+      const { thinkingLevel } = thinkingFor("area_analysis");
 
-    const displayRoomType = roomTypeName.replace(/_/g, " ");
-    const prompt = buildMobilePassAPrompt(displayRoomType);
+      const contentBlocks: AIContentBlock[] = [
+        { type: "image", source: { type: "url", url: image_url } },
+      ];
 
-    const response = await geminiProvider.chat({
-      model,
-      system: "You are an expert interior designer analyzing room photos for a mobile design app. Provide specific, actionable analysis grounded in what you actually see in the photo.",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt } as AIContentBlock,
-            ...contentBlocks,
-          ],
-        },
-      ],
-      max_tokens: 8192,
-      seed: DETERMINISTIC_SEED,
-      responseMimeType: "application/json",
-      thinkingConfig: thinkingFor("area_analysis"),
+      const displayRoomType = roomTypeName.replace(/_/g, " ");
+      const prompt = buildMobilePassAPrompt(displayRoomType);
+
+      const response = await geminiProvider.chat({
+        model,
+        system: "You are an expert interior designer analyzing room photos for a mobile design app. Provide specific, actionable analysis grounded in what you actually see in the photo.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt } as AIContentBlock,
+              ...contentBlocks,
+            ],
+          },
+        ],
+        max_tokens: 8192,
+        seed: DETERMINISTIC_SEED,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel },
+      });
+
+      recordUsage("mobile-pass-a", model, response.usage, { thinkingLevel });
+
+      const s = summary();
+      console.log(`[mobile/analyze] user=${user.id} room=${roomTypeName} tokens=${s.totalTokens}`);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = extractJsonObject<any>(response.content);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return NextResponse.json({ error: "Analysis failed — unexpected AI response shape" }, { status: 500 });
+      }
+
+      if (typeof raw.summary !== "string" || !raw.summary) {
+        return NextResponse.json({ error: "Analysis failed — incomplete AI response" }, { status: 500 });
+      }
+
+      // Guard array fields so a malformed AI response does not crash the mobile client
+      const arrayFields = [
+        "recommended_palette", "recommended_materials", "recommended_textures",
+        "what_works", "what_should_go",
+      ];
+      for (const field of arrayFields) {
+        if (!Array.isArray(raw[field])) {
+          return NextResponse.json({ error: "Analysis failed — malformed AI response" }, { status: 500 });
+        }
+      }
+
+      return NextResponse.json({ analysis: raw });
     });
-
-    recordUsage("mobile-pass-a", model, response.usage, thinkingFor("area_analysis"));
-
-    const s = summary();
-    console.log(`[mobile/analyze] user=${user.id} room=${roomTypeName} tokens=${s.totalTokens}`);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = extractJsonObject<any>(response.content);
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      return NextResponse.json({ error: "Analysis failed — unexpected AI response shape" }, { status: 500 });
-    }
-
-    // Validate minimum required fields before sending to client
-    if (typeof raw.summary !== "string" || !raw.summary) {
-      return NextResponse.json({ error: "Analysis failed — incomplete AI response" }, { status: 500 });
-    }
-
-    return NextResponse.json({ analysis: raw });
-  });
+  } catch (err) {
+    console.error("[mobile/analyze] LLM error", err);
+    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
+  }
 }
 
 function buildMobilePassAPrompt(roomType: string): string {
