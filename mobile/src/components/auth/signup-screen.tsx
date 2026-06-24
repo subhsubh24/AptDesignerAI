@@ -44,14 +44,16 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
     setLoading(true);
     setError(null);
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
     });
 
     if (authError) {
       setError(authError.message);
-    } else {
+    } else if (data.session === null) {
+      // Email confirmation required — show "check your email" screen.
+      // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
       setSuccess(true);
     }
     setLoading(false);
