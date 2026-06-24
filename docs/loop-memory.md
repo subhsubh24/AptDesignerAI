@@ -4,6 +4,55 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 21)
+
+### State on entry
+- Context compacted from Run 21 mid-session. All 6 Run 20 PRs (#46–#51) merged. Stale PR #41 closed.
+- Peer-review results for 3 prepared changes in hand: Reviewer A requested changes on all 3 (race condition comment, false-positive on global-error.tsx, unescaped apostrophe). Reviewer B approved all 3.
+- Branches `c1/web-entitlement-gate`, `d4/stability-checklist`, `e3/seo-guides` committed locally, not yet pushed.
+
+### Area served this run
+**C1** (web entitlement enforcement) + **D4** (stability — global/focus error boundaries + pre-submission checklist) + **E3** (SEO guide articles + FAQ expansion).
+
+### What was done
+
+**PR #52 — C1 web entitlement gate**
+- `lib/entitlements/web.ts`: `FREE_SAVE_LIMIT_WEB = 3`
+- `app/api/saved-designs/route.ts` POST: count+check+403 gate for net-new saves; UPDATE path always allowed
+- Soft/best-effort limit documented in comment (identical semantics to mobile gate, PR #43)
+- Reviewer A race concern addressed by explicit documentation; no DB-level constraint added (same decision as mobile)
+
+**PR #53 — D4 stability + pre-submission checklist**
+- `app/global-error.tsx`: root-layout fallback, `<html>`+`<body>`, inline styles only, `error.digest` display
+- `app/projects/[projectId]/rooms/[roomId]/focus/error.tsx`: scoped boundary for the highest-risk route
+- `docs/pre-submission-checklist.md`: 10-section human-runnable checklist satisfying ROADMAP D4
+- Reviewer A's flags were false positives (reviewed pre-existing `app/error.tsx` instead of new file)
+
+**PR #54 — E3 SEO guides + FAQ expansion**
+- `app/guides/page.tsx`: hub page with 3 article cards
+- 3 new guide articles: colour-palette-guide, ai-vs-professional-design, material-coherence
+- FAQ: 2 new Pricing items; Support: Design guides quick-link
+- Reviewer A caught 1 unescaped apostrophe in JSX text node → fixed (`AI&rsquo;s`) before push
+
+### Lessons learned
+
+1. **Reviewer A vs Reviewer B false-positive divergence pattern.** Reviewer A tends to review the existing file at the same path rather than the newly-written file when both exist — seen here with `app/error.tsx` vs `app/global-error.tsx`. When Reviewer A flags something that Reviewer B doesn't and the flags sound like they describe a different file, verify by reading the actual written file before acting on the feedback.
+
+2. **ESLint `react/no-unescaped-entities` fails CI silently on apostrophes in JSX text nodes.** Any `'` inside a JSX text node (not inside `{}` or `""`) is caught by this rule. The fix is `&rsquo;`. Do a final grep for bare apostrophes in `.tsx` files before committing guide/content pages.
+
+3. **Default branch name is not `main`.** This repo's default branch is `claude/ai-apartment-design-app-iHAdb`. PR creation with `base: "main"` returns 422 validation failed. Always call `list_branches` or check the remote before creating PRs.
+
+4. **Count+insert race at entitlement gate boundaries is intentional and documented.** Both the mobile gate (PR #43) and web gate (PR #52) use soft/best-effort limiting. The product decision is not to block with a 500-class error if the race fires; document it and move on.
+
+### Rotation guide for next run
+- **Track C**: Web gate (PR #52) closes the enforcement gap. C1 complete end-to-end. Human ops still required: STRIPE keys, Price IDs, migration 018.
+- **Track D**: D4 stability done (PR #53). D3 store screenshots still pending.
+- **Track E**: E3 SEO articles done (PR #54). E5 analytics scaffolding not started.
+- **Track B**: B3 push notifications / deep links still not started. B4 tablet layout pending.
+- **Track A**: A5 eval suite still blocked on Supabase fixture setup in test env.
+
+---
+
 ## Run 2026-06-24 (Run 20)
 
 ### State on entry
