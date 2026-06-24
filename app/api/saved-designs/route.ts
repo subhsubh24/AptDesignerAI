@@ -118,6 +118,8 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   // Gate new saves for free-tier users. Re-saving an already-saved room (UPDATE path) is always allowed.
+  // Soft/best-effort limit: a count+insert race at the boundary could allow one extra save (same
+  // semantics as the mobile gate — no DB-level constraint enforces the cap).
   if (!existing) {
     const { count: saveCount } = await supabase
       .from("saved_designs")
