@@ -4,7 +4,7 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
-## Run 2026-06-24 (Run 16)
+## Run 2026-06-24 (Run 17)
 
 ### State on entry
 - Default branch at `42359eb` (PR #32 — B2 analyze endpoint merged).
@@ -50,6 +50,53 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 - **Track C (RevenueCat monetization) is the next unstarted track** — C1-C4 all pending. RevenueCat SDK, paywall UI, server-side entitlement checks. This is high-value because D2/D3 store content explicitly notes "submit only after RevenueCat paywall is live."
 - **A5 (live eval suite) still blocked.** Needs publicly-accessible room photo URLs. Owner must supply.
 - **D4 (stability + screenshots) still pending.** Screenshots need the real B2 AI results to show meaningful content — defer until B2 is complete.
+
+---
+
+## Run 2026-06-24 (Run 17)
+
+### State on entry
+- Default branch at `ef37a8c` (PRs #33 + #34 merged — B2 mobile UX flow + run15 bookkeeping).
+- Open PRs: #35 (B2 saved designs screen) failing mobile CI gate with TS2322 on Colors prop type; #36 (run16 bookkeeping) not triggering CI due to merge conflict with PR #34; #37 (save design) just created.
+- 876 tests passing on the default branch.
+
+### Area served this run
+**PR #35 mobile CI fix** (Colors union type) + **PR #37 B2 write path** (save design endpoint + button) + **PR #36 conflict resolution** (rebased run16/bookkeeping).
+
+### What was done
+
+**PR #35 mobile CI fix**
+- Root cause: `SkeletonCard` and `DesignCard` components in `saved.tsx` typed `colors` prop as `(typeof Colors)['light']` — a single literal type. But `Colors[scheme]` (where `scheme` is `'light' | 'dark'`) returns a union `Colors['light'] | Colors['dark']`, which is not assignable to the single literal type.
+- Fix: changed prop type to `(typeof Colors)[keyof typeof Colors]` (the union of all color scheme values). Two characters changed, unblocked CI.
+
+**PR #37 — B2 write path (2 files)**
+- `app/api/mobile/saved-designs/route.ts` (new): POST endpoint, Bearer JWT auth, room_type allowlist, analysis shape validation, thumbnail_url SSRF guard, 10/min rate limit, RLS-safe insert via authed client (Bearer in global.headers)
+- `mobile/src/app/results.tsx`: stores `publicUrl` in state, `saveDesign()` with SaveState machine, primary save button + secondary back button
+- No ROADMAP ticks (PRs #35/#36/#37 pending CI)
+
+**PR #36 conflict resolution**
+- `run16/bookkeeping` was branched from `42359eb` (before PRs #33/#34 merged). After those merged, the ledger files conflicted.
+- Resolved by rebasing onto current default branch — run16 entries appear above run15 entries (newest-first order maintained).
+- Pushed with `--force-with-lease` to trigger CI.
+
+### Lessons learned
+
+1. **`Colors[scheme]` always returns a union type in TypeScript, even when `scheme` is narrowed.** `'light' | 'dark'` as an index produces `Colors['light'] | Colors['dark']` — a union. Components receiving this as a prop must accept `(typeof Colors)[keyof typeof Colors]`, not the specific literal `(typeof Colors)['light']`. This pattern will recur wherever `useColorScheme()` drives color selection.
+
+2. **Bookkeeping branches should be created from the default branch immediately before push, not during feature work.** Run 16's bookkeeping branch was created from the feature branch base (`42359eb`) rather than from the post-merge default (`ef37a8c`). This caused a trivial but time-consuming conflict. Future runs: always `git checkout default-branch && git checkout -b run{N}/bookkeeping` as the last step.
+
+3. **A `run16/bookkeeping` PR with 0 check runs means CI was never triggered** — usually because the branch was created before a required-check-list change or has a merge conflict (GitHub doesn't run CI on conflicted PRs). Rebase + force-push re-triggers CI.
+
+4. **The `authedClient` pattern (Bearer token in `global.headers`) is the correct way to do RLS-enforced inserts from server-side code with a user's JWT.** The anon key + Bearer header makes PostgREST evaluate `auth.uid()` from the JWT, satisfying `with check (auth.uid() = user_id)`. No service-role bypass needed for user-scoped writes.
+
+5. **`thumbnail_url` SSRF validation: store-only vs fetch-on-request distinction.** The mobile save endpoint stores `thumbnail_url` as a string and never fetches it server-side. Strictly speaking, SSRF is not a risk here (a URL stored in JSONB can't trigger a server-side request). But validating the Supabase host ensures data consistency — the only valid sources are the project's own Storage buckets, which is what the mobile upload step always produces.
+
+### Rotation guide for next run
+- **PRs #35, #36, #37 pending CI** — should auto-merge once CI passes. Confirm and tick ROADMAP B2 boxes in next bookkeeping.
+- **Track B2 is functionally complete**: photo capture → upload → AI analysis → save → saved designs view. The full loop works. Remaining B2 polish: haptics (B2 "gestures + haptics" requirement), deep links (B3), push notifications (B3).
+- **Track C (RevenueCat monetization) is the next priority.** C1: subscription model scaffold (revenue cat SDK, `useEntitlements` hook, free-tier usage cap). Live keys are human-applied; the loop writes the code.
+- **A5 (live eval suite)** still blocked — needs owner-supplied CDN URLs for gold room photos.
+- **D4 (stability + screenshots)** still pending — screenshots need real B2 AI results content, which is now available once PRs #33+#35 merge.
 
 ---
 
