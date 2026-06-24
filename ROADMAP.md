@@ -7,10 +7,38 @@ the **Definition of Done** below, phase by phase, and then **stops building and
 hands off** — it does not run forever.
 
 ## The goal (one sentence)
-Ship two things — the **web app** and a **native mobile app** (iOS + Android) —
-polished and complete enough to be **submitted to the App Store and Play Store and
-accepted with high confidence**, monetized by **subscription**, and primed (via a
-marketing engine + waitlist) to generate **reliable revenue (target ≥ $100K/yr)**.
+Drive BOTH the **product** (web app + native iOS/Android app, store-acceptable with
+high confidence, subscription-monetized) AND the **marketing engine** to **100% of
+everything within the loop's control**, so that a paid launch targeting **≥ $100K/yr**
+is gated only by the handful of things a human must physically do (accounts, signing,
+funding) — nothing else.
+
+## The bar — do NOT declare done early (read this)
+This loop does not stop at "good enough." It stops only when BOTH of these are
+**genuinely 100%** and CI-verified:
+- **Product = 100%:** you are highly confident the app would be **accepted into the
+  App Store / Play Store** on submission — no missing flows, no crashes, no policy
+  violations, no placeholder content, billing wired, compliance complete.
+- **Marketing = 100%:** a complete, launch-ready marketing engine is BUILT and
+  STAGED — waitlist + brand + site/SEO + ASO + content + owned-channel campaigns +
+  analytics — such that the moment the owner connects/funds accounts, demand
+  generation runs. A finished product with no marketing is NOT done, and vice versa.
+- **Honest contract on revenue:** no code can *guarantee* $100K/yr — that's a market
+  outcome. What you CAN and MUST do is take every controllable lever to 100% so the
+  ONLY thing between the owner and revenue is the market itself. "Done" means: *I have
+  built every lever I control to maximize the $100K/yr shot, and the only remaining
+  steps are ones I literally cannot perform.* Do not fake a guarantee; do not refuse
+  to finish chasing impossible certainty. When that bar is truly met, say so plainly.
+
+## Full autonomy (granted)
+You have full autonomy to do whatever genuinely advances the goal: create any files
+or pages, add routes/features, spin up new code, build INTERNAL TOOLS (admin dashboards,
+analytics, content generators, asset pipelines, growth/experiment scaffolding), add
+marketing surfaces, write documentation — anything that moves product or marketing
+toward 100%. The brakes, value bar, review gates, security/RLS bar, and the
+billing/secrets + marketing-publish boundaries below still apply (they make the
+autonomy SAFE, they do not limit ambition). If something would clearly help the goal
+and isn't yet on this ROADMAP, add it as a new phase and build it.
 
 ## Operating model (how the loop uses this file)
 - Work is **milestone/phase-driven**, not scattershot. Each run: read this file,
@@ -107,6 +135,15 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   welcome sequence for the waitlist. **Staged as drafts** — see Human Core.
   **(PR #49 — docs/email-welcome-sequence.md + docs/social-drafts.md)**
 - E5. Analytics/attribution scaffolding so launch spend is measurable.
+- E6. **Launch-ready growth engine (marketing must hit 100%, not just "staged").**
+  Beyond E1–E5, build everything a real launch needs, staged and ready to flip on:
+  full content calendar + a batch of ready-to-post drafts per channel; the complete
+  email lifecycle (welcome → activation → conversion → win-back); referral/share
+  loops in-product; an ASO package ready to paste into App Store Connect / Play
+  Console (title, subtitle, keywords, description variants, screenshot captions);
+  press-kit / launch-day assets; landing-page conversion polish + A/B variants; and
+  any internal tooling that makes ongoing growth cheap to run. Marketing is "100%"
+  only when the owner could launch demand-gen the same day they connect accounts.
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
@@ -115,9 +152,10 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 > owner's identity without a connected, owner-authorized channel.
 
 ## Definition of Done (the STOP gate)
-The loop **stops building new features and opens ONE issue titled
-`FACTORY: ready for submission`** (with the Human Core checklist below) when ALL of
-these are true and verified in CI:
+Do NOT declare done until BOTH product AND marketing are genuinely 100% (see "The bar"
+above). The loop **stops building new features and opens ONE issue titled
+`FACTORY: ready for submission`** (with the ordered Owner Handoff checklist below) when
+ALL of these are true and verified in CI:
 - [ ] Track A complete: web app reliable, on-design, secure (RLS clean), AND the
       A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
       added — A5 is a Track A requirement and is not yet built.)
@@ -129,23 +167,36 @@ these are true and verified in CI:
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
       **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability done (PR #53); screenshots still pending]**
-- [ ] Track E1–E3 complete: waitlist page + brand kit + ASO/store copy staged.
-      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 fully done — /support (PR #48) + guides hub + 3 SEO articles + FAQ (PR #54); E4 email + social drafts done (PR #49)]**
+- [ ] **Marketing = 100% (Track E COMPLETE, E1–E6):** waitlist + brand + site/SEO +
+      ASO package + content calendar + full email lifecycle + owned-channel campaigns
+      + referral/share loops + analytics — all BUILT and STAGED, launch-ready.
+      **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5/E6 pending]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
+- [ ] **Confidence statement:** you can honestly state that the product would be
+      accepted to the stores with high confidence AND every marketing lever within
+      your control is built — i.e. only the human-only steps below remain.
 
 Until then, keep advancing the lowest incomplete phase. After then, do **not**
-keep adding scope — the loop's job is finished; the owner submits.
+keep adding scope — the loop's job is finished; the owner runs the handoff.
 
-## Human Core (the unavoidable ~5% — only the owner can do these)
-These are gated behind verified-human login / payment and are NOT loop work:
+## Owner Handoff — remaining steps, IN ORDER (only what the loop CANNOT do)
+When Done, the `FACTORY: ready for submission` issue MUST contain a NUMBERED,
+in-ORDER checklist of the remaining steps — and ONLY steps that are genuinely
+impossible for the loop (verified-human login, payment, identity, physical
+submission). For each step: what to do, why, where (the exact dashboard/URL), and
+which `PENDING_OPS.md` entry it corresponds to. Do NOT include anything the loop
+could have done itself — if it could, do it instead of listing it. Keep this list in
+true execution order so the owner can go top-to-bottom. The canonical order:
 1. Apple Developer account ($99/yr) + Google Play account ($25) + identity verify.
 2. Signing certs / provisioning / EAS credentials; accept Apple & Google agreements.
 3. Production billing setup (App Store/Play subscriptions, RevenueCat live keys,
    Stripe live keys) — apply the `PENDING_OPS.md` entries.
-4. Apply pending DB migrations to prod (`supabase db push`).
-5. Connect + fund marketing/ad/social accounts to flip staged campaigns live.
+4. Apply any pending DB migrations to prod (`supabase db push`).
+5. Connect + fund marketing/ad/social/email accounts to flip the staged campaigns live.
 6. Final submission in App Store Connect / Play Console and responding to review.
+Also ensure end-user + operator DOCUMENTATION exists in the repo (how the product
+works, how the marketing engine is wired, how to run/flip each staged campaign).
 
 ## Guardrails carried over (do not trade away)
 - `VISION.md` design bar; LLM cost contract; determinism; security & RLS bar.
