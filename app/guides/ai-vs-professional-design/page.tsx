@@ -62,7 +62,7 @@ export default function AIVsProfessionalPage() {
               <p className="mt-3">
                 This is genuinely useful work that would take a human designer several hours to
                 replicate manually. For renters and apartment owners who are buying furniture rather
-                than commissioning custom pieces, the AI's ability to search and score mass-market
+                than commissioning custom pieces, the AI&rsquo;s ability to search and score mass-market
                 products at scale is the core value.
               </p>
               <p className="mt-3">
