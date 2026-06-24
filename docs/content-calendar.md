@@ -96,7 +96,7 @@ Hook (0–3s): "Your apartment would look better if you knew these five things."
 1 (3–7s): "Too many wood species. Three is too many. Pick two."
 2 (7–12s): "The rug is too small. It needs to anchor at least the front legs of every seat."
 3 (12–17s): "Wrong light for your palette. North-facing rooms need warm undertones."
-4 (17–22s): "Scale is off. Your sofa should fill two-thirds of the wall behind it."
+4 (17–22s): "Scale is off. Your sofa should fill two-thirds of the longest wall, or be balanced by a significant piece across from it."
 5 (22–27s): "No shared thread. Your rooms need one wood, one metal, one soft material across the whole apartment."
 
 CTA (27–30s): "AptDesigner reads your room and tells you exactly what to fix. Free on iOS + Android next week."
