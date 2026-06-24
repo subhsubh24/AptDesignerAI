@@ -4,6 +4,68 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 14)
+
+### State on entry
+- B2 photo capture (PR #26) merged. Mobile ESLint gate fixed. 876 tests passing.
+- A5 (live eval suite) blocked pending owner-supplied CDN URLs for gold room photos.
+- D1 (account deletion, PR #23) and E1 (waitlist, PR #22) pending CI from run 12.
+
+### Area served this run
+**Track B2 (mobile auth), B3 (app brand config), D2/D3 (store content staging).**
+Three file-disjoint changes on separate branches, all reviewed by two independent reviewers before PR creation. All reviewers flagged real issues — all fixed before merge.
+
+### What was done
+
+**PR #28 — B2 Supabase auth (6 files)**
+- Supabase client using AsyncStorage (SecureStore limit is 2048 bytes; Supabase sessions exceed it)
+- `useSession` hook using `onAuthStateChange` only — fires `INITIAL_SESSION` on mount, no race
+- Login + signup screens in warm-editorial design system
+- Auth gate in `_layout.tsx` — loading→null (splash visible), session→AppTabs, no session→Login/Signup
+- Sign-out in home screen header
+- Reviewer A caught 3 bugs: getSession race condition, missing .catch() on unhandled rejection, auto-confirm signup success gate showing "check email" when session is already set. All fixed.
+- Reviewer B caught: no sign-out path. Fixed.
+
+**PR #29 — B3 app.json brand config (2 files)**
+- Fixed all Expo template defaults: name/slug/scheme "mobile"→"aptdesignerai"
+- Added bundleIdentifier + android.package = "ai.aptdesigner.app"
+- Removed invalid `ios.icon: "./assets/expo.icon"` (file doesn't exist)
+- expo-splash-screen colors: #208AEF → #faf9f7 (light) / #141211 (dark)
+- AnimatedSplashOverlay: removed hardcoded blue, added useColorScheme() + inline backgroundColor
+- Both reviewers approved (Reviewer B had a false positive from reading the wrong git branch)
+
+**PR #30 — D2/D3 store content staging (2 files)**
+- docs/app-privacy.md: Apple App Privacy + Google Play Data Safety staged content
+- docs/store-listing.md: iOS + Android store listing copy, ASO keyword clusters, screenshot guidance
+- Reviewer A caught: Tavily Search API missing from third-party disclosures (sends product search query strings). Fixed.
+- Reviewer A caught: pricing description inaccurate — said "Pro subscription" but actual model is Explore (free) / Apartment ($29 one-time) / Pro ($49/month). Fixed.
+- Reviewer B caught: ASO competition estimates unverified. Fixed (labeled as estimates).
+- Reviewer B caught: submission checklist note missing — submit store copy only after RevenueCat (Track C) paywall is live. Added.
+
+### Lessons learned
+
+1. **Supabase sessions exceed SecureStore's 2048-byte limit on React Native.** Use `@react-native-async-storage/async-storage` instead. SecureStore is fine for small tokens; Supabase's full session JSON routinely exceeds the limit. This is documented in Supabase's own docs but easy to miss.
+
+2. **`onAuthStateChange` fires `INITIAL_SESSION` on mount — use it instead of `getSession` + subscription.** The dual-subscribe pattern (`getSession().then(...)` + `onAuthStateChange(...)`) has an inherent race condition: if the subscription fires a `SIGNED_OUT` event before `getSession` resolves, the stale result overwrites it. Dropping `getSession` and relying solely on `onAuthStateChange` eliminates the race and the missing `.catch()` surface.
+
+3. **Gate `signUp` success on `data.session === null`, not just absence of error.** When Supabase is in auto-confirm mode, `signUp` returns both `data.session` (non-null) and no error. If you unconditionally show "Check your email" in that case, the user is stuck on a success screen while they're actually already signed in. Check `data.session === null` to discriminate.
+
+4. **Reviewers reading the actual filesystem instead of the diff can generate false positives.** Reviewer B for the b3/app-brand-config change reported the animated-icon.tsx change was "not present" — because they read the file on the current branch (d2-d3/store-content), not the b3 branch. When a reviewer contradicts the diff, check which branch they're examining before acting on the rejection.
+
+5. **Store listing copy must reflect actual pricing tiers.** The initial draft described "Free / Pro subscription" but the actual product has three tiers: Explore (free), Apartment ($29 one-time), Pro ($49/month). Store reviewers read the listing and test the app — a mismatch is a rejection reason. Always cross-reference pricing copy against the live pricing page.
+
+6. **Tavily is a third-party data processor and must be disclosed in privacy labels.** Even though it only receives product search query strings (no PII), it's a third-party service that processes user-derived data and must appear in both Apple App Privacy and Google Play Data Safety disclosures. Omitting a processor can cause store review rejection.
+
+### Rotation guide for next run
+- **B2 continues — next up: photo upload to backend + AI analysis + real results.** Auth is done (PR #28). Photo capture is done (PR #26). The results screen currently shows static placeholder cards. Next: upload the selected image (Supabase Storage or multipart), call the room-diagnosis pipeline, render real AI output.
+- **B2 remaining scope after upload+AI:** saved designs persistence, offline/error states, gestures, haptics, skeleton loaders. Plan for 2 more runs to complete full B2.
+- **Track C (RevenueCat paywall) is the next unstarted track.** D2/D3 store content is staged and waiting for C to be live before submission. C1-C4 are all pending. RevenueCat SDK, paywall UI, server-side entitlement checks, Stripe web billing.
+- **D4 (stability) and D3 (screenshots)** still pending. Screenshots need the actual app running with real AI content — defer until B2 upload+AI is complete.
+- **A5 (live eval suite) still blocked.** Needs publicly-accessible room photo URLs. Owner must supply.
+- **Migration 017 still pending** — owner must `supabase db push` after PR #22 merges.
+
+---
+
 ## Run 2026-06-23 (first run)
 
 ### State on entry
