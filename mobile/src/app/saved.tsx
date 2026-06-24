@@ -130,9 +130,10 @@ export default function SavedDesignsScreen() {
 
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
     const token = session?.access_token;
+    const fallbackMsg = `Check out "${title}" — my room design from AptDesignerAI!\nhttps://aptdesignerai.com`;
     if (!apiUrl || !token) {
       // Fallback: share the app homepage when no session or URL configured
-      await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+      await Share.share({ message: fallbackMsg });
       return;
     }
 
@@ -144,13 +145,13 @@ export default function SavedDesignsScreen() {
       if (resp.ok) {
         const json = await resp.json() as { share_url?: string };
         const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
-        await Share.share({ message: `Check out my room design from AptDesignerAI!\n${shareUrl}` });
+        await Share.share({ message: `Check out "${title}" — my room design from AptDesignerAI!\n${shareUrl}` });
       } else {
-        await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+        await Share.share({ message: fallbackMsg });
       }
     } catch {
       // Network error — still open share sheet with app URL so the action never silently fails
-      await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+      await Share.share({ message: fallbackMsg });
     }
   }, [session]);
 

@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/utils/rate-limiter";
 
 /**
  * POST /api/mobile/saved-designs/[id]/share
@@ -36,6 +37,14 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const limit = checkRateLimit(`mobile-share:${user.id}`, { maxRequests: 20, windowMs: 60_000 });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs ?? 60000) / 1000)) } },
+    );
+  }
+
   const authedClient = createClient(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
@@ -55,14 +64,15 @@ export async function POST(
   // Preserve existing token so the URL stays stable if called multiple times
   const share_token = existing.share_token ?? randomBytes(16).toString("hex");
 
-  const { error: updateError } = await authedClient
+  const { data: updateData, error: updateError } = await authedClient
     .from("saved_designs")
     .update({ is_public: true, share_token, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select("id");
 
-  if (updateError) {
-    console.error("[mobile/share] update error", updateError.message);
+  if (updateError || !updateData?.length) {
+    console.error("[mobile/share] update error or 0 rows", updateError?.message);
     return NextResponse.json({ error: "Failed to enable sharing" }, { status: 500 });
   }
 
