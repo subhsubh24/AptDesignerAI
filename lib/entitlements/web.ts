@@ -12,6 +12,9 @@
 
 import { getAdminClient } from "@/lib/supabase/admin";
 
+/** Maximum number of saved designs for free-tier web users. */
+export const FREE_SAVE_LIMIT_WEB = 3;
+
 export type WebBillingStatus = {
   hasPaid: boolean;
   tier: "apartment" | "pro" | null;
