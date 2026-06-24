@@ -1,125 +1,83 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Platform, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export default function TabTwoScreen() {
+const TIPS: { title: string; body: string }[] = [
+  {
+    title: 'Colour & natural light',
+    body:
+      'Natural light changes how every colour reads throughout the day. North-facing rooms stay cool and flat — warm neutrals (linen, terracotta) counteract that. South-facing rooms amplify warmth — cooler whites and greys prevent them feeling yellow. Our AI reads your room photos at face value; shoot in daylight with lamps off for the most accurate palette recommendation.',
+  },
+  {
+    title: 'Proportion & furniture scale',
+    body:
+      'A sofa that fills 2/3 of the wall behind it reads as correctly scaled; smaller feels lost, larger feels cramped. Seat height should land within 25–30 cm of the coffee table surface. The AI checks these ratios against your photo — if a piece is flagged for removal, disproportionate scale is often why.',
+  },
+  {
+    title: 'Layering materials & textures',
+    body:
+      'A well-designed room uses three material weights: a structural material (wood, stone, plaster), a mid-weight (woven fabric, rattan, matte metal), and a soft accent (velvet, bouclé, sheepskin). More than two of the same finish type — warm metals, shiny surfaces — creates visual noise. The materials report in your analysis highlights conflicts.',
+  },
+  {
+    title: 'Negative space & breathing room',
+    body:
+      'Empty wall and floor space is not wasted — it gives the eye somewhere to rest and makes the objects you do place feel intentional. As a rule, leave at least 90 cm of clear walkway between furniture groupings, and resist filling every shelf. The AI flags overcrowding in the "What to Remove" list.',
+  },
+  {
+    title: 'Cohesion across rooms',
+    body:
+      'Rooms in an apartment read as related even when you cannot see them at once — through doorways, reflections, and the mental map you form over time. Running one wood species, one metal finish, and one soft-material family across all rooms creates a thread that makes the whole apartment feel considered rather than assembled piece by piece.',
+  },
+];
+
+export default function DesignTipsScreen() {
   const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
   const theme = useTheme();
 
   const contentPlatformStyle = Platform.select({
     android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
+      paddingTop: safeAreaInsets.top,
+      paddingLeft: safeAreaInsets.left,
+      paddingRight: safeAreaInsets.right,
+      paddingBottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
     },
     web: {
       paddingTop: Spacing.six,
       paddingBottom: Spacing.four,
+    },
+    default: {
+      paddingBottom: BottomTabInset + Spacing.three,
     },
   });
 
   return (
     <ScrollView
       style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
+      contentInset={safeAreaInsets}
+      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}
+    >
+      <ThemedView style={styles.inner}>
+        <ThemedView style={styles.header}>
+          <ThemedText type="title">Design Principles</ThemedText>
+          <ThemedText type="default" themeColor="textSecondary" style={styles.subtitle}>
+            What the AI looks for when reading your room.
           </ThemedText>
-
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
         </ThemedView>
 
         <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
+          {TIPS.map(({ title, body }) => (
+            <Collapsible key={title} title={title}>
+              <ThemedText type="small" style={styles.tipBody}>
+                {body}
               </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
-
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
+            </Collapsible>
+          ))}
         </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
       </ThemedView>
     </ScrollView>
   );
@@ -133,48 +91,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  container: {
+  inner: {
     maxWidth: MaxContentWidth,
     flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
     paddingHorizontal: Spacing.four,
+  },
+  header: {
+    gap: Spacing.two,
     paddingVertical: Spacing.six,
   },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
+  subtitle: {
+    lineHeight: 22,
   },
   sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+    gap: Spacing.three,
   },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
-    width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+  tipBody: {
+    lineHeight: 20,
   },
 });
