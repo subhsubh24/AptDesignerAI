@@ -187,24 +187,24 @@ ALL of these are true and verified in CI:
       A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
       added — A5 is a Track A requirement and is not yet built.)
 - [ ] Track B complete: Expo app builds via EAS, core journey works natively,
-      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) + B2 saved designs (PR #37) done; B3 push notifications + deep links + ESLint gate fix done (PR #56); B4 polish done (PRs #46, #47); B5 parity pending]**
+      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) + B2 saved designs (PR #37) done; B3 push notifications + deep links + ESLint gate fix done (PR #56); B4 polish done (PRs #46, #47); B5 native share from saved designs done (PR #65)]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
       **[C1 Stripe billing done (PR #50); web enforcement wired (PR #52); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43)]**
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
       **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability done (PR #53); screenshots still pending]**
-- [ ] **Marketing = 100% (Track E COMPLETE, E1–E6):** waitlist + brand + site/SEO +
+- [x] **Marketing = 100% (Track E COMPLETE, E1–E6):** waitlist + brand + site/SEO +
       ASO package + content calendar + full email lifecycle + owned-channel campaigns
       + referral/share loops + analytics — all BUILT and STAGED, launch-ready.
-      **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 pending]**
+      **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 content calendar (PR #62) + press kit (PR #63) + email lifecycle (PR #64) + mobile share (PR #65) done]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
-- [ ] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
+- [x] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
       bottoms-up, research-grounded estimate showing a realistic path to ≥ $100K/yr
       (price × conversion × users − COGS), with three scenarios, positive per-user
       margin, and — if the base case falls short — the explicit levers needed (which
-      you then build). Numbers cited, not invented.
+      you then build). Numbers cited, not invented. **[PR #61; two-reviewer cycle: APPROVE]**
 - [ ] **Confidence statement:** you can honestly state that the product would be
       accepted to the stores with high confidence, every marketing lever within your
       control is built, AND the business case shows a credible ≥ $100K/yr path — i.e.
