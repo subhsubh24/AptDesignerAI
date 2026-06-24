@@ -30,6 +30,32 @@ This loop does not stop at "good enough." It stops only when BOTH of these are
   steps are ones I literally cannot perform.* Do not fake a guarantee; do not refuse
   to finish chasing impossible certainty. When that bar is truly met, say so plainly.
 
+## The business case — ESTIMATE whether $100K/yr is reachable (living artifact)
+Building the product is not enough; you must show the money math. Maintain a living
+`docs/BUSINESS_CASE.md` that gives a **bottoms-up, defensible estimate** of whether
+this app can realistically reach **≥ $100K/yr**, and keep it updated as the product
+and pricing evolve.
+- **Bottoms-up model:** ARR ≈ paying_users × price × 12 − churn − refunds − fees,
+  where paying_users = installs/visitors × signup% × free→paid conversion%. Show the
+  formula with explicit numbers, not vibes.
+- **Ground every input in RESEARCH** (use WebSearch/WebFetch): category pricing
+  benchmarks, typical app-store/freemium **conversion rates** (free→paid is usually a
+  few %), retention/churn norms for this category, and realistic install/traffic
+  assumptions for the launch channels you're building. Cite sources; never invent a
+  metric.
+- **Unit economics / margin:** compute **per-user COGS** from the real per-design
+  inference cost (this is exactly why the LLM cost contract matters) and show the
+  gross margin at the chosen price. A plan that's unprofitable per user does not pencil.
+- **Three scenarios:** conservative / base / optimistic, each with the install +
+  conversion + price inputs that produce it. State which is the planning case.
+- **Honesty + levers:** if the base case does NOT reach $100K/yr, say so plainly and
+  spell out exactly what would have to change to get there (higher price tier, better
+  conversion via the paywall/onboarding, a specific growth channel, add-on/usage
+  revenue) — and then prioritize building those levers. The goal is a credible path,
+  not a flattering number.
+- This artifact is itself **value-bar-clearing work**: keep it current; a stale or
+  hand-wavy business case is a gap, not a nicety.
+
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
 or pages, add routes/features, spin up new code, build INTERNAL TOOLS (admin dashboards,
@@ -174,9 +200,15 @@ ALL of these are true and verified in CI:
       **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 pending]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
+- [ ] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
+      bottoms-up, research-grounded estimate showing a realistic path to ≥ $100K/yr
+      (price × conversion × users − COGS), with three scenarios, positive per-user
+      margin, and — if the base case falls short — the explicit levers needed (which
+      you then build). Numbers cited, not invented.
 - [ ] **Confidence statement:** you can honestly state that the product would be
-      accepted to the stores with high confidence AND every marketing lever within
-      your control is built — i.e. only the human-only steps below remain.
+      accepted to the stores with high confidence, every marketing lever within your
+      control is built, AND the business case shows a credible ≥ $100K/yr path — i.e.
+      only the human-only steps below remain.
 
 Until then, keep advancing the lowest incomplete phase. After then, do **not**
 keep adding scope — the loop's job is finished; the owner runs the handoff.
