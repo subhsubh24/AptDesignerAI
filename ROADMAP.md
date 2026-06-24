@@ -35,6 +35,26 @@ marketing engine + waitlist) to generate **reliable revenue (target ≥ $100K/yr
 - A2. Clears the `VISION.md` **design bar** everywhere (no vibe-coded surfaces).
 - A3. Performance: fast first-result ("time-to-wow"), no obvious latency leaks.
 - A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
+- A5. **Eval coverage — currently the biggest quality gap.** Today the eval
+  harness is *structural scaffolding only*: `evals/runner.ts` scoring + a single
+  gold case with a **placeholder image URL**, and **zero live `.eval.test.ts`
+  files that call the real pipeline** (the `RUN_EVALS=1` gate exists but nothing
+  uses it to hit the model). Evals are how we *know* the output is good, not just
+  that it compiles — so build them out, treating eval growth as first-class,
+  value-bar-clearing work:
+  1. **Runnable golden fixtures** using REAL test images (committed under
+     `evals/gold/` or a fetchable fixtures host), covering the core scenarios —
+     not `example.com` placeholders.
+  2. **A live `.eval.test.ts` per core pipeline stage** — room/apartment
+     understanding, diagnosis, product-sourcing relevance, and mockup grounding —
+     gated behind `RUN_EVALS=1`, calling the ACTUAL pipeline and scoring with
+     `scoreAgainstExpectations`.
+  3. **Run them in the loop's own environment** (where the Gemini key + prod-like
+     network exist); do NOT depend on a developer laptop. Wire a `RUN_EVALS=1`
+     job so eval regressions are visible. Live eval calls cost tokens — that
+     spend is expected and approved as a cost of knowing the product is good.
+  4. **Grow the gold set over time** so output-quality regressions are caught
+     before users (and Apple reviewers) see them.
 
 ### Track B — Native mobile app (Expo / React Native) — NEW
 Lives in `/mobile` (its own `package.json`; share TypeScript domain logic with the
@@ -91,7 +111,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 The loop **stops building new features and opens ONE issue titled
 `FACTORY: ready for submission`** (with the Human Core checklist below) when ALL of
 these are true and verified in CI:
-- [x] Track A complete: web app reliable, on-design, secure (RLS clean).
+- [ ] Track A complete: web app reliable, on-design, secure (RLS clean), AND the
+      A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
+      added — A5 is a Track A requirement and is not yet built.)
 - [ ] Track B complete: Expo app builds via EAS, core journey works natively,
       not a thin wrapper, clears the design bar. **[B1 scaffold done; B2-B5 in progress]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
