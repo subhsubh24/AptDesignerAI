@@ -78,6 +78,7 @@ require human designers or don't read the actual room.
 | Day-30 churn (lifestyle installs) | 70–80% | CleverTap mobile app churn analysis |
 | CPI, iOS (North America, design category) | $4.70 | Mapendo CPI Benchmarks 2025 |
 | CPI, Android | $3.70 | Mapendo CPI Benchmarks 2025 |
+| **Blended CPI used in model** | **$4.30** | Derived: $4.70 × 60% iOS + $3.70 × 40% Android = $4.30 |
 | Organic install share | 35–40% | MobileAction / SplitMetrics 2025 |
 | App Store conversion (paid search ads) | 67% | SplitMetrics |
 | App Store conversion (organic browse) | 25–27% | SplitMetrics |
@@ -112,10 +113,10 @@ ARR = Monthly_Net_Revenue × 12
 **Inputs:** 2,000 installs/month, 3% conversion, 70% organic
 
 ```
-Active users reaching paywall: 2,000 × 0.25 = 500/month
+Active users reaching paywall: 2,000 × 0.25 [Day-30 retention] = 500/month
 Paid conversions: 500 × 0.03 = 15/month
-  Apartment buyers: 15 × 0.60 = 9/month  →  $9 × $29 × 0.70 = $184/month
-  Pro new subscribers: 15 × 0.40 = 6/month
+  Apartment buyers: 15 × 0.60 [Apartment mix] = 9/month  →  $9 × $29 × 0.70 = $184/month
+  Pro new subscribers: 15 × 0.40 [Pro mix] = 6/month
   Steady-state Pro base: 6 / 0.07 = ~86 subscribers
   Pro MRR: 86 × $49 × 0.70 = $2,949/month
 
@@ -134,11 +135,19 @@ The lever to pull: improve conversion from 3% to 5% via paywall timing + trial o
 ### Scenario B — Base (planning case)
 **Inputs:** 4,000 installs/month, 4% conversion, 50% organic
 
+> **Why 50% organic (above the 35–40% benchmark):** The 35–40% figure is a cross-category
+> mobile average, weighted by games and utilities. Lifestyle apps with aesthetic, shareable
+> content (design before/afters, room transformations) consistently outperform this average
+> on visual platforms (Instagram, Pinterest, TikTok). The E2–E6 marketing work — content
+> calendar, press kit, social drafts, ASO copy — is specifically built to drive that
+> above-average organic share. 50% is an aspirational-but-achievable target that requires
+> this marketing engine to be active, not a baseline assumption.
+
 ```
-Active users reaching paywall: 4,000 × 0.25 = 1,000/month
+Active users reaching paywall: 4,000 × 0.25 [Day-30 retention] = 1,000/month
 Paid conversions: 1,000 × 0.04 = 40/month
-  Apartment buyers: 40 × 0.60 = 24/month  →  24 × $29 × 0.70 = $487/month
-  Pro new subscribers: 40 × 0.40 = 16/month
+  Apartment buyers: 40 × 0.60 [Apartment mix] = 24/month  →  24 × $29 × 0.70 = $487/month
+  Pro new subscribers: 40 × 0.40 [Pro mix] = 16/month
   Steady-state Pro base: 16 / 0.07 = ~229 subscribers
   Pro MRR: 229 × $49 × 0.70 = $7,855/month
 
@@ -164,10 +173,10 @@ $62K/year and net profit reaches ~$35K. This is the path: organic > paid.
 **Inputs:** 6,000 installs/month, 6% conversion, 65% organic
 
 ```
-Active users reaching paywall: 6,000 × 0.25 = 1,500/month
+Active users reaching paywall: 6,000 × 0.25 [Day-30 retention] = 1,500/month
 Paid conversions: 1,500 × 0.06 = 90/month
-  Apartment buyers: 90 × 0.60 = 54/month  →  54 × $29 × 0.70 = $1,098/month
-  Pro new subscribers: 90 × 0.40 = 36/month
+  Apartment buyers: 90 × 0.60 [Apartment mix] = 54/month  →  54 × $29 × 0.70 = $1,098/month
+  Pro new subscribers: 90 × 0.40 [Pro mix] = 36/month
   Steady-state Pro base: 36 / 0.07 = ~514 subscribers
   Pro MRR: 514 × $49 × 0.70 = $17,632/month
 
