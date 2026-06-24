@@ -311,11 +311,11 @@ export function initializeSaturation(
   );
 
   // Seed global dimensions from existing items
-  let totalCurrent = items.length;
-  let smallDecorCurrent = items.filter(i => isSmallDecor(i.category)).length;
-  let focalCurrent = items.filter(i => isFocal(i.category)).length;
-  let colorCurrent = items.filter(i => isColorCarrier(i.category)).length;
-  let textureCurrent = items.filter(i => isTextureItem(i.category, i.action)).length;
+  const totalCurrent = items.length;
+  const smallDecorCurrent = items.filter(i => isSmallDecor(i.category)).length;
+  const focalCurrent = items.filter(i => isFocal(i.category)).length;
+  const colorCurrent = items.filter(i => isColorCarrier(i.category)).length;
+  const textureCurrent = items.filter(i => isTextureItem(i.category, i.action)).length;
 
   return {
     room_sqft: sqft,

@@ -16,7 +16,7 @@ const eslintConfig = defineConfig([
   },
   // Mobile app (Expo / React Native) — allow require() for static assets, ignore alt-text on images
   {
-    files: ["mobile/src/**/*.ts", "mobile/src/**/*.tsx"],
+    files: ["mobile/**/*.ts", "mobile/**/*.tsx", "mobile/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
       "jsx-a11y/alt-text": "off",

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -19,13 +19,14 @@ const ThemeContext = createContext<ThemeContextType>({
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored) setThemeState(stored);
   }, []);
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -33,6 +34,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const isDark =
         theme === "dark" || (theme === "system" && mediaQuery.matches);
       root.classList.toggle("dark", isDark);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResolvedTheme(isDark ? "dark" : "light");
     }
 

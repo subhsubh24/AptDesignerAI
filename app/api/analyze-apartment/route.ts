@@ -296,6 +296,7 @@ ${synthInput}
     const synthTrimmed = (synthResponse.content || "").trim();
     if (synthTrimmed) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
         synthParsed = extractJsonObject<Record<string, any>>(synthTrimmed);
       } catch (err) {
         console.warn(
