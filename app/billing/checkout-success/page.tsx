@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { ConversionTracker } from "./conversion-tracker";
 
 export const metadata: Metadata = {
   title: "Payment confirmed — AptDesigner",
@@ -34,6 +35,7 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <ConversionTracker tier={tier} />
       <MarketingHeader />
 
       <main className="flex-1 flex items-center justify-center px-6 py-24">

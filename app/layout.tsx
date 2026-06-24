@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
@@ -38,6 +39,7 @@ export default function RootLayout({
           {children}
           <ToastProvider />
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
