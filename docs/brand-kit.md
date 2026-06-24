@@ -32,7 +32,7 @@ the fussiness of a decorative logotype. Use the SVG at `public/wordmark.svg`.
 | Text | `#141211` | `#f5f4f2` | Body copy, headings |
 | Text Secondary | `#6b6560` | `#9e9893` | Supporting copy, captions |
 | Accent | `#b4501e` | `#d4733e` | CTAs, highlights, accent borders |
-| Accent Foreground | `#faf9f7` | `#faf9f7` | Text on accent backgrounds |
+| Accent Foreground | `#faf9f7` | `#141211` | Text on accent backgrounds |
 | Border | `#e8e5e1` | `#2a2724` | Card borders, dividers |
 | Card | `#f5f4f2` | `#1e1c1a` | Elevated surfaces |
 | Muted Foreground | `#9e9893` | `#706b67` | Placeholder text, quiet labels |
@@ -70,10 +70,10 @@ Built on a 4 px base unit. Named tokens (from `constants/theme.ts`):
 | `Spacing.half` | 2 px |
 | `Spacing.one` | 4 px |
 | `Spacing.two` | 8 px |
-| `Spacing.three` | 12 px |
-| `Spacing.four` | 16 px |
-| `Spacing.five` | 24 px |
-| `Spacing.six` | 32 px |
+| `Spacing.three` | 16 px |
+| `Spacing.four` | 24 px |
+| `Spacing.five` | 32 px |
+| `Spacing.six` | 64 px |
 
 ---
 
@@ -114,11 +114,10 @@ production-quality art before EAS Build for store submission.
 
 | Asset | Dimensions | Notes |
 |-------|-----------|-------|
-| OG image (web) | 1200 × 630 px | Used on `/shared/[token]` share pages |
+| OG image (web) | 1200 × 630 px | Head meta + share pages; wordmark + tagline on `#faf9f7` bg |
 | App Store icon | 1024 × 1024 px | PNG, no alpha |
 | Twitter/X avatar | 400 × 400 px | Square crop of wordmark on `#b4501e` bg |
 | Instagram avatar | 320 × 320 px | Same as Twitter avatar |
-| OG social card | 1200 × 628 px | Wordmark + tagline on `#faf9f7` bg |
 
 **Wordmark SVG:** `public/wordmark.svg` — use this as the master source for
 all exports. Scale uniformly; never rasterise at less than 2× the target size.
