@@ -1,29 +1,23 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+import Purchases from 'react-native-purchases';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { LoginScreen } from '@/components/auth/login-screen';
 import { SignupScreen } from '@/components/auth/signup-screen';
 import { useSession } from '@/hooks/use-session';
-
-const RC_KEY = process.env.EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY ?? '';
-
-let rcConfigured = false;
+import { initRC, RC_KEY } from '@/lib/rc-init';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { session, loading } = useSession();
   const [showSignup, setShowSignup] = useState(false);
 
-  // Configure RC once on mount (no-op when RC_KEY is unset)
+  // Configure RC once on mount — shared singleton guard in rc-init.ts prevents double-configure
   useEffect(() => {
-    if (!RC_KEY || rcConfigured) return;
-    Purchases.setLogLevel(LOG_LEVEL.WARN);
-    Purchases.configure({ apiKey: RC_KEY });
-    rcConfigured = true;
+    initRC();
   }, []);
 
   // Keep RC identity in sync with Supabase auth state

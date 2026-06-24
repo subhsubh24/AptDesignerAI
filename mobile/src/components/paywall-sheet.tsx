@@ -7,8 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-const RC_KEY = process.env.EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY ?? '';
+import { RC_KEY } from '@/lib/rc-init';
 
 type DisplayOption = {
   pkg: PurchasesPackage | null;

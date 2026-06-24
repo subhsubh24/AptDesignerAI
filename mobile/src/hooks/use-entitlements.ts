@@ -1,26 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+import Purchases from 'react-native-purchases';
 import type { CustomerInfo } from 'react-native-purchases';
 
-// Set at EAS build time via EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY env var.
-// Absent in local Expo Go dev: the hook gracefully degrades (isPro = false,
-// paywall shows but cannot make real purchases).
-const RC_KEY = process.env.EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY ?? '';
+import { initRC, RC_KEY } from '@/lib/rc-init';
 
 export const ENTITLEMENT_ID = 'pro';
-
-// Module-level flag: configure() must be called exactly once.
-let rcConfigured = false;
-
-function configureRC(): boolean {
-  if (!RC_KEY) return false;
-  if (!rcConfigured) {
-    Purchases.setLogLevel(LOG_LEVEL.WARN);
-    Purchases.configure({ apiKey: RC_KEY });
-    rcConfigured = true;
-  }
-  return true;
-}
 
 export type EntitlementsState = {
   isLoading: boolean;
@@ -31,8 +15,8 @@ export type EntitlementsState = {
 
 /**
  * Returns the current user's RevenueCat entitlement status.
- * Requires RC to be configured in _layout.tsx before this hook runs.
- * When RC_KEY is unset (local dev), always returns isPro = false.
+ * RC is configured via the shared initRC() singleton in lib/rc-init.ts.
+ * When RC_KEY is unset (local dev / Expo Go), always returns isPro = false.
  */
 export function useEntitlements(userId: string | undefined): EntitlementsState {
   const [isLoading, setIsLoading] = useState(!!RC_KEY && !!userId);
@@ -55,7 +39,7 @@ export function useEntitlements(userId: string | undefined): EntitlementsState {
       setIsLoading(false);
       return;
     }
-    configureRC();
+    initRC();
     setIsLoading(true);
     void refresh().finally(() => setIsLoading(false));
   }, [userId, refresh]);
