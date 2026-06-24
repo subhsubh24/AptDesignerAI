@@ -4,6 +4,66 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 20)
+
+### State on entry
+- Default branch current. Runs 19 bookkeeping PR (#41) still open. Track B2 + C2/C3/C4 + E2 complete.
+- Lowest incomplete phases: B4 (native polish / design-bar violations in emoji), E3 (support page 404), E4 (marketing content drafts), C1 (web Stripe billing).
+- Context was compacted (prior session ran out of context). Resumed from a summary; confirmed branch state with `git status`.
+
+### Area served this run
+**B4** (mobile emoji/design-bar fix + Explore tab rewrite) + **E3** (support page) + **E4** (email + social drafts) + **C1** (full Stripe web billing stack).
+
+### What was done
+
+**PR #46 — B4 View-based indicators in results.tsx + room-type.tsx**
+- `✓` / `✕` Unicode glyphs → 6 px View-based filled dots (accent-warm / destructive) with flex text
+- `›` ThemedText chevron → rotated 7×7 border View (45deg transform)
+- Both unambiguously non-emoji on all platforms
+
+**PR #47 — B4 Explore tab: Design Principles content replaces boilerplate**
+- 5 Collapsible sections of factual interior design knowledge grounded in how the AI pipeline works
+- Removed: Image, SymbolView, ExternalLink, WebBadge, Pressable (all boilerplate-only)
+
+**PR #48 — E3 /support page**
+- Server component; fixes 404 that App Store listing links to
+- Email contact, 4 topic quick-links, account deletion note per App Store guideline
+
+**PR #49 — E4 email sequence + social drafts**
+- `docs/email-welcome-sequence.md`: 4-email waitlist nurture, Day 0-Launch
+- `docs/social-drafts.md`: X/Twitter, Instagram, TikTok, Reddit templates
+
+**PR #50 — C1 Stripe web billing (12 files)**
+- `supabase/migrations/018_stripe_customers.sql` with RLS
+- `lib/billing/stripe.ts`: checkout, webhook parsing, event extraction
+- `lib/entitlements/web.ts`: `hasProEntitlementWeb()` via admin client, fail-open
+- `POST /api/billing/checkout`: creates Stripe session, uses NEXT_PUBLIC_APP_URL for redirects
+- `POST /api/billing/webhook`: signature verification + stripe_customers upsert
+- `/billing/upgrade`, `/billing/checkout-success`, `/billing/checkout-cancel` pages
+- `app/pricing/page.tsx`: paid tier CTAs → `/billing/upgrade?tier=...`
+- Reviewer A caught: Origin header open-redirect (→ NEXT_PUBLIC_APP_URL), billing_cycle_anchor wrong for period_end (→ null; rely on status)
+
+### Lessons learned
+
+1. **Stripe v22 (2026-05-27.dahlia) removed `current_period_end` from `Subscription`.** Billing period end is no longer a direct property — the model moved to `billing_schedules[].bill_until`. For entitlement gating, `status` is sufficient; store `null` for `current_period_end` and rely on status as the primary gate.
+
+2. **Never use `request.headers.get("origin")` to build Stripe redirect URLs.** The Origin header is set by the caller and can be spoofed from non-browser contexts. If Stripe's dashboard has no domain allowlist configured, this is an open redirect. Always use a server-owned env var (`NEXT_PUBLIC_APP_URL`) with a hardcoded production fallback.
+
+3. **Resuming after context compaction: verify branch state before writing code.** On entry, `git status` confirmed the branch and showed unstaged `lib/billing/stripe.ts` (already written in the prior session). Reading the summary + the actual file state before writing more files prevented double-writes.
+
+4. **Two-reviewer pattern catches semantic bugs that TypeScript doesn't.** `billing_cycle_anchor` type-checks as a number; TypeScript had no objection. Reviewer A flagged the semantic incorrectness (it's a day-of-month anchor, not the period end). Pure-type correctness is not sufficient — human semantics still need review.
+
+### Rotation guide for next run
+- **Track C web billing**: C1 code is done (PR #50). Human ops required: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, two Price IDs, `supabase db push` migration 018. Also: `hasProEntitlementWeb()` is not yet wired to the web save/generation routes — that's the follow-up enforcement step.
+- **Track B**: B4 partial (emoji + explore done; tablet layout, large-screen still pending). B5 parity pending.
+- **Track B3**: push notifications + deep links — not started yet.
+- **Track D4**: stability pass + screenshot generation still pending.
+- **Track E3**: support page done; ASO articles + FAQ expansion not started.
+- **Track E5**: analytics scaffolding not started.
+- **A5 (live eval suite)**: still blocked on owner-supplied CDN URLs for gold room photos.
+
+---
+
 ## Run 2026-06-24 (Run 19)
 
 ### State on entry

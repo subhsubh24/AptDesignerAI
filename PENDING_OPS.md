@@ -6,6 +6,43 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### Stripe web billing — secrets + webhook + Price IDs (added 2026-06-24, PR #50 — set before enabling paid web purchases)
+
+PR #50 (C1 Stripe web billing) requires the following before live purchases work.
+
+**Vercel env vars (Production + Preview):**
+```
+STRIPE_SECRET_KEY=<sk_live_...>
+STRIPE_WEBHOOK_SECRET=<whsec_...>
+STRIPE_PRICE_ID_APARTMENT=<price_...>     # one-time $29 product
+STRIPE_PRICE_ID_PRO_MONTHLY=<price_...>  # recurring $49/month product
+```
+
+**Stripe dashboard steps:**
+1. Create two Products in the Stripe dashboard:
+   - "AptDesigner Apartment" — one-time price of $29.00 USD
+   - "AptDesigner Pro" — recurring monthly price of $49.00 USD
+2. Copy the Price IDs (starting with `price_`) into the env vars above.
+3. Register the webhook endpoint:
+   - Go to Stripe → Developers → Webhooks → Add endpoint
+   - URL: `https://<your-vercel-url>/api/billing/webhook`
+   - Events to send: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+   - Copy the signing secret (`whsec_...`) into `STRIPE_WEBHOOK_SECRET`.
+
+**Supabase migration — apply migration 018:**
+```
+supabase db push
+```
+This creates the `stripe_customers` table with RLS (file: `supabase/migrations/018_stripe_customers.sql`).
+
+Verify:
+1. Hit `/billing/upgrade?tier=apartment` — page renders with $29 price
+2. POST `/api/billing/checkout` with valid auth → returns `{ sessionId, url }` pointing to Stripe
+3. Complete a test purchase in Stripe test mode → stripe_customers row appears in Supabase
+4. GET `/api/mobile/entitlements` (web user) → `{ tier: "apartment" }` for the buyer
+
+Note: `hasProEntitlementWeb()` is not yet wired to web save/generation routes — that enforcement step is a follow-up PR.
+
 ### RevenueCat keys — mobile + server (added 2026-06-24, PRs #42 + #43 — set before EAS build and before production Vercel deploy)
 
 PR #42 (C2/C3 RevenueCat mobile SDK) and PR #43 (C4 server-side entitlement check) require two separate keys.
