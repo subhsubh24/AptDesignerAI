@@ -72,7 +72,7 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 - [x] C1. Subscription model: monthly + annual tiers, a free trial, and a clear
   free→paid moment that lands on **real value** (a beautiful, trustworthy result),
   not a nag. Free tier limited by genuine COGS (per-design inference cost).
-  **(PR #50 — Stripe checkout, webhook, stripe_customers table, upgrade/success/cancel pages; web entitlement code written; enforcement wiring is follow-up)**
+  **(PR #50 — Stripe checkout, webhook, stripe_customers table, upgrade/success/cancel pages; PR #52 — hasProEntitlementWeb() wired into /api/saved-designs POST, FREE_SAVE_LIMIT_WEB=3)**
 - [x] C2. Billing integration: App Store / Play in-app purchase via **RevenueCat**
   (cross-platform entitlements) on mobile; Stripe (or RC web billing) on web.
   Build the code; **live keys / production billing config stay human-applied**
@@ -90,8 +90,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   form content prepared; ATT prompt only if actually tracking.
 - D3. Store assets: app icon, screenshots (all required sizes), preview text,
   keywords/ASO, support URL, marketing URL.
-- D4. Stability: no crashes on the core path; sensible permissions usage strings;
+- [x] D4. Stability: no crashes on the core path; sensible permissions usage strings;
   passes a self-run pre-submission checklist (see Definition of Done).
+  **(PR #53 — app/global-error.tsx + focus/error.tsx + docs/pre-submission-checklist.md)**
 
 ### Track E — Marketing engine (separate from the app; build + stage)
 - E1. **Waitlist landing page** (own route or static site): brand, hero, value
@@ -99,9 +100,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 - [x] E2. Brand kit: name/wordmark (working name: *AptDesignerAI* — rename-able),
   palette already exists, social avatars/banners, OG images.
   **(PR #44 — docs/brand-kit.md + public/wordmark.svg)**
-- E3. Content + ASO: launch copy, FAQ, a few SEO articles / "how it works",
+- [x] E3. Content + ASO: launch copy, FAQ, a few SEO articles / "how it works",
   app-store description variants, screenshots with captions.
-  **(PR #48 — /support page done; ASO articles + FAQ expansion pending)**
+  **(PR #48 — /support page; PR #54 — /guides hub + 3 SEO articles (colour palette, AI vs pro, material coherence) + FAQ expansion (2 new Pricing items))**
 - [x] E4. Owned-channel drafts: scheduled-post drafts (X/IG/TikTok/Reddit), an email
   welcome sequence for the waitlist. **Staged as drafts** — see Human Core.
   **(PR #49 — docs/email-welcome-sequence.md + docs/social-drafts.md)**
@@ -124,12 +125,12 @@ these are true and verified in CI:
       not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) pending CI; saved designs + offline/error states + gestures/haptics/skeletons pending; B4-B5 pending]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
-      **[C1 Stripe web billing code done (PR #50); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43). Follow-up: wire hasProEntitlementWeb() into web save/generation routes]**
+      **[C1 Stripe billing done (PR #50); web enforcement wired (PR #52); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43)]**
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
-      **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability + screenshots pending]**
+      **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability done (PR #53); screenshots still pending]**
 - [ ] Track E1–E3 complete: waitlist page + brand kit + ASO/store copy staged.
-      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 /support page done (PR #48), ASO/SEO articles still pending; E4 email + social drafts done (PR #49)]**
+      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 fully done — /support (PR #48) + guides hub + 3 SEO articles + FAQ (PR #54); E4 email + social drafts done (PR #49)]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 
