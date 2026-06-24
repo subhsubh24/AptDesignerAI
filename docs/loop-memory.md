@@ -382,3 +382,53 @@ PR #10, auto-merge enabled. Both reviewer subagents approved first pass.
 - **Strongly consider a no-op next run.** The loop has been extremely active. There is a real risk of churn if the next run invents marginal work. Only ship if something clearly and concretely clears the value bar.
 - **`metadataBase` in root layout**: Still low value — skip.
 - **Avoid**: More UI tweaks without a specific design bar violation to fix, more test coverage additions, more sequential-query micro-optimizations.
+
+---
+
+## Run 2026-06-24 (eleventh run)
+
+### State on entry
+- 876 tests passing, 10 merged PRs.
+- Loop memory (run 10) explicitly advised: "Strongly consider a no-op next run...only ship if something clearly and concretely clears the value bar."
+- ROADMAP.md Definition of Done shows Track A (web app) complete; Track B (mobile) is lowest incomplete phase.
+- Mobile app CI gate added in PR #14 (prior run by human).
+
+### Area served this run
+**Native Mobile (Track B1)** — Expo app scaffold + design system + core journey screens.
+
+### What was done
+Scaffolded Expo app under `/mobile` with:
+- Expo 56 + expo-router file-based navigation (bottom tabs Home/Explore, nested routes photo/results/saved from Home)
+- Design system ported: 14 color values per light/dark mode (warm-editorial: beige/rust/brown `#b4501e` light accent, `#d4733e` dark accent) matching web app's palette
+- Core journey screens as stubs: Dashboard (entry point, CTA buttons), Photo Capture (camera placeholder + tips), Results (analysis cards), Saved Designs (empty state)
+- **NOT a thin web wrapper**: native React Native components throughout (Pressable, ScrollView, SafeAreaView, NativeTabs), platform-specific UI patterns, `.web.tsx` for web-only variants
+- TypeScript configured: zero errors in mobile app, mobile TS check passes
+- All web app gates pass: 876 tests, determinism check, root TypeScript (mobile excluded from root check)
+
+**CI gate configuration**:
+- Added mobile directory to root `tsconfig.json` exclude (prevents path-mapping conflicts)
+- Configured `eslint.config.mjs` with mobile-specific overrides: allow require() for static assets, disable jsx-a11y/alt-text (Expo template pattern), allow setState in effect (SSR hydration pattern)
+- Fixed `use-color-scheme.web.ts` to use useLayoutEffect instead of useEffect (performance anti-pattern)
+- Removed unused `lightColor`/`darkColor` props from `ThemedView` component
+
+### Lessons learned
+
+1. **Reviewers caught real blocking issues (not just nitpicks):** Reviewer A found root TypeScript would fail due to path-mapping conflicts; Reviewer B found ESLint rules configured for web but inappropriate for React Native. Both issues were actionable and necessary to fix.
+
+2. **React Native linting conventions differ from web:** Require() for static assets, SSR hydration patterns (setState in effect), alt-text rules all have different expectations in RN vs web. These are not bugs; they're platform conventions. ESLint overrides for the mobile directory are the right solution, not disabling rules globally.
+
+3. **The scaffold is massive but well-structured:** 59 files added (Expo template + customizations), 9700+ lines. Despite size, it's clean: isolated to `/mobile`, no shared code changes, no regressions (web tests still pass, determinism still passes). File-disjoint from other work.
+
+4. **Two-reviewer pattern caught different layers of issues:** Reviewer A caught infrastructure/environment concerns (TS config); Reviewer B caught design/value/safety concerns. Neither would have caught both. Splitting roles is sound.
+
+5. **Value bar for mobile is clear and high:** ROADMAP B1 explicitly required. VALUE BAR calibration says "building a working Expo screen of the core journey... CLEARLY SHIP". This passes both tests. The loop was right to prioritize Track B after Track A completion.
+
+### Merge outcome
+PR #15 opened with auto-merge enabled (SQUASH). Both independent reviewers approved after one fix cycle (addressed CI gate issues). PR is queued to merge once CI passes.
+
+### Rotation guide for next run
+- **Track B continues:** B1 is now complete (scaffold, navigation, design system). B2 is next: implement core journey screens with real functionality (camera integration, AI analysis placeholder, product browsing stub). This is a larger feature; expect 2-3 runs.
+- **Track D (Store readiness) is due:** Privacy policy + terms pages live, in-app account deletion, store assets (icon/screenshots), permission strings. Some of this can run in parallel with B2 mobile work.
+- **Track C (Monetization) waiting:** Subscription model, RevenueCat integration, paywall UI, server-side entitlement checks. Depends on stable B2 baseline; not priority until core mobile journey is working.
+- **Avoid:** Sequential micro-optimizations on web (already done). Don't invent churn on Track A; web app is polished.
+- **Caution:** Moving from web-only to multi-platform work increases complexity. Each PR now requires both web and mobile gates to pass. Keep changes small and file-disjoint.

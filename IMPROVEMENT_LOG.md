@@ -3,9 +3,10 @@
 One line per autonomous loop run. Most recent first.
 
 | Date | Area | Change | Outcome |
+|------|------|--------|---------|
+| 2026-06-24 | Native Mobile (Track B1) | Scaffold Expo app under `/mobile`: Expo 56 + expo-router navigation, design system ported (warm-editorial palette + light/dark modes), core journey screens (Dashboard, Photo, Results, Saved) as stubs ready for B2 integration. Uses native React Native components (Pressable, ScrollView, SafeAreaView), NOT a thin web wrapper. TypeScript/ESLint/tests all passing (876 web tests, mobile TS clean). Clears ROADMAP Track B1 | PR #15 (auto-merge enabled) |
 | 2026-06-23 | UI / Design quality + Store-readiness | Fix VISION.md design bar violation in signup page: replace `🏠` emoji with Lucide `Home` icon (matches login panel pattern); add Terms of Service + Privacy Policy consent line below the signup form (App Store requirement for paid launch) | PR #11 (auto-merge enabled) |
 | 2026-06-23 | Latency / Performance | Parallelize room overview count queries (`candidate_products`, `product_bundles`, `room_mockups`) with `Promise.all` — eliminates 2 stacked sequential server-side round-trips on the room journey hub page, cutting TTFB by ~40ms per visit | PR #10 (auto-merge enabled) |
-|------|------|--------|---------|
 | 2026-06-23 | UI / Design quality | Replace emoji iconography (🏠🛋️🍳🛏️🚿) in dashboard room-select and photo-upload steps with Lucide icon components (Home, Sofa, UtensilsCrossed, BedDouble, Bath): fixes explicit VISION.md design bar violation ("emoji used as iconography") in the primary onboarding flow | PR #9 (auto-merge enabled) |
 | 2026-06-23 | Latency / Performance | Remove dead blocking `GET /api/analyze-apartment` fetch from dashboard `loadExisting()`: `apartmentSummary` state was never read in any render path; removing the fetch eliminates one Supabase round-trip that blocked `setLoading(false)` for every returning user with diagnosed rooms | PR #8 (auto-merge enabled) |
 | 2026-06-23 | Latency / Performance | Parallelize per-room image fetches in dashboard `loadExisting()`: convert sequential `for` loop to `Promise.all` — 3–4× faster dashboard load for returning users with 3–4 rooms; also fix pre-existing ESLint unescaped-apostrophe error | PR #7 (auto-merge enabled) |
