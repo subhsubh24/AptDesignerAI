@@ -4,6 +4,75 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 23)
+
+### State on entry
+- Context compacted from Run 22. PRs #56 (B3) and #58 (E5) already merged.
+- ROADMAP lowest incomplete phases: E6 (growth engine, no content calendar/lifecycle/press kit) and `docs/BUSINESS_CASE.md` (Definition of Done prerequisite). B5 (mobile share = parity item) also pending.
+
+### Area served this run
+**E6** (growth engine completion: content calendar + press kit + email lifecycle) + **E6/B5** (mobile share native feature) + **Definition of Done** (business case document).
+
+### What was done
+
+**PR #61 — docs/BUSINESS_CASE.md (Definition of Done)**
+- Bottoms-up financial model: 3 scenarios (Conservative $38K, Base $100K, Optimistic $225K ARR)
+- COGS confirmed at $0.0006/analysis (Gemini 2.5 Flash Lite → 97–99% gross margin)
+- Blended CPI derived: $4.70 × 60% iOS + $3.70 × 40% Android = $4.30
+- Steady-state formula: `new_subs / monthly_churn` (mathematically sound geometric series)
+- Reviewer A (round 1): CPI mismatch, unlabeled 0.25/0.40 factors, unsourced 50% organic, Scenario B sensitivity arithmetic wrong. All fixed.
+- Reviewer A (round 2): APPROVE. Reviewer B: APPROVE on first pass.
+
+**PR #62 — docs/content-calendar.md (E6)**
+- 30-day launch content calendar: D-7 pre-launch through D+30 evergreen/conversion
+- Platforms: X/Twitter, Instagram (stories/reels/carousels), TikTok, Reddit, email
+- Cross-references existing social-drafts.md — no duplication; adds the scheduling layer
+- Reviewer A: APPROVE with one note (Day -2 sofa tip imprecise → fixed to match Day 21 phrasing)
+
+**PR #63 — docs/press-kit.md (E6)**
+- Product Hunt launch package: tagline (58 chars), description (203 chars), first maker comment
+- Media outreach templates (design bloggers + tech journalists) — grounded pitches, no invented metrics
+- App fact sheet, boilerplate variants (25/50/100 words), media asset directory, launch checklist
+- 3 A/B headline variants with testing guidance
+- Both reviewers APPROVE on first pass.
+
+**PR #64 — docs/email-lifecycle.md (E6)**
+- 6 sequences: A (activation), B (habit formation), C (upgrade conversion), D (paid re-engagement), E (win-back), F (share trigger → referral loop)
+- All event-driven with proper suppression rules. F1 fires 1h after first public share — connects share feature to email lifecycle.
+- Both reviewers APPROVE on first pass.
+
+**PR #65 — Mobile share: e6/mobile-share (E6/B5)**
+- `POST /api/mobile/saved-designs/[id]/share`: Bearer-JWT auth, idempotent token, rate-limited (20/min), 0-row UPDATE guard
+- `saved.tsx`: native Share sheet on each DesignCard using React Native's built-in Share API; uses design title in share copy
+- Reviewer A (round 1): missing rate limit, 0-row UPDATE not detected, unused `title` param. All fixed.
+- Reviewer B: APPROVE on first pass.
+
+### Lessons learned
+
+1. **Pass full file content inline to reviewers — never ask them to read the filesystem.** Reviewers run as fresh agents without access to feature branches. Prior runs learned this the hard way: reviewers who read the filesystem found nothing (file is on a branch) and reported REQUEST_CHANGES for wrong reasons. The pattern that works: embed the full diff or file content in the reviewer prompt.
+
+2. **Business case arithmetic must be end-to-end verified.** The sensitivity paragraph in Scenario B used $62K (wrong) when the actual derived number was $72K (4,000 × 35% × $4.30 × 12). Reviewer A caught this in round 2. Going forward: write sensitivity calculations as inline derivations, not rounded summaries, so the math can be audited directly.
+
+3. **`POST .../update ... .select("id")` is the correct UPDATE pattern in Supabase.** Without `.select()`, PostgREST returns `{ data: [], error: null }` when 0 rows are affected (TOCTOU race: row deleted between SELECT and UPDATE). Without the `!updateData?.length` check, the endpoint falls through and returns a share URL for a token that was never written. The web PATCH endpoint already had this pattern; the mobile endpoint missed it. Add `.select("id")` + length check to all Supabase UPDATE calls that must verify they touched at least one row.
+
+4. **Content calendar and social-drafts are different artifacts.** Social-drafts.md = copy repository (what to say). Content calendar = scheduling layer (when, where, in what order). They are complementary and should cross-reference, not duplicate. A codebase that has copy but no calendar is not launch-ready; the calendar converts "I have content" into "I have a publishing plan."
+
+5. **Track E is complete. Remaining Definition-of-Done gaps are Track A (A5 live eval suite, owner-supplied images required) and Track D (screenshots, owner must record from device).**
+
+### Merge outcome
+PRs #61–65 open with auto-merge (SQUASH) enabled. All passed two-reviewer cycles (some with fixes). Track E now complete; B5 now complete; `docs/BUSINESS_CASE.md` satisfies the business-case requirement.
+
+### Rotation guide for next run
+- **Definition of Done remaining gaps:**
+  1. Track A5: live eval suite — BLOCKED on owner supplying real room photo URLs. Cannot be resolved autonomously.
+  2. Track D screenshots: need actual screen recordings from the running app. Owner must capture.
+  3. Pre-submission checklist: can be written autonomously once A5 and screenshots are unblocked.
+  4. Confidence statement: can be written once all other gaps are resolved.
+- **What the next autonomous run can do:** author the pre-submission checklist as a staged doc (`docs/pre-submission-checklist.md`) based on App Store / Play Console guidelines, and write the `FACTORY: ready for submission` issue template for when the owner completes A5 and screenshots.
+- **Do not:** add new product features or marketing content. E6 is complete. The loop's job is to converge on Definition of Done, not expand scope.
+
+---
+
 ## Run 2026-06-24 (Run 22)
 
 ### State on entry
