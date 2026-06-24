@@ -6,6 +6,81 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### iOS Universal Links — Apple App Site Association file (added 2026-06-24, PR #56 — apply before App Store submission)
+
+PR #56 adds `ios.associatedDomains: ["applinks:aptdesignerai.ai"]` to `app.json`. iOS Universal Links require a signed AASA file hosted at a specific path.
+
+**Steps:**
+1. Create the file `public/.well-known/apple-app-site-association` in your web deployment (or serve it directly) with:
+   ```json
+   {
+     "applinks": {
+       "apps": [],
+       "details": [
+         {
+           "appID": "<TEAM_ID>.ai.aptdesigner.app",
+           "paths": ["/saved/*", "/results/*", "/shared/*"]
+         }
+       ]
+     }
+   }
+   ```
+   Replace `<TEAM_ID>` with your 10-character Apple Developer Team ID (found in Xcode → Signing & Capabilities or developer.apple.com/account).
+2. The file must be served at `https://aptdesignerai.ai/.well-known/apple-app-site-association` with `Content-Type: application/json` (no `.json` extension in the URL).
+3. After EAS build: test by tapping an `https://aptdesignerai.ai/saved/...` link on a physical iPhone — it should open the app rather than Safari.
+
+Note: Only link paths listed in `paths` will open the app. The list above restricts to in-app routes; it does NOT hijack marketing/landing pages.
+
+### EAS project ID for push token registration (added 2026-06-24, PR #56 — set before production EAS build)
+
+`use-push-notifications.ts` resolves the EAS project ID via `Constants.expoConfig?.extra?.eas?.projectId`. Without it, `getExpoPushTokenAsync` uses a development fallback that may not work in standalone builds.
+
+**Steps:**
+1. Create an EAS project at https://expo.dev if you haven't already:
+   ```bash
+   cd mobile && npx eas init
+   ```
+2. Add the project ID to `mobile/app.json`:
+   ```json
+   {
+     "expo": {
+       "extra": {
+         "eas": {
+           "projectId": "<your-eas-project-id>"
+         }
+       }
+     }
+   }
+   ```
+3. Also add to EAS environment variables for CI builds.
+
+Verify: build a standalone app → install on a physical device → launch → accept notification permission → check AsyncStorage `expoPushToken` key contains a valid `ExponentPushToken[...]` string.
+
+### Future: server-side push token storage (added 2026-06-24, PR #56 — implement when re-engagement sends are needed)
+
+PR #56 stores the Expo push token in AsyncStorage only. For server-initiated re-engagement sends (e.g., "your design is ready" notifications), the token needs to be synced to Supabase.
+
+**When ready to implement:**
+1. Add `supabase/migrations/019_device_push_tokens.sql`:
+   ```sql
+   CREATE TABLE device_push_tokens (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+     token text NOT NULL,
+     platform text NOT NULL CHECK (platform IN ('ios', 'android')),
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now(),
+     UNIQUE(user_id, token)
+   );
+   ALTER TABLE device_push_tokens ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "Users manage own tokens" ON device_push_tokens
+     FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+   ```
+2. Add `POST /api/mobile/push-token` endpoint that upserts the token (Bearer JWT auth, same pattern as `/api/mobile/saved-designs`).
+3. Call the endpoint from `registerForPushNotificationsAsync` after `AsyncStorage.setItem`.
+
+This is a future integration — the current AsyncStorage storage means the token survives app reinstalls and is available when the server-side integration is built.
+
 ### Stripe web billing — secrets + webhook + Price IDs (added 2026-06-24, PR #50 — set before enabling paid web purchases)
 
 PR #50 (C1 Stripe web billing) requires the following before live purchases work.

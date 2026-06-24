@@ -4,6 +4,55 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 22)
+
+### State on entry
+- Context compacted mid-session. PR #56 (B3 push notifications + deep links) had been committed locally on branch `b3/push-notifications-deep-links` and was in review. E5 analytics scaffolding was in progress on `e5/analytics-scaffolding`.
+- PR #56 merged by the time bookkeeping ran.
+
+### Area served this run
+**B3** (push notifications, deep links, mobile ESLint gate fix) + **E5** (analytics scaffolding).
+
+### What was done
+
+**PR #56 — B3 push notifications + deep links + ESLint gate fix**
+- `expo-notifications@56.0.18` installed; app.json plugin with accent color, default channel
+- `use-push-notifications.ts`: full permission lifecycle — Device.isDevice guard, Android channel, idempotent permission request, EAS project ID resolution, token → AsyncStorage
+- `_layout.tsx`: `usePushNotifications(session?.user.id)` wired
+- `+not-found.tsx`: expo-router fallback for unknown deep-link routes (branded error + home link)
+- `app.json`: `ios.associatedDomains` for iOS Universal Links; Android intentFilters deliberately omitted (too broad, would hijack marketing site links)
+- `eslint.config.mjs`: fixed `eslint-config-expo/flat` → `flat.js` (ESM directory import); disabled `react-hooks/set-state-in-effect`
+- Reviewer A caught 4 issues (token not persisted, no Device.isDevice guard, Android intentFilters too broad, URL injection comment); all fixed
+
+**PR #58 — E5 analytics scaffolding**
+- `@vercel/analytics` installed; `<Analytics />` in root layout for auto page-view capture
+- `lib/analytics.ts`: typed `FunnelEvent` union + SSR-safe `trackEvent()` wrapper
+- 7 events wired at correct call sites (signup_complete, analysis_started, analysis_complete, design_saved, upgrade_page_view, checkout_started, checkout_complete)
+- Null-render client islands (`UpgradeViewTracker`, `ConversionTracker`) inject tracking into server pages
+- `docs/analytics.md`: event reference table + known limitations
+- Reviewer B initially blocked (4 events dead-code, no docs); both fixed. Both reviewers approved on second cycle.
+
+### Lessons learned
+
+1. **Reviewer B's dead-code detection is valuable.** Declaring `FunnelEvent` types without call sites is real tech debt — it makes the event list look complete when it isn't. Always instrument every declared event before calling a feature "done."
+
+2. **ESLint `eslint-config-expo/flat` was a broken directory import.** The correct import is `eslint-config-expo/flat.js` (explicit file extension required for ESM). This was silently breaking the mobile ESLint gate on CI. Fix was trivial but blocked every mobile CI run until caught.
+
+3. **`cancelled` flag pattern in useEffect is fragile with lint.** A `cancelled` flag inside a useEffect with a `finally` block triggers `no-unused-expressions` if referenced as a standalone expression. The cleaner fix for idempotent async ops (like `requestPermissionsAsync`) is to remove the flag entirely — the op is safe to call twice.
+
+4. **`setNotificationHandler` belongs at module level, not inside React component.** Expo requires the handler to be set before the React tree mounts. Module-level call is the correct pattern; `useEffect` call would be too late.
+
+5. **Android intentFilters for Universal Links need path filtering.** Without a path prefix allowlist, `https://aptdesigner.ai` would open the app for all links including marketing site pages that have nothing to do with the app. Deferred entirely; custom URL scheme `aptdesignerai://` is sufficient for in-app deep links.
+
+### Rotation guide for next run
+- **Track B**: B3 done (PR #56). B5 parity still pending (web app features not yet on mobile: refine chat, manual sourcing, bundle views, floor-plan extraction). B4 polish largely done (#46, #47).
+- **Track E**: E5 analytics done (PR #58). E6 growth engine pending — the big remaining marketing gap (content calendar, full email lifecycle, referral loops, ASO package, press kit, A/B variants).
+- **Track A**: A5 eval suite still blocked on real test images for gold fixtures.
+- **Track C**: All server/mobile/web entitlement gating done. Human ops still required: Stripe keys + Price IDs + webhook, RevenueCat keys, migration 018.
+- **Track D**: D4 done. Store screenshots still pending.
+
+---
+
 ## Run 2026-06-24 (Run 21)
 
 ### State on entry
