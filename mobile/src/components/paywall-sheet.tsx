@@ -14,6 +14,7 @@ type PricingOption = {
   badge: string | null;
 };
 
+// Phase 2: replace with RevenueCat Offerings fetch so prices stay in sync with store config
 const PRICING: PricingOption[] = [
   {
     id: 'annual',

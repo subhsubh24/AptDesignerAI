@@ -25,11 +25,14 @@ export function useFreeSaveQuota(): FreeQuotaHook {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Read from AsyncStorage on each call to avoid stale-closure races on double-tap
   const markSaved = useCallback(async () => {
-    const next = savesUsed + 1;
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const current = parseInt(raw ?? '0', 10);
+    const next = (isNaN(current) ? 0 : current) + 1;
     setSavesUsed(next);
     await AsyncStorage.setItem(STORAGE_KEY, String(next));
-  }, [savesUsed]);
+  }, []);
 
   return {
     isLoading,
