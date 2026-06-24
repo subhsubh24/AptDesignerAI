@@ -38,7 +38,7 @@ function relativeTime(iso: string | null | undefined): string {
   return diffMo === 1 ? '1 month ago' : `${diffMo} months ago`;
 }
 
-function SkeletonCard({ colors }: { colors: (typeof Colors)['light'] }) {
+function SkeletonCard({ colors }: { colors: (typeof Colors)[keyof typeof Colors] }) {
   return (
     <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       <View style={[styles.cardThumb, { backgroundColor: colors.backgroundElement }]} />
@@ -50,7 +50,7 @@ function SkeletonCard({ colors }: { colors: (typeof Colors)['light'] }) {
   );
 }
 
-function DesignCard({ design, colors }: { design: SavedDesign; colors: (typeof Colors)['light'] }) {
+function DesignCard({ design, colors }: { design: SavedDesign; colors: (typeof Colors)[keyof typeof Colors] }) {
   return (
     <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       {design.thumbnail_url ? (
