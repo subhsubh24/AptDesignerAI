@@ -6,6 +6,28 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### RevenueCat setup — required before Track C Phase 2 (added 2026-06-24 — set before wiring purchase flow)
+PR #40 introduces the paywall UI and entitlements stub. Phase 2 wires the real purchase flow.
+
+1. Create a RevenueCat account at https://app.revenuecat.com/ → new project for AptDesignerAI
+2. Add iOS app (bundle ID: `ai.aptdesigner.app`) + Android app (package: `ai.aptdesigner.app`)
+3. Configure subscription products in App Store Connect + Google Play Console:
+   - Annual: $79.99/yr with 7-day free trial
+   - Monthly: $9.99/mo with 7-day free trial
+4. Import products into RevenueCat → create Entitlement named `pro` → attach both products
+5. Get the RevenueCat **Public SDK Key** (Project Settings → API Keys → Public):
+   ```
+   EXPO_PUBLIC_REVENUECAT_API_KEY=<your-public-sdk-key>
+   ```
+   Add to `mobile/.env.local` and EAS secrets.
+6. Get the RevenueCat **Secret API Key** (Project Settings → API Keys → Secret):
+   ```
+   REVENUECAT_API_KEY=<your-secret-api-key>
+   ```
+   Add to Vercel environment variables (**NOT** `NEXT_PUBLIC_`-prefixed — server-side only).
+
+Verify: after Phase 2 implementation — tap "Start Free Trial" in paywall → RevenueCat purchase sheet appears → purchase completes → `GET /api/mobile/entitlements` returns `{tier:"pro", canSaveDesigns:true}`.
+
 ### Mobile env vars — Supabase + API URL (added 2026-06-24, updated PR #32 — set before EAS build or local dev on device)
 PR #28 (B2 mobile auth) and PR #32 (B2 photo upload + AI analysis) require these env vars.
 Create `mobile/.env.local` (gitignored) with:

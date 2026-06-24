@@ -4,6 +4,58 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 18)
+
+### State on entry
+- 876 tests passing. PR #38 (run17 bookkeeping) and PR #37 (B2 saved-designs write path) pending CI.
+- Lowest incomplete phase: Track B2 (haptics/gestures remaining) and Track C (monetisation — fully unstarted).
+- ROADMAP B2 note: "saved designs + offline/error states + gestures/haptics/skeletons pending."
+
+### Area served this run
+**Track B2 haptics + pull-to-refresh** (PR #39) and **Track C Phase 1 paywall foundation** (PR #40) — two file-disjoint PRs.
+
+### What was done
+
+**PR #39 — B2 haptics + pull-to-refresh**
+- `mobile/package.json`: added `expo-haptics: ~56.0.3`
+- `room-type.tsx`: Light haptic impact before navigation on room-type selection
+- `photo.tsx`: Success notification after gallery pick / camera capture; Medium impact on "Analyze This Room" CTA
+- `saved.tsx`: `RefreshControl` with `tintColor` (iOS) + `colors` (Android) using accent token; `isRefreshing` state separate from skeleton state; `handleRefresh` with Light haptic; `handleRetry` with Medium haptic
+- All `Haptics.*Async()` calls are fire-and-forget (`void` prefix) — resolves silently on simulators, no unhandled rejection
+- Reviewer B caught missing Android `colors` prop — fixed before push
+
+**PR #40 — Track C Phase 1 paywall foundation**
+- `mobile/src/hooks/use-free-quota.ts` (new): AsyncStorage hook, `@aptdesigner:saves_used`, `FREE_SAVES_LIMIT=1`, returns `{isLoading, canSave, savesUsed, markSaved}`
+- `mobile/src/components/paywall-sheet.tsx` (new): native Modal (pageSheet, slide animation), warm-editorial pricing cards (Annual $79.99 / Monthly $9.99, both 7-day trial), "Start Free Trial" CTA stub, Restore Purchases stub, legal copy, no emoji
+- `mobile/src/app/results.tsx`: gates `saveDesign` behind `canSave`; shows `PaywallSheet` when quota exceeded; calls `markSaved()` only after confirmed 2xx server response; disables save button while quota loads
+- `app/api/mobile/entitlements/route.ts` (new): Bearer-auth GET endpoint, JWT validation via Supabase, returns `{tier:"free",canSaveDesigns:false,canAnalyze:true}` — primed for RevenueCat server-side receipt validation in Phase 2
+- Reviewer A caught stale closure in `markSaved` (closed over `savesUsed` state, double-tap race) — fixed to read from AsyncStorage directly with empty dep array
+- Reviewer B caught hardcoded pricing needs Phase 2 seam comment — fixed
+
+### Lessons learned
+
+1. **`markSaved` must not close over state for concurrent correctness.** The initial version captured `savesUsed` at render time. Two concurrent taps before the first AsyncStorage write resolved would both compute `savesUsed + 1` instead of incrementing sequentially. Fix: read from AsyncStorage inside the callback, no closure dependency. `setSavesUsed(next)` is an optimistic UI update; the source of truth is always AsyncStorage.
+
+2. **Android `RefreshControl` needs `colors={[accent]}`, not just `tintColor`.** `tintColor` is iOS-only; Android uses the `colors` prop (array of color strings for the spinner animation). Omitting it leaves Android with a grey default spinner disconnected from the design system.
+
+3. **Fire-and-forget haptics with `void` prefix avoids unhandled rejections.** `Haptics.impactAsync()` returns a Promise that can fail silently on simulators without haptic hardware. `void` signals intentional discard and satisfies `no-floating-promises` lint rules.
+
+4. **Client-side quota enforcement is intentional for Phase 1 scaffolding.** AsyncStorage can be cleared by the user; this is a known tradeoff accepted for Phase 1. The entitlements endpoint is the server-side enforcement seam — it becomes authoritative once RevenueCat is wired in Phase 2. See PENDING_OPS.md for RevenueCat setup checklist.
+
+5. **Hardcoded paywall pricing needs a Phase 2 seam comment.** RevenueCat Offerings provide dynamic pricing synced with store configuration. Without a comment, the hardcoded constants become invisible tech debt when Phase 2 lands.
+
+### Merge outcome
+PR #39 (haptics) + PR #40 (paywall) opened with auto-merge (SQUASH). Web tsc clean; 876/876 tests; determinism all passed.
+
+### Rotation guide for next run
+- **Track C Phase 2:** Wire RevenueCat SDK. Owner must set `EXPO_PUBLIC_REVENUECAT_API_KEY` and `REVENUECAT_API_KEY` first (see PENDING_OPS.md). Phase 2 scope: real purchase flow for "Start Free Trial", dynamic pricing from Offerings, server-side entitlement check in `/api/mobile/entitlements`.
+- **Track B2 remaining:** ROADMAP still shows gestures partially pending. Skeletons exist in `saved.tsx`. Review ROADMAP checklist for exact remaining items.
+- **Track D4 (screenshots):** Defer until paywall flow is wired (RevenueCat Phase 2) so screenshots show the full monetised experience.
+- **PR #38 (run17 bookkeeping) still pending.** If it conflicts with this bookkeeping PR, resolve newest-first (Run 18 above Run 17 above Run 16).
+- **Avoid:** Shipping the "Start Free Trial" CTA stub to the App Store without RevenueCat wired — Apple review requires functional purchase flows (guideline 3.1.1).
+
+---
+
 ## Run 2026-06-24 (Run 16)
 
 ### State on entry
