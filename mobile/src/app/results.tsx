@@ -23,6 +23,7 @@ interface AnalysisResult {
 }
 
 type Stage = 'uploading' | 'analyzing' | 'done' | 'error';
+type SaveState = 'idle' | 'saving' | 'saved' | 'save_error';
 
 function mimeTypeForExt(ext: string): string {
   if (ext === 'png') return 'image/png';
@@ -99,6 +100,8 @@ export default function ResultsScreen() {
   const [stage, setStage] = useState<Stage>('uploading');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>('idle');
 
   const run = useCallback(async (uri: string, rt: string) => {
     try {
@@ -108,10 +111,11 @@ export default function ResultsScreen() {
       const userId = sessionData.session.user.id;
 
       setStage('uploading');
-      const publicUrl = await uploadImage(uri, token, userId);
+      const uploadedUrl = await uploadImage(uri, token, userId);
+      setPublicUrl(uploadedUrl);
 
       setStage('analyzing');
-      const result = await analyzeRoom(publicUrl, rt, token);
+      const result = await analyzeRoom(uploadedUrl, rt, token);
 
       setAnalysis(result);
       setStage('done');
@@ -121,6 +125,31 @@ export default function ResultsScreen() {
       setStage('error');
     }
   }, []);
+
+  const saveDesign = useCallback(async () => {
+    if (!analysis) return;
+    setSaveState('saving');
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error('Not authenticated');
+      const token = sessionData.session.access_token;
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      if (!apiUrl) throw new Error('App configuration error: API URL not set.');
+
+      const resp = await fetch(`${apiUrl}/api/mobile/saved-designs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ room_type: roomType, analysis, thumbnail_url: publicUrl }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Save failed (${resp.status})`);
+      }
+      setSaveState('saved');
+    } catch {
+      setSaveState('save_error');
+    }
+  }, [analysis, publicUrl, roomType]);
 
   useEffect(() => {
     if (imageUri) {
@@ -306,14 +335,34 @@ export default function ResultsScreen() {
           ) : null}
 
           <ThemedView style={styles.buttonContainer}>
+            {stage === 'done' && analysis ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  {
+                    backgroundColor:
+                      saveState === 'saved' ? colors.backgroundSelected : colors.accent,
+                    opacity: pressed || saveState === 'saving' || saveState === 'saved' ? 0.8 : 1,
+                  },
+                ]}
+                onPress={saveState === 'idle' || saveState === 'save_error' ? saveDesign : undefined}
+                disabled={saveState === 'saving' || saveState === 'saved'}
+              >
+                <ThemedText style={[styles.buttonText, { color: saveState === 'saved' ? colors.text : colors.accentForeground }]}>
+                  {saveState === 'idle' ? 'Save Design' :
+                   saveState === 'saving' ? 'Saving…' :
+                   saveState === 'saved' ? 'Saved' : 'Retry Save'}
+                </ThemedText>
+              </Pressable>
+            ) : null}
             <Pressable
               style={({ pressed }) => [
-                styles.saveButton,
-                { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                styles.backButton,
+                { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
               ]}
               onPress={() => router.push('/')}
             >
-              <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
+              <ThemedText style={[styles.buttonText, { color: colors.text }]}>
                 Back to Home
               </ThemedText>
             </Pressable>
@@ -408,6 +457,14 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  backButton: {
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   buttonText: {
     fontSize: 16,
