@@ -69,9 +69,10 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 - B5. Parity with the web app's value (a user can reach a beautiful room on phone).
 
 ### Track C — Monetization (subscription)
-- C1. Subscription model: monthly + annual tiers, a free trial, and a clear
+- [x] C1. Subscription model: monthly + annual tiers, a free trial, and a clear
   free→paid moment that lands on **real value** (a beautiful, trustworthy result),
   not a nag. Free tier limited by genuine COGS (per-design inference cost).
+  **(PR #50 — Stripe checkout, webhook, stripe_customers table, upgrade/success/cancel pages; web entitlement code written; enforcement wiring is follow-up)**
 - [x] C2. Billing integration: App Store / Play in-app purchase via **RevenueCat**
   (cross-platform entitlements) on mobile; Stripe (or RC web billing) on web.
   Build the code; **live keys / production billing config stay human-applied**
@@ -100,8 +101,10 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   **(PR #44 — docs/brand-kit.md + public/wordmark.svg)**
 - E3. Content + ASO: launch copy, FAQ, a few SEO articles / "how it works",
   app-store description variants, screenshots with captions.
-- E4. Owned-channel drafts: scheduled-post drafts (X/IG/TikTok/Reddit), an email
+  **(PR #48 — /support page done; ASO articles + FAQ expansion pending)**
+- [x] E4. Owned-channel drafts: scheduled-post drafts (X/IG/TikTok/Reddit), an email
   welcome sequence for the waitlist. **Staged as drafts** — see Human Core.
+  **(PR #49 — docs/email-welcome-sequence.md + docs/social-drafts.md)**
 - E5. Analytics/attribution scaffolding so launch spend is measurable.
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
@@ -121,12 +124,12 @@ these are true and verified in CI:
       not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) pending CI; saved designs + offline/error states + gestures/haptics/skeletons pending; B4-B5 pending]**
 - [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
-      **[C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43); C1 subscription model scaffold + web billing pending]**
+      **[C1 Stripe web billing code done (PR #50); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43). Follow-up: wire hasProEntitlementWeb() into web save/generation routes]**
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
       **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability + screenshots pending]**
 - [ ] Track E1–E3 complete: waitlist page + brand kit + ASO/store copy staged.
-      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 ASO/SEO articles pending]**
+      **[E1 waitlist done (PR #22); E2 brand kit done (PR #44); E3 /support page done (PR #48), ASO/SEO articles still pending; E4 email + social drafts done (PR #49)]**
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 
