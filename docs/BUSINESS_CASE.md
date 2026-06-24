@@ -164,8 +164,9 @@ Total MRR: $8,342  →  ARR: ~$100,100/year ✓
 revenue if you rely on paid acquisition. **The path to profitability requires organic
 channel strength.** The content calendar, SEO articles, social presence, and ASO
 optimization built in Tracks E2–E6 are not marketing theater — they are the unit
-economics. If 65% of installs come organically (vs 50%), marketing spend drops to
-$62K/year and net profit reaches ~$35K. This is the path: organic > paid.
+economics. If 65% of installs come organically (vs 50%), paid installs drop to
+1,400/month (4,000 × 35%) → 1,400 × $4.30 × 12 = ~$72K/year in marketing spend
+and net profit reaches ~$28K. This is the path: organic > paid.
 
 ---
 
