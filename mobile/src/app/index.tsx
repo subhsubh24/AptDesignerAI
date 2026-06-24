@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -17,9 +18,16 @@ export default function DashboardScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedView style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            AptDesignerAI
-          </ThemedText>
+          <ThemedView style={styles.headerRow}>
+            <ThemedText type="title" style={styles.title}>
+              AptDesignerAI
+            </ThemedText>
+            <Pressable onPress={() => supabase.auth.signOut()} hitSlop={8}>
+              <ThemedText type="small" style={{ color: colors.mutedForeground }}>
+                Sign out
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
           <ThemedText type="subtitle" style={styles.subtitle}>
             Design your dream space
           </ThemedText>
@@ -96,6 +104,11 @@ const styles = StyleSheet.create({
   header: {
     paddingVertical: Spacing.four,
     gap: Spacing.one,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: {
     textAlign: 'left',
