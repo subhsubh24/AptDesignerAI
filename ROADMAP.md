@@ -81,6 +81,31 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
 - **Track the plan:** when a phase's checklist item is genuinely done, tick it in
   this file (in the final bookkeeping PR, same rules as the other ledger files).
 
+## DONE means VERIFIED ARTIFACTS, not self-assessment (hard guard)
+The loop has been over-eager ticking its own boxes. A box counts as done ONLY when
+ALL of the following are objectively true IN THE SAME RUN — never on intent, a plan,
+or an open/CI-pending PR:
+1. **The change is merged to the default branch** (verify with `git`/`gh` — not just
+   that a PR exists or "should" pass).
+2. **The artifacts physically exist** in the merged tree: the actual files the item
+   promises are present and non-empty — e.g. a rendered page/route file, a real image/
+   asset (not a 0-byte or placeholder), a migration file, a doc with real content. If
+   the item claims a screenshot/icon/preview, the binary must exist; if it claims a
+   page, the route file must exist and build.
+3. **The full gate was RE-RUN GREEN in this run** on the merged result — the relevant
+   commands (`npx tsc --noEmit`, `npm test`, `npm run check:determinism`, the prod
+   `build`, and for `/mobile` its own typecheck) pass; CI's required checks
+   (`verify` + `build` + `mobile`) are green on what landed. A box may not be ticked
+   on a red or not-yet-run gate.
+4. **For quality/eval items**, the live check actually executed and passed (e.g. the
+   `RUN_EVALS=1` suite ran against the real pipeline), not "tests would pass."
+When you tick a box in the bookkeeping PR, cite the concrete evidence (merged PR #,
+the file path(s) that now exist, and that the gate is green). If you cannot show the
+artifact + a green gate, the item is NOT done — leave it unchecked and keep working.
+This applies to every track box AND every Definition-of-Done box, including the final
+"ready for submission" decision: do not open `FACTORY: ready for submission` until you
+have re-verified the whole DoD against real artifacts and a green gate in that run.
+
 ## Tracks & phases
 
 ### Track A — Web app (exists; bring to paid quality)
@@ -179,6 +204,8 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 > owner's identity without a connected, owner-authorized channel.
 
 ## Definition of Done (the STOP gate)
+Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
+artifacts exist in the merged tree AND the full gate was re-run green in the same run.
 Do NOT declare done until BOTH product AND marketing are genuinely 100% (see "The bar"
 above). The loop **stops building new features and opens ONE issue titled
 `FACTORY: ready for submission`** (with the ordered Owner Handoff checklist below) when
