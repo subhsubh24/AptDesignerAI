@@ -6,8 +6,10 @@ import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { PaywallSheet } from '@/components/paywall-sheet';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useFreeSaveQuota } from '@/hooks/use-free-quota';
 import { supabase } from '@/lib/supabase';
 import { peekPendingImageUri, peekPendingRoomType } from '@/state/photo-session';
 
@@ -102,6 +104,8 @@ export default function ResultsScreen() {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [showPaywall, setShowPaywall] = useState(false);
+  const { isLoading: quotaLoading, canSave, markSaved } = useFreeSaveQuota();
 
   const run = useCallback(async (uri: string, rt: string) => {
     try {
@@ -128,6 +132,10 @@ export default function ResultsScreen() {
 
   const saveDesign = useCallback(async () => {
     if (!analysis) return;
+    if (!canSave) {
+      setShowPaywall(true);
+      return;
+    }
     setSaveState('saving');
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -145,11 +153,12 @@ export default function ResultsScreen() {
         const body = await resp.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `Save failed (${resp.status})`);
       }
+      await markSaved();
       setSaveState('saved');
     } catch {
       setSaveState('save_error');
     }
-  }, [analysis, publicUrl, roomType]);
+  }, [analysis, canSave, markSaved, publicUrl, roomType]);
 
   useEffect(() => {
     if (imageUri) {
@@ -346,7 +355,7 @@ export default function ResultsScreen() {
                   },
                 ]}
                 onPress={saveState === 'idle' || saveState === 'save_error' ? saveDesign : undefined}
-                disabled={saveState === 'saving' || saveState === 'saved'}
+                disabled={quotaLoading || saveState === 'saving' || saveState === 'saved'}
               >
                 <ThemedText style={[styles.buttonText, { color: saveState === 'saved' ? colors.text : colors.accentForeground }]}>
                   {saveState === 'idle' ? 'Save Design' :
@@ -369,6 +378,8 @@ export default function ResultsScreen() {
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
+
+      <PaywallSheet visible={showPaywall} onDismiss={() => setShowPaywall(false)} />
     </ThemedView>
   );
 }
