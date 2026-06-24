@@ -1,30 +1,33 @@
-import { useCallback } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
+import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { RC_KEY } from '@/lib/rc-init';
 
-type PricingOption = {
-  id: string;
+type DisplayOption = {
+  pkg: PurchasesPackage | null;
   label: string;
   price: string;
   subline: string;
   badge: string | null;
 };
 
-// Phase 2: replace with RevenueCat Offerings fetch so prices stay in sync with store config
-const PRICING: PricingOption[] = [
+// Shown when RC offerings haven't loaded yet or RC is not configured
+const FALLBACK_OPTIONS: DisplayOption[] = [
   {
-    id: 'annual',
+    pkg: null,
     label: 'Annual',
     price: '$79.99 / year',
     subline: '$6.67 per month · 7-day free trial',
     badge: 'Best value',
   },
   {
-    id: 'monthly',
+    pkg: null,
     label: 'Monthly',
     price: '$9.99 / month',
     subline: '7-day free trial',
@@ -32,22 +35,96 @@ const PRICING: PricingOption[] = [
   },
 ];
 
+function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
+  return offering.availablePackages.map((pkg) => {
+    const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
+    const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
+    const priceStr = pkg.product.priceString;
+    return {
+      pkg,
+      label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
+      price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
+      subline: isAnnual
+        ? '7-day free trial · best value'
+        : isMonthly
+          ? '7-day free trial'
+          : pkg.product.description,
+      badge: isAnnual ? 'Best value' : null,
+    };
+  });
+}
+
 type Props = {
   visible: boolean;
   onDismiss: () => void;
+  onPurchaseSuccess?: () => void;
 };
 
-export function PaywallSheet({ visible, onDismiss }: Props) {
+export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
 
-  // RevenueCat purchase: wire up in Track C Phase 2
-  const handleStartTrial = useCallback(() => {
-    onDismiss();
-  }, [onDismiss]);
+  const [options, setOptions] = useState<DisplayOption[]>(FALLBACK_OPTIONS);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [purchasing, setPurchasing] = useState(false);
+  const [offeringLoaded, setOfferingLoaded] = useState(false);
 
-  // RevenueCat restore: wire up in Track C Phase 2
-  const handleRestore = useCallback(() => {}, []);
+  // Fetch RC offerings each time the sheet opens
+  useEffect(() => {
+    if (!visible || !RC_KEY || offeringLoaded) return;
+    Purchases.getOfferings()
+      .then((offerings) => {
+        const current = offerings.current;
+        if (current && current.availablePackages.length > 0) {
+          setOptions(packagesToOptions(current));
+          setSelectedIndex(0);
+          setOfferingLoaded(true);
+        }
+      })
+      .catch(() => {
+        // Fall back to hardcoded options — no-op
+      });
+  }, [visible, offeringLoaded]);
+
+  const selectedOption = options[selectedIndex] ?? null;
+
+  const handleStartTrial = useCallback(async () => {
+    const pkg = selectedOption?.pkg;
+    if (!RC_KEY || !pkg) {
+      // RC not configured (dev mode) — dismiss gracefully
+      onDismiss();
+      return;
+    }
+    setPurchasing(true);
+    try {
+      await Purchases.purchasePackage(pkg);
+      onPurchaseSuccess?.();
+      onDismiss();
+    } catch (err: unknown) {
+      // RC throws { userCancelled: true } when the user taps Cancel in the OS dialog
+      const userCancelled =
+        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
+      if (!userCancelled) {
+        Alert.alert('Purchase failed', 'Please try again or restore your purchases below.');
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  }, [onDismiss, onPurchaseSuccess, selectedOption]);
+
+  const handleRestore = useCallback(async () => {
+    if (!RC_KEY) return;
+    setPurchasing(true);
+    try {
+      await Purchases.restorePurchases();
+      onPurchaseSuccess?.();
+      onDismiss();
+    } catch {
+      Alert.alert('Restore purchases', 'No previous purchases found for this account.');
+    } finally {
+      setPurchasing(false);
+    }
+  }, [onDismiss, onPurchaseSuccess]);
 
   return (
     <Modal
@@ -57,7 +134,7 @@ export function PaywallSheet({ visible, onDismiss }: Props) {
       onRequestClose={onDismiss}
     >
       <ThemedView style={[styles.sheet, { backgroundColor: colors.background }]}>
-        <Pressable style={styles.closeButton} onPress={onDismiss} hitSlop={12}>
+        <Pressable style={styles.closeButton} onPress={onDismiss} hitSlop={12} disabled={purchasing}>
           <ThemedText style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '500' }}>
             Close
           </ThemedText>
@@ -74,50 +151,66 @@ export function PaywallSheet({ visible, onDismiss }: Props) {
           </ThemedView>
 
           <ThemedView style={styles.pricingList}>
-            {PRICING.map((option) => (
-              <ThemedView
-                key={option.id}
-                style={[
-                  styles.pricingCard,
-                  {
-                    borderColor: option.badge ? colors.accent : colors.border,
-                    backgroundColor: colors.card,
-                  },
-                ]}
+            {options.map((option, index) => (
+              <Pressable
+                key={option.label}
+                onPress={() => setSelectedIndex(index)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: index === selectedIndex }}
               >
-                <ThemedView style={[styles.pricingCardTop, { backgroundColor: 'transparent' }]}>
-                  <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>
-                    {option.label}
+                <ThemedView
+                  style={[
+                    styles.pricingCard,
+                    {
+                      borderColor:
+                        index === selectedIndex
+                          ? colors.accent
+                          : option.badge
+                            ? colors.accent
+                            : colors.border,
+                      backgroundColor: colors.card,
+                      borderWidth: index === selectedIndex ? 2 : 1.5,
+                    },
+                  ]}
+                >
+                  <ThemedView style={[styles.pricingCardTop, { backgroundColor: 'transparent' }]}>
+                    <ThemedText type="defaultSemiBold" style={{ color: colors.text }}>
+                      {option.label}
+                    </ThemedText>
+                    {option.badge ? (
+                      <ThemedView style={[styles.badge, { backgroundColor: colors.accent }]}>
+                        <ThemedText type="small" style={{ color: colors.accentForeground, fontWeight: '600' }}>
+                          {option.badge}
+                        </ThemedText>
+                      </ThemedView>
+                    ) : null}
+                  </ThemedView>
+                  <ThemedText style={[styles.price, { color: colors.text }]}>{option.price}</ThemedText>
+                  <ThemedText type="small" style={{ color: colors.mutedForeground }}>
+                    {option.subline}
                   </ThemedText>
-                  {option.badge ? (
-                    <ThemedView style={[styles.badge, { backgroundColor: colors.accent }]}>
-                      <ThemedText type="small" style={{ color: colors.accentForeground, fontWeight: '600' }}>
-                        {option.badge}
-                      </ThemedText>
-                    </ThemedView>
-                  ) : null}
                 </ThemedView>
-                <ThemedText style={[styles.price, { color: colors.text }]}>{option.price}</ThemedText>
-                <ThemedText type="small" style={{ color: colors.mutedForeground }}>
-                  {option.subline}
-                </ThemedText>
-              </ThemedView>
+              </Pressable>
             ))}
           </ThemedView>
 
           <Pressable
             style={({ pressed }) => [
               styles.ctaButton,
-              { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+              {
+                backgroundColor: colors.accent,
+                opacity: pressed || purchasing ? 0.8 : 1,
+              },
             ]}
             onPress={handleStartTrial}
+            disabled={purchasing}
           >
             <ThemedText style={[styles.ctaText, { color: colors.accentForeground }]}>
-              Start Free Trial
+              {purchasing ? 'Processing…' : 'Start Free Trial'}
             </ThemedText>
           </Pressable>
 
-          <Pressable style={styles.restoreButton} onPress={handleRestore} hitSlop={8}>
+          <Pressable style={styles.restoreButton} onPress={handleRestore} hitSlop={8} disabled={purchasing}>
             <ThemedText type="small" style={{ color: colors.textSecondary }}>
               Restore Purchases
             </ThemedText>
@@ -168,7 +261,6 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.two,
   },
   pricingCard: {
-    borderWidth: 1.5,
     borderRadius: 12,
     padding: Spacing.three,
     gap: Spacing.one,
