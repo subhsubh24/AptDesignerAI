@@ -8,12 +8,16 @@ import AppTabs from '@/components/app-tabs';
 import { LoginScreen } from '@/components/auth/login-screen';
 import { SignupScreen } from '@/components/auth/signup-screen';
 import { useSession } from '@/hooks/use-session';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { initRC, RC_KEY } from '@/lib/rc-init';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { session, loading } = useSession();
   const [showSignup, setShowSignup] = useState(false);
+
+  // Register for push notifications once the user is authenticated.
+  usePushNotifications(session?.user.id);
 
   // Configure RC once on mount — shared singleton guard in rc-init.ts prevents double-configure
   useEffect(() => {

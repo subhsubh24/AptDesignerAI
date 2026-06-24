@@ -142,7 +142,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
 
             <View style={styles.footerSection}>
               <ThemedText type="small" style={{ color: colors.textSecondary }}>
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
               </ThemedText>
               <Pressable onPress={onSignup} hitSlop={8}>
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>

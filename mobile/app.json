@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ai.aptdesigner.app",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "associatedDomains": ["applinks:aptdesignerai.ai"]
     },
     "android": {
       "package": "ai.aptdesigner.app",
@@ -27,6 +28,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#b4501e",
+          "defaultChannel": "default",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
       [
         "expo-image-picker",
         {
