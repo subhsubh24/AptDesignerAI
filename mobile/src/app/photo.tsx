@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -55,6 +56,7 @@ export default function PhotoCaptureScreen() {
     });
     if (!result.canceled && result.assets.length > 0) {
       setSelectedImageUri(result.assets[0].uri);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, []);
 
@@ -85,11 +87,13 @@ export default function PhotoCaptureScreen() {
     });
     if (!result.canceled && result.assets.length > 0) {
       setSelectedImageUri(result.assets[0].uri);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, []);
 
   const handleAnalyze = useCallback(() => {
     if (!selectedImageUri) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPendingImageUri(selectedImageUri);
     router.push('/room-type');
   }, [router, selectedImageUri]);
