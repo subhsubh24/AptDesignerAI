@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSession } from '@/hooks/use-session';
 import { useSavedDesigns, type SavedDesign } from '@/hooks/use-saved-designs';
 
 const ROOM_LABELS: Record<string, string> = {
@@ -52,7 +53,15 @@ function SkeletonCard({ colors }: { colors: (typeof Colors)[keyof typeof Colors]
   );
 }
 
-function DesignCard({ design, colors }: { design: SavedDesign; colors: (typeof Colors)[keyof typeof Colors] }) {
+function DesignCard({
+  design,
+  colors,
+  onShare,
+}: {
+  design: SavedDesign;
+  colors: (typeof Colors)[keyof typeof Colors];
+  onShare: (id: string, title: string) => void;
+}) {
   return (
     <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       {design.thumbnail_url ? (
@@ -74,6 +83,16 @@ function DesignCard({ design, colors }: { design: SavedDesign; colors: (typeof C
             {relativeTime(design.updated_at)}
           </ThemedText>
         </ThemedView>
+        <Pressable
+          style={({ pressed }) => [styles.shareButton, { opacity: pressed ? 0.6 : 1 }]}
+          onPress={() => onShare(design.id, design.title)}
+          accessibilityRole="button"
+          accessibilityLabel={`Share ${design.title}`}
+        >
+          <ThemedText type="small" style={{ color: colors.accent }}>
+            Share design
+          </ThemedText>
+        </Pressable>
       </ThemedView>
     </ThemedView>
   );
@@ -84,6 +103,7 @@ export default function SavedDesignsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
   const { state, reload } = useSavedDesigns();
+  const { session } = useSession();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -104,6 +124,35 @@ export default function SavedDesignsScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     reload();
   }, [reload]);
+
+  const handleShare = useCallback(async (id: string, title: string) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const token = session?.access_token;
+    if (!apiUrl || !token) {
+      // Fallback: share the app homepage when no session or URL configured
+      await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+      return;
+    }
+
+    try {
+      const resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const json = await resp.json() as { share_url?: string };
+        const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
+        await Share.share({ message: `Check out my room design from AptDesignerAI!\n${shareUrl}` });
+      } else {
+        await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+      }
+    } catch {
+      // Network error — still open share sheet with app URL so the action never silently fails
+      await Share.share({ message: `Check out my room design from AptDesignerAI!\nhttps://aptdesignerai.com` });
+    }
+  }, [session]);
 
   return (
     <ThemedView style={styles.container}>
@@ -176,7 +225,9 @@ export default function SavedDesignsScreen() {
 
           {state.status === 'done' &&
             state.designs.length > 0 &&
-            state.designs.map((design) => <DesignCard key={design.id} design={design} colors={colors} />)}
+            state.designs.map((design) => (
+              <DesignCard key={design.id} design={design} colors={colors} onShare={handleShare} />
+            ))}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -238,6 +289,10 @@ const styles = StyleSheet.create({
   skeletonLine: {
     height: 14,
     borderRadius: 6,
+  },
+  shareButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
   },
   feedbackBox: {
     borderRadius: 12,
