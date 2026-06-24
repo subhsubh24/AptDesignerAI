@@ -4,6 +4,63 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 19)
+
+### State on entry
+- Default branch at latest (PRs #35–#37 and prior bookkeeping all merged). Track B2 functionally complete.
+- Track C (RevenueCat monetization) was the lowest incomplete phase. C1 paywall foundation existed as a stub (PR #41 from prior run) but C2-C4 (real SDK, server gating) were unstarted.
+- Track E2 (brand kit) had no files.
+
+### Area served this run
+**Track C (C2/C3/C4) — RevenueCat mobile SDK + server-side entitlement gate** + **Track E2 — brand kit + wordmark SVG.**
+
+### What was done
+
+**PR #42 — C2/C3 RevenueCat mobile SDK (6 files)**
+- `mobile/src/lib/rc-init.ts` (new): shared singleton with one `_configured` flag; eliminates double-configure risk
+- `mobile/src/app/_layout.tsx`: `initRC()` on mount + `Purchases.logIn/logOut` on auth state change
+- `mobile/src/hooks/use-entitlements.ts`: `useEntitlements(userId)` → `{isPro, refresh}`
+- `mobile/src/components/paywall-sheet.tsx`: live Offerings fetch, `purchasePackage`, `restorePurchases`, user-cancel handling
+- `mobile/src/app/results.tsx`: `canSave = isPro || freeQuotaOk`
+- Reviewer A caught double-configure: two independent `rcConfigured` module-level booleans (one in `_layout.tsx`, one in `use-entitlements.ts`) could each trigger `configure()` once → fixed with shared singleton
+
+**PR #43 — C4 server-side entitlement gate (3 files)**
+- `lib/entitlements/server.ts` (new): `hasProEntitlement()` via RC REST API, `FREE_SAVE_LIMIT = 3`
+- `/api/mobile/entitlements`: replaced hardcoded `tier: "free"` stub with real RC check
+- `/api/mobile/saved-designs`: server-side count gate before body parsing
+- Reviewer A caught `X-Platform: "stripe"` header (causes 404 for mobile subscribers) → removed
+- Reviewer A caught `!RC_SECRET_KEY → return false` (silently blocks paying subscribers when key is not configured) → changed to `return true` with `console.error`
+- Reviewer B caught redundant `authedClientForCount` + `authedClient` → consolidated to one client
+
+**PR #44 — E2 brand kit (2 files)**
+- `docs/brand-kit.md`: colour palette (light/dark tokens matching theme.ts), typography, spacing, voice, icon sizes, social assets, "what NOT to do"
+- `public/wordmark.svg`: tspan-based wordmark (no fragile x-offset)
+- Reviewer B caught spacing table off-by-one vs theme.ts (three=12 should be 16 etc) — fixed
+- Reviewer B caught dark accentForeground wrong (#faf9f7 should be #141211) — fixed
+- Reviewer A caught duplicate OG dimension rows (630 vs 628) — consolidated
+- Reviewer A caught hardcoded x=242 SVG offset — replaced with tspan
+
+### Lessons learned
+
+1. **Module-level singletons must live in a dedicated module if multiple files import them.** Two files each having `let rcConfigured = false` creates two independent flags — both can call `configure()` once. Any "call this exactly once" invariant must live in a single module that all callers import from.
+
+2. **Fail-open vs fail-closed depends on whose failure mode is worse.** For the RC entitlement check: failing closed (`return false` on error) blocks paying subscribers. Failing open (`return true` on missing key / network error) lets a few free users through temporarily. The right choice here is fail-open with a loud log — misconfiguration/outage is always transient; blocking paying users is immediately harmful.
+
+3. **RC `X-Platform` header is platform-specific.** Mobile subscribers are created via iOS/Android SDK, not Stripe. Sending `X-Platform: "stripe"` on the subscriber lookup causes RC to search the wrong platform's subscriber records and return 404. Drop the header entirely for a unified subscriber lookup across all platforms.
+
+4. **Cross-referencing docs against live code matters.** The brand-kit spacing table was off by one step for all tokens ≥ three (12/16/24/32 instead of 16/24/32/64). A doc that contradicts the code is worse than no doc — it trains the loop and contributors to use wrong values. Always verify numeric constants against the actual source file.
+
+5. **SVG text with hardcoded x-offsets is fragile for master-export sources.** System fonts have different metrics on macOS vs Windows vs Android. Using `<tspan>` keeps the suffix inline with the preceding text run, eliminating cross-platform layout divergence without requiring a font embed or path conversion.
+
+### Rotation guide for next run
+- **Track C is code-complete.** Live keys (`EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY` mobile, `REVENUECAT_SECRET_KEY` server) are human-applied via PENDING_OPS.md.
+- **Track B remaining:** gestures/haptics (B2 requirement), push notifications + deep links (B3), native polish pass (B4/B5). B2 is functionally complete; B3-B5 are next.
+- **Track D4 (stability + screenshots)** is unblocked now that B2 AI results are available.
+- **Track E remaining:** E3 (SEO articles, FAQ expansion), E4 (social drafts, email welcome), E5 (analytics scaffolding).
+- **A5 (live eval suite)** still blocked — needs owner-supplied CDN URLs for gold room photos.
+
+---
+
 ## Run 2026-06-24 (Run 17)
 
 ### State on entry
