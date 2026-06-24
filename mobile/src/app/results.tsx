@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -8,14 +8,132 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { consumePendingImageUri } from '@/state/photo-session';
+import { supabase } from '@/lib/supabase';
+import { peekPendingImageUri, peekPendingRoomType } from '@/state/photo-session';
+
+interface AnalysisResult {
+  summary: string;
+  style_name: string;
+  design_direction: string;
+  recommended_palette: string[];
+  recommended_materials: string[];
+  recommended_textures: string[];
+  what_works: string[];
+  what_should_go: string[];
+}
+
+type Stage = 'uploading' | 'analyzing' | 'done' | 'error';
+
+function mimeTypeForExt(ext: string): string {
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+async function uploadImage(imageUri: string, token: string, userId: string): Promise<string> {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!supabaseUrl) throw new Error('App configuration error: Supabase URL not set.');
+
+  const ext = imageUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const filename = `${userId}/${Date.now()}.${ext}`;
+  const mimeType = mimeTypeForExt(ext);
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: imageUri,
+    name: filename.split('/').pop(),
+    type: mimeType,
+  } as unknown as Blob);
+
+  const uploadResp = await fetch(
+    `${supabaseUrl}/storage/v1/object/room-photos/${filename}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: supabaseAnonKey,
+      },
+      body: formData,
+    },
+  );
+
+  if (!uploadResp.ok) {
+    const text = await uploadResp.text().catch(() => '');
+    throw new Error(`Upload failed (${uploadResp.status}): ${text}`);
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/room-photos/${filename}`;
+}
+
+async function analyzeRoom(publicUrl: string, roomType: string, token: string): Promise<AnalysisResult> {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  if (!apiUrl) throw new Error('App configuration error: API URL not set.');
+
+  const analyzeResp = await fetch(`${apiUrl}/api/mobile/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ image_url: publicUrl, room_type: roomType }),
+  });
+
+  if (!analyzeResp.ok) {
+    const body = await analyzeResp.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? `Analysis failed (${analyzeResp.status})`);
+  }
+
+  const json = await analyzeResp.json() as { analysis: AnalysisResult };
+  return json.analysis;
+}
 
 export default function ResultsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
 
-  const [imageUri] = useState<string | null>(consumePendingImageUri);
+  // peek (non-consuming) so back → room-type → results remounts correctly
+  const [imageUri] = useState<string | null>(peekPendingImageUri);
+  const [roomType] = useState<string>(() => peekPendingRoomType() ?? 'living_room');
+  const [stage, setStage] = useState<Stage>('uploading');
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+
+  const run = useCallback(async (uri: string, rt: string) => {
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error('Not authenticated');
+      const token = sessionData.session.access_token;
+      const userId = sessionData.session.user.id;
+
+      setStage('uploading');
+      const publicUrl = await uploadImage(uri, token, userId);
+
+      setStage('analyzing');
+      const result = await analyzeRoom(publicUrl, rt, token);
+
+      setAnalysis(result);
+      setStage('done');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setErrorMsg(msg);
+      setStage('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (imageUri) {
+      run(imageUri, roomType);
+    } else {
+      setErrorMsg('No image found — please go back and select a photo.');
+      setStage('error');
+    }
+    // imageUri and roomType are stable (set once from module store on mount)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const roomLabel = roomType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <ThemedView style={styles.container}>
@@ -26,13 +144,14 @@ export default function ResultsScreen() {
               <ThemedText style={{ fontSize: 16, color: colors.textSecondary }}>← Back</ThemedText>
             </Pressable>
             <ThemedText type="title">Design Analysis</ThemedText>
+            <ThemedText type="small" style={{ color: colors.mutedForeground }}>
+              {roomLabel}
+            </ThemedText>
           </ThemedView>
 
-          {/* Selected room photo */}
+          {/* Room photo */}
           {imageUri ? (
-            <ThemedView
-              style={[styles.photoCard, { borderColor: colors.border }]}
-            >
+            <ThemedView style={[styles.photoCard, { borderColor: colors.border }]}>
               <Image
                 source={{ uri: imageUri }}
                 style={styles.roomPhoto}
@@ -41,39 +160,150 @@ export default function ResultsScreen() {
               />
               <ThemedView style={styles.photoLabel}>
                 <ThemedText type="small" style={{ color: colors.mutedForeground }}>
-                  Your room
+                  Your {roomLabel.toLowerCase()}
                 </ThemedText>
               </ThemedView>
             </ThemedView>
           ) : null}
 
-          {/* Analysis cards — AI integration coming in B2 */}
-          <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>
-              Room Understanding
-            </ThemedText>
-            <ThemedText type="default" style={[styles.cardContent, { color: colors.mutedForeground }]}>
-              AI analysis coming soon — full diagnosis, design direction, and curated products.
-            </ThemedText>
-          </ThemedView>
+          {/* Loading */}
+          {(stage === 'uploading' || stage === 'analyzing') && (
+            <ThemedView style={[styles.loadingCard, { borderColor: colors.border }]}>
+              <ActivityIndicator color={colors.accent} />
+              <ThemedText type="default" style={{ color: colors.mutedForeground }}>
+                {stage === 'uploading' ? 'Uploading your photo…' : 'Analysing your room with AI…'}
+              </ThemedText>
+              {stage === 'analyzing' ? (
+                <ThemedText type="small" style={{ color: colors.mutedForeground, opacity: 0.7 }}>
+                  This usually takes 15–30 seconds.
+                </ThemedText>
+              ) : null}
+            </ThemedView>
+          )}
 
-          <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>
-              Design Direction
-            </ThemedText>
-            <ThemedText type="default" style={[styles.cardContent, { color: colors.mutedForeground }]}>
-              Palette, materials, and style recommendations will appear here.
-            </ThemedText>
-          </ThemedView>
+          {/* Error */}
+          {stage === 'error' && (
+            <ThemedView style={[styles.analysisCard, { borderColor: colors.destructive }]}>
+              <ThemedText type="subtitle" style={{ color: colors.destructive }}>
+                Analysis failed
+              </ThemedText>
+              <ThemedText type="default" style={{ color: colors.mutedForeground }}>
+                {errorMsg}
+              </ThemedText>
+              {imageUri ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => run(imageUri, roomType)}
+                >
+                  <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
+                    Try Again
+                  </ThemedText>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                  onPress={() => router.push('/photo')}
+                >
+                  <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
+                    Pick a Photo
+                  </ThemedText>
+                </Pressable>
+              )}
+            </ThemedView>
+          )}
 
-          <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
-            <ThemedText type="subtitle" style={styles.cardTitle}>
-              Curated Products
-            </ThemedText>
-            <ThemedText type="default" style={[styles.cardContent, { color: colors.mutedForeground }]}>
-              Personalized picks from top retailers, matched to your space.
-            </ThemedText>
-          </ThemedView>
+          {/* Results */}
+          {stage === 'done' && analysis ? (
+            <>
+              {/* Style + Summary */}
+              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  {analysis.style_name}
+                </ThemedText>
+                <ThemedText type="default" style={[styles.cardContent, { color: colors.mutedForeground }]}>
+                  {analysis.summary}
+                </ThemedText>
+              </ThemedView>
+
+              {/* Design Direction */}
+              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  Design Direction
+                </ThemedText>
+                <ThemedText type="default" style={[styles.cardContent, { color: colors.mutedForeground }]}>
+                  {analysis.design_direction}
+                </ThemedText>
+              </ThemedView>
+
+              {/* Palette */}
+              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  Colour Palette
+                </ThemedText>
+                <ThemedView style={styles.chipRow}>
+                  {analysis.recommended_palette.map((color) => (
+                    <ThemedView
+                      key={color}
+                      style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+                    >
+                      <ThemedText type="small">{color}</ThemedText>
+                    </ThemedView>
+                  ))}
+                </ThemedView>
+              </ThemedView>
+
+              {/* Materials + Textures */}
+              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                <ThemedText type="subtitle" style={styles.cardTitle}>
+                  Materials &amp; Textures
+                </ThemedText>
+                <ThemedView style={styles.chipRow}>
+                  {[...analysis.recommended_materials, ...analysis.recommended_textures].map((item) => (
+                    <ThemedView
+                      key={item}
+                      style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+                    >
+                      <ThemedText type="small">{item}</ThemedText>
+                    </ThemedView>
+                  ))}
+                </ThemedView>
+              </ThemedView>
+
+              {/* What Works */}
+              {analysis.what_works.length > 0 && (
+                <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                  <ThemedText type="subtitle" style={styles.cardTitle}>
+                    What to Keep
+                  </ThemedText>
+                  {analysis.what_works.map((item) => (
+                    <ThemedText key={item} type="default" style={styles.listItem}>
+                      ✓ {item}
+                    </ThemedText>
+                  ))}
+                </ThemedView>
+              )}
+
+              {/* What Should Go */}
+              {analysis.what_should_go.length > 0 && (
+                <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                  <ThemedText type="subtitle" style={styles.cardTitle}>
+                    What to Remove
+                  </ThemedText>
+                  {analysis.what_should_go.map((item) => (
+                    <ThemedText key={item} type="default" style={styles.listItem}>
+                      ✕ {item}
+                    </ThemedText>
+                  ))}
+                </ThemedView>
+              )}
+            </>
+          ) : null}
 
           <ThemedView style={styles.buttonContainer}>
             <Pressable
@@ -127,6 +357,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
+  loadingCard: {
+    borderWidth: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.four,
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
   analysisCard: {
     borderWidth: 1,
     borderRadius: Spacing.three,
@@ -138,6 +375,28 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     lineHeight: 22,
+  },
+  listItem: {
+    lineHeight: 22,
+    paddingVertical: Spacing.half,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  chip: {
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Spacing.two,
+    borderWidth: 1,
+  },
+  retryButton: {
+    marginTop: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
   },
   buttonContainer: {
     gap: Spacing.two,
