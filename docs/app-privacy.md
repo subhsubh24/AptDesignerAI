@@ -58,9 +58,11 @@ websites owned by other companies?" question.
 |---|---|---|
 | Google (Gemini API) | Room photos, room type, user context text | AI analysis — third-party processing, covered by Google's data processing terms |
 | Supabase | Email address, room photos, design data | Database + storage hosting |
+| Tavily Search API | Product search query strings derived from AI design output (e.g. "mid-century oak bookshelf") — no PII | Product sourcing — web search for furniture and décor recommendations |
 
-Neither Google nor Supabase uses this data to build ad profiles or track users
-across apps per their published data processing agreements.
+None of the above use this data to build ad profiles or track users across apps
+per their published data processing agreements. Tavily queries contain only
+design-derived product terms; no email, photo, or other personal data is included.
 
 ---
 
@@ -82,6 +84,7 @@ across apps per their published data processing agreements.
 |---|---|---|
 | Google (Gemini API) | Photos, analysis text | App functionality — AI analysis |
 | Supabase | All user data | Infrastructure — data storage/hosting |
+| Tavily Search API | Product search query strings (no PII) | App functionality — product sourcing search |
 
 ### Security practices
 
@@ -121,3 +124,5 @@ correct before submission; the links must be publicly reachable at review time.
 - [ ] Confirm `https://aptdesignerai.com/privacy` and `/terms` are reachable
 - [ ] Set a monitored support email in both store listings
 - [ ] Review Google Gemini API data-processing agreement to confirm no ad usage
+- [ ] Review Tavily data-processing terms to confirm no user profiling
+- [ ] **Submit store listing copy only after RevenueCat paywall (Track C) is live** — store reviewers will test that paid features are actually gated. The subscription/pricing copy in store-listing.md is accurate for the intended final state.

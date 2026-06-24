@@ -66,9 +66,15 @@ WEB APP INCLUDED
 
 Your designs sync with the companion web app at aptdesignerai.com — start on mobile, continue on the web.
 
-SUBSCRIPTION
+PRICING
 
-A free plan lets you analyze your first room. A Pro subscription unlocks unlimited room analyses, the full product catalog, and saved design history. Subscription details shown at checkout.
+Explore for free — analyze one room end-to-end at no cost, no credit card required. Ready for more?
+
+**Apartment ($29, one-time)** — every room in your apartment: unlimited room analyses, cross-room style coherence, AI mockups, and the full product catalog.
+
+**Pro ($49/month)** — unlimited apartments and projects, client-ready exports, and priority support. For designers and property managers.
+
+Pricing details shown at checkout. 30-day money-back guarantee on paid plans.
 
 PRIVACY
 
@@ -136,9 +142,13 @@ SAVE, SHARE, AND COMPARE
 
 Save design directions, share design cards, and sync with the companion web app at aptdesignerai.com.
 
-SUBSCRIPTION
+PRICING
 
-Free plan: analyze your first room. Pro plan: unlimited analyses, full product catalog, saved history. Subscription details shown at checkout; cancel anytime.
+Free: analyze one room, no credit card needed.
+Apartment ($29, one-time): every room in your apartment — unlimited analyses, cross-room coherence, AI mockups.
+Pro ($49/month): unlimited apartments and projects for designers and property managers.
+
+Pricing details shown at checkout. 30-day money-back guarantee.
 
 PRIVACY
 
@@ -156,8 +166,8 @@ Photos are processed to generate your design plan and stored in your account. De
 
 ## ASO notes (App Store Optimization)
 
-These keyword clusters have high relevance and moderate-to-low competition in the
-Lifestyle/Utilities category based on product category positioning:
+These keyword clusters have high relevance based on product category positioning
+(competition estimates are unverified — validate in App Store Connect Search Ads before submission):
 
 - **Primary**: "interior design app", "room design AI", "AI home decor"
 - **Secondary**: "room planner", "furniture picker", "palette generator", "home
