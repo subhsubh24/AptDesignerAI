@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = new Set(["/login", "/signup"]);
+const PUBLIC_PATHS = new Set(["/login", "/signup", "/waitlist"]);
+const PUBLIC_API_PATHS = new Set(["/api/waitlist"]);
 
 export async function updateSession(request: NextRequest) {
   // Redirect root to dashboard always
@@ -55,9 +56,10 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicPath = PUBLIC_PATHS.has(request.nextUrl.pathname);
   const isAuthCallback = request.nextUrl.pathname.startsWith("/api/auth");
+  const isPublicApi = PUBLIC_API_PATHS.has(request.nextUrl.pathname);
   const isApi = request.nextUrl.pathname.startsWith("/api/");
 
-  if (!user && !isPublicPath && !isAuthCallback) {
+  if (!user && !isPublicPath && !isAuthCallback && !isPublicApi) {
     if (isApi) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
