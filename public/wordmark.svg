@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 48" fill="none" role="img" aria-label="AptDesigner wordmark">
+  <title>AptDesigner</title>
+  <!--
+    Set-weight sans-serif wordmark.
+    "AptDesigner" in #141211 (primary text); "AI" in #b4501e (accent).
+    Dark background swap: text fill → #faf9f7; accent stays #d4733e.
+    tspan is used so the AI suffix flows directly after AptDesigner with no
+    hardcoded x offset — eliminates cross-platform font metric divergence.
+    For production exports, convert text to paths in an SVG editor to
+    guarantee pixel-perfect rendering across all environments.
+  -->
+  <text
+    x="0"
+    y="36"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-size="32"
+    font-weight="700"
+    letter-spacing="-0.5"
+    fill="#141211"
+  >AptDesigner<tspan fill="#b4501e">AI</tspan></text>
+</svg>
