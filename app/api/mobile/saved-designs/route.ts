@@ -75,15 +75,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Server-side entitlement gate: enforce FREE_SAVE_LIMIT for non-Pro users.
-  // We check entitlements BEFORE parsing the body so we don't waste cycles on
-  // validation for a request that will be rejected anyway.
-  // hasProEntitlement() returns false when REVENUECAT_SECRET_KEY is unset (dev),
-  // so in that case we also count existing saves to enforce the limit.
-  const authedClientForCount = createClient(supabaseUrl, supabaseKey, {
+  // Reuse one authed client for both the count check and the insert.
+  const authedClient = createClient(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
-  const { count: existingSaveCount } = await authedClientForCount
+
+  // Server-side entitlement gate: enforce FREE_SAVE_LIMIT for non-Pro users.
+  // Checked before body parsing so rejected requests skip validation work.
+  const { count: existingSaveCount } = await authedClient
     .from("saved_designs")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
@@ -158,11 +157,6 @@ export async function POST(request: NextRequest) {
       source: "mobile",
     },
   };
-
-  // Insert via authed client so RLS auth.uid() = user_id is satisfied
-  const authedClient = createClient(supabaseUrl, supabaseKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
 
   const { data, error } = await authedClient
     .from("saved_designs")
