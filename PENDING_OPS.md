@@ -6,6 +6,21 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### Mobile env vars — Supabase (added 2026-06-24 — set before EAS build or local dev on device)
+PR #28 (B2 mobile auth) uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+Create `mobile/.env.local` (gitignored) with:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+For EAS Build: add these as EAS environment variables in your EAS project dashboard
+(https://expo.dev/accounts/<user>/projects/aptdesignerai/environment-variables).
+Use the same values as your Supabase project (same project as the web app).
+
+Verify: launch the mobile app → login screen should appear and signInWithPassword should succeed.
+
 ### 017_waitlist.sql (added 2026-06-24 — apply when PR #22 merges)
 Creates the `waitlist_emails` table (email capture for iOS/Android waitlist). RLS enabled with NO policy — service-role only.
 
