@@ -24,6 +24,11 @@ const QUICK_LINKS = [
     desc: "Plans, one-time purchases, trial period, and refund policy.",
   },
   {
+    heading: "Design guides",
+    href: "/guides",
+    desc: "Colour palettes, material coherence, and how to read your space — practical design principles explained.",
+  },
+  {
     heading: "Privacy & data",
     href: "/privacy",
     desc: "What we collect, how it's stored, and how to delete your account.",

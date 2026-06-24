@@ -79,6 +79,14 @@ const SECTIONS: Section[] = [
         q: "Do I need Pro?",
         a: "Pro is for professionals managing many spaces (designers, property managers, landlords). If you're designing your own apartment, Apartment is the right tier.",
       },
+      {
+        q: "Can I use this for commercial properties?",
+        a: "The app is optimised for residential apartments and houses — it understands domestic room types, residential furniture scale, and typical apartment floor plans. Commercial spaces (offices, retail, hospitality) have different constraints and aren't well served by the current pipeline. We may add commercial support in future.",
+      },
+      {
+        q: "What's the difference between the Apartment and Pro plans?",
+        a: "Apartment is a one-time purchase that unlocks one apartment (unlimited rooms within it): floor plan extraction, AI mockups, bundle comparisons. Pro is a monthly subscription for professionals who manage multiple properties — it unlocks unlimited apartments, priority support, and future pro-only features. Most individual users need Apartment.",
+      },
     ],
   },
   {
