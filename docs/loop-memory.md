@@ -4,6 +4,55 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-24 (Run 16)
+
+### State on entry
+- Default branch at `42359eb` (PR #32 — B2 analyze endpoint merged).
+- Open PRs: #33 (B2 mobile UX flow: room-type picker + upload/analyze/results) and #34 (run 15 bookkeeping), both failing the mobile CI gate with identical TS2322 error.
+- Root cause: `mobile/src/app/room-type.tsx` uses `type="defaultSemiBold"` but `ThemedTextProps` union did not include that variant.
+- Both PRs had the same bug because #34 was branched from #33 (carrying all its code).
+- 876 tests passing on the default branch.
+
+### Area served this run
+**Mobile CI gate fix** (unblocked PRs #33 + #34) + **Track B2 saved designs screen** (PR #35).
+
+### What was done
+
+**Mobile CI fix — pushed to `b2/mobile-ux-flow` + `b2/bookkeeping-run15`**
+- Added `"defaultSemiBold"` to `ThemedTextProps` type union in `mobile/src/components/themed-text.tsx`
+- Added conditional style dispatch (`type === 'defaultSemiBold' && styles.defaultSemiBold`)
+- Added `StyleSheet` entry: `{ fontSize: 16, lineHeight: 24, fontWeight: '600' }`
+- Reviewer A (first pass): caught `fontWeight: 600` (numeric) → required `'600'` (string, matching codebase convention). Fixed.
+- Reviewer B: APPROVE first pass.
+- Cherry-picked the same fix commit to `b2/bookkeeping-run15` so both PRs re-enter CI green.
+
+**PR #35 — B2 saved designs screen (2 files)**
+- `mobile/src/hooks/use-saved-designs.ts` (new): direct Supabase query, `tick`-based reload pattern, `cancelled` flag in IIFE prevents setState after unmount, `getSession()` session guard before querying, `room_type: string | null`
+- `mobile/src/app/saved.tsx`: 3 skeleton placeholders (loading), error + retry state, empty state, `DesignCard` (thumbnail, title, room-type badge, relative time), no emoji
+- Reviewer A caught 5 issues: (1) auth race / misleading empty state on unauthenticated call, (2) `room_type` nullability crash in `roomLabel`, (3) `setState` after unmount, (4) `relativeTime` NaN on malformed ISO, (5) `cardBody` indent. All fixed before merge.
+- Reviewer B: APPROVE first pass (noted completeness: save button in results.tsx is the write-side counterpart, planned for next run).
+
+### Lessons learned
+
+1. **Bookkeeping branches built on feature branches inherit the feature branch's CI bugs.** Both PRs #33 and #34 failed the same mobile gate because PR #34 was branched from PR #33. Fix: cherry-pick the same commit to both branches. Future lesson: bookkeeping branches should be branched from the default branch (docs-only commits), not from a feature branch — this avoids inheriting code bugs.
+
+2. **Direct Supabase queries from mobile are the right pattern for user-scoped reads.** The mobile Supabase client (configured with `persistSession: true` + AsyncStorage) automatically attaches the JWT to queries. RLS `auth.uid() = user_id` enforces the security boundary server-side. No Next.js API hop needed for simple reads. This is faster and simpler than the API route pattern used for the analyze endpoint.
+
+3. **`tick`-based reload with `cancelled` flag is cleaner than `useCallback` for async data hooks.** The `useCallback([])` + `useEffect([load])` pattern doesn't compose cleanly with cancellation (the cleanup function can't be the callback itself). A `tick` state that the IIFE effect depends on gives each fetch its own `cancelled` scope that the cleanup can flip, and `reload()` is just `setTick(t => t + 1)`.
+
+4. **Session guard in the data hook is defence-in-depth, even with a layout-level auth gate.** The layout gate prevents unauthenticated users from reaching the screen, but the hook fires in `useEffect` which runs after the gate evaluates. A stale/expired session could slip through during the async window. `getSession()` at the start of every fetch costs one async round-trip but prevents the "No designs yet" false empty state on session expiry.
+
+5. **`fontWeight` in React Native StyleSheet should always be a string literal (`'600'`), not a numeric literal (`600`).** The `TextStyle['fontWeight']` union only accepts strings. The existing `themed-text.tsx` file already uses numeric values for legacy entries (500, 700) without causing CI errors (the Expo tsconfig appears lenient here), but new additions should use string form to be type-correct and consistent with the rest of the codebase.
+
+### Rotation guide for next run
+- **PRs #33, #34, #35 pending CI** — all should auto-merge once CI re-runs. Confirm in next run.
+- **B2 write path: save button in results.tsx.** PR #33 rewrites `results.tsx` (upload + analyze + results display). Once it merges, the next increment is a "Save Design" button in `results.tsx` that calls a new `/api/mobile/saved-designs` endpoint accepting the raw analysis JSON (the web `/api/saved-designs` requires a `room_id`, which the mobile stateless flow doesn't have). Plan a new endpoint for this.
+- **Track C (RevenueCat monetization) is the next unstarted track** — C1-C4 all pending. RevenueCat SDK, paywall UI, server-side entitlement checks. This is high-value because D2/D3 store content explicitly notes "submit only after RevenueCat paywall is live."
+- **A5 (live eval suite) still blocked.** Needs publicly-accessible room photo URLs. Owner must supply.
+- **D4 (stability + screenshots) still pending.** Screenshots need the real B2 AI results to show meaningful content — defer until B2 is complete.
+
+---
+
 ## Run 2026-06-24 (Run 14)
 
 ### State on entry
