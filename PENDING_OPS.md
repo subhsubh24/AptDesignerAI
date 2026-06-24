@@ -6,20 +6,38 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
-### Mobile env vars — Supabase (added 2026-06-24 — set before EAS build or local dev on device)
-PR #28 (B2 mobile auth) uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+### Mobile env vars — Supabase + API URL (added 2026-06-24, updated PR #32 — set before EAS build or local dev on device)
+PR #28 (B2 mobile auth) and PR #32 (B2 photo upload + AI analysis) require these env vars.
 Create `mobile/.env.local` (gitignored) with:
 
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+EXPO_PUBLIC_API_URL=https://<your-vercel-deployment-url>
 ```
 
 For EAS Build: add these as EAS environment variables in your EAS project dashboard
 (https://expo.dev/accounts/<user>/projects/aptdesignerai/environment-variables).
 Use the same values as your Supabase project (same project as the web app).
+`EXPO_PUBLIC_API_URL` should point to your Vercel deployment (e.g. `https://aptdesignerai.vercel.app`).
 
-Verify: launch the mobile app → login screen should appear and signInWithPassword should succeed.
+Verify: launch the mobile app → login screen should appear → select a photo → choose room type → analysis runs and shows real AI results.
+
+### Supabase Storage bucket: room-photos (added 2026-06-24 — create before testing mobile upload)
+PR #32 uploads mobile photos to a `room-photos` Supabase Storage bucket. Create it if it does not exist:
+
+1. Go to your Supabase project dashboard → Storage → New bucket
+2. Name: `room-photos`
+3. Public: **Yes** (images are fetched by Gemini via their public URL)
+4. Add an RLS INSERT policy so authenticated users can upload:
+   ```sql
+   -- Allow authenticated users to upload to their own folder
+   CREATE POLICY "Authenticated users can upload room photos"
+   ON storage.objects FOR INSERT
+   TO authenticated
+   WITH CHECK (bucket_id = 'room-photos' AND auth.uid()::text = (storage.foldername(name))[1]);
+   ```
+5. Verify: upload a test image from the mobile app → confirm it appears in the bucket under `<user-id>/<timestamp>.jpg`
 
 ### 017_waitlist.sql (added 2026-06-24 — apply when PR #22 merges)
 Creates the `waitlist_emails` table (email capture for iOS/Android waitlist). RLS enabled with NO policy — service-role only.

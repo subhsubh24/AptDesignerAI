@@ -91,7 +91,7 @@ export default function PhotoCaptureScreen() {
   const handleAnalyze = useCallback(() => {
     if (!selectedImageUri) return;
     setPendingImageUri(selectedImageUri);
-    router.push('/results');
+    router.push('/room-type');
   }, [router, selectedImageUri]);
 
   return (
