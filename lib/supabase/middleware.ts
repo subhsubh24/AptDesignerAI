@@ -1,8 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = new Set(["/login", "/signup", "/waitlist"]);
-const PUBLIC_API_PATHS = new Set(["/api/waitlist"]);
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/signup",
+  "/waitlist",
+  "/pricing",
+  "/faq",
+  "/privacy",
+  "/terms",
+  "/support",
+]);
+
+// /guides has sub-routes (/guides/color-palette-guide, etc.) — use prefix match below.
+const PUBLIC_PATH_PREFIXES = ["/guides"];
+
+// API routes that must accept unauthenticated requests.
+// /api/billing/webhook — Stripe POSTs here with its own signature verification.
+// /api/shared/*       — public design share links; each route MUST enforce
+//                       share_token + is_public via RLS. Do not add auth-gated
+//                       routes under this prefix.
+// /api/mobile/*       — mobile clients authenticate via Bearer token in the
+//                       Authorization header (no session cookie); each route
+//                       calls supabase.auth.getUser(token) directly.
+const PUBLIC_API_PATHS = new Set(["/api/waitlist", "/api/billing/webhook"]);
 
 export async function updateSession(request: NextRequest) {
   // Redirect root to dashboard always
@@ -54,10 +75,16 @@ export async function updateSession(request: NextRequest) {
     // Supabase unreachable — treat as unauthenticated but don't crash
   }
 
-  const isPublicPath = PUBLIC_PATHS.has(request.nextUrl.pathname);
-  const isAuthCallback = request.nextUrl.pathname.startsWith("/api/auth");
-  const isPublicApi = PUBLIC_API_PATHS.has(request.nextUrl.pathname);
-  const isApi = request.nextUrl.pathname.startsWith("/api/");
+  const { pathname } = request.nextUrl;
+  const isPublicPath =
+    PUBLIC_PATHS.has(pathname) ||
+    PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  const isAuthCallback = pathname.startsWith("/api/auth");
+  const isPublicApi =
+    PUBLIC_API_PATHS.has(pathname) ||
+    pathname.startsWith("/api/shared/") ||
+    pathname.startsWith("/api/mobile/");
+  const isApi = pathname.startsWith("/api/");
 
   if (!user && !isPublicPath && !isAuthCallback && !isPublicApi) {
     if (isApi) {
