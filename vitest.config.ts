@@ -10,6 +10,12 @@ export default defineConfig({
       provider: "v8",
       include: ["lib/**/*.ts"],
       exclude: ["lib/types/**", "lib/design-context/**"],
+      thresholds: {
+        statements: 25,
+        branches: 19,
+        functions: 30,
+        lines: 25,
+      },
     },
   },
   resolve: {
