@@ -6,6 +6,26 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### 019_fix_saved_designs_rls.sql — security: require share_token in RLS policy (added 2026-06-25, PR #78)
+
+Fixes an enumeration vulnerability in `saved_designs`: the migration-015 policy allowed any unauthenticated PostgREST caller to list all `is_public=true` rows without knowing the share token. The replacement policy requires the caller to prove knowledge of the token.
+
+**Apply:**
+```sh
+psql $DATABASE_URL -f supabase/migrations/019_fix_saved_designs_rls.sql
+```
+
+**Verify (run as anon role — must return 0 rows without a token filter):**
+```sql
+SELECT id FROM saved_designs WHERE is_public = true LIMIT 5;
+-- Expected: 0 rows
+-- (A query including ?share_token=eq.<valid-token> in PostgREST should still return the matching row)
+```
+
+**Note on app-layer changes:** The migration uses the JWT-claim approach (`current_setting('request.jwt.claims')`). If the share-link fetch path in the app passes the token as a PostgREST column filter (`?share_token=eq.<token>`) rather than embedding it in the JWT, use the simpler `USING (is_public = true AND share_token IS NOT NULL)` variant documented in the migration file comments instead. Verify the `/shared/[token]` route's Supabase query before applying.
+
+---
+
 ### RUN_EVALS=1 CI job — wire eval suite into GitHub Actions (added 2026-06-25, Track A5)
 
 PR #73 adds three live eval test files (`evals/__tests__/diagnosis.eval.test.ts`, `sourcing.eval.test.ts`, `grounding.eval.test.ts`) that call the real Gemini pipeline when `RUN_EVALS=1` is set. The loop cannot write `.github/workflows/` (triggers the sensitive-file permission hook in headless runs), so this job must be wired manually.
