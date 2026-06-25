@@ -247,6 +247,24 @@ have re-verified the whole DoD against real artifacts and a green gate in that r
      spend is expected and approved as a cost of knowing the product is good.
   4. **Grow the gold set over time** so output-quality regressions are caught
      before users (and Apple reviewers) see them.
+- [ ] A6. **Upgrade the Computer-Use product verifier to Gemini 3.5 Flash native
+  computer use.** The product-verification agent (`lib/agents/computer-use/`, driving
+  Browserbase) currently runs on the standalone `gemini-2.5-computer-use-preview-10-2025`
+  (`MODELS.computerUse` in `lib/ai/models.ts`). As of 2026-06-24 Google made computer
+  use a BUILT-IN TOOL in **Gemini 3.5 Flash** — best-yet agentic performance PLUS
+  built-in prompt-injection safety (adversarial training, confirm-on-sensitive,
+  auto-stop on injection), which matters here because this agent operates on live,
+  untrusted external retailer pages. Do this PROPERLY, not as a blind string swap:
+  (1) RESEARCH the actual 3.5-Flash computer-use API via WebSearch/official docs — it
+  is a built-in *tool*, so the request shape / action schema likely differs from the
+  standalone model; adapt the agent loop + driver accordingly. (2) Keep it behind the
+  existing `COMPUTER_USE_MODEL` env override and move provider floors + the
+  provider-floors test together per the cost contract. (3) Verify cost/perf is neutral-
+  or-better and product-verification accuracy is equal-or-better (use/extend an eval or
+  a manual spot-check). (4) Enable the optional injection-safety safeguards. This clears
+  the value bar on BOTH reliability (core sourcing accuracy) and security (live-page
+  injection surface). If the API turns out to be a heavier lift, ship it as its own
+  coherent change and record blockers in PENDING_OPS.md / an FYI issue.
 
 ### Track B — Native mobile app (Expo / React Native) — NEW
 Lives in `/mobile` (its own `package.json`; share TypeScript domain logic with the
