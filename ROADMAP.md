@@ -106,6 +106,25 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
 - **Track the plan:** when a phase's checklist item is genuinely done, tick it in
   this file (in the final bookkeeping PR, same rules as the other ledger files).
 
+## Progress format contract (machine-readable — the dashboard reads THIS)
+Record progress as MARKDOWN CHECKBOXES, not prose. An external dashboard derives
+build-progress from the Track checkboxes and submission-readiness from the
+Definition-of-Done checkboxes — so any progress that lives ONLY in a prose note or a
+`(PR #…)` reference is INVISIBLE to it and reads as 0%. Rules:
+- EVERY Track item (A1, B2, C3, …) and EVERY Definition-of-Done item is a
+  `- [ ]` / `- [x]` markdown checkbox. PR-reference annotations are fine, but they go
+  IN ADDITION to ticking the box, never instead of it.
+- When the verified-artifacts guard below is satisfied for an item, tick its checkbox
+  (`- [x]`) in the bookkeeping PR. A parent Track item is `- [x]` only when the whole
+  item is genuinely complete; keep it `- [ ]` while partial (note sub-progress inline).
+- Checkboxes are the SINGLE SOURCE OF TRUTH for progress — keep them in sync with
+  reality every bookkeeping run.
+- **ONE-TIME RECONCILE (do this on your next run):** scan the whole ROADMAP, convert
+  any Track item that is NOT yet a checkbox into one, then tick every item whose
+  artifacts are present on the default branch with a green gate, and UN-tick any box
+  that is not actually satisfied. After this pass, the Track + Definition-of-Done
+  checkboxes accurately reflect real, verified state.
+
 ## DONE means VERIFIED ARTIFACTS, not self-assessment (hard guard)
 The loop has been over-eager ticking its own boxes. A box counts as done ONLY when
 ALL of the following are objectively true IN THE SAME RUN — never on intent, a plan,
