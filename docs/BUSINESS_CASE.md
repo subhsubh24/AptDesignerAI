@@ -1,5 +1,19 @@
 # Business Case — AptDesignerAI
 
+```yaml
+# BUSINESS_CASE_SUMMARY (machine-readable; keep in sync with the analysis below)
+currency: USD
+arr_year1:
+  conservative: 37600
+  base: 100100
+  optimistic: 224760
+planning_case: base
+floor_usd: 100000
+floor_met_year1: true
+time_to_floor: "base case reaches the $100K floor in year 1"
+as_of: 2026-06-25
+```
+
 A bottoms-up, research-grounded estimate of the path to ≥ $100K/yr ARR. Maintained
 as a living artifact; update when pricing, conversion data, or market conditions change.
 **All benchmarks cited; no invented metrics.**
