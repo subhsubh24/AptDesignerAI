@@ -9,9 +9,10 @@ hands off** — it does not run forever.
 ## The goal (one sentence)
 Drive BOTH the **product** (web app + native iOS/Android app, store-acceptable with
 high confidence, subscription-monetized) AND the **marketing engine** to **100% of
-everything within the loop's control**, so that a paid launch targeting **≥ $100K/yr**
-is gated only by the handful of things a human must physically do (accounts, signing,
-funding) — nothing else.
+everything within the loop's control** — with monetization optimized to **MAXIMIZE
+revenue (≥ $100K/yr is the floor, not the target)** — so that a paid launch is gated
+only by the handful of things a human must physically do (accounts, signing, funding)
+— nothing else.
 
 ## The bar — do NOT declare done early (read this)
 This loop does not stop at "good enough." It stops only when BOTH of these are
@@ -55,6 +56,27 @@ and pricing evolve.
   not a flattering number.
 - This artifact is itself **value-bar-clearing work**: keep it current; a stale or
   hand-wavy business case is a gap, not a nicety.
+- **MAXIMIZE revenue — $100K is the FLOOR, not the target.** $100K/yr is the MINIMUM
+  bar to call this worth shipping, NOT the goal. The goal is to maximize the credible
+  revenue ceiling: do NOT settle once the base case crosses $100K — build the
+  monetization machine as strong as it defensibly can be, and make the OPTIMISTIC
+  scenario the ambition you build toward (every number still honest + researched; the
+  anti-gaming rule holds absolutely). Treat these revenue levers as first-class,
+  value-bar-clearing work and push each to its defensible maximum: (1) PRICING & TIERS
+  — good-better-best, a higher Pro/Studio tier, annual plans, one-time + subscription
+  mix, priced to real value/benchmarks; (2) CONVERSION — optimize the free→paid moment
+  (paywall timing/design, onboarding, trial, time-to-wow); (3) RETENTION & LTV — reduce
+  churn, lengthen lifetime (re-engagement, save/share loops); (4) EXPANSION REVENUE —
+  add-ons, usage/credit packs, team/client/pro plans, referrals; (5) MARGIN — drive
+  per-user COGS down so more of each dollar is profit; (6) REACH — more defensible
+  acquisition channels (organic-first, ASO, content, SEO). Document each lever's upside
+  in the business case and build the best-return ones. This does NOT break convergence:
+  revenue-maximization means building the BEST monetization + growth machine within the
+  submission-readiness goal — it does NOT mean running forever. You still STOP and hand
+  off when product + marketing are 100% and the business case shows a strong, MAXIMIZED,
+  credible path (floor ≥$100K, reaching toward the optimistic ceiling). Continuous
+  revenue optimization with real post-launch conversion/retention data is the owner's
+  job after launch, not a reason to never ship. Maximize the machine, then hand off.
 - **THIS is the governing "is it worth it" number — not any external dashboard
   estimate.** A separate dashboard may show a rough heuristic ARR (often ~price ×
   a small assumed user count); that is an order-of-magnitude gauge, NOT the gate.
@@ -304,11 +326,15 @@ ALL of these are true and verified in CI:
       audit is running and its last pass surfaced no unaddressed critical findings (F5).
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
-- [x] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
-      bottoms-up, research-grounded estimate showing a realistic path to ≥ $100K/yr
-      (price × conversion × users − COGS), with three scenarios, positive per-user
-      margin, and — if the base case falls short — the explicit levers needed (which
-      you then build). Numbers cited, not invented. **[PR #61; two-reviewer cycle: APPROVE]**
+- [ ] **Business case (`docs/BUSINESS_CASE.md`) is complete, credible, and
+      revenue-MAXIMIZED:** a bottoms-up, research-grounded model with three scenarios
+      and positive per-user margin, showing a credible path with a FLOOR ≥ $100K/yr —
+      AND documenting the revenue-maximization levers (pricing/tiers, conversion,
+      retention/LTV, expansion, margin, reach) with the high-return ones actually built,
+      so the credible ceiling is pushed as high as it defensibly goes (toward the
+      optimistic scenario), not settled at $100K. Numbers cited, not invented; no gaming.
+      **(Re-open: was ticked for the ≥$100K floor (PR #61); now also requires the
+      maximization levers built + documented.)**
 - [ ] **Confidence statement:** you can honestly state that the product would be
       accepted to the stores with high confidence, every marketing lever within your
       control is built, AND the business case shows a credible ≥ $100K/yr path — i.e.
