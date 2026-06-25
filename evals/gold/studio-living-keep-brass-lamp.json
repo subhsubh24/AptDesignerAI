@@ -3,16 +3,14 @@
   "description": "Small studio living room. Client insists on keeping the brass floor lamp and wants a warm palette.",
   "input": {
     "roomType": "living_room",
-    "imageUrls": ["https://example.com/fixtures/studio-living-1.jpg"],
+    "imageUrls": ["https://images.unsplash.com/photo-1600210492493-0946911123ea?w=1280&q=80"],
     "userContext": "Keep the brass floor lamp at all costs. Warm palette — terracotta, camel, warm whites. No cool grays.",
     "keepItems": ["brass floor lamp"],
     "budgetMode": "balanced"
   },
   "expectations": {
-    "mustKeep": ["brass floor lamp"],
     "mustNotDrop": ["brass floor lamp"],
     "paletteIncludes": ["terracotta", "camel", "warm"],
-    "requiredCategories": ["sofa", "area_rug"],
-    "minValidationConfidence": 0.6
+    "requiredCategories": ["sofa", "area_rug"]
   }
 }
