@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AptDesignerAI
 
-## Getting Started
+AI-powered interior design for apartments. Upload a photo of your room, describe your style, and get a fully realised design direction with shoppable product picks — in under 10 minutes.
 
-First, run the development server:
+## What it does
+
+- **Room diagnosis** — Gemini analyses your photo to extract room dimensions, existing furniture, dominant palette, and lighting conditions
+- **Style direction** — the AI generates a coherent design concept with mood, palette, and material recommendations
+- **Shoppable products** — scored and ranked picks from real retailers, matched to your style, budget, and room constraints
+- **Share links** — save designs and share a public link with a unique token; only the holder of the token can view the design
+- **Mobile companion** — Expo/React Native app for photo capture and on-the-go design review (iOS + Android)
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Web frontend | Next.js 16 App Router, Tailwind CSS |
+| Mobile | Expo (React Native) |
+| AI pipeline | Google Gemini (room understanding, product scoring) |
+| Auth & database | Supabase (Postgres + Row Level Security) |
+| Storage | Supabase Storage (room photos) |
+| Billing (web) | Stripe |
+| Billing (mobile) | RevenueCat |
+| Deployment | Vercel (web) + EAS (mobile) |
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev       # Next.js dev server at http://localhost:3000
+npm test          # vitest unit tests
+npx tsc --noEmit  # TypeScript check
+npx eslint .      # lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs without API keys in local dev — Supabase auth is bypassed when `NEXT_PUBLIC_SUPABASE_URL` is unset, and the AI pipeline is skipped when `GEMINI_API_KEY` is absent.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For the mobile app:
+```bash
+cd mobile && npm install
+npx expo start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment variables
 
-## Learn More
+Copy `.env.example` to `.env.local` and fill in:
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (safe to expose) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for admin operations |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `STRIPE_SECRET_KEY` | Stripe secret key (web billing) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `REVENUECAT_SECRET_KEY` | RevenueCat server key (mobile entitlement check) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See `PENDING_OPS.md` for billing setup steps and Supabase migration instructions.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `ARCHITECTURE.md` for a full description of the AI pipeline (maker/checker loops, deterministic validators, cost ledger) and `AGENTS.md` for the rules governing AI agent contributions to this repo.
