@@ -55,6 +55,31 @@ and pricing evolve.
   not a flattering number.
 - This artifact is itself **value-bar-clearing work**: keep it current; a stale or
   hand-wavy business case is a gap, not a nicety.
+- **THIS is the governing "is it worth it" number — not any external dashboard
+  estimate.** A separate dashboard may show a rough heuristic ARR (often ~price ×
+  a small assumed user count); that is an order-of-magnitude gauge, NOT the gate.
+  The Definition of Done is governed by THIS bottoms-up business case, not that
+  heuristic.
+- **NEVER game the number (hard anti-reward-hacking rule).** Do NOT inflate the
+  price string, invent a user count, or pad assumptions to make any estimate read
+  higher. Pricing must be set by real value + researched benchmarks and JUSTIFIED in
+  the business case (and consistent with the actual paywall/Stripe/RevenueCat config),
+  never reverse-engineered to hit a target. A higher number that isn't real is a
+  FAILURE, not progress. Reviewer B rejects any pricing/business-case change whose
+  only effect is to move an estimate without a defensible, value-based rationale.
+- **Revenue is moved by DISTRIBUTION, CONVERSION, and RETENTION — not by more
+  features.** A complete, polished app with no audience still earns little; that is
+  the real constraint. So when pushing toward the $100K path, weight effort toward
+  the things that actually move it: the marketing/growth engine (Track E), free→paid
+  conversion (paywall + onboarding + time-to-wow), retention/re-engagement, a
+  defensible price tier, and reach — over piling on additional product surface. Build
+  product to "store-acceptable and delightful," then let the growth levers carry ARR.
+- **Honest ceiling (do not chase the impossible):** no pre-launch code can make the
+  app *actually worth* $100K/yr — realized revenue is a post-launch market outcome
+  that needs real users + the human-only launch steps. "Done" = you have built every
+  controllable lever to 100% AND the business case shows a CREDIBLE path to ≥ $100K/yr
+  at a defensible price. Do not loop forever waiting for an estimate to cross a
+  threshold; deliver the credible path + the levers, then hand off.
 
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
