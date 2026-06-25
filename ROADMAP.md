@@ -9,9 +9,10 @@ hands off** — it does not run forever.
 ## The goal (one sentence)
 Drive BOTH the **product** (web app + native iOS/Android app, store-acceptable with
 high confidence, subscription-monetized) AND the **marketing engine** to **100% of
-everything within the loop's control**, so that a paid launch targeting **≥ $100K/yr**
-is gated only by the handful of things a human must physically do (accounts, signing,
-funding) — nothing else.
+everything within the loop's control** — with monetization optimized to **MAXIMIZE
+revenue (≥ $100K/yr is the floor, not the target)** — so that a paid launch is gated
+only by the handful of things a human must physically do (accounts, signing, funding)
+— nothing else.
 
 ## The bar — do NOT declare done early (read this)
 This loop does not stop at "good enough." It stops only when BOTH of these are
@@ -55,6 +56,27 @@ and pricing evolve.
   not a flattering number.
 - This artifact is itself **value-bar-clearing work**: keep it current; a stale or
   hand-wavy business case is a gap, not a nicety.
+- **MAXIMIZE revenue — $100K is the FLOOR, not the target.** $100K/yr is the MINIMUM
+  bar to call this worth shipping, NOT the goal. The goal is to maximize the credible
+  revenue ceiling: do NOT settle once the base case crosses $100K — build the
+  monetization machine as strong as it defensibly can be, and make the OPTIMISTIC
+  scenario the ambition you build toward (every number still honest + researched; the
+  anti-gaming rule holds absolutely). Treat these revenue levers as first-class,
+  value-bar-clearing work and push each to its defensible maximum: (1) PRICING & TIERS
+  — good-better-best, a higher Pro/Studio tier, annual plans, one-time + subscription
+  mix, priced to real value/benchmarks; (2) CONVERSION — optimize the free→paid moment
+  (paywall timing/design, onboarding, trial, time-to-wow); (3) RETENTION & LTV — reduce
+  churn, lengthen lifetime (re-engagement, save/share loops); (4) EXPANSION REVENUE —
+  add-ons, usage/credit packs, team/client/pro plans, referrals; (5) MARGIN — drive
+  per-user COGS down so more of each dollar is profit; (6) REACH — more defensible
+  acquisition channels (organic-first, ASO, content, SEO). Document each lever's upside
+  in the business case and build the best-return ones. This does NOT break convergence:
+  revenue-maximization means building the BEST monetization + growth machine within the
+  submission-readiness goal — it does NOT mean running forever. You still STOP and hand
+  off when product + marketing are 100% and the business case shows a strong, MAXIMIZED,
+  credible path (floor ≥$100K, reaching toward the optimistic ceiling). Continuous
+  revenue optimization with real post-launch conversion/retention data is the owner's
+  job after launch, not a reason to never ship. Maximize the machine, then hand off.
 - **THIS is the governing "is it worth it" number — not any external dashboard
   estimate.** A separate dashboard may show a rough heuristic ARR (often ~price ×
   a small assumed user count); that is an order-of-magnitude gauge, NOT the gate.
@@ -247,6 +269,35 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 > loop never invents public claims or fake metrics, and never posts under the
 > owner's identity without a connected, owner-authorized channel.
 
+### Track F — World-class quality, validation & evals (the excellence bar)
+The product must be demonstrably top-grade — not "tests pass," but rigorously
+validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
+required gate or a recurring audit, not a nicety.
+- [ ] F1. **Lint clean + ENFORCED.** Drive `npx eslint .` to ZERO errors and zero
+  new warnings, then keep it clean. Reviewer A rejects any change that introduces a
+  lint error/warning. (Owner promotes `lint` to a required CI check once it is green;
+  until then the loop keeps every new diff lint-clean and burns down the backlog.)
+- [ ] F2. **Coverage floor.** Enforce a meaningful test-coverage threshold on the
+  critical paths (the validation/math/agents modules) via `vitest --coverage`; a
+  regression below the floor fails the gate. Cover real branch behavior, not lines-
+  for-lines' sake.
+- [ ] F3. **Eval coverage COMPLETE (extends A5).** A live `.eval.test.ts` for EVERY
+  core pipeline stage — apartment/room understanding, diagnosis, product-sourcing
+  relevance, mockup grounding — each calling the real pipeline (`RUN_EVALS=1`) and
+  scoring against a GROWING gold set of real fixtures. Wire a scheduled eval run so
+  AI-output-quality regressions are caught before users/reviewers see them.
+- [ ] F4. **E2E + accessibility + visual + performance gates (UX is the product).**
+  Playwright end-to-end tests for the core journey (web; and the mobile core flow as
+  feasible); automated accessibility checks (e.g. axe) on key pages with no critical
+  violations; visual-regression on the design-bar surfaces; a Lighthouse/performance
+  budget on the hot paths. These catch what unit tests cannot.
+- [ ] F5. **Periodic DEEP AUDIT (holistic, not per-diff).** On a recurring cadence
+  (see the routine), a whole-codebase audit beyond per-change review: security/RLS,
+  performance, accessibility, dead/duplicate code, consistency with the design system,
+  dependency health, eval gaps, and "does this still read as world-class?" Findings
+  become prioritized, value-bar-clearing work. This is how quality is continuously
+  re-validated in depth without pretending to re-review every character every run.
+
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
 artifacts exist in the merged tree AND the full gate was re-run green in the same run.
@@ -269,13 +320,21 @@ ALL of these are true and verified in CI:
       ASO package + content calendar + full email lifecycle + owned-channel campaigns
       + referral/share loops + analytics — all BUILT and STAGED, launch-ready.
       **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 content calendar (PR #62) + press kit (PR #63) + email lifecycle (PR #64) + mobile share (PR #65) done]**
+- [ ] **Track F complete (world-class quality bar):** lint clean + enforced (F1);
+      coverage floor met (F2); the full per-stage live eval suite passes (F3);
+      E2E + accessibility + visual + performance gates green (F4); the periodic deep
+      audit is running and its last pass surfaced no unaddressed critical findings (F5).
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
-- [x] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
-      bottoms-up, research-grounded estimate showing a realistic path to ≥ $100K/yr
-      (price × conversion × users − COGS), with three scenarios, positive per-user
-      margin, and — if the base case falls short — the explicit levers needed (which
-      you then build). Numbers cited, not invented. **[PR #61; two-reviewer cycle: APPROVE]**
+- [ ] **Business case (`docs/BUSINESS_CASE.md`) is complete, credible, and
+      revenue-MAXIMIZED:** a bottoms-up, research-grounded model with three scenarios
+      and positive per-user margin, showing a credible path with a FLOOR ≥ $100K/yr —
+      AND documenting the revenue-maximization levers (pricing/tiers, conversion,
+      retention/LTV, expansion, margin, reach) with the high-return ones actually built,
+      so the credible ceiling is pushed as high as it defensibly goes (toward the
+      optimistic scenario), not settled at $100K. Numbers cited, not invented; no gaming.
+      **(Re-open: was ticked for the ≥$100K floor (PR #61); now also requires the
+      maximization levers built + documented.)**
 - [ ] **Confidence statement:** you can honestly state that the product would be
       accepted to the stores with high confidence, every marketing lever within your
       control is built, AND the business case shows a credible ≥ $100K/yr path — i.e.
