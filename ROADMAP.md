@@ -102,6 +102,18 @@ and pricing evolve.
   controllable lever to 100% AND the business case shows a CREDIBLE path to ≥ $100K/yr
   at a defensible price. Do not loop forever waiting for an estimate to cross a
   threshold; deliver the credible path + the levers, then hand off.
+- **KEEP IT LIVING — recompute, don't write-once (this file must improve over time).**
+  The business case was written once and must NOT be left to rot. RE-COMPUTE the model
+  whenever any of these change: pricing/tiers, a revenue lever ships (conversion,
+  retention, expansion), per-user COGS, or new evidence/benchmarks. Note: building more
+  FEATURES does NOT change the number — only levers, pricing, margin, reach, and real
+  data do; so improving this file means recomputing when those move, not when feature
+  count grows. ANCHOR the model to the ACTUAL paywall/Stripe/RevenueCat config — if the
+  doc's prices (e.g. $29/$49) ever diverge from the real product config, that drift is a
+  bug: fix it and recompute. Stamp each revision with a 'last recomputed' date + a one-
+  line changelog of what moved and why. POST-LAUNCH (owner activity): re-ground every
+  assumption on the REAL conversion/retention/CPI data from the analytics (Track E5) —
+  that is when this goes from a researched projection to a data-backed forecast.
 
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
