@@ -114,6 +114,26 @@ and pricing evolve.
   line changelog of what moved and why. POST-LAUNCH (owner activity): re-ground every
   assumption on the REAL conversion/retention/CPI data from the analytics (Track E5) —
   that is when this goes from a researched projection to a data-backed forecast.
+- **MACHINE-READABLE SUMMARY BLOCK (required — the dashboard reads THIS, not prose).**
+  `docs/BUSINESS_CASE.md` MUST begin with a fenced summary block so tools read one
+  structured source instead of scraping prose (which mis-grabs monthly figures or
+  COGS/marketing dollar lines). Keep it in sync with the analysis below it; the
+  `arr_year1.base` value MUST equal the base-scenario ANNUAL ARR in the body. Exact
+  format:
+  ```yaml
+  # BUSINESS_CASE_SUMMARY (machine-readable; keep in sync with the analysis below)
+  currency: USD
+  arr_year1:            # year-1 ARR in whole dollars, per scenario
+    conservative: <int>
+    base: <int>
+    optimistic: <int>
+  planning_case: base
+  floor_usd: 100000
+  floor_met_year1: <true|false>          # is arr_year1.base >= floor_usd?
+  time_to_floor: "<e.g. ~year 2 in the base case>"   # only if floor not met in year 1
+  as_of: <YYYY-MM-DD>
+  ```
+  All three sibling projects use this IDENTICAL block shape, so values are comparable.
 
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
