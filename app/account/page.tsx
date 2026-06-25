@@ -101,10 +101,11 @@ export default function AccountPage() {
                 This will immediately and permanently delete your account and all data.
               </p>
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                <label htmlFor="confirm-delete" className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
                   Type <span className="font-mono font-semibold text-foreground">{CONFIRM_PHRASE}</span> to confirm
                 </label>
                 <input
+                  id="confirm-delete"
                   type="text"
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
