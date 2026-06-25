@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Stethoscope, Loader2, AlertCircle, CheckCircle2, ArrowRight, RotateCcw, Sparkles, Search } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
-import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
+import { PageTransition } from "@/components/ui/motion";
 import type { DiagnosisData, DesignDirection, ActionItem, RoomSceneGraph } from "@/lib/types/database";
 import { IdentifiedProductPill } from "@/components/rooms/identified-product-pill";
 import { SceneCoverageCard } from "@/components/rooms/scene-coverage-card";

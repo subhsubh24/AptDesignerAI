@@ -278,6 +278,7 @@ export default function BundlesPage() {
                       <div key={product.id} className="shrink-0 w-28 snap-start space-y-2">
                         {product.image_url && (
                           <div className="aspect-square rounded-xl overflow-hidden bg-muted shadow-sm">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={product.image_url}
                               alt={product.title}

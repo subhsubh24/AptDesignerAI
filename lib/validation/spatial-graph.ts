@@ -175,7 +175,7 @@ function pickActiveQuadrantSet(nodes: SpatialNode[]): string[] {
 
 export function computeSpatialGraph(
   analysis: Record<string, unknown>,
-  context: { roomType?: string },
+  _context: { roomType?: string },
 ): SpatialGraphResult {
   const whatItNeeds =
     (analysis.what_it_needs as Array<{

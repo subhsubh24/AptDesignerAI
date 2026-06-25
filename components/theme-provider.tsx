@@ -34,7 +34,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const isDark =
         theme === "dark" || (theme === "system" && mediaQuery.matches);
       root.classList.toggle("dark", isDark);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResolvedTheme(isDark ? "dark" : "light");
     }
 

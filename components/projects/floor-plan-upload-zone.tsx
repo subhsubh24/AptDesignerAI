@@ -178,6 +178,7 @@ export function FloorPlanUploadZone({
                 <span className="truncate font-medium">Floor plan · PDF</span>
               </div>
             ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageUrl}
                 alt="Floor plan"
@@ -226,6 +227,7 @@ export function FloorPlanUploadZone({
             <p className="text-xs text-muted-foreground/70 mt-1">This may take 10–20 seconds</p>
           </>
         ) : preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={preview} alt="Preview" className="max-h-32 rounded-md object-contain" />
         ) : (
           <>

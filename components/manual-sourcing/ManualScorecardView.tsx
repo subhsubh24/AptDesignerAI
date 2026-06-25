@@ -20,7 +20,7 @@ import {
   DollarSign,
   Shield,
 } from "lucide-react";
-import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
+import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -397,6 +397,7 @@ function ProductScorecard({
         onClick={onToggle}
       >
         {product.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={product.image_url}
             alt={product.title || "Product image"}

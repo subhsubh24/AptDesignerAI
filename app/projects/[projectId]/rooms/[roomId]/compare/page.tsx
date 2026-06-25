@@ -5,9 +5,9 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, GitCompare, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, GitCompare, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
-import { PageTransition, ScrollReveal } from "@/components/ui/motion";
+import { PageTransition } from "@/components/ui/motion";
 import { SkeletonCompareRow } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 import type { Verdict } from "@/lib/types/scoring";
@@ -174,6 +174,7 @@ export default function ComparePage() {
                         <div className="space-y-2.5">
                           {product.image_url && (
                             <div className="mx-auto w-20 h-20 rounded-xl overflow-hidden bg-background shadow-sm">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={product.image_url}
                                 alt={product.title || ""}
@@ -306,6 +307,7 @@ export default function ComparePage() {
                     <div className="flex items-center gap-3">
                       {product.image_url && (
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={product.image_url}
                             alt={product.title || ""}

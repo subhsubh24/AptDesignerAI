@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, Search, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, ExternalLink, Star, ThumbsDown, Bookmark, ShoppingBag, Sparkles, X, ArrowUpDown, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
 import { ScoreBarCompact } from "@/components/ui/score-display";
 import { PageTransition, StaggerList, StaggerItem, CardHover } from "@/components/ui/motion";
@@ -359,6 +359,7 @@ export default function ProductsPage() {
               >
                 {product.image_url && (
                   <div className="aspect-square w-full overflow-hidden bg-muted relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={product.image_url}
                       alt={product.title || "Product"}
@@ -499,6 +500,7 @@ export default function ProductsPage() {
 
               {detailProduct.image_url && (
                 <div className="aspect-square rounded-xl overflow-hidden bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={detailProduct.image_url}
                     alt={detailProduct.title || "Product"}

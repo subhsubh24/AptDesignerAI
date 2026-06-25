@@ -147,6 +147,7 @@ export default function RoomSetupPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               {images.map((img) => (
                 <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={img.url} alt="" className="h-full w-full object-cover" />
                 </div>
               ))}
@@ -286,6 +287,7 @@ export default function RoomSetupPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {referenceImages.map((img) => (
                   <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={img.url} alt="" className="h-full w-full object-cover" />
                   </div>
                 ))}

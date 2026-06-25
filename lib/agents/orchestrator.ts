@@ -135,7 +135,7 @@ export interface OrchestrationResult {
   };
 }
 
-const ALL_PRICE_TIERS: PriceTier[] = ["budget", "balanced", "high_end"];
+
 
 /**
  * Map budget mode to a single search tier. Searching only the user's price
@@ -850,7 +850,7 @@ export async function runAgenticSearch(
     // Pre-filter: drop candidates with very low Tavily relevance score
     const minRelevance = Number(process.env.TAVILY_MIN_RELEVANCE || "0.3");
     let relevanceDropped = 0;
-    for (const [category, tierResults] of Object.entries(dedupedByCategory)) {
+    for (const [, tierResults] of Object.entries(dedupedByCategory)) {
       for (const tier of PRICE_TIERS) {
         const before = tierResults[tier].length;
         tierResults[tier] = tierResults[tier].filter((c) => {

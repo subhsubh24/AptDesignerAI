@@ -187,6 +187,7 @@ export default function MockupsPage() {
                   className="aspect-video w-full overflow-hidden bg-muted relative cursor-pointer group"
                   onClick={() => setLightboxUrl(mockup.result_image_url)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={mockup.result_image_url}
                     alt="Room mockup"
@@ -295,6 +296,7 @@ function LightboxImage({ url, onClose }: { url: string; onClose: () => void }) {
       >
         <X className="h-5 w-5" />
       </Button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
         alt="Room mockup (click to zoom)"

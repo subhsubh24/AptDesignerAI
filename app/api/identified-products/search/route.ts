@@ -140,5 +140,4 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ results: deduped });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _SuppressUnused = IdentifiableBrand;

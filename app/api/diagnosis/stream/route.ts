@@ -10,10 +10,7 @@ import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import { inferUserPreferences } from "@/lib/design-context/infer-preferences";
-import {
-  runFullDiagnosisExpansion,
-  type DiagnosisExpansionResult,
-} from "@/lib/agents/diagnosis-expansion-pipeline";
+import { runFullDiagnosisExpansion } from "@/lib/agents/diagnosis-expansion-pipeline";
 import { createLogger } from "@/lib/logging/logger";
 import type { AgentContext } from "@/lib/agents/types";
 import type { DiagnosisData } from "@/lib/types/database";

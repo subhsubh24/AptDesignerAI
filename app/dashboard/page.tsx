@@ -336,7 +336,7 @@ export default function DashboardPage() {
     } finally {
       setAnalyzing(false);
     }
-  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, apartmentSqft, ensureProject, buildingPlaceId]);
+  }, [roomImages, projectId, buildingName, buildingUrl, buildingResearch, city, state, neighborhood, bedrooms, bathrooms, apartmentSqft, ensureProject, buildingPlaceId, locationCoords?.lat, locationCoords?.lng]);
 
   const totalImages = Object.values(roomImages).flat().length;
 
@@ -930,6 +930,7 @@ export default function DashboardPage() {
                 {/* Room thumbnail */}
                 {firstImage && (
                   <div className="aspect-[16/10] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={firstImage.url}
                       alt={section.label}
@@ -1123,6 +1124,7 @@ function RoomUploadSection({
         <div className="flex gap-3 flex-wrap">
           {images.map((img) => (
             <div key={img.id} className="relative group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={img.url}
                 alt=""

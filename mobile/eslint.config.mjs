@@ -3,7 +3,7 @@
 // node_modules that are not installed during mobile-only CI runs).
 import expo from "eslint-config-expo/flat.js";
 
-export default [
+const config = [
   ...expo,
   {
     rules: {
@@ -17,3 +17,4 @@ export default [
     },
   },
 ];
+export default config;

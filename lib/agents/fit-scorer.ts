@@ -727,9 +727,9 @@ export async function quickScoreProducts(
   designDirection?: DesignDirection,
   placement?: string,
   floorPlan?: Record<string, unknown>,
-  diagnosis?: Record<string, unknown>,
-  priorities?: string[],
-  existingItems?: string[],
+  _diagnosis?: Record<string, unknown>,
+  _priorities?: string[],
+  _existingItems?: string[],
 ): Promise<AgentResult<QuickScoreEntry[]>> {
   if (products.length === 0) {
     return { success: true, data: [] };

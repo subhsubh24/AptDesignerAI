@@ -1,6 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { getSystemPromptCore, getSystemPrompt } from "@/lib/prompts/system";
+import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
   HarmonyGlobalResponseSchema,
@@ -1401,8 +1401,7 @@ ${roomContext.whatItNeeds.map((n) => `- **${n.category}**: ${n.search_title || "
 IMPORTANT: Check that products match their category's SPECS (dimensions, materials, color range). A product that's in the right category but wrong size/material should get a lower functional_fit score.` : ""}
 
 ## PRODUCTS TO VALIDATE
-${/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
+${JSON.stringify(products.map(({ image_url: _img, ...rest }) => rest), null, 2)}
 
 ## YOUR JOB — HARMONY GATE (NOT FULL RE-SCORING)
 Per-product 6-dim scoring already happened during deep-score. Your job is the THIN harmony pass:

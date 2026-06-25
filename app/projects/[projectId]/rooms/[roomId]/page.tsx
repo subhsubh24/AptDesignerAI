@@ -171,6 +171,7 @@ export default async function RoomPage({
         {hasImages && room.room_images[0]?.image_url && (
           <div className="relative rounded-2xl overflow-hidden mb-6 shadow-warm-sm">
             <div className="aspect-[21/9] w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={room.room_images[0].image_url}
                 alt={room.name}

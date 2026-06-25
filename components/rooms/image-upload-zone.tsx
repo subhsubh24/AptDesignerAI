@@ -112,6 +112,7 @@ export function ImageUploadZone({
       {/* Optimistic preview while uploading */}
       {preview && (
         <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Uploading preview" className="max-h-32 rounded-md object-contain opacity-60" />
           <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />

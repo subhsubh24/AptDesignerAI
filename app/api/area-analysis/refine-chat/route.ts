@@ -21,7 +21,6 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { runAnalysis } from "@/app/api/area-analysis/route";
 import { summarizeRefineChanges } from "@/lib/agents/refine-summarizer";
 
-const HISTORY_LIMIT = 10;
 
 /** Top-level analysis fields the focus page renders. */
 const TRACKED_FIELDS = [

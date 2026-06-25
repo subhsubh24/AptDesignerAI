@@ -28,7 +28,6 @@ import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import { z } from "zod";
 import type { AgentResult } from "./types";
-import type { CandidateProduct } from "@/lib/types/database";
 
 const log = createLogger("mockup-prompt-validator");
 
