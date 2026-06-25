@@ -139,6 +139,18 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
   run (or Apple) has to reject.
 - **Track the plan:** when a phase's checklist item is genuinely done, tick it in
   this file (in the final bookkeeping PR, same rules as the other ledger files).
+- **LIVING ARTIFACTS — every artifact stays consistent with reality.** Every doc,
+  copy, and config the loop produces — README, ARCHITECTURE.md, the business case,
+  marketing copy, store-listing/ASO, privacy/data-safety docs, the pre-submission
+  checklist, loop-memory, IMPROVEMENT_LOG, PENDING_OPS, ROADMAP — is LIVING: when the
+  thing it describes changes (code, pricing, positioning, data flows, architecture),
+  UPDATE the artifact in the SAME work so it never contradicts reality. A doc that
+  contradicts the current product is a BUG (and a store/review/trust risk), and fixing
+  it clears the value bar. TWO failure modes to avoid equally: (a) STALE — write-once
+  docs that drift out of date; (b) CHURN — rewriting things for their own sake. The
+  rule is *consistency with reality*, not constant rewriting: refresh an artifact when
+  its subject changes; do NOT churn STABLE ANCHORS (VISION.md, the cost/determinism
+  rules, the guard tests) just to look busy — those are intentionally stable ratchets.
 
 ## Progress format contract (machine-readable — the dashboard reads THIS)
 Record progress as MARKDOWN CHECKBOXES, not prose. An external dashboard derives
@@ -306,9 +318,13 @@ required gate or a recurring audit, not a nicety.
 - [ ] F5. **Periodic DEEP AUDIT (holistic, not per-diff).** On a recurring cadence
   (see the routine), a whole-codebase audit beyond per-change review: security/RLS,
   performance, accessibility, dead/duplicate code, consistency with the design system,
-  dependency health, eval gaps, and "does this still read as world-class?" Findings
-  become prioritized, value-bar-clearing work. This is how quality is continuously
-  re-validated in depth without pretending to re-review every character every run.
+  dependency health, eval gaps, **ARTIFACT FRESHNESS & CONSISTENCY** (do README,
+  ARCHITECTURE.md, the business case, marketing copy, store-listing/ASO, and privacy
+  docs still match the CURRENT code, pricing, and positioning? flag any stale claim or
+  contradiction as a fix — see LIVING ARTIFACTS above), and "does this still read as
+  world-class?" Findings become prioritized, value-bar-clearing work. This is how
+  quality is continuously re-validated in depth without pretending to re-review every
+  character every run.
 
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
