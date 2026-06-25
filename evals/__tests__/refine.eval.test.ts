@@ -91,17 +91,28 @@ describe("eval runner — gold cases", () => {
   });
 
   it("fails when validation confidence is under the threshold", () => {
-    const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+    // Use an inline fixture to test the runner's confidence-threshold logic in
+    // isolation. Real gold cases (brass-lamp, etc.) don't set minValidationConfidence
+    // because the diagnosis pipeline doesn't produce a confidence score.
+    const fixtureWithThreshold = {
+      id: "inline-confidence-test",
+      description: "inline fixture for confidence threshold testing",
+      input: {
+        roomType: "living_room",
+        imageUrls: [],
+      },
+      expectations: {
+        minValidationConfidence: 0.6,
+      },
+    };
 
     const goodOutput = {
-      what_works: ["brass floor lamp"],
+      what_works: [],
       what_should_go: [],
-      recommended_palette: ["terracotta"],
-      what_it_needs: [{ category: "sofa" }, { category: "area_rug" }],
+      recommended_palette: [],
+      what_it_needs: [],
     };
-    const verdict = scoreAgainstExpectations(brassLamp, goodOutput, 0.3);
+    const verdict = scoreAgainstExpectations(fixtureWithThreshold, goodOutput, 0.3);
     expect(verdict.passed).toBe(false);
     expect(verdict.failures.some((f) => f.includes("confidence"))).toBe(true);
   });
