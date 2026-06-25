@@ -6,23 +6,62 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### Playwright E2E CI wiring (added 2026-06-25, PR #87 — wire before F4 gate can be ticked)
+
+PR #87 adds `playwright.config.ts`, `e2e/public-pages.spec.ts`, and `e2e/a11y.spec.ts`. The E2E suite is ready to run but is not yet wired into CI (the loop cannot write `.github/workflows/`).
+
+**Steps:**
+1. Add a Playwright job to `.github/workflows/ci.yml` (or a new `e2e.yml`):
+   ```yaml
+   e2e:
+     runs-on: ubuntu-latest
+     env:
+       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+       PLAYWRIGHT_BASE_URL: "http://localhost:3000"
+       CI: "true"
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-node@v4
+         with:
+           node-version: '20'
+           cache: 'npm'
+       - run: npm ci
+       - run: npm run build
+       - run: npx playwright test
+   ```
+   The pre-installed Chromium is at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` — `playwright.config.ts` already points there via `launchOptions.executablePath`. `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` prevents re-downloading.
+2. Add the job as a required check in GitHub repository settings (Settings → Branches → Branch protection → Require status checks → add `e2e`).
+
+**Why it matters:** Without this, the axe-core accessibility scans and public-pages smoke tests never run in CI. F4 cannot be ticked until the gate actually executes and passes.
+
+---
+
+### 020_fix_saved_designs_rls_column_filter.sql — security: fix share-link RLS policy mismatch (added 2026-06-25, PR #84)
+
+Migration 019 (not yet applied) and migration 020 (new this run) must be applied **together, in order**, on the same deployment:
+
+```sh
+# Apply both in one session — 019 first, then 020 immediately after.
+psql $DATABASE_URL -f supabase/migrations/019_fix_saved_designs_rls.sql
+psql $DATABASE_URL -f supabase/migrations/020_fix_saved_designs_rls_column_filter.sql
+```
+
+**Why two migrations?** Migration 019 drops the too-permissive policy from migration 015 and adds a JWT-claim policy. Migration 020 fixes a mismatch: the app (`app/api/shared/[token]/route.ts`) uses a PostgREST column filter (`.eq("share_token", token)`) — not a JWT claim — so the 019 policy returns 0 rows for every share link. Migration 020 replaces it with the correct column-filter policy: `USING (is_public = true AND share_token IS NOT NULL)`.
+
+**Verify (run as anon role):**
+```sql
+-- Must return 0 rows (no token filter provided — enumeration blocked):
+SELECT id FROM saved_designs WHERE is_public = true LIMIT 5;
+
+-- Must return exactly 1 row for a valid token:
+SELECT id FROM saved_designs WHERE share_token = '<valid-token>' AND is_public = true;
+```
+
+---
+
 ### 019_fix_saved_designs_rls.sql — security: require share_token in RLS policy (added 2026-06-25, PR #78)
 
-Fixes an enumeration vulnerability in `saved_designs`: the migration-015 policy allowed any unauthenticated PostgREST caller to list all `is_public=true` rows without knowing the share token. The replacement policy requires the caller to prove knowledge of the token.
-
-**Apply:**
-```sh
-psql $DATABASE_URL -f supabase/migrations/019_fix_saved_designs_rls.sql
-```
-
-**Verify (run as anon role — must return 0 rows without a token filter):**
-```sql
-SELECT id FROM saved_designs WHERE is_public = true LIMIT 5;
--- Expected: 0 rows
--- (A query including ?share_token=eq.<valid-token> in PostgREST should still return the matching row)
-```
-
-**Note on app-layer changes:** The migration uses the JWT-claim approach (`current_setting('request.jwt.claims')`). If the share-link fetch path in the app passes the token as a PostgREST column filter (`?share_token=eq.<token>`) rather than embedding it in the JWT, use the simpler `USING (is_public = true AND share_token IS NOT NULL)` variant documented in the migration file comments instead. Verify the `/shared/[token]` route's Supabase query before applying.
+⚠️ **Apply 019 together with 020 (see entry above).** Do not apply 019 alone — it uses the JWT-claim approach which breaks share links; 020 fixes it immediately after.
 
 ---
 

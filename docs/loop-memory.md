@@ -4,6 +4,80 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-25 (Run 27)
+
+### State on entry
+- Context compacted from Run 26 (context window exhausted mid-run). PRs #76–79 confirmed merged on entry.
+- 876 tests passing, tsc clean, lint clean on entry.
+- Last DEEP AUDIT entry: none found in history → deep audit was overdue.
+
+### Area served this run
+**Deep audit (security, a11y, docs) + Track F4 (Playwright E2E + a11y gate).**
+
+### What was done
+
+**Deep Audit — 6 lenses run in parallel before implementation:**
+- Security/RLS: found two CRITICAL gaps: (1) middleware missing public paths for billing webhook, share API, mobile API, and marketing pages; (2) migration 019 uses JWT-claim RLS but the app uses column-filter — mismatch breaks all share links after 019 is applied.
+- A11y: found CRITICAL — account deletion form label has no `htmlFor` / input has no `id` (WCAG 1.3.1 + 4.1.2 violation).
+- Docs: README was still `create-next-app` boilerplate.
+- Dead code: no dead code found (clean). Zero test coverage in `lib/billing/`, `lib/entitlements/`, `lib/auth/`, `lib/supabase/admin.ts` — recorded for future work.
+- Performance/dependency: Next.js 14 vulnerabilities reported; no critical; defer.
+
+**PR #83 — `security/middleware-public-paths` (CRITICAL)**
+- Added `/api/billing/webhook` to `PUBLIC_API_PATHS` (Stripe needs no session cookie)
+- Added `/api/shared/` and `/api/mobile/` prefix bypasses (share API uses column-filter auth; mobile API uses Bearer token auth)
+- Added `/pricing`, `/faq`, `/privacy`, `/terms`, `/support` to `PUBLIC_PATHS` (exact match)
+- Added `/guides` to `PUBLIC_PATH_PREFIXES` list (prefix match — covers sub-routes like `/guides/color-palette-guide`)
+- Two reviewers: Reviewer 1 flagged `/api/mobile/` missing bypass; Reviewer 2 flagged `/guides` sub-routes and scope-creep comment. Both incorporated before merge.
+
+**PR #84 — `security/fix-rls-migration-020` (HIGH)**
+- `supabase/migrations/020_fix_saved_designs_rls_column_filter.sql`: drops JWT-claim policy from migration 019, adds correct column-filter policy: `USING (is_public = true AND share_token IS NOT NULL)`. UNIQUE constraint on `share_token` ensures enumeration is impossible without the token.
+- PENDING_OPS.md updated with combined 019+020 apply instructions (apply both in sequence).
+
+**PR #85 — `a11y/account-form-label` (CRITICAL a11y)**
+- `app/account/page.tsx`: `id="confirm-delete"` on input, `htmlFor="confirm-delete"` on label. 2-char fix unblocks screen readers and label-click focus behavior.
+
+**PR #86 — `docs/readme-product-description` (HIGH docs)**
+- `README.md`: full product description — what it does, stack table, local dev setup (web + mobile), env var reference, pointers to ARCHITECTURE.md / AGENTS.md.
+
+**PR #87 — `f4/playwright-e2e-accessibility` (Track F4)**
+- `playwright.config.ts`: Chromium at `/opt/pw-browsers`; dev server auto-start; 1 retry in CI.
+- `e2e/public-pages.spec.ts`: smoke tests — all 7 public marketing pages must load (< 400) and render a visible heading.
+- `e2e/a11y.spec.ts`: axe-core WCAG 2.x scan; fails on critical or serious violations with human-readable node HTML summary.
+- `package.json`: `@playwright/test@^1.61.1` + `@axe-core/playwright@^4.12.1`; `test:e2e` and `test:e2e:a11y` scripts.
+- CI wiring recorded in PENDING_OPS.md (`.github/workflows/` write-blocked in headless runs).
+
+**ROADMAP reconcile:**
+- Converted A1–A4, B1–B5, D1–D4 (except D3), E1, E6 from bullet to `[x]` checkbox.
+- Ticked Track B and Track C DoD checkboxes (all sub-items merged, gate green in this run).
+- Left A5 unchecked (eval files exist but CI job is human-applied).
+- Left D3 unchecked (screenshots require human to run app on device).
+- Left F4 unchecked (Playwright setup merged, but CI job not yet wired — human-applied).
+
+### Lessons learned
+
+1. **`/api/mobile/*` routes must be in middleware's public-path bypass.** Mobile clients send `Authorization: Bearer` — no session cookie. The middleware's cookie-auth check returned 401 before the route's own `supabase.auth.getUser(token)` ever ran. Any API route that performs its own auth (Bearer, HMAC, API key) needs a middleware bypass with clear documentation of who is responsible for auth.
+
+2. **RLS approach must be verified against the actual Supabase query at the call site.** Migration 019 documented two variants (JWT-claim vs column-filter) but chose JWT-claim without verifying which one the app actually uses. The route uses `.eq("share_token", token)` — a column filter. Always read the route before choosing the RLS variant.
+
+3. **Both reviewers independently found issues the other missed.** Reviewer 1 (mobile API bypass) and Reviewer 2 (/guides sub-routes) each caught one critical gap. Neither caught the other's issue. Two reviewers with different prompts are not redundant — they surface different categories of problems.
+
+4. **`git checkout <base>` in a two-command Bash call switches BACK before the branch creation completes as expected.** When running `git checkout <base> && git checkout -b <branch>` and then another `git checkout <base>` in a SEPARATE Bash call, the second call switches back to base, and the next Write/commit lands on base instead of the feature branch. Always check `git branch` before writing files. Fixed by cherry-pick + `git reset --hard HEAD~1`.
+
+5. **Deep audit found zero dead code / TODO/FIXME debt.** But found zero test coverage for `lib/billing/`, `lib/entitlements/`, `lib/auth/`, `lib/supabase/admin.ts` — these are critical paths (money, auth, identity) with no tests. This is the most impactful coverage gap remaining.
+
+### Merge outcome
+PRs #83, #84, #85, #86, #87 all merged (all green: verify ✓ build ✓ mobile ✓ quality ✓).
+
+### Rotation guide for next run
+- **Track F remaining:** F3 (full eval suite with CI job — human wire step), F4 (Playwright CI wiring — human wire step). The loop cannot advance F3 or F4 further without the CI jobs being wired. F5 deep audit ran this run (satisfies F5 for now).
+- **Track A5 (eval CI):** Human applies the `RUN_EVALS=1` CI job from PENDING_OPS.md. Eval files are complete.
+- **Track D3 (screenshots):** Human must run the app on a device. Cannot be resolved autonomously.
+- **Coverage gaps (HIGH priority for next audit):** `lib/billing/stripe.ts`, `lib/entitlements/web.ts` + `server.ts`, `lib/auth/ownership.ts`, `lib/supabase/admin.ts` — zero test coverage for money/auth critical paths.
+- **Do NOT:** Add new features. The remaining gaps are human-gated (CI jobs, screenshots) or coverage depth. Advance whichever test coverage gap has the highest risk vs. effort ratio if blocked on human steps.
+
+---
+
 ## Run 2026-06-25 (Run 25)
 
 ### State on entry

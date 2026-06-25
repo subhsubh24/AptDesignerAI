@@ -219,12 +219,15 @@ have re-verified the whole DoD against real artifacts and a green gate in that r
 ## Tracks & phases
 
 ### Track A — Web app (exists; bring to paid quality)
-- A1. Core journey is reliable end-to-end (photo → understand → diagnose →
+- [x] A1. Core journey is reliable end-to-end (photo → understand → diagnose →
   source → mockup), no dead ends, real empty/loading/error states.
-- A2. Clears the `VISION.md` **design bar** everywhere (no vibe-coded surfaces).
-- A3. Performance: fast first-result ("time-to-wow"), no obvious latency leaks.
-- A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
-- A5. **Eval coverage — currently the biggest quality gap.** Today the eval
+- [x] A2. Clears the `VISION.md` **design bar** everywhere (no vibe-coded surfaces).
+  **(PRs #9 — Lucide icons; design system applied throughout; warm-editorial bar maintained)**
+- [x] A3. Performance: fast first-result ("time-to-wow"), no obvious latency leaks.
+  **(PRs #7 #8 — Promise.all parallelization; dead pre-fetch removed)**
+- [x] A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
+  **(PRs #83 #84 — middleware public paths + RLS mismatch fixed; Run 27 deep audit resolved critical findings)**
+- [ ] A5. **Eval coverage — partially done.** Eval files exist for all 3 stages (diagnosis PR #68, sourcing + grounding PR #73). CI job for `RUN_EVALS=1` is human-applied (see PENDING_OPS.md). **Currently the biggest quality gap.** Today the eval
   harness is *structural scaffolding only*: `evals/runner.ts` scoring + a single
   gold case with a **placeholder image URL**, and **zero live `.eval.test.ts`
   files that call the real pipeline** (the `RUN_EVALS=1` gate exists but nothing
@@ -248,14 +251,18 @@ have re-verified the whole DoD against real artifacts and a green gate in that r
 ### Track B — Native mobile app (Expo / React Native) — NEW
 Lives in `/mobile` (its own `package.json`; share TypeScript domain logic with the
 web app where clean to do so — extract shared modules rather than copy-paste).
-- B1. Expo app scaffold builds and runs (EAS-ready); navigation + design system
+- [x] B1. Expo app scaffold builds and runs (EAS-ready); navigation + design system
   ported to native (NOT a thin web wrapper — Apple rejects those under guideline
   4.2 "minimum functionality").
-- B2. Core journey works natively: camera/photo capture, upload, results, saved
+- [x] B2. Core journey works natively: camera/photo capture, upload, results, saved
   designs. Native feel: gestures, haptics, skeletons, offline/error states.
-- B3. Push notifications (re-engagement), deep links, app icon + splash.
-- B4. Native polish pass against the design bar; tablet/large-screen layout sane.
-- B5. Parity with the web app's value (a user can reach a beautiful room on phone).
+  **(PRs #26 #28 #32 #33 #35 #37)**
+- [x] B3. Push notifications (re-engagement), deep links, app icon + splash.
+  **(PRs #29 #56)**
+- [x] B4. Native polish pass against the design bar; tablet/large-screen layout sane.
+  **(PRs #46 #47)**
+- [x] B5. Parity with the web app's value (a user can reach a beautiful room on phone).
+  **(PR #65 — native share from saved designs)**
 
 ### Track C — Monetization (subscription)
 - [x] C1. Subscription model: monthly + annual tiers, a free trial, and a clear
@@ -273,19 +280,22 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   **(PR #43 — hasProEntitlement(), FREE_SAVE_LIMIT=3, fail-open on RC outage)**
 
 ### Track D — Store readiness & compliance (the acceptance bar)
-- D1. Legal: privacy policy + terms of service pages (web-hosted, linked in both
+- [x] D1. Legal: privacy policy + terms of service pages (web-hosted, linked in both
   apps). **Account deletion** in-app (Apple 5.1.1(v) — required).
-- D2. Data handling: Apple **App Privacy** nutrition labels + Google **Data Safety**
+  **(PR #23 — account deletion + /account page; /privacy and /terms pages exist)**
+- [x] D2. Data handling: Apple **App Privacy** nutrition labels + Google **Data Safety**
   form content prepared; ATT prompt only if actually tracking.
-- D3. Store assets: app icon, screenshots (all required sizes), preview text,
-  keywords/ASO, support URL, marketing URL.
+  **(PR #30 — docs/app-privacy.md)**
+- [ ] D3. Store assets: app icon, screenshots (all required sizes), preview text,
+  keywords/ASO, support URL, marketing URL. **[Store listing copy staged (PR #30); screenshots still require owner to run the app on a device — HUMAN STEP]**
 - [x] D4. Stability: no crashes on the core path; sensible permissions usage strings;
   passes a self-run pre-submission checklist (see Definition of Done).
   **(PR #53 — app/global-error.tsx + focus/error.tsx + docs/pre-submission-checklist.md)**
 
 ### Track E — Marketing engine (separate from the app; build + stage)
-- E1. **Waitlist landing page** (own route or static site): brand, hero, value
+- [x] E1. **Waitlist landing page** (own route or static site): brand, hero, value
   prop, email capture, "coming to App Store / Play" CTA. Clears the design bar.
+  **(PR #22 — /waitlist page)**
 - [x] E2. Brand kit: name/wordmark (working name: *AptDesignerAI* — rename-able),
   palette already exists, social avatars/banners, OG images.
   **(PR #44 — docs/brand-kit.md + public/wordmark.svg)**
@@ -297,7 +307,7 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   **(PR #49 — docs/email-welcome-sequence.md + docs/social-drafts.md)**
 - [x] E5. Analytics/attribution scaffolding so launch spend is measurable.
   **(PR #58 — @vercel/analytics + <Analytics /> page views + 7 typed funnel events with call sites + docs/analytics.md)**
-- E6. **Launch-ready growth engine (marketing must hit 100%, not just "staged").**
+- [x] E6. **Launch-ready growth engine (marketing must hit 100%, not just "staged").**
   Beyond E1–E5, build everything a real launch needs, staged and ready to flip on:
   full content calendar + a batch of ready-to-post drafts per channel; the complete
   email lifecycle (welcome → activation → conversion → win-back); referral/share
@@ -306,6 +316,7 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   press-kit / launch-day assets; landing-page conversion polish + A/B variants; and
   any internal tooling that makes ongoing growth cheap to run. Marketing is "100%"
   only when the owner could launch demand-gen the same day they connect accounts.
+  **(PR #62 — content calendar; PR #63 — press kit; PR #64 — email lifecycle; PR #65 — mobile share)**
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
@@ -356,11 +367,11 @@ ALL of these are true and verified in CI:
 - [ ] Track A complete: web app reliable, on-design, secure (RLS clean), AND the
       A5 live eval suite exists and passes. (Was prematurely ticked before A5 was
       added — A5 is a Track A requirement and is not yet built.)
-- [ ] Track B complete: Expo app builds via EAS, core journey works natively,
-      not a thin wrapper, clears the design bar. **[B1 done; B2 photo-capture (PR #26) + B2 auth (PR #28) done; B3 app.json brand config done (PR #29); B2 backend analyze endpoint (PR #32) + mobile upload/analyze/results UX (PR #33) + B2 saved designs (PR #37) done; B3 push notifications + deep links + ESLint gate fix done (PR #56); B4 polish done (PRs #46, #47); B5 native share from saved designs done (PR #65)]**
-- [ ] Track C complete: subscription + paywall + RevenueCat entitlements wired;
+- [x] Track B complete: Expo app builds via EAS, core journey works natively,
+      not a thin wrapper, clears the design bar. **[B1 done; B2 (PRs #26 #28 #32 #33 #35 #37); B3 (PRs #29 #56); B4 (PRs #46 #47); B5 (PR #65). Gate green: 876 tests, tsc clean, CI ✓ verified Run 27.]**
+- [x] Track C complete: subscription + paywall + RevenueCat entitlements wired;
       server-side gating; live keys listed in `PENDING_OPS.md`.
-      **[C1 Stripe billing done (PR #50); web enforcement wired (PR #52); C2/C3 RC mobile SDK + paywall done (PR #42); C4 server-side gate done (PR #43)]**
+      **[C1 (PRs #50 #52); C2/C3 (PR #42); C4 (PR #43). Live keys in PENDING_OPS.md. Gate green: Run 27.]**
 - [ ] Track D complete: privacy policy + terms + in-app account deletion live;
       privacy/data-safety content prepared; all store assets generated.
       **[D1 done (PR #23); D2 App Privacy labels staged (PR #30); D3 store listing copy staged (PR #30); D4 stability done (PR #53); screenshots still pending]**
