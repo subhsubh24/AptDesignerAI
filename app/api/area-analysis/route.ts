@@ -505,7 +505,6 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
     // every downstream step, so variance here propagates to the entire room.
     // Default N=3, configurable via SELF_CONSISTENCY_N. See
     // lib/agents/self-consistency.ts for details.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
     type PassASample = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: Record<string, any>;
@@ -1344,11 +1343,7 @@ Use Google Search to verify current pricing and material availability when neede
       }
 
       // Apply per-dimension math caps + composite scoring (weighted geometric mean + pairwise penalties)
-      const mathItemMap = new Map(
-        (latestMathResult?.itemScores || []).map((s) => [s.category, s])
-      );
       for (const s of harmony.item_scores) {
-        const mathItem = mathItemMap.get(s.category);
 
         // Build per-dimension math caps from the math module's outputs
         const mathCaps: MathDimensionCaps = {};

@@ -316,7 +316,6 @@ const SCALE_RELATIONS: Array<{
   },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function computeBundleScaleBalance(products: BundleProduct[], _ctx: BundleMathContext): { score: number; issues: string[] } {
   const issues: string[] = [];
   let score = 0.8;

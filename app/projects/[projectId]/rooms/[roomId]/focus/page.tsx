@@ -350,7 +350,7 @@ export default function FocusPage() {
     if (step === "analysis") {
       // Just re-trigger background generation, don't change step
       if (areaAnalysis) {
-        visionTriggered.current = true; // eslint-disable-line react-hooks/immutability
+        visionTriggered.current = true;
         setVisionUrl(null);
         await generateVisionInBackground(areaAnalysis);
       }
@@ -824,6 +824,7 @@ export default function FocusPage() {
                                 className="w-full h-full relative group"
                                 onClick={() => setExpandedMockup(isExpanded ? null : item.category)}
                               >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={mockupUrl} alt={`Preview: ${item.category}`} className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                                   <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
@@ -844,6 +845,7 @@ export default function FocusPage() {
                         {isExpanded && mockupUrl && (
                           <div className="px-3 pb-3">
                             <div className="relative rounded-lg overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={mockupUrl} alt={`${item.search_title || item.category} in your room`} className="w-full h-auto" />
                               <button
                                 className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
@@ -904,6 +906,7 @@ export default function FocusPage() {
                       className="relative rounded-xl overflow-hidden border cursor-pointer group"
                       onClick={() => setShowVisionOverlay(true)}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={visionUrl} alt="Design vision preview" className="w-full h-auto" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                         <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium bg-black/60 px-3 py-1.5 rounded-full">
@@ -1386,6 +1389,7 @@ function ImageOverlay({
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
       <div className="max-w-4xl w-full bg-background rounded-2xl overflow-hidden shadow-2xl">
         <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
           <button
             onClick={onClose}
@@ -1540,6 +1544,7 @@ function RecommendationTable({
                 return (
                   <div key={tier} className="flex items-center gap-3 p-2 rounded-xl bg-muted/30">
                     {product.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={product.image_url} alt={product.title || "Product image"} className="h-12 w-12 rounded object-cover shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
@@ -1619,6 +1624,7 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
     <td className="px-4 py-3">
       <div className="flex flex-col items-center gap-1 text-center">
         {product.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={product.image_url} alt={product.title || "Product image"} className="h-10 w-10 rounded object-cover" />
         )}
         <span className={cn("text-xs font-semibold", tierColorClass)}>

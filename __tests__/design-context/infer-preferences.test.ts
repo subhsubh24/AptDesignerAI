@@ -31,7 +31,6 @@ function makeRoom(opts: {
     priorities: opts.priorities ?? [],
     user_context: opts.user_context ?? null,
     budget_mode: opts.budget_mode ?? null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     room_diagnoses: (opts.diagnoses ?? []).map((d) => ({
       id: "dx",
       room_id: opts.id,

@@ -5,6 +5,16 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Allow _-prefixed variables and parameters to signal intentionally-unused args.
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      }],
+    },
+  },
   // Ban raw console calls in AI pipeline code — use lib/logging/logger.ts instead.
   // The logger itself and store infrastructure are exempted.
   {
@@ -30,6 +40,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vitest coverage output:
+    "coverage/**",
   ]),
 ]);
 

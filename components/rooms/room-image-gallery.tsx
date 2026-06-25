@@ -16,6 +16,7 @@ export function RoomImageGallery({ images }: RoomImageGalleryProps) {
           key={image.id}
           className="aspect-video rounded-lg overflow-hidden bg-muted"
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={image.image_url}
             alt={image.caption || "Room photo"}

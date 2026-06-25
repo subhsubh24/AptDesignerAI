@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, ExternalLink, Download, Star } from "lucide-react";
+import { ArrowLeft, ExternalLink, Download, Star } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { SkeletonCard } from "@/components/ui/skeleton";
@@ -152,6 +152,7 @@ export default function PicksPage() {
               <Card className="overflow-hidden group hover:shadow-md transition-shadow">
                 {p.image_url && (
                   <div className="h-40 overflow-hidden bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={p.image_url}
                       alt={p.title || "Product"}
