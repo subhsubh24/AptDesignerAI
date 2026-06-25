@@ -247,6 +247,35 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 > loop never invents public claims or fake metrics, and never posts under the
 > owner's identity without a connected, owner-authorized channel.
 
+### Track F — World-class quality, validation & evals (the excellence bar)
+The product must be demonstrably top-grade — not "tests pass," but rigorously
+validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
+required gate or a recurring audit, not a nicety.
+- [ ] F1. **Lint clean + ENFORCED.** Drive `npx eslint .` to ZERO errors and zero
+  new warnings, then keep it clean. Reviewer A rejects any change that introduces a
+  lint error/warning. (Owner promotes `lint` to a required CI check once it is green;
+  until then the loop keeps every new diff lint-clean and burns down the backlog.)
+- [ ] F2. **Coverage floor.** Enforce a meaningful test-coverage threshold on the
+  critical paths (the validation/math/agents modules) via `vitest --coverage`; a
+  regression below the floor fails the gate. Cover real branch behavior, not lines-
+  for-lines' sake.
+- [ ] F3. **Eval coverage COMPLETE (extends A5).** A live `.eval.test.ts` for EVERY
+  core pipeline stage — apartment/room understanding, diagnosis, product-sourcing
+  relevance, mockup grounding — each calling the real pipeline (`RUN_EVALS=1`) and
+  scoring against a GROWING gold set of real fixtures. Wire a scheduled eval run so
+  AI-output-quality regressions are caught before users/reviewers see them.
+- [ ] F4. **E2E + accessibility + visual + performance gates (UX is the product).**
+  Playwright end-to-end tests for the core journey (web; and the mobile core flow as
+  feasible); automated accessibility checks (e.g. axe) on key pages with no critical
+  violations; visual-regression on the design-bar surfaces; a Lighthouse/performance
+  budget on the hot paths. These catch what unit tests cannot.
+- [ ] F5. **Periodic DEEP AUDIT (holistic, not per-diff).** On a recurring cadence
+  (see the routine), a whole-codebase audit beyond per-change review: security/RLS,
+  performance, accessibility, dead/duplicate code, consistency with the design system,
+  dependency health, eval gaps, and "does this still read as world-class?" Findings
+  become prioritized, value-bar-clearing work. This is how quality is continuously
+  re-validated in depth without pretending to re-review every character every run.
+
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
 artifacts exist in the merged tree AND the full gate was re-run green in the same run.
@@ -269,6 +298,10 @@ ALL of these are true and verified in CI:
       ASO package + content calendar + full email lifecycle + owned-channel campaigns
       + referral/share loops + analytics — all BUILT and STAGED, launch-ready.
       **[E1 waitlist (PR #22); E2 brand kit (PR #44); E3 /support + guides + SEO + FAQ (#48/#54); E4 email + social drafts (#49); E5 analytics done (PR #58); E6 content calendar (PR #62) + press kit (PR #63) + email lifecycle (PR #64) + mobile share (PR #65) done]**
+- [ ] **Track F complete (world-class quality bar):** lint clean + enforced (F1);
+      coverage floor met (F2); the full per-stage live eval suite passes (F3);
+      E2E + accessibility + visual + performance gates green (F4); the periodic deep
+      audit is running and its last pass surfaced no unaddressed critical findings (F5).
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 - [x] **Business case (`docs/BUSINESS_CASE.md`) is complete and credible:** a
