@@ -4,6 +4,50 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-25 (Run 24)
+
+### State on entry
+- Context compacted from Run 23. PRs #61–65 merged (E6 complete, business case, mobile share/B5).
+- Rotation guide from Run 23: A5 BLOCKED on owner images; D screenshots BLOCKED; do NOT add new features.
+- A5 claim of "BLOCKED on owner-supplied images" was revisited and overturned this run.
+
+### Area served this run
+**Track A5** — Live eval suite (first increment: diagnosis stage).
+
+### What was done
+
+**PR #68 — `a5/live-eval-suite`**
+- Identified root blocker for A5: prior runs claimed images required owner-supplied CDN URLs. This run recognized Unsplash CDN (`images.unsplash.com`) is publicly accessible to Gemini via URL, unblocking A5 autonomously.
+- `evals/gold/living-room-warm-sofa.json` (new): warm neutral living room gold fixture using `photo-1555041469-a586c61ea9bc`, broad 10-term OR palette gate (warm/neutral/beige/cream/white/wood/oak/walnut/natural/light).
+- `evals/gold/studio-living-keep-brass-lamp.json` (updated): replaced placeholder `example.com` URL with `photo-1600210492493-0946911123ea` (distinct Unsplash image). Removed `mustKeep` (wrong signal — observational `what_is_working` check, not compliance) and `minValidationConfidence: 0.6` (diagnosis pipeline produces no confidence score; keeping it was a lying contract).
+- `evals/__tests__/diagnosis.eval.test.ts` (new): live eval test calling `runRoomDiagnosis` end-to-end. `flattenDiagnosisOutput()` adapter bridges `what_is_working`/`what_is_not_working` → `what_works`/`what_should_go`. Per-test `it.skipIf(!evalsEnabled())` (not describe-level). Two tests: palette check (warm-sofa) and keepItems compliance (brass-lamp, `mustNotDrop` only). 3-minute timeout per test.
+- `evals/__tests__/refine.eval.test.ts` (updated): the "fails when validation confidence is under the threshold" test was using the brass-lamp fixture which no longer has `minValidationConfidence`. Decoupled to use an inline fixture — correct design since this test exercises runner infrastructure, not a gold case.
+- Two full reviewer cycles, both APPROVE. All 876 tests passing, type check clean, determinism clean.
+
+### Lessons learned
+
+1. **"BLOCKED" labels must be revisited.** Prior runs marked A5 as "BLOCKED on owner-supplied images" without testing whether Unsplash CDN URLs work. They do — Gemini's URL-based image intake is not limited to images the operator has uploaded. Before recording a block as permanent, test the actual constraint.
+
+2. **`mustKeep` vs `mustNotDrop` semantics.** `mustKeep` checks `what_is_working` (observational output — "things the model praised"). A model can correctly honor a keepItem constraint without praising the item in diagnosis output. The correct compliance signal is `mustNotDrop`, which checks that the item does NOT appear in `what_should_go`. Use `mustNotDrop` for keepItems, never `mustKeep`.
+
+3. **Gold fixture expectations must be honest about what the call site actually checks.** The brass-lamp fixture had `minValidationConfidence: 0.6` but `runRoomDiagnosis` returns no confidence score, and the diagnosis eval test was never going to pass it as the third arg to `scoreAgainstExpectations`. A fixture expectation that is silently dropped at every call site is worse than no expectation. Remove it, or wire it up — don't leave it lying.
+
+4. **Confidence-threshold unit tests belong in the runner's own test, not in a gold case.** `refine.eval.test.ts` was testing the runner's `minValidationConfidence` enforcement behavior using the brass-lamp gold fixture. When we cleaned the fixture, that test broke. Fix: use an inline fixture object for any test exercising runner mechanics in isolation. Gold cases should describe real eval scenarios, not double as unit test fixtures.
+
+5. **`runRoomDiagnosis` has zero DB references and runs without Supabase.** `getAdminClient()` returns null when env vars are absent; `fetchDiagnosisExamples()` returns `[]` on null client (zero-shot mode). This makes `runRoomDiagnosis` the ideal first eval target — no test DB needed.
+
+### Merge outcome
+PR #68 merged (SQUASH). Two-reviewer cycle passed. Track A5 is now partially unblocked: real images + diagnosis stage eval tests are in. Still needed for full A5 completion:
+- Eval tests for product-sourcing relevance and mockup grounding stages
+- `RUN_EVALS=1` CI job wiring in GitHub Actions
+
+### Rotation guide for next run
+- **Track A5 remaining**: Two more eval files needed (sourcing relevance, mockup grounding) + CI job. Eval tests for sourcing can likely follow the same pattern (real Unsplash images, real Gemini call). The CI job is a `.github/workflows` file addition — check if writing `.github/` is permitted (it may hit the sensitive-file hook).
+- **Track D3 (screenshots)**: Still blocked on owner running the app. Cannot be resolved autonomously.
+- **Do NOT**: Add new features. The loop's job is to converge on Definition of Done. A5 and D3 are the remaining gaps.
+
+---
+
 ## Run 2026-06-24 (Run 23)
 
 ### State on entry
