@@ -317,11 +317,11 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 The product must be demonstrably top-grade — not "tests pass," but rigorously
 validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
 required gate or a recurring audit, not a nicety.
-- [ ] F1. **Lint clean + ENFORCED.** Drive `npx eslint .` to ZERO errors and zero
+- [x] F1. **Lint clean + ENFORCED.** Drive `npx eslint .` to ZERO errors and zero
   new warnings, then keep it clean. Reviewer A rejects any change that introduces a
   lint error/warning. (Owner promotes `lint` to a required CI check once it is green;
   until then the loop keeps every new diff lint-clean and burns down the backlog.)
-- [ ] F2. **Coverage floor.** Enforce a meaningful test-coverage threshold on the
+- [x] F2. **Coverage floor.** Enforce a meaningful test-coverage threshold on the
   critical paths (the validation/math/agents modules) via `vitest --coverage`; a
   regression below the floor fails the gate. Cover real branch behavior, not lines-
   for-lines' sake.

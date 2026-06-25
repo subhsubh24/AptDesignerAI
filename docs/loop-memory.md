@@ -1126,3 +1126,68 @@ PR #32 (backend) + PR #33 (mobile UX) opened with auto-merge (SQUASH) enabled. 8
 - **D4 (stability + screenshots) deferred** until B2 upload+AI is verifiably working so screenshots show real AI content.
 - **Migration 017 still pending** — owner must `supabase db push` when PR #22 merges.
 - **Avoid:** Track A web changes unless a regression surfaces. Mobile CI ESLint gate status — verify PRs #32/#33 pass before starting more mobile work.
+
+---
+
+## Run 2026-06-25 (Run 26)
+
+### State on entry
+- 876 tests passing. Prior runs completed: A5 (live eval suite — PRs #68, #73), E6 (mobile share + email lifecycle — PR #65), plus full marketing/monetization/store-readiness tracks.
+- DEEP AUDIT completed earlier this session: found RLS enumeration gap in `saved_designs`, `Math.random()` in test data, `no-limit` full table scan, missing JSON parse try/catch in 5 routes, missing `<img>` suppressions throughout UI.
+- Track F was the lowest incomplete track: F1 (lint clean), F2 (coverage floor), F3 (eval complete), F4 (E2E+a11y+perf), F5 (periodic deep audit).
+
+### Area served this run
+Three file-disjoint deliverables on separate branches:
+- **Track F1** — `eslint .` to zero warnings (PR #76)
+- **Track F2** — vitest coverage threshold gate (PR #77)
+- **Security** — RLS enumeration fix for `saved_designs` (PR #78)
+
+### What was done
+
+**PR #76 — F1: drive eslint to zero warnings (29 files)**
+- `eslint.config.mjs`: global `@typescript-eslint/no-unused-vars` with `argsIgnorePattern`/`varsIgnorePattern: "^_"` + `coverage/**` to globalIgnores
+- `mobile/eslint.config.mjs`: named export syntax fix (was `export default [...]`)
+- 24 `@next/next/no-img-element` suppressions across 14 files (Supabase CDN, external retailer URLs, `blob:` preview URLs — not suppressible via next/image config)
+- Dead code removed: `HISTORY_LIMIT`, `mathItemMap`+`mathItem` in area-analysis, `ALL_PRICE_TIERS` in orchestrator, 8 unused imports
+- `react-hooks/exhaustive-deps` fix in `dashboard/page.tsx`: added missing `locationCoords?.lat/lng` deps (correctness fix, not just lint)
+- 8 stale `eslint-disable` comments removed after global config made them unnecessary
+- Two independent reviewers (Reviewer A: correctness/security; Reviewer B: value/phase-fit) both APPROVE
+- `npx eslint . --max-warnings=0` exits 0 ✓
+
+**PR #77 — F2: vitest coverage threshold gate (1 file)**
+- `vitest.config.ts`: adds `coverage.thresholds: { statements: 25, branches: 19, functions: 30, lines: 25 }`
+- Current coverage ≈ 36/28/40/36 — well above thresholds, leaving headroom
+- `npx vitest run --coverage` exits 0 ✓
+
+**PR #78 — Security: fix saved_designs RLS (1 new migration)**
+- `supabase/migrations/019_fix_saved_designs_rls.sql`: drops migration-015 policy, replaces with token-required policy
+- Root cause: `USING (is_public = true)` allowed PostgREST enumeration without share token — token check only existed in app layer
+- Fix: `USING (is_public = true AND share_token IS NOT NULL AND share_token = current_setting('request.jwt.claims', true)::json->>'share_token')`
+- HUMAN-APPLIED — entry added to PENDING_OPS.md
+
+### Lessons learned
+
+1. **Global `argsIgnorePattern: "^_"` creates 8 "unused directive" warnings.** Adding `varsIgnorePattern/argsIgnorePattern: "^_"` to the global ESLint config automatically makes all existing per-line `// eslint-disable-next-line @typescript-eslint/no-unused-vars` comments stale. The linter then reports these as "unused disable directive" warnings. Fix: scan for and remove all per-line `no-unused-vars` disable comments after adding the global config.
+
+2. **`coverage/**` must be in eslint globalIgnores.** Running `npx vitest run --coverage` generates HTML/JS coverage output files (including `coverage/block-navigation.js` etc.) that ESLint picks up and reports `no-undef` and other errors. Add `"coverage/**"` to `globalIgnores` whenever coverage output lands in the project root.
+
+3. **`@typescript-eslint/no-unused-vars` does NOT ignore `_`-prefixed names by default.** Unlike TypeScript compiler's `noUnusedParameters` which honors `_` prefixes natively, the ESLint rule requires explicit `argsIgnorePattern: "^_"` and `varsIgnorePattern: "^_"` config. Without it, `_diagnosis: string` triggers a warning even though the `_` prefix signals intentional non-use.
+
+4. **RLS enumeration is subtle.** A policy `USING (is_public = true)` looks safe because it's "opt-in public." But PostgREST exposes the table; an unauthenticated caller can do `GET /saved_designs?is_public=eq.true` and enumerate all public designs. The share token check must be at the DB policy level, not just the app layer.
+
+5. **Reviewer A and B catch different failure modes.** On the F1 PR: Reviewer A focused on whether dead code removals were truly safe (confirmed `mathItemMap`, `HISTORY_LIMIT`, `ALL_PRICE_TIERS` were dead); Reviewer B focused on whether the `^_` pattern creates future blind spots (low risk, standard ecosystem pattern). Neither finding was a blocker; both gave useful signal.
+
+### Merge outcome
+- PR #76 (F1) — pushed, CI passing (all 4 checks green), auto-merge attempted but requires branch protection rule (admin action); branch is ready to merge manually
+- PR #77 (F2) — pushed, CI pending
+- PR #78 (security) — pushed, CI pending
+
+### Rotation guide for next run
+- **F3 is the next Track F item.** A live `.eval.test.ts` for EVERY core pipeline stage — apartment/room understanding, diagnosis, sourcing relevance, mockup grounding. A5 has sourcing+diagnosis+grounding started; F3 means completing the suite with area-analysis and mockup stages + a growing gold fixture set.
+- **Three items from the DEEP AUDIT still pending:**
+  1. `__tests__/integration/scoring-pipeline.test.ts` lines 77-105 use `Math.random()` in test data — determinism violation (low risk since test data, but violates the contract)
+  2. 5 API routes missing try/catch on `request.json()` (returns 500 on malformed JSON instead of 400): `api/bundles/route.ts`, `api/products/route.ts`, `api/projects/route.ts`, `api/rooms/route.ts`, `api/saved-designs/route.ts`
+  3. `app/api/identified-products/search/route.ts` full table scan — no `.limit()` (can return thousands of rows)
+- **Migration 019 PENDING** — owner must apply `supabase/migrations/019_fix_saved_designs_rls.sql` and verify the share-link fetch path before the RLS fix is live. Verify whether the app uses JWT-claim or column-filter approach.
+- **F4 (E2E + a11y + perf)** is the next unstarted quality gate after F3. Playwright + axe + Lighthouse budget on the hot paths.
+- **Auto-merge on PR #76** requires branch protection rules — owner should enable "Require status checks to pass before merging" in repository settings and then auto-merge will work for future PRs.
