@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-25 (Run 25)
+
+### State on entry
+- Context compacted from Run 24. PR #68 merged (diagnosis eval tests, A5 partially unblocked).
+- Rotation guide from Run 24: A5 remaining = sourcing relevance + mockup grounding evals + CI job.
+
+### Area served this run
+**Track A5** — Live eval suite (second increment: sourcing relevance + photo-grounding stages).
+
+### What was done
+
+**PR #73 — `a5/sourcing-grounding-evals`**
+- `evals/__tests__/sourcing.eval.test.ts` (new): exercises `scoreProduct()` with two clearly-matching products against a warm Scandinavian living-room context with full `ScoringContext` (design direction, materials, palette, room image). Two tests: warm beige linen sofa (linen + walnut) and oak/brass round coffee table. Asserts `verdict ≠ "no"` AND `final_item_score ≥ 6` (raised from initial `≥ 5` after Reviewer A flagged the threshold was at the exact `"no"` boundary). Uses text-only scoring path (`image_url: null`) — documented in comments.
+- `evals/__tests__/grounding.eval.test.ts` (new): exercises `verifyWhatShouldGoAgainstPhotos()` with the warm-sofa Unsplash image. Two tests: (1) clearly visible sofa must NOT be dropped, (2) contrastive — impossible gas range stove MUST be dropped while sofa control is kept. Asserts `fellBack === false` before checking item-level results.
+- Reviewer A REQUEST_CHANGES on initial draft: (1) `if (!result.success || !result.data) return` silent-pass on `data === undefined` — fixed by adding explicit `expect(result.data).toBeDefined()` assertion before guard; (2) `≥ 5` threshold at exact `"no"` boundary — raised to `≥ 6`. Reviewer B APPROVE on initial draft.
+- Fixed and re-verified: 876 tests passing, 6 skipped (4 new + 2 existing eval skips), `tsc --noEmit` clean, `check:determinism` clean.
+
+**PENDING_OPS.md (this run)**
+- Documented the `RUN_EVALS=1` CI job that must be added manually to `.github/workflows/` (loop cannot write there in headless runs). Includes the complete YAML snippet and `GEMINI_API_KEY` secret setup steps.
+
+### Lessons learned
+
+1. **Threshold at the boundary is a correctness bug.** `final_item_score ≥ 5` is the exact `"no"` verdict threshold — a calibration shift of 0.1 can push a product from `"maybe"` to `"no"` and make the assertion flip while the change is invisible in the test output message. Always set eval score thresholds with at least 1 point of headroom above the verdict boundary (use `≥ 6` for "should never be no" products, not `≥ 5`).
+
+2. **`if (!x) return` after a success assertion is a silent pass.** The pattern `expect(result.success).toBe(true); if (!result.success || !result.data) return` silently exits as "passed" when `result.success` is true but `result.data` is undefined. Fix: assert `.toBeDefined()` explicitly before the guard.
+
+3. **`.github/workflows/` is truly write-blocked in headless runs.** The CI job for `RUN_EVALS=1` cannot be added autonomously. Record in PENDING_OPS.md with the full YAML so the owner can apply it in one copy-paste.
+
+### Merge outcome
+PR #73 open, two reviewers APPROVE (after Reviewer A's issues were fixed). Track A5 eval files are now complete on disk: diagnosis + sourcing + grounding stages all covered. Still needed for full A5 completion:
+- PR #73 merged to default branch
+- `RUN_EVALS=1` CI job wired (human-applied, see PENDING_OPS.md)
+
+### Rotation guide for next run
+- **Track A5**: PR #73 must be merged. After merge, A5's eval file requirement is satisfied. CI job is the only remaining gap — human-applied, not loop-applicable. A5 can be ticked in ROADMAP after PR #73 is confirmed merged and gate is green.
+- **Track D3 (screenshots)**: Still blocked on owner running the app. Cannot be resolved autonomously.
+- **Do NOT**: Add new features. The loop is converging on Definition of Done; A5 merge + D3 screenshots are the only gaps.
+
+---
+
 ## Run 2026-06-25 (Run 24)
 
 ### State on entry

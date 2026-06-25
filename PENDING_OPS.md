@@ -6,6 +6,36 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### RUN_EVALS=1 CI job — wire eval suite into GitHub Actions (added 2026-06-25, Track A5)
+
+PR #73 adds three live eval test files (`evals/__tests__/diagnosis.eval.test.ts`, `sourcing.eval.test.ts`, `grounding.eval.test.ts`) that call the real Gemini pipeline when `RUN_EVALS=1` is set. The loop cannot write `.github/workflows/` (triggers the sensitive-file permission hook in headless runs), so this job must be wired manually.
+
+**Steps:**
+1. Add a new workflow file `.github/workflows/evals.yml` (or add a job to the existing `ci.yml`):
+   ```yaml
+   jobs:
+     evals:
+       runs-on: ubuntu-latest
+       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+       env:
+         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+         RUN_EVALS: "1"
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with:
+             node-version: '20'
+             cache: 'npm'
+         - run: npm ci
+         - run: npx vitest run evals/__tests__/diagnosis.eval.test.ts evals/__tests__/sourcing.eval.test.ts evals/__tests__/grounding.eval.test.ts
+           timeout-minutes: 15
+   ```
+2. Add `GEMINI_API_KEY` to GitHub Actions secrets (Settings → Secrets → New secret).
+3. Schedule: `cron: '0 6 * * *'` (daily at 06:00 UTC) or run on `workflow_dispatch` for manual invocation.
+4. A failure in this job means a pipeline regression — investigate before merging new model/prompt changes.
+
+**Why it matters:** Without this job, the eval suite only runs locally when a developer manually sets `RUN_EVALS=1`. The loop cannot verify pipeline quality on merge without a live eval gate.
+
 ### iOS Universal Links — Apple App Site Association file (added 2026-06-24, PR #56 — apply before App Store submission)
 
 PR #56 adds `ios.associatedDomains: ["applinks:aptdesignerai.ai"]` to `app.json`. iOS Universal Links require a signed AASA file hosted at a specific path.
