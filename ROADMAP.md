@@ -473,6 +473,14 @@ Build this script (Track-F / quality work) and keep it current. It MUST, in one 
     + `lib/agents/design-coordinator.ts` — each step calls the real provider/agent and
     returns real output, not a canned/placeholder response.
   Keep this list in sync if these paths move (LIVING ARTIFACTS).
+- validate the BUSINESS_CASE_SUMMARY block: extract the fenced `yaml` block from
+  `docs/BUSINESS_CASE.md` and parse it with a REAL YAML parser (e.g. `npx --yes js-yaml`
+  or python `yaml.safe_load`) — EXIT NON-ZERO if the block is missing, fails to parse
+  (e.g. an invalid `$` escape, bad indentation, smart quotes), or is missing a numeric
+  `arr_year1.base`. A block that doesn't parse must NEVER ship, because the dashboard
+  will (correctly) degrade to "unparseable → link" and the ARR will silently vanish.
+  Also assert `arr_year1.base` is consistent with the base-scenario annual ARR in the
+  body (anti-drift).
 - exit 0 ONLY when all of the above hold. "Code exists" must NOT pass as "it works."
 
 **Gate 2 — Readiness audit (independent + adversarial).** Before opening the issue, spawn
