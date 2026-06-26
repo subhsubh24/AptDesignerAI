@@ -374,6 +374,12 @@ required gate or a recurring audit, not a nicety.
   world-class?" Findings become prioritized, value-bar-clearing work. This is how
   quality is continuously re-validated in depth without pretending to re-review every
   character every run.
+- [ ] F6. **Readiness gate harness (`scripts/preflight.sh`).** Build the mechanical
+  pre-flight script that gates the `FACTORY: ready for submission` declaration — re-runs
+  the full gate, asserts artifacts exist, exits non-zero while any DoD checkbox is
+  unchecked, and mechanically verifies the critical revenue/product paths are wired not
+  stubbed. See the READINESS AUDIT GATE section. (The ≥3-auditor adversarial pass is run
+  by the loop at declaration time; this script is the un-gameable mechanical half.)
 
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
@@ -416,9 +422,67 @@ ALL of these are true and verified in CI:
       accepted to the stores with high confidence, every marketing lever within your
       control is built, AND the business case shows a credible ≥ $100K/yr path — i.e.
       only the human-only steps below remain.
+- [ ] **Mechanical pre-flight passes (`scripts/preflight.sh` exits 0):** re-runs the
+      full gate (tsc + tests + determinism + prod build + /mobile typecheck) in THIS
+      run, asserts every required artifact physically exists, **fails while ANY
+      Definition-of-Done checkbox above is unchecked**, and verifies the critical paths
+      are WIRED not stubbed (the AI design→render pipeline runs end-to-end; the
+      billing/checkout charge call exists, not a stub). "Code exists" must NOT pass as
+      "it works." See the READINESS AUDIT GATE section.
+- [ ] **Readiness audit passes (≥3 fresh adversarial auditors find no real gap):** an
+      independent, adversarial re-verification of the WHOLE DoD (see the READINESS AUDIT
+      GATE section). Every box stays `[x]` only if an independent auditor confirms it.
 
 Until then, keep advancing the lowest incomplete phase. After then, do **not**
 keep adding scope — the loop's job is finished; the owner runs the handoff.
+
+## READINESS AUDIT GATE — you may NOT self-certify "ready" (two independent gates)
+A loop that ticks its own boxes AND certifies its own readiness will eventually declare
+"ready" without the work being real (mass-ticking, calling a stub "done", cherry-picking
+the business case). So the `FACTORY: ready for submission` issue may open ONLY when BOTH
+of the following independent gates pass IN THE SAME RUN — never on self-assessment, never
+while any DoD box is unchecked, never while any proof is missing.
+
+**Gate 1 — Mechanical pre-flight (`scripts/preflight.sh`, the un-gameable backstop).**
+Build this script (Track-F / quality work) and keep it current. It MUST, in one run:
+- re-run the full gate green (`npx tsc --noEmit`, `npm test`, `npm run check:determinism`,
+  the prod `build`, and `cd mobile && npx tsc --noEmit`);
+- assert every required artifact physically EXISTS (rendered images/icons/screenshots are
+  real committed files, not 0-byte/placeholder; migrations, docs, routes present);
+- parse the Definition of Done and EXIT NON-ZERO if ANY DoD checkbox is unchecked
+  (cannot be bypassed by prose);
+- mechanically verify CRITICAL PATHS are wired, not stubbed — the AI design→render
+  pipeline runs end-to-end, and the billing/checkout path makes a real charge/entitlement
+  call (no stub/TODO/placeholder on a revenue or core path);
+- exit 0 ONLY when all of the above hold. "Code exists" must NOT pass as "it works."
+
+**Gate 2 — Readiness audit (independent + adversarial).** Before opening the issue, spawn
+≥3 FRESH auditor subagents (maker ≠ checker — NONE built the thing) on the STRONG model
+(Sonnet, never the cheap scout tier — adversarial judgment is where you do not cut cost),
+each told: *"The loop claims AptDesignerAI is submission-ready. PROVE IT IS NOT. Default to
+NOT-READY unless you genuinely cannot find a single real gap. Be adversarial."* Divide
+coverage so every DoD gate is independently re-verified, at minimum:
+- **Functional reality** — actually exercise the critical journeys end-to-end (signup →
+  paywall → checkout → entitlement unlock; and the core photo→understand→diagnose→source→
+  mockup flow). Any stub / TODO / placeholder / dead path on a critical path = NOT ready.
+- **Business-case honesty** — inputs sourced + defensible; NO lever's adoption % chosen
+  merely to clear the revenue floor; the machine-readable summary block matches the body
+  AND the real billing config (Stripe/RevenueCat prices).
+- **Artifact reality** — every ticked box's artifact genuinely exists AND functions;
+  every doc matches current code; no contradictions.
+- **Store acceptance** (re-audit vs current Apple/Google guidelines via research),
+  **security/RLS**, **quality gates** (lint/coverage/evals/E2E/a11y), **marketing completeness**.
+A box stays `[x]` ONLY if an independent auditor CONFIRMS it. If ANY auditor finds a real
+gap → UN-TICK that box, queue the fix, and DO NOT open the issue this run — keep building.
+
+**Declaration rule.** Open `FACTORY: ready for submission` ONLY when BOTH gates pass —
+preflight exits 0 AND all ≥3 adversarial auditors independently fail to find any real gap
+— and PASTE both the preflight output AND the readiness-audit findings (who verified what)
+into the issue as evidence. **Convergence still holds:** this makes "ready" harder, not
+impossible — the loop still STOPS and hands off when genuinely done. If, after building
+all defensible revenue levers, the honest median STILL can't reach the $100K floor, open
+an FYI issue to the owner with the gap + options rather than faking convergence or looping
+forever.
 
 ## Owner Handoff — remaining steps, IN ORDER (only what the loop CANNOT do)
 When Done, the `FACTORY: ready for submission` issue MUST contain a NUMBERED,
