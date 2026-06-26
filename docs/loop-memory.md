@@ -78,6 +78,59 @@ PRs #83, #84, #85, #86, #87 all merged (all green: verify ✓ build ✓ mobile �
 
 ---
 
+## Run 2026-06-26 (Run 31)
+
+### State on entry
+- Context compacted from Run 30. PRs #93–98 confirmed merged on entry (952 tests, tsc clean, lint clean).
+- Three deliverables assigned: F3 area-analysis eval, F6 preflight script, business case Pro Annual update.
+
+### Area served this run
+**Track F quality hardening (F3 eval suite completion + F6 preflight gate) + docs (business case Pro Annual tier).**
+
+### What was done
+
+**PR #105 — `f3/area-analysis-eval`:**
+`evals/__tests__/area-analysis.eval.test.ts`: live eval for area-analysis Pass A pipeline stage. Calls `geminiProvider.chat()` directly with the same model (`selectModel("area_analysis")`), prompt (`buildMobilePassAPrompt` exact copy), and params (`max_tokens: 8192`, `seed: DETERMINISTIC_SEED`, `responseMimeType: "application/json"`, HIGH thinking) as `app/api/mobile/analyze/route.ts`. Two tests gated behind `RUN_EVALS=1`: (1) quality assertions — all 8 response fields present, `recommended_palette ≥ 3` entries with at least one warm term; (2) JSON mode regression guard — invalid UTF-8 in image URL returns error, not a crash.
+Review bugs fixed: (a) `buildPassAPrompt` initially omitted GOOD/BAD style_name examples and concrete palette/material/texture values from production's prompt — fixed by making the eval function an exact copy; (b) `max_tokens: 2048` too low for HIGH thinking + 8 fields — changed to 8192 to match production.
+Completes the 5-eval coverage set: diagnosis + sourcing + grounding + refine + area-analysis.
+
+**PR #106 — `f6/preflight-script`:**
+`scripts/preflight.sh`: 5-gate mechanical readiness script.
+- Gate 1: Full CI (tsc + npm test + determinism + build + mobile tsc).
+- Gate 2: 22 required file existence checks.
+- Gate 3: Counts unchecked `- [ ]` DoD boxes in ROADMAP.md via awk.
+- Gate 4: 10 critical-path grep checks including `checkout.session.completed` in `lib/billing/stripe.ts` (not `app/api/billing/webhook/route.ts` which has it only in a JSDoc comment), `pro_annual`, `REVENUECAT_SECRET_KEY`.
+- Gate 5: Validates BUSINESS_CASE_SUMMARY YAML via Python using env-var injection pattern (`_PREFLIGHT_YAML="$YAML_BLOCK" python3 - <<'PYEOF'`) to avoid `$100K` → `00K` shell expansion in the YAML content.
+Review bugs fixed: (a) Gate 5 heredoc `$100K` expansion — YAML passed via env var with quoted heredoc; (b) Gate 4 wrong file for `checkout.session.completed` — changed to `lib/billing/stripe.ts`; (c) dead duplicate `PYTHON_CHECK` assignment from intermediate edit — cleaned up in one final Edit.
+Currently exits 1 (8 unchecked DoD boxes) — correct behavior.
+
+**PR #107 — `docs/business-case-annual-tier`:**
+`docs/BUSINESS_CASE.md`: Pro Annual tier ($399/yr, ~$33/mo, save 32%) added to pricing table. Revenue formula updated to split Pro into 75% monthly / 25% annual (EffectiveMonthlyChurn_Annual ≈ 2.4%/month from 25% annual renewal churn per Recurly B2C benchmarks). ARR scenarios recomputed: conservative $46.2K, base $122.9K, optimistic $276.8K (+23% across all from annual LTV uplift). Pro Annual LTV comparison section: Annual LTV $1,117 vs Monthly $490 (+128%). YAML summary block updated `as_of: 2026-06-26`.
+Review bug fixed: "Honest statement" section referenced $100K ARR (stale) and listed only 4 levers — updated to $122.9K ARR and 5 levers (added: "25% of Pro subscribers choosing the annual plan"; updated churn bullet to cover both monthly ≤7% and annual renewal ≤25%).
+
+### Lessons learned
+
+1. **Eval prompts must be exact copies of production prompts, not summaries.** The first version of `buildPassAPrompt` dropped the inline GOOD/BAD examples for `style_name` and the concrete palette/material/texture values that appear in production's `buildMobilePassAPrompt`. The eval would have tested a weaker prompt variant, masking any regression in the production path. Rule: eval prompt functions should be verbatim copies with an explicit `// Keep in sync.` comment, not abridged versions.
+
+2. **`max_tokens` in eval must match production.** An eval for HIGH-thinking area_analysis with `max_tokens: 2048` would have truncated the 8-field JSON response. Always read the production `.chat()` call to confirm `max_tokens` before writing the eval.
+
+3. **Shell dollar-sign expansion in heredocs is an invisible trap for YAML content.** `$100K` in a heredoc (without quoted delimiter) silently becomes `00K`. Always pass structured text containing dollar signs via environment variables with `<<'PYEOF'` (quoted heredoc), not `<<PYEOF`.
+
+4. **`checkout.session.completed` appears in multiple files — verify the handler, not just the string.** The string appears in a JSDoc comment in `app/api/billing/webhook/route.ts` but the actual `case "checkout.session.completed":` handler lives in `lib/billing/stripe.ts`. Preflight critical-path checks must grep the file that contains the runtime logic, not the first file where the string appears.
+
+### Merge outcome
+PRs #105, #106, #107 all merged (all green: verify ✓ build ✓ mobile ✓ quality ✓).
+
+### Rotation guide for next run
+- **F3 eval CI wiring:** Eval files are complete (all 5 stages). Human must apply the `RUN_EVALS=1` CI job from PENDING_OPS.md before F3 can be ticked.
+- **F4 Playwright CI wiring:** Still human-applied. Cannot advance further autonomously.
+- **F6 preflight.sh:** Built and merged. Currently exits 1 (correct — DoD boxes unchecked). Will exit 0 only when all DoD boxes are ticked.
+- **Remaining a11y gaps:** Icon-only buttons in `app/saved/page.tsx` (~line 142) and `app/projects/[projectId]/rooms/[roomId]/mockups/page.tsx` (~line 292) still need `aria-label`. Noted since Run 30.
+- **Coverage gap:** `lib/supabase/admin.ts` still has zero test coverage.
+- **Track D:** `screenshots` (D3) still require a human on a device.
+
+---
+
 ## Run 2026-06-26 (Run 30)
 
 ### State on entry
