@@ -17,7 +17,7 @@ export const FREE_SAVE_LIMIT_WEB = 3;
 
 export type WebBillingStatus = {
   hasPaid: boolean;
-  tier: "apartment" | "pro" | null;
+  tier: "apartment" | "pro" | "pro_annual" | null;
   status: "active" | "cancelled" | "past_due" | "unpaid" | null;
 };
 
@@ -60,7 +60,7 @@ export async function getWebBillingStatus(userId: string): Promise<WebBillingSta
     return { hasPaid: false, tier: null, status: null };
   }
 
-  const tier = data.tier as "apartment" | "pro";
+  const tier = data.tier as "apartment" | "pro" | "pro_annual";
   const status = data.status as "active" | "cancelled" | "past_due" | "unpaid";
 
   // Apartment is a one-time purchase — active indefinitely once status = active.
