@@ -42,6 +42,22 @@ const TIER_COPY = {
       "30-day money-back guarantee",
     ],
   },
+  pro_annual: {
+    name: "Pro Annual",
+    price: "$399",
+    period: "/year",
+    tagline: "Everything in Pro — billed annually. Save $189 vs monthly.",
+    features: [
+      "Everything in Pro",
+      "Unlimited apartments & projects",
+      "Client-ready share links & exports",
+      "Higher AI generation limits",
+      "Early access to new features",
+      "Dedicated support channel",
+      "30-day money-back guarantee",
+      "Save $189/year vs monthly billing",
+    ],
+  },
 } as const;
 
 interface Props {
@@ -52,7 +68,7 @@ export default async function UpgradePage({ searchParams }: Props) {
   const params = await searchParams;
   const tier = params.tier;
 
-  if (tier !== "apartment" && tier !== "pro") {
+  if (tier !== "apartment" && tier !== "pro" && tier !== "pro_annual") {
     redirect("/pricing");
   }
 
