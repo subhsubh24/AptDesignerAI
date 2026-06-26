@@ -167,7 +167,7 @@ export default function SavedDesignDetailPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/saved">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to saved designs">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
@@ -212,7 +212,7 @@ export default function SavedDesignDetailPage() {
             )}
             {isPublic ? "Shared" : "Share"}
           </Button>
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDelete} disabled={deleting}>
+          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={handleDelete} disabled={deleting} aria-label="Delete design">
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>
         </div>
