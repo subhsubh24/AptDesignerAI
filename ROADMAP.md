@@ -150,9 +150,13 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
   find the **lowest-numbered phase that is not yet complete**, and advance it with
   the highest-value, file-disjoint changes available (per the loop's normal value
   bar, disjoint rule, maker/checker review, CI gate, and brakes).
-- **Coherence over volume.** A store-acceptable app is one cohesive product, not a
-  pile of disconnected PRs. Prefer fewer changes that move a phase materially
-  forward over many that don't. Do **not** pad runs to hit a count.
+- **Coherence over CHURN (not "fewer for its own sake").** A store-acceptable app is
+  one cohesive product, not a pile of disconnected PRs. The VALUE BAR is the only
+  limiter on how many changes ship in a run: ship ALL the changes that genuinely clear
+  it (MAXIMIZE scope per run — see "RUN SCOPE — MAXIMIZE EACH RUN" in the routine) and
+  ZERO that don't. Never pad a run to hit a count; never artificially stop at 1–2 when
+  more genuinely-valuable, file-disjoint work exists. Many changes is GOOD when each is
+  real; avoid BOTH failure modes equally — padding (churn) and artificial scarcity.
 - **Spend:** the loop runs on the cheapest viable model. Cheap-but-incoherent is a
   false economy here — rework burns more than it saves. If a change needs real
   architectural judgment, do it properly or defer it; never ship slop that a later
