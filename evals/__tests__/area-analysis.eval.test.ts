@@ -74,13 +74,13 @@ NAME EVERYTHING specifically: material + color + form. Never use "generic furnit
 Return ONLY valid JSON (no markdown, no prose, no code fences):
 {
   "summary": "3-4 sentences — dominant colors, materials, what's working, what's broken. Mention flooring and wall finishes here, not in what_works.",
-  "style_name": "2-3 word evocative label from the room's actual cues.",
-  "design_direction": "4-6 sentences — color strategy, material mixing, texture layering. Specific and actionable.",
-  "recommended_palette": ["4-6 specific colors"],
-  "recommended_materials": ["4-6 materials"],
-  "recommended_textures": ["3-5 textures"],
-  "what_works": ["Exact item — color + material + form. Only movable furniture and decor you can see."],
-  "what_should_go": ["Exact item + why. Only removable items you can actually see in the photo."]
+  "style_name": "2-3 word evocative label from the room's actual cues. GOOD: 'Industrial Warmth', 'Nordic Calm', 'Cognac and Charcoal'. BAD: 'Contemporary Modern', 'Refined Minimalism'.",
+  "design_direction": "4-6 sentences — color strategy, material mixing, texture layering. Specific and actionable. Reference the actual finishes visible in the photo.",
+  "recommended_palette": ["4-6 specific colors — e.g. 'warm ivory', 'walnut brown', 'sage green', 'matte black'"],
+  "recommended_materials": ["4-6 materials — e.g. 'solid walnut', 'linen', 'brushed brass', 'natural jute'"],
+  "recommended_textures": ["3-5 textures — e.g. 'bouclé', 'woven rattan', 'matte ceramic', 'raw linen weave'"],
+  "what_works": ["Exact item — color + material + form. What the owner should KEEP. Only movable furniture and decor you can see."],
+  "what_should_go": ["Exact item + why. What the owner should REMOVE or REPLACE. Only removable items you can actually see in the photo."]
 }`;
 }
 
@@ -107,7 +107,7 @@ describe("area-analysis Pass A (room understanding) live evals — run with RUN_
             ],
           },
         ],
-        max_tokens: 2048,
+        max_tokens: 8192,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel },
@@ -187,7 +187,7 @@ describe("area-analysis Pass A (room understanding) live evals — run with RUN_
             ],
           },
         ],
-        max_tokens: 2048,
+        max_tokens: 8192,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel },
