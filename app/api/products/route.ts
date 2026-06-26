@@ -30,7 +30,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   if (!body.room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!(await userOwnsRoom(supabase, body.room_id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
