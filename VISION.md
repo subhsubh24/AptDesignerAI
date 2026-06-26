@@ -77,6 +77,37 @@ Every UI change must clear this bar:
   latter, it does not ship. When unsure whether a visual change clears the bar,
   treat it as human-only and open a PR rather than auto-merging.
 
+### THE DESIGNER QUESTION (run this on EVERY UI change — Reviewer B enforces it)
+Before implementing or approving any layout, component, color, spacing, motion, or
+visual decision, pause and ask the one question that kills lazy visual defaults:
+**"Would an experienced product designer intentionally make this decision?"** If the
+answer is no, improve the design before proceeding — do NOT ship it. The interface
+should feel built, edited, and judged by taste, NOT assembled from the average of the
+internet. Reviewer B REQUEST_CHANGES any UI diff that can't answer this with a clear yes.
+
+### AVOID BY DEFAULT (generic-AI-frontend slop — these never ship)
+Cookie-cutter SaaS dashboards · excessive cards everywhere · default/unstyled Tailwind or
+shadcn aesthetics · weak typography · random/inconsistent spacing · visual noise &
+decorative gradients/blur for their own sake · over-engineered interfaces · design-by-
+template thinking · uninspired landing pages · generic startup-website patterns · emoji
+as iconography · three competing accent colors · centered-everything hero blandness.
+A layout that could belong to *any* startup is a FAIL — make it unmistakably this product.
+
+### GENERATE BETTER (what we optimize FOR)
+Strong visual hierarchy · exceptional typography · deliberate spacing & rhythm · clear
+information architecture · premium product aesthetics · thoughtful interaction & meaningful
+motion · cohesive visual system · high-quality component composition · intentional color ·
+human-designed, opinionated decisions · product-level polish · memorable experiences.
+
+### RECURRING TASTE AUDIT (part of the loop, not a one-off)
+The periodic DEEP AUDIT's design lens must actively HUNT for slop across the live UI —
+layout, type scale, spacing, hierarchy, component quality, color, navigation, motion,
+landing/dashboard quality, responsiveness, a11y, information density — flag anything
+that reads "generated," and turn the highest-design-impact fixes into prioritized,
+value-bar-clearing work (ranked by how much they improve hierarchy, comprehension, trust,
+and polish). Final standard: **simplicity without blandness; functionality without visual
+clutter.**
+
 ## Hard constraints (never trade away — see AGENTS.md + .claude/rules)
 - **LLM cost contract.** Cheapest tier by default; explicit `thinkingConfig` on
   every `.chat()`; seed every call; HIGH thinking only where there's no cheap
