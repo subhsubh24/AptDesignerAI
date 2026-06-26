@@ -73,6 +73,8 @@ export async function GET(request: NextRequest) {
     .from("product_image_embeddings")
     .select("*")
     .order("brand", { ascending: true })
+    .order("model", { ascending: true })
+    .order("id", { ascending: true })
     .limit(500);
   const rows = (embedRows as ProductImageEmbedding[] | null) ?? [];
   for (const row of rows) {
