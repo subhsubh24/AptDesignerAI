@@ -376,6 +376,37 @@ required gate or a recurring audit, not a nicety.
   by the loop at declaration time; this script is the un-gameable mechanical half.)
   **[Script built and merged (PR #106). Currently exits 1 (8 unchecked DoD boxes) — correct behavior.]**
 
+### Track G — Pre-launch security & abuse hardening (vibe-coded apps get sued/drained)
+RLS is necessary but not sufficient. A live app that calls PAID APIs (Gemini, Tavily,
+Browserbase, Stripe) and has PUBLIC forms (waitlist, signup) is a wallet-drain + abuse
+target. Build and ENFORCE these; the deep-audit security lens re-checks them each cycle,
+Reviewer A rejects regressions, and the preflight verifies the critical ones.
+- [ ] G1. **Rate limiting on EVERY paid-API / expensive / auth endpoint** (not
+  case-by-case): a sane baseline (e.g. ~100 req/min/IP public, ~1000/min authenticated),
+  stricter on anything that hits Gemini/Tavily/Browserbase/Stripe or auth. An unthrottled
+  expensive endpoint is a money leak and a brute-force surface. Reviewer A REJECTS any new
+  expensive/auth route without rate limiting.
+- [ ] G2. **Server-side validation on every write** (client Zod is UX, not security):
+  re-validate types/lengths/shape on the server for every endpoint that writes to the DB
+  or calls a paid API; reject malformed/oversized input.
+- [ ] G3. **Error-message hygiene**: generic user-facing errors ("not found"), full
+  context logged SERVER-SIDE only; never leak schema/table/column names, stack traces, or
+  query logic to the client. No enumeration via error differences.
+- [ ] G4. **Auth failure-case hardening + tests**: lockout/backoff on repeated wrong
+  passwords; password-reset does NOT reveal whether an email exists; email-verification
+  link is idempotent (double-click safe); signup with an existing email does NOT leak that
+  it's already registered (no user enumeration). Add a test for each case.
+- [ ] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
+  POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
+- [ ] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
+  security headers (CSP / HSTS / X-Content-Type-Options, etc.); align to OWASP basics.
+- [ ] G7. **API spend ceiling + alerts**: a code-level usage cap / circuit-breaker per
+  user/day on paid-API calls, AND record in PENDING_OPS.md the human-only step to set HARD
+  daily caps + 50%-of-cap alerts in the Gemini/Anthropic/provider dashboards (the loop
+  cannot set those — the owner must).
+Secrets stay server-side (already enforced); if exposure is ever suspected, record a
+PENDING_OPS handoff to regenerate the key immediately.
+
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
 artifacts exist in the merged tree AND the full gate was re-run green in the same run.
@@ -402,6 +433,11 @@ ALL of these are true and verified in CI:
       coverage floor met (F2); the full per-stage live eval suite passes (F3);
       E2E + accessibility + visual + performance gates green (F4); the periodic deep
       audit is running and its last pass surfaced no unaddressed critical findings (F5).
+- [ ] **Track G complete (pre-launch security & abuse hardening):** rate limiting on all
+      paid-API/expensive/auth endpoints (G1); server-side validation (G2); error-message
+      hygiene / no enumeration (G3); auth failure-case hardening + tests (G4); CAPTCHA on
+      public forms (G5); CORS + security headers (G6); API spend ceiling in code + the
+      human-only hard-cap/alert step recorded in PENDING_OPS (G7).
 - [ ] A self-run **pre-submission checklist** passes (no crashes on core path,
       required URLs present, permission strings set, no debug/placeholder content).
 - [ ] **Business case (`docs/BUSINESS_CASE.md`) is complete, credible, and
