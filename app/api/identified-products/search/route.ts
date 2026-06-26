@@ -71,7 +71,8 @@ export async function GET(request: NextRequest) {
   // ── Pass 1: seeded embedding index (brand + model pairs with images) ──
   const { data: embedRows } = await supabase
     .from("product_image_embeddings")
-    .select("*");
+    .select("*")
+    .limit(500);
   const rows = (embedRows as ProductImageEmbedding[] | null) ?? [];
   for (const row of rows) {
     if (
