@@ -4,6 +4,62 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-26 (Run 28)
+
+### State on entry
+- Context compacted from Run 27 mid-run. PRs #83–#87 confirmed merged in loop-memory from Run 27.
+- 878 tests passing on `a6/computer-use-gemini-3.5-flash` branch (2 tests added by that branch); 876 on default branch.
+- Run 27 identified zero test coverage for `lib/billing/stripe.ts`, `lib/entitlements/web.ts` + `server.ts`, `lib/auth/ownership.ts` as highest-risk gap.
+- Deep audit due (last was Run 27, ~24h earlier).
+
+### Area served this run
+**Deep audit + Track A6 (Gemini 3.5 Flash computer use upgrade) + critical-path test coverage (billing, entitlements, auth, computer-use safety — all at 0%).**
+
+### What was done
+
+**Deep Audit — 3 lenses run in parallel (Haiku subagents):**
+- Security: CLEAN — no critical/high findings. No new injection vectors, no RLS gaps beyond already-recorded migration 019/020 human-apply step.
+- Performance: known N+1 dashboard queries (project + preferences fetched sequentially) and sequential uploads — pre-existing, not introduced this run.
+- Coverage: confirmed `lib/billing/`, `lib/entitlements/`, `lib/auth/ownership.ts`, `lib/agents/computer-use/safety.ts` all at 0%. These are the money/auth/security critical paths — top priority for coverage work.
+
+**PR #91 — `a6/computer-use-gemini-3.5-flash` (Track A6)**
+- `MODELS.computerUse` = `"gemini-3.5-flash"` (GA as of 2026-06-24; computer use is now a built-in tool in this model, not a separate preview endpoint).
+- Research confirmed `agent-loop.ts` ALREADY used the correct built-in tool format (`computerUse: { environment: "ENVIRONMENT_BROWSER" }`). Only the model ID string needed updating.
+- Pin test + `selectModel("computer_use")` routing test added to `__tests__/ai/models.test.ts` (not the guard test `provider-floors.test.ts`).
+- `COMPUTER_USE_MODEL` env override preserved throughout.
+
+**PR #90 — `test/critical-path-coverage`**
+- 74 new tests; 950 total; 0 regressions.
+- 5 test files covering zero-coverage critical paths:
+  - `computer-use-safety.test.ts`: pure `evaluateAction` — all policy paths
+  - `billing/stripe.test.ts`: `extractBillingInfoFromEvent` (all Stripe status mappings + null guards), error paths for constructWebhookEvent / createCheckoutSession
+  - `entitlements/web.test.ts`: `getWebBillingStatus` (apartment/pro tier logic, period-end expiry, fail-open), `hasProEntitlementWeb`
+  - `auth/ownership.test.ts`: `userOwnsRoom` + `userOwnsCandidateProduct` via chainable Supabase mock
+  - `entitlements/server.test.ts`: `hasProEntitlement` (all fail-open + fail-closed branches) using `vi.resetModules()` + `vi.stubEnv()` + dynamic import (module-level env var pattern)
+
+### Lessons learned
+
+1. **Vitest chainable Supabase mock: avoid self-referential `const eq = vi.fn().mockReturnValue({ eq, single })`** — this is a TDZ error (cannot access `eq` before initialization). Fix: build a mutable `chain` object first, then assign `.eq = vi.fn().mockReturnValue(chain)`. The chain object is initialized before the assignment, so no TDZ issue.
+
+2. **`vi.resetModules()` + `vi.stubEnv()` + dynamic import is mandatory for module-level env var constants.** `hasProEntitlement` evaluates `RC_SECRET_KEY = process.env.REVENUECAT_SECRET_KEY ?? ""` at module load time. Changing the env var after module load has no effect. Each test block that needs a different key value must reset modules, stub the env, then dynamically import the module.
+
+3. **`gemini-3.5-flash` computer use: agent loop adaptation was already correct.** The fear was that the GA model's tool format would differ from the preview format. In practice, `agent-loop.ts` already used `{ computerUse: { environment: "ENVIRONMENT_BROWSER" } }` — the correct GA built-in tool declaration. Research before coding confirmed this; no adaptation was needed.
+
+4. **Safety.ts `require_confirmation` check fires before URL-pattern check.** When both conditions are true (a require_confirmation action on a blocked URL), the function returns the require_confirmation verdict, not the URL-block verdict. Test `"priority order"` confirms this — the reason string must mention the action name.
+
+### Merge outcome
+- PR #90 (coverage) and PR #91 (A6): both open, awaiting human reviewer approval.
+
+### Rotation guide for next run
+- **Merge A6 (PR #91) and tick A6 checkbox** once merged — the PR is green, needs human approval.
+- **Merge coverage (PR #90)** — 950 tests, no regressions, human approval needed.
+- **Performance fix** (`lib/api/dashboard`): N+1 project + preferences queries could be combined into one Supabase JOIN query. File-disjoint from coverage/A6 work. Low risk, low effort.
+- **`lib/supabase/admin.ts` coverage**: still at 0%. `getAdminClient()` is a 2-line function; a simple env-stub test would cover it. The web entitlement tests already mock it via `vi.mock("@/lib/supabase/admin")` — a direct unit test of the actual function is the remaining gap.
+- **Track A remaining**: A5 (eval CI job) and A6 (pending PR merge). A5 is human-applied (cannot write `.github/workflows/`). A6 merges next run.
+- **Do NOT**: edit guard tests, edit `.claude/` or `.github/`, run prod SQL.
+
+---
+
 ## Run 2026-06-25 (Run 27)
 
 ### State on entry

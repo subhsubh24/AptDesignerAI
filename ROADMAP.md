@@ -265,6 +265,9 @@ have re-verified the whole DoD against real artifacts and a green gate in that r
   the value bar on BOTH reliability (core sourcing accuracy) and security (live-page
   injection surface). If the API turns out to be a heavier lift, ship it as its own
   coherent change and record blockers in PENDING_OPS.md / an FYI issue.
+  **[Run 28 — PR #91 open: `MODELS.computerUse` = `gemini-3.5-flash` GA; agent-loop
+  already used correct built-in tool format; pin test added to `models.test.ts`.
+  AWAITING MERGE to tick this checkbox.]**
 
 ### Track B — Native mobile app (Expo / React Native) — NEW
 Lives in `/mobile` (its own `package.json`; share TypeScript domain logic with the
