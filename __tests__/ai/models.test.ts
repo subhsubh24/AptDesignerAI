@@ -23,6 +23,12 @@ describe("MODELS", () => {
   it("uses distinct models for text vs image", () => {
     expect(MODELS.text).not.toBe(MODELS.image);
   });
+
+  it("pins computerUse to gemini-3.5-flash (GA built-in computer use)", () => {
+    // Guard: computer use is a built-in tool in Gemini 3.5 Flash (GA since 2026-06-24).
+    // Changing this to a preview/legacy model regresses injection-safety guarantees.
+    expect(MODELS.computerUse).toBe("gemini-3.5-flash");
+  });
 });
 
 describe("TEXT_TIERS", () => {
@@ -66,11 +72,19 @@ describe("selectModel", () => {
     }
   });
 
+  it("routes computer_use to MODELS.computerUse or env override", () => {
+    // selectModel respects the COMPUTER_USE_MODEL env var; when unset, returns MODELS.computerUse.
+    const expected = process.env.COMPUTER_USE_MODEL || MODELS.computerUse;
+    expect(selectModel("computer_use")).toBe(expected);
+    expect(selectModel("computer_use")).toMatch(/^gemini-/);
+  });
+
   it("never returns undefined or empty string", () => {
     const allTasks = [
       "diagnosis", "apartment_analysis", "area_analysis", "extraction",
       "scoring", "bundle", "search_brief", "mockup_prompt", "validation",
       "apartment_research", "image_generation", "search", "quick_score", "quick_screen",
+      "computer_use",
     ] as const;
 
     for (const task of allTasks) {

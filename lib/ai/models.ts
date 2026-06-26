@@ -64,12 +64,14 @@ export const MODELS = {
    */
   imagePro: "gemini-3-pro-image",
   /**
-   * Computer Use (browser-control agent). Preview-only — supports a subset
-   * of models distinct from the regular text model. The env override
-   * COMPUTER_USE_MODEL lets ops swap to gemini-3-flash-preview if Google
-   * moves the feature there.
+   * Computer Use (browser-control agent). As of 2026-06-24, computer use is a
+   * BUILT-IN TOOL in Gemini 3.5 Flash (GA) — no separate preview model needed.
+   * Uses the same gemini-3.5-flash model as TEXT_TIERS.ceiling with the
+   * `computerUse: { environment: "ENVIRONMENT_BROWSER" }` tool declaration.
+   * Includes built-in prompt-injection safety (confirm-on-sensitive, auto-stop).
+   * The env override COMPUTER_USE_MODEL lets ops pin to a specific revision.
    */
-  computerUse: "gemini-2.5-computer-use-preview-10-2025",
+  computerUse: "gemini-3.5-flash",
 } as const;
 
 export const DEEPSEEK_MODELS = {
