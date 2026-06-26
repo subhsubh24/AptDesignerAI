@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
   const { data: embedRows } = await supabase
     .from("product_image_embeddings")
     .select("*")
+    .order("brand", { ascending: true })
     .limit(500);
   const rows = (embedRows as ProductImageEmbedding[] | null) ?? [];
   for (const row of rows) {
