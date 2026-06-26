@@ -285,17 +285,14 @@ and the growth model doesn't work regardless of installs.
 
 ## The honest statement
 
-The base case (Scenario B) shows a credible path to $100K ARR, but it is not automatic.
-It requires:
+The base case (Scenario B) shows a credible path to **$122.9K ARR** — 23% above the $100K floor — but it is not automatic. It requires five things:
 - Consistently reaching 4,000 installs/month (strong ASO + organic channels)
 - Maintaining 4%+ conversion (paywall UX, good onboarding, fast time-to-value)
-- Keeping Pro churn ≤7% (product quality, re-engagement, push + email)
+- Keeping Pro monthly churn ≤7% and annual renewal churn ≤25%
+- Getting 25%+ of Pro subscribers to choose the annual plan (the annual tier must be prominently offered and priced to feel like a deal — "save 32% upfront")
 - Building organic install share to 50%+ (this is exactly what E2–E6 builds toward)
 
-The product and marketing engine built across Tracks A–E in this roadmap addresses
-all four levers within what the loop controls. The only things it cannot control are
-market reception and the owner's execution on the human-only steps (accounts,
-distribution, funding). On the levers it does control, it has been taken to 100%.
+The product and marketing engine built across Tracks A–E in this roadmap addresses all five levers within what the loop controls. The only things it cannot control are market reception and the owner's execution on the human-only steps (accounts, distribution, funding). On the levers it does control, it has been taken to 100%.
 
 **Per-user COGS is not a constraint** — at $0.001/analysis and 97%+ gross margins,
 this product has excellent unit economics. The constraint is user acquisition and retention.
