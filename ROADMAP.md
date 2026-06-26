@@ -451,9 +451,24 @@ Build this script (Track-F / quality work) and keep it current. It MUST, in one 
   real committed files, not 0-byte/placeholder; migrations, docs, routes present);
 - parse the Definition of Done and EXIT NON-ZERO if ANY DoD checkbox is unchecked
   (cannot be bypassed by prose);
-- mechanically verify CRITICAL PATHS are wired, not stubbed — the AI design→render
-  pipeline runs end-to-end, and the billing/checkout path makes a real charge/entitlement
-  call (no stub/TODO/placeholder on a revenue or core path);
+- mechanically verify THIS REPO'S REAL CRITICAL PATHS are wired, not stubbed (no
+  stub/TODO/placeholder/`throw new Error('not implemented')` on any of them):
+  - **REVENUE (must make a real charge + gate entitlement):** `app/api/billing/checkout/route.ts`
+    creates a real Stripe Checkout session via `lib/billing/stripe.ts`
+    (`stripe.checkout.sessions.create`, real price IDs from env — incl. the `pro_annual`
+    tier); the Stripe webhook handler updates entitlement; `lib/entitlements/server.ts`
+    `hasProEntitlement()` (RevenueCat/mobile) and `lib/entitlements/web.ts`
+    `hasProEntitlementWeb()` are SERVER-SIDE and actually enforced on the gated routes
+    (`app/api/saved-designs/route.ts`, `app/api/mobile/saved-designs/route.ts`,
+    `app/api/mobile/entitlements/route.ts`) — never a hardcoded `true`/client flag.
+  - **CORE PRODUCT (the photo→understand→diagnose→source→mockup journey must run
+    end-to-end):** `app/api/upload` (photo) → `app/api/area-analysis/route.ts` /
+    `app/api/analyze-apartment` (understand) → `app/api/diagnosis/route.ts` (+ `/stream`)
+    (diagnose) → `app/api/search/route.ts` (+ `/stream`) (source real products) →
+    `app/api/mockups/route.ts` (render mockup), orchestrated via `lib/agents/orchestrator.ts`
+    + `lib/agents/design-coordinator.ts` — each step calls the real provider/agent and
+    returns real output, not a canned/placeholder response.
+  Keep this list in sync if these paths move (LIVING ARTIFACTS).
 - exit 0 ONLY when all of the above hold. "Code exists" must NOT pass as "it works."
 
 **Gate 2 — Readiness audit (independent + adversarial).** Before opening the issue, spawn
