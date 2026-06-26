@@ -2,7 +2,36 @@
 
 Operations that require manual (human) action at deploy time — migrations, live
 secrets, billing config. The loop never runs these; it records them here and the
-owner applies them. The daily digest reads this file.
+owner applies them. The daily digest + the factory dashboard read this file (the
+dashboard parses the fenced OWNER_ACTIONS YAML block below).
+
+```yaml
+OWNER_ACTIONS:
+  project: AptDesignerAI
+  as_of: 2026-06-26
+  items:
+    - id: spend-caps
+      title: Set HARD daily API spend caps + alerts in every provider dashboard
+      priority: urgent
+      status: open
+      why: "The app is live on Vercel and calls paid APIs (Gemini, Tavily, Browserbase, Stripe); an abuse spike or runaway loop can run up cost. A provider-side spend cap is the only hard backstop."
+      how: "Set hard daily budgets/limits + 50%-of-cap alerts in each provider console (Google AI Studio / Gemini, Anthropic, Tavily, Browserbase), and regenerate any key you suspect is exposed."
+      blocks: launch-safety
+    - id: connect-channels
+      title: Connect + authorize marketing channels to switch the Growth Agent into execute mode
+      priority: high
+      status: open
+      why: "The Growth Agent stays in honest prepare-only mode until the owner connects their own authorized channels; the staged marketing engine (Track E) cannot run demand-gen otherwise."
+      how: "Connect your own accounts/keys (X/Instagram/TikTok/Reddit, an email provider) to the deployed app's growth settings, server-side. The agent never holds live secrets; the deployed app sends."
+      blocks: growth-execution
+    - id: apply-migration-021
+      title: "Apply migration 021_stripe_customers_annual_tier.sql to prod before enabling annual billing"
+      priority: normal
+      status: open
+      why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
+      how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
+      blocks: annual-billing
+```
 
 ## Pending
 

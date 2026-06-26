@@ -135,6 +135,15 @@ and pricing evolve.
   ```
   All three sibling projects use this IDENTICAL block shape, so values are comparable.
 
+## DASHBOARD FEEDS (three sibling machine-readable blocks, kept in sync + parseable)
+The owner's factory dashboard reads three fenced YAML blocks; keep all three valid
+(preflight fails on any malformed one) and honest (real data / null only): (1)
+BUSINESS_CASE_SUMMARY in docs/BUSINESS_CASE.md; (2) GROWTH_STATUS in
+docs/growth/GROWTH_STATUS.md (owned + updated every run by the Growth Agent;
+phase-aware pre_launch->launching->post_launch); (3) OWNER_ACTIONS in PENDING_OPS.md.
+All three use the SAME cross-project shape across AptDesignerAI / HighlightMagic /
+GroceryManager.
+
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
 or pages, add routes/features, spin up new code, build INTERNAL TOOLS (admin dashboards,

@@ -341,6 +341,39 @@ PYEOF
   fi
 fi
 
+# ── Dashboard feed: GROWTH_STATUS must parse (dashboard reads it) ───────────────
+if python3 - "$REPO_ROOT/docs/growth/GROWTH_STATUS.md" <<'PY'
+import sys, re, yaml
+try: txt = open(sys.argv[1]).read()
+except OSError: print("GROWTH_STATUS.md missing"); sys.exit(1)
+m = re.search(r"ya?ml\s*\n(.*?GROWTH_STATUS.*?)\n```", txt, re.S)
+if not m: print("no GROWTH_STATUS block"); sys.exit(1)
+try: d = (yaml.safe_load(m.group(1)) or {}).get("GROWTH_STATUS") or {}
+except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
+if d.get("phase") not in ("pre_launch","launching","post_launch"): print("bad phase"); sys.exit(1)
+if not isinstance(d.get("funnel"), dict): print("missing funnel"); sys.exit(1)
+print("ok", d["phase"])
+PY
+then pass "GROWTH_STATUS: valid, parseable YAML block"
+else fail "GROWTH_STATUS: missing or UNPARSEABLE"; fi
+
+# ── Dashboard feed: OWNER_ACTIONS must parse ───────────────────────────────────
+if python3 - "$REPO_ROOT/PENDING_OPS.md" <<'PY'
+import sys, re, yaml
+txt = open(sys.argv[1]).read()
+m = re.search(r"ya?ml\s*\n(.*?OWNER_ACTIONS.*?)\n```", txt, re.S)
+if not m: print("no OWNER_ACTIONS block"); sys.exit(1)
+try: d = (yaml.safe_load(m.group(1)) or {}).get("OWNER_ACTIONS") or {}
+except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
+if not isinstance(d.get("items"), list): print("items must be a list"); sys.exit(1)
+for it in d["items"]:
+    if it.get("status") not in ("open","in_progress","done"): print("bad status", it.get("id")); sys.exit(1)
+    if it.get("priority") not in ("urgent","high","normal"): print("bad priority", it.get("id")); sys.exit(1)
+print("ok", len(d["items"]))
+PY
+then pass "OWNER_ACTIONS: valid, parseable YAML block"
+else fail "OWNER_ACTIONS: missing or UNPARSEABLE"; fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
