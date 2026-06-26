@@ -6,6 +6,39 @@ owner applies them. The daily digest reads this file.
 
 ## Pending
 
+### 021_stripe_customers_annual_tier.sql — extend tier CHECK constraint for pro_annual (added 2026-06-26, PR #98 — apply before enabling annual billing)
+
+Migration 021 extends the `stripe_customers.tier` column's CHECK constraint to include `'pro_annual'`. Without this, the Stripe webhook handler fails with a Postgres constraint violation when recording an annual subscription, preventing the customer row from being written.
+
+**Apply via:**
+```sh
+supabase db push
+# or paste into Supabase SQL Editor:
+# supabase/migrations/021_stripe_customers_annual_tier.sql
+```
+
+**What it does:**
+```sql
+ALTER TABLE stripe_customers DROP CONSTRAINT IF EXISTS stripe_customers_tier_check;
+ALTER TABLE stripe_customers ADD CONSTRAINT stripe_customers_tier_check
+  CHECK (tier IN ('apartment', 'pro', 'pro_annual'));
+```
+
+**Also set the new env var** (Vercel + Stripe dashboard):
+```
+STRIPE_PRICE_ID_PRO_ANNUAL=<price_...>   # recurring yearly price of $399.00 USD
+```
+Create the price in Stripe dashboard → Products → "AptDesigner Pro" → Add pricing → Recurring yearly → $399.00 USD. Copy the resulting `price_...` ID into the env var.
+
+**Verify:**
+```sql
+-- After applying migration:
+SELECT tier FROM stripe_customers LIMIT 1;   -- should not fail
+-- Test upsert with pro_annual tier in Stripe test mode
+```
+
+---
+
 ### Playwright E2E CI wiring (added 2026-06-25, PR #87 — wire before F4 gate can be ticked)
 
 PR #87 adds `playwright.config.ts`, `e2e/public-pages.spec.ts`, and `e2e/a11y.spec.ts`. The E2E suite is ready to run but is not yet wired into CI (the loop cannot write `.github/workflows/`).
