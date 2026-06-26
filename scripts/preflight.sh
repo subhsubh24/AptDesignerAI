@@ -211,10 +211,12 @@ check_file_contains \
   "app/api/billing/checkout/route.ts" \
   "createCheckoutSession"
 
-# Billing webhook processes subscription events
+# Billing webhook handler has the case branch for checkout.session.completed.
+# The real handler lives in lib/billing/stripe.ts (extractBillingInfoFromEvent),
+# not in the route file itself — check the right file.
 check_file_contains \
-  "Billing webhook: processes checkout.session.completed" \
-  "app/api/billing/webhook/route.ts" \
+  "Billing webhook: checkout.session.completed handler in stripe.ts" \
+  "lib/billing/stripe.ts" \
   "checkout.session.completed"
 
 # Server-side entitlement check exists and is not a stub returning true
@@ -283,11 +285,17 @@ else
   if [[ -z "$YAML_BLOCK" ]]; then
     fail "Business case — no YAML block found"
   else
-    # Validate with Python yaml.safe_load and check required keys
-    PYTHON_CHECK=$(python3 - <<PYEOF 2>&1
-import yaml, sys
+    # Pass the YAML via env variable to avoid shell-expanding $ signs inside the
+    # content (e.g. "$100K" in a YAML string must not become "00K" via word split).
+    # The quoted heredoc (<<'PYEOF') ensures no shell expansion happens in the script.
+    PYTHON_CHECK=$(_PREFLIGHT_YAML="$YAML_BLOCK" python3 - <<'PYEOF' 2>&1
+import yaml, sys, os
 
-yaml_text = """$YAML_BLOCK"""
+yaml_text = os.environ.get("_PREFLIGHT_YAML", "")
+if not yaml_text:
+    print("YAML_ERROR: empty YAML block")
+    sys.exit(1)
+
 try:
     data = yaml.safe_load(yaml_text)
 except yaml.YAMLError as e:
