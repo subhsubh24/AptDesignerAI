@@ -247,24 +247,12 @@ have re-verified the whole DoD against real artifacts and a green gate in that r
      spend is expected and approved as a cost of knowing the product is good.
   4. **Grow the gold set over time** so output-quality regressions are caught
      before users (and Apple reviewers) see them.
-- [ ] A6. **Upgrade the Computer-Use product verifier to Gemini 3.5 Flash native
-  computer use.** The product-verification agent (`lib/agents/computer-use/`, driving
-  Browserbase) currently runs on the standalone `gemini-2.5-computer-use-preview-10-2025`
-  (`MODELS.computerUse` in `lib/ai/models.ts`). As of 2026-06-24 Google made computer
-  use a BUILT-IN TOOL in **Gemini 3.5 Flash** — best-yet agentic performance PLUS
-  built-in prompt-injection safety (adversarial training, confirm-on-sensitive,
-  auto-stop on injection), which matters here because this agent operates on live,
-  untrusted external retailer pages. Do this PROPERLY, not as a blind string swap:
-  (1) RESEARCH the actual 3.5-Flash computer-use API via WebSearch/official docs — it
-  is a built-in *tool*, so the request shape / action schema likely differs from the
-  standalone model; adapt the agent loop + driver accordingly. (2) Keep it behind the
-  existing `COMPUTER_USE_MODEL` env override and move provider floors + the
-  provider-floors test together per the cost contract. (3) Verify cost/perf is neutral-
-  or-better and product-verification accuracy is equal-or-better (use/extend an eval or
-  a manual spot-check). (4) Enable the optional injection-safety safeguards. This clears
-  the value bar on BOTH reliability (core sourcing accuracy) and security (live-page
-  injection surface). If the API turns out to be a heavier lift, ship it as its own
-  coherent change and record blockers in PENDING_OPS.md / an FYI issue.
+- [x] A6. **Upgrade the Computer-Use product verifier to Gemini 3.5 Flash native
+  computer use.** **(PRs #89 — ROADMAP annotation; #90 — critical-path safety tests for
+  billing/entitlements/auth/computer-use; #91 — implementation: `MODELS.computerUse →
+  "gemini-3.5-flash"`, agent loop rewritten for the GA built-in tool API with
+  `computerUse: { environment: "ENVIRONMENT_BROWSER" }`, injection-safety safeguards
+  enabled, provider-floors test updated. Gate green: 952 tests, tsc clean.)**
 
 ### Track B — Native mobile app (Expo / React Native) — NEW
 Lives in `/mobile` (its own `package.json`; share TypeScript domain logic with the
@@ -303,7 +291,8 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   **(PR #23 — account deletion + /account page; /privacy and /terms pages exist)**
 - [x] D2. Data handling: Apple **App Privacy** nutrition labels + Google **Data Safety**
   form content prepared; ATT prompt only if actually tracking.
-  **(PR #30 — docs/app-privacy.md)**
+  **(PR #30 — docs/app-privacy.md; PR #94 — Stripe, Google Maps/Places, Browserbase, DeepSeek
+  added as third-party processors — all four are active in the codebase)**
 - [ ] D3. Store assets: app icon, screenshots (all required sizes), preview text,
   keywords/ASO, support URL, marketing URL. **[Store listing copy staged (PR #30); screenshots still require owner to run the app on a device — HUMAN STEP]**
 - [x] D4. Stability: no crashes on the core path; sensible permissions usage strings;

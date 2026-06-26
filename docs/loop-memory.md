@@ -78,6 +78,102 @@ PRs #83, #84, #85, #86, #87 all merged (all green: verify ✓ build ✓ mobile �
 
 ---
 
+## Run 2026-06-26 (Run 30)
+
+### State on entry
+- Context compacted from Run 29 (which exited before creating PRs for 3 feature branches).
+- Three orphaned run29 branches on remote (`feat/run29-a11y-aria-labels`, `feat/run29-annual-billing`, `feat/run29-privacy-disclosures`) — valid work, brought through 2-reviewer cycle and PRs created.
+- Stale `bookkeeping/run-28` branch identified as DANGEROUS (predates PRs #90/#91, would delete computer-use safety tests). Skipped; fresh bookkeeping PR created from HEAD instead.
+- Three deep-audit items from Run 26 still unaddressed: Math.random() in tests, missing request.json() try/catch (5 routes), full table scan in identified-products search.
+- 952 tests passing, tsc clean, lint clean on entry (post-PRs #89–91).
+
+### Area served this run
+**F-track quality hardening (determinism, API robustness, table scan safety) + D-track store readiness (a11y, privacy disclosures) + C-track monetization (annual billing tier).**
+
+### What was done
+
+**Fix 1 — `fix/determinism-test-random` (PR #95):**
+Replaced `Math.random()` in `__tests__/integration/scoring-pipeline.test.ts` with deterministic fixed values. Fixes AGENTS.md determinism contract violation.
+
+**Fix 2 — `fix/api-request-json-guard` (PR #96):**
+Added try/catch around `request.json()` on all 14 unguarded API routes. Initial 5-route fix was rejected by both reviewers as incomplete; expanded to full 14-route coverage in second commit. All routes now return 400 on malformed JSON instead of 500.
+
+**Fix 3 — `fix/search-table-scan-limit` (PR #97):**
+Added `.order("brand").order("model").order("id").limit(500)` to `product_image_embeddings` query in typeahead search. Reviewer B initially rejected `.limit(500)` alone (non-deterministic window at boundary); added composite ORDER BY to make it deterministic.
+
+**Run29 orphans:**
+- PR #93 (`feat/run29-a11y-aria-labels`): `aria-label` on 5 icon-only buttons across 4 core pages (WCAG `button-name` fix).
+- PR #94 (`feat/run29-privacy-disclosures`): Stripe, Google Maps/Places, Browserbase, DeepSeek added to `docs/app-privacy.md`. Reviewer A false-rejected (was reading wrong branch — working tree vs remote); verified via `git show origin/...` and confirmed correct.
+- PR #98 (`feat/run29-annual-billing`): `pro_annual` tier at $399/yr. Reviewer A found 2 bugs (entitlement type gap + missing DB migration for CHECK constraint) — both fixed before creating PR. Migration `021_stripe_customers_annual_tier.sql` created.
+
+**ROADMAP reconcile:**
+- A6 ticked `[x]` — PR #91 merged, 952 tests green.
+- D2 annotation updated with PR #94.
+
+### Lessons learned
+
+1. **Reviewer subagents reading local working tree, not the target branch.** Reviewers for `fix/search-table-scan-limit` and `feat/run29-annual-billing` correctly REJECTED based on reading the local working tree (which was on a different branch). Always verify remote branch content with `git show origin/<branch>:<file>` when reviewer findings seem inconsistent with committed work. This run lost 1 review cycle on each of these branches due to wrong-branch reads.
+
+2. **"Partial fix" completeness is a rejection criterion.** Both reviewers rejected `fix/api-request-json-guard` for covering only 5/14 routes with a misleading commit message ("all API POST routes"). The value bar for a hardening fix includes full coverage, not just the routes that happened to be in scope at the time. Expanding from 5 to 14 routes was the right call — don't ship partial security fixes.
+
+3. **DB migrations must accompany new type values.** The annual billing `pro_annual` tier needed both a TypeScript type update AND a Postgres CHECK constraint migration. Neither was caught until Reviewer A specifically looked at both the entitlement code and the migration files. Checklist for new enum values: (1) TypeScript type unions, (2) DB CHECK constraints, (3) all code paths that switch/compare on the value.
+
+4. **`bookkeeping/run-28` branch was stale and dangerous.** It predated PRs #90/#91 and would have deleted `computer-use-safety.test.ts` (145 lines of safety tests) if merged. Any bookkeeping branch older than the latest 2–3 code PRs should be inspected before merging; a fresh branch from HEAD is always safer than merging a stale one.
+
+### Merge outcome
+PRs #93–98 queued with auto-merge enabled. CI pending.
+
+### Rotation guide for next run
+- **Track A5 + F3:** Eval CI job remains human-applied (PENDING_OPS.md). No autonomous progress possible without the CI job wired.
+- **Track D3:** Screenshots require human on device. Cannot be resolved autonomously.
+- **Track F4:** Playwright CI job wiring is human-applied (PENDING_OPS.md).
+- **Annual billing (PR #98):** Owner must apply migration 021 and set `STRIPE_PRICE_ID_PRO_ANNUAL` env var (see PENDING_OPS.md).
+- **F5 deep audit:** Last ran Run 27. Due again — run a full codebase audit on next run.
+- **Remaining accessibility gaps:** Reviewer A found 2 pre-existing icon-only buttons without `aria-label` in `app/saved/page.tsx` (delete in card list ~line 142) and `app/projects/[projectId]/rooms/[roomId]/mockups/page.tsx` (~line 292). These are the next a11y fixes.
+- **Coverage gaps still open:** `lib/supabase/admin.ts` has zero test coverage (PR #90 added billing/entitlements/auth/computer-use but skipped admin.ts).
+
+---
+
+## Run 2026-06-25 (Run 28)
+
+### State on entry
+- Context compacted from Run 27. PRs #83–87 merged (Run 27 deep audit + F4 Playwright). 952 tests pending (876 on entry to Run 27, 952 after Run 28 adds tests).
+- Rotation guide from Run 27: Track A6 (Computer-Use upgrade), critical-path coverage (billing/entitlements/auth), F3/F4 remain human-gated.
+
+### Area served this run
+**Track A6 (Computer-Use verifier upgrade to Gemini 3.5 Flash GA built-in tool) + critical-path test coverage for billing/entitlements/auth/computer-use.**
+
+### What was done
+
+**PR #89 — `feat/roadmap-a6-annotation`:**
+Added A6 item to ROADMAP.md: upgrade Computer-Use verifier to Gemini 3.5 Flash native computer use (built-in tool API, injection-safety safeguards).
+
+**PR #90 — `test/critical-path-coverage`:**
+Added test coverage for 4 previously-zero-coverage modules:
+- `lib/billing/stripe.ts`: Stripe session creation, webhook parsing, tier validation
+- `lib/entitlements/web.ts`: fail-open behavior, pro/apartment tier checks, `FREE_SAVE_LIMIT_WEB`
+- `lib/auth/ownership.ts`: room ownership guard
+- `lib/agents/computer-use/`: injection-safety invariants (`computer-use-safety.test.ts`), model-pin test in `models.test.ts`
+Total: 952 tests (+76 from Run 27's 876 baseline).
+
+**PR #91 — `feat/a6-computer-use-gemini35`:**
+- `lib/ai/models.ts`: `MODELS.computerUse → "gemini-3.5-flash"`
+- `lib/agents/computer-use/agent-loop.ts`: rewrote for GA built-in tool API (`computerUse: { environment: "ENVIRONMENT_BROWSER" }` built-in tool replaces standalone model), injection-safety safeguards enabled
+- Provider-floors test updated per cost contract (floors move together)
+
+### Lessons learned
+1. **Gemini 3.5 Flash computer use is a built-in tool, not a standalone model.** The old `gemini-2.5-computer-use-preview-10-2025` model used a standalone request shape. The GA `"gemini-3.5-flash"` model uses `computerUse: { environment: "ENVIRONMENT_BROWSER" }` as a built-in tool passed via `tools:`. The agent loop must use the GoogleGenAI SDK directly (bypasses `geminiProvider.chat()`) for multi-turn computer-use sessions.
+
+### Merge outcome
+PRs #89, #90, #91 all merged.
+
+### Rotation guide for next run
+- Deep-audit items from Run 26 still unaddressed: Math.random() in tests, 5 unguarded request.json() routes, full table scan in identified-products search.
+- 3 orphaned run29 branches on remote need PRs created and reviewed.
+- Stale `bookkeeping/run-28` branch exists on remote — DO NOT merge (predates PRs #90/#91, deletes safety tests). Create fresh bookkeeping PR from HEAD.
+
+---
+
 ## Run 2026-06-25 (Run 25)
 
 ### State on entry
