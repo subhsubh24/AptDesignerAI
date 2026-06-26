@@ -20,7 +20,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const { room_id, url, image_url, source_type } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
