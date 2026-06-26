@@ -59,10 +59,16 @@ websites owned by other companies?" question.
 | Google (Gemini API) | Room photos, room type, user context text | AI analysis — third-party processing, covered by Google's data processing terms |
 | Supabase | Email address, room photos, design data | Database + storage hosting |
 | Tavily Search API | Product search query strings derived from AI design output (e.g. "mid-century oak bookshelf") — no PII | Product sourcing — web search for furniture and décor recommendations |
+| Stripe | Name, email address, payment card data (collected directly by Stripe; we never see raw card data) | Payment processing for Apartment ($29) and Pro plans |
+| Google (Maps/Places API) | Product image search queries — no PII | Product imagery — fetching photos of identified furniture products |
+| Browserbase | Screenshots of product pages — no PII; no user data transmitted | Product verification — computer-vision agent confirms product images match descriptions |
+| DeepSeek | Design analysis text, product descriptions — no PII | AI analysis (optional secondary provider for cost optimization) |
 
 None of the above use this data to build ad profiles or track users across apps
-per their published data processing agreements. Tavily queries contain only
-design-derived product terms; no email, photo, or other personal data is included.
+per their published data processing agreements. Tavily and Google Maps queries
+contain only design-derived product terms; no email, photo, or other personal
+data is included. Stripe processes payments under its own PCI-DSS certification.
+DeepSeek is used only for design text analysis, never for user-identifying data.
 
 ---
 
@@ -85,6 +91,10 @@ design-derived product terms; no email, photo, or other personal data is include
 | Google (Gemini API) | Photos, analysis text | App functionality — AI analysis |
 | Supabase | All user data | Infrastructure — data storage/hosting |
 | Tavily Search API | Product search query strings (no PII) | App functionality — product sourcing search |
+| Stripe | Email, payment data (Stripe-only; we do not store card numbers) | Financial info — payment processing |
+| Google (Maps/Places API) | Product search terms (no PII) | App functionality — product imagery |
+| Browserbase | Product page screenshots (no PII) | App functionality — product verification |
+| DeepSeek | Design text (no PII) | App functionality — AI analysis (optional provider) |
 
 ### Security practices
 
