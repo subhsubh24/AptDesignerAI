@@ -1132,6 +1132,7 @@ function RoomUploadSection({
               />
               <button
                 onClick={() => onRemove(img.id)}
+                aria-label="Remove image"
                 className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-md"
               >
                 <X className="h-3 w-3" />
