@@ -75,13 +75,14 @@ describe("Scoring pipeline integration", () => {
   });
 
   it("drift detection triggers on inflated scores", () => {
-    // Record 15 products with inflated scores (median > 7.5)
+    // Record 15 products with inflated scores (median > 7.5). Use deterministic
+    // values — Math.random() in test data violates the determinism contract.
     for (let i = 0; i < 15; i++) {
       recordProductScores({
-        style_fit_score: 8 + Math.random(),
-        palette_fit_score: 8 + Math.random(),
-        material_fit_score: 8 + Math.random(),
-        scale_fit_score: 8 + Math.random(),
+        style_fit_score: 8.5,
+        palette_fit_score: 8.5,
+        material_fit_score: 8.5,
+        scale_fit_score: 8.5,
       });
     }
 
@@ -91,11 +92,12 @@ describe("Scoring pipeline integration", () => {
   });
 
   it("drift detection triggers on clustered scores", () => {
-    // Record 15 products with tightly clustered scores
+    // Record 15 products with tightly clustered scores. Deterministic values in
+    // [6.5, 6.9] replicate the uniform spread of the original random range.
     for (let i = 0; i < 15; i++) {
       recordProductScores({
-        style_fit_score: 6.5 + Math.random() * 0.5, // all between 6.5 and 7.0
-        palette_fit_score: 6.5 + Math.random() * 0.5,
+        style_fit_score: 6.5 + (i % 5) * 0.1, // cycles 6.5 6.6 6.7 6.8 6.9
+        palette_fit_score: 6.5 + (i % 5) * 0.1,
       });
     }
 
