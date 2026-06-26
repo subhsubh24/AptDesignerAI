@@ -352,6 +352,7 @@ required gate or a recurring audit, not a nicety.
   relevance, mockup grounding — each calling the real pipeline (`RUN_EVALS=1`) and
   scoring against a GROWING gold set of real fixtures. Wire a scheduled eval run so
   AI-output-quality regressions are caught before users/reviewers see them.
+  **[Eval files complete (PR #105): all 5 stages — diagnosis, sourcing, grounding, refine, area-analysis. CI wiring (RUN_EVALS=1 job) still pending — human-applied per PENDING_OPS.md.]**
 - [ ] F4. **E2E + accessibility + visual + performance gates (UX is the product).**
   Playwright end-to-end tests for the core journey (web; and the mobile core flow as
   feasible); automated accessibility checks (e.g. axe) on key pages with no critical
@@ -367,12 +368,13 @@ required gate or a recurring audit, not a nicety.
   world-class?" Findings become prioritized, value-bar-clearing work. This is how
   quality is continuously re-validated in depth without pretending to re-review every
   character every run.
-- [ ] F6. **Readiness gate harness (`scripts/preflight.sh`).** Build the mechanical
+- [x] F6. **Readiness gate harness (`scripts/preflight.sh`).** Build the mechanical
   pre-flight script that gates the `FACTORY: ready for submission` declaration — re-runs
   the full gate, asserts artifacts exist, exits non-zero while any DoD checkbox is
   unchecked, and mechanically verifies the critical revenue/product paths are wired not
   stubbed. See the READINESS AUDIT GATE section. (The ≥3-auditor adversarial pass is run
   by the loop at declaration time; this script is the un-gameable mechanical half.)
+  **[Script built and merged (PR #106). Currently exits 1 (8 unchecked DoD boxes) — correct behavior.]**
 
 ## Definition of Done (the STOP gate)
 Every box below must meet the "DONE means VERIFIED ARTIFACTS" guard above —
