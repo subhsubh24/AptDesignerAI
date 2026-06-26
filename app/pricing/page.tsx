@@ -23,6 +23,7 @@ type Tier = {
   href: string;
   features: string[];
   footnote?: string;
+  annualHref?: string;
 };
 
 const TIERS: Tier[] = [
@@ -66,7 +67,7 @@ const TIERS: Tier[] = [
     tagline: "For designers & property managers working across many spaces.",
     price: "$49",
     period: "/month",
-    cta: "Start pro",
+    cta: "Start pro monthly",
     href: "/billing/upgrade?tier=pro",
     features: [
       "Everything in Apartment",
@@ -76,7 +77,7 @@ const TIERS: Tier[] = [
       "Early access to new features",
       "Dedicated support channel",
     ],
-    footnote: "Cancel anytime.",
+    annualHref: "/billing/upgrade?tier=pro_annual",
   },
 ];
 
@@ -175,6 +176,14 @@ export default function PricingPage() {
                 {tier.footnote && (
                   <p className="text-xs text-muted-foreground text-center mt-3">
                     {tier.footnote}
+                  </p>
+                )}
+                {tier.annualHref && (
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    Cancel anytime.{" "}
+                    <Link href={tier.annualHref} className="font-medium text-accent-warm hover:underline">
+                      Save 32% with annual — $399/yr
+                    </Link>
                   </p>
                 )}
               </div>

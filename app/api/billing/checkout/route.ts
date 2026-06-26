@@ -27,14 +27,14 @@ export async function POST(request: NextRequest) {
   }
 
   const tier = body.tier;
-  if (tier !== "apartment" && tier !== "pro") {
+  if (tier !== "apartment" && tier !== "pro" && tier !== "pro_annual") {
     return NextResponse.json(
-      { error: "tier must be 'apartment' or 'pro'" },
+      { error: "tier must be 'apartment', 'pro', or 'pro_annual'" },
       { status: 400 },
     );
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://aptdesigner.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://aptdesignerai.com";
   const successUrl = `${appUrl}/billing/checkout-success?tier=${tier}`;
   const cancelUrl = `${appUrl}/billing/checkout-cancel`;
 

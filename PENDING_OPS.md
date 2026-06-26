@@ -170,7 +170,7 @@ PR #56 stores the Expo push token in AsyncStorage only. For server-initiated re-
 
 This is a future integration — the current AsyncStorage storage means the token survives app reinstalls and is available when the server-side integration is built.
 
-### Stripe web billing — secrets + webhook + Price IDs (added 2026-06-24, PR #50 — set before enabling paid web purchases)
+### Stripe web billing — secrets + webhook + Price IDs (added 2026-06-24, PR #50; updated Run 29 — add Pro Annual)
 
 PR #50 (C1 Stripe web billing) requires the following before live purchases work.
 
@@ -180,12 +180,14 @@ STRIPE_SECRET_KEY=<sk_live_...>
 STRIPE_WEBHOOK_SECRET=<whsec_...>
 STRIPE_PRICE_ID_APARTMENT=<price_...>     # one-time $29 product
 STRIPE_PRICE_ID_PRO_MONTHLY=<price_...>  # recurring $49/month product
+STRIPE_PRICE_ID_PRO_ANNUAL=<price_...>   # recurring $399/year product (added Run 29)
 ```
 
 **Stripe dashboard steps:**
-1. Create two Products in the Stripe dashboard:
+1. Create three Products in the Stripe dashboard:
    - "AptDesigner Apartment" — one-time price of $29.00 USD
    - "AptDesigner Pro" — recurring monthly price of $49.00 USD
+   - "AptDesigner Pro Annual" — recurring yearly price of $399.00 USD
 2. Copy the Price IDs (starting with `price_`) into the env vars above.
 3. Register the webhook endpoint:
    - Go to Stripe → Developers → Webhooks → Add endpoint

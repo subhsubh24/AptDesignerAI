@@ -6,7 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
 interface Props {
-  tier: "apartment" | "pro";
+  tier: "apartment" | "pro" | "pro_annual";
 }
 
 export function UpgradeCheckoutButton({ tier }: Props) {

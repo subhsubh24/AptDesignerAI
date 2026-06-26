@@ -5,11 +5,12 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 // Stripe price IDs — set these in Vercel env vars after creating products in the Stripe dashboard.
 // See PENDING_OPS.md for the exact env var names and setup steps.
 export const STRIPE_PRICE_IDS = {
-  apartment: process.env.STRIPE_PRICE_ID_APARTMENT ?? "",  // one-time $29
+  apartment: process.env.STRIPE_PRICE_ID_APARTMENT ?? "",      // one-time $29
   pro_monthly: process.env.STRIPE_PRICE_ID_PRO_MONTHLY ?? "",  // recurring $49/month
+  pro_annual: process.env.STRIPE_PRICE_ID_PRO_ANNUAL ?? "",    // recurring $399/year
 } as const;
 
-export type BillingTier = "apartment" | "pro";
+export type BillingTier = "apartment" | "pro" | "pro_annual";
 
 let _stripe: Stripe | null = null;
 
@@ -39,11 +40,16 @@ export async function createCheckoutSession(
   const stripe = getStripe();
   const { userId, userEmail, tier, successUrl, cancelUrl } = params;
 
-  const priceId = tier === "apartment" ? STRIPE_PRICE_IDS.apartment : STRIPE_PRICE_IDS.pro_monthly;
+  const priceId =
+    tier === "apartment"
+      ? STRIPE_PRICE_IDS.apartment
+      : tier === "pro_annual"
+        ? STRIPE_PRICE_IDS.pro_annual
+        : STRIPE_PRICE_IDS.pro_monthly;
   if (!priceId) {
     throw new Error(
       `[billing] Stripe price ID for tier '${tier}' is not configured. ` +
-      "Set STRIPE_PRICE_ID_APARTMENT or STRIPE_PRICE_ID_PRO_MONTHLY in Vercel env vars.",
+      "Set STRIPE_PRICE_ID_APARTMENT, STRIPE_PRICE_ID_PRO_MONTHLY, or STRIPE_PRICE_ID_PRO_ANNUAL in Vercel env vars.",
     );
   }
 
