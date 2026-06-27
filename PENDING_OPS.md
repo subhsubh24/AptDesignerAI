@@ -70,6 +70,33 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Cloudflare Turnstile — bot protection on public forms (added 2026-06-27, Run 35 — PR #141, Track G5)
+
+The waitlist form now supports Cloudflare Turnstile but ships **inert** until the owner connects
+Cloudflare. With neither key set, the widget renders nothing and the server fails open, so the
+form is unchanged.
+
+**To enable bot protection on the waitlist:**
+1. Create a free Turnstile widget at https://dash.cloudflare.com → Turnstile. Add your production
+   domain (and `localhost` for testing). Copy the **Site Key** and **Secret Key**.
+2. Set on the deployment (Vercel → Environment Variables):
+   ```
+   TURNSTILE_SECRET_KEY=<secret-key>          # server-only — NEVER prefix with NEXT_PUBLIC_
+   NEXT_PUBLIC_TURNSTILE_SITE_KEY=<site-key>  # public widget key
+   ```
+   Set **both together** — a secret with no site key blocks all sign-ups (no token sent); a site
+   key with no secret renders the widget but the server still fails open.
+3. **Rebuild/redeploy** after setting `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `NEXT_PUBLIC_*` values are
+   inlined at build time, so the widget will not appear until a new build runs.
+4. Verify: load `/waitlist` → the Turnstile widget renders → submit → a sign-up without solving the
+   challenge is rejected (HTTP 400).
+
+**Signup form (completes G5 — owner-side, no loop code):** the signup page uses a client-side
+Supabase auth call, so the right place for its CAPTCHA is **Supabase's built-in bot protection**:
+Supabase dashboard → Authentication → Settings → enable CAPTCHA (Cloudflare Turnstile / hCaptcha)
+and paste the same Turnstile keys. Once both the waitlist (above) and signup are protected, G5 can
+be ticked.
+
 ### Growth-engine env vars (added 2026-06-27, Run 33 — PRs #117/#118/#120) — see docs/growth/CONNECT.md
 
 The growth execution engine ships **closed by default**; set these on the deployment (Vercel → Environment Variables) to switch each capability live. None are committed.

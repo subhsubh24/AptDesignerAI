@@ -32,6 +32,44 @@ were testing the wrong app, not an AptDesignerAI bug.)
 
 ---
 
+## Run 2026-06-27 (Run 35)
+
+### State on entry
+- Default tip #135 (post Run 34 + owner ROADMAP/growth changes #127–135, incl. the BUILDS≠WORKS
+  journey suite #133). `node_modules` absent on a cold container → `npm install` first; `git reset
+  --hard origin/<default>` to be safe.
+- Last DEEP AUDIT: Run 32 (same day) → not due (every ~4 runs / ~24h). Next due ~Run 36.
+- Lowest incomplete buildable: **Track G** (G1–G6 mostly open; G7 done) + **E7** tail + quality gaps.
+
+### Area served this run
+**Track G (G6 CORS ✓, G5 Turnstile partial) + E7.2 (welcome email) + quality (social correctness, F2 admin coverage, dashboard a11y).** 6 file-disjoint changes, all merged.
+
+### What was done
+- **PR #136 — social correctness:** `lib/social/queue.ts` enqueuePost + `lib/social/index.ts` validate() both checked RAW `input.body.length` against the platform cap but stored/sent the TRIMMED body — whitespace-padded posts wrongly rejected, two paths disagreed. Fixed both to use `body.length`. Reviewer A caught the sibling index.ts bug (queue.ts alone was half a fix).
+- **PR #137 — F2 admin coverage:** `__tests__/supabase/admin.test.ts` for `getAdminClient()` (was zero-coverage). doMock-after-resetModules pattern (a reviewer wrongly flagged hoisted vi.mock + resetModules; switched to vi.doMock to settle it — tests were already green, proving interception).
+- **PR #138 — dashboard a11y:** htmlFor/id on 3 onboarding controls (WCAG 1.3.1/4.1.2); one caption `<p>`→`<label>` keeping classes + `block`.
+- **PR #139 — E7.2 welcome email:** first lifecycle SEND wired — `app/api/waitlist/confirm/route.ts` sends a one-time welcome (new `lib/email/templates/waitlist-welcome.ts`) after double-opt-in confirm. At-most-once (token cleared on confirm), dry-run-safe, never breaks confirmation on send failure.
+- **PR #140 — G6 CORS:** `lib/security/cors.ts` + middleware. ACAO reflected only for allowlist (NEXT_PUBLIC_SITE_URL/APP_URL + localhost), never `*`; OPTIONS 204 pre-auth; additive (server-to-server unaffected). With CSP/HSTS/X-CTO already shipped, **G6 ticked**.
+- **PR #141 — G5 Turnstile (waitlist):** `lib/security/turnstile.ts` server verify + `components/ui/turnstile.tsx` widget. Closed-but-inert until owner sets both keys; fail-open on missing key AND on Cloudflare-unreachable; fail-closed on missing/invalid token when enabled. G5 stays unchecked (signup captcha is Supabase-side owner config).
+
+### Lessons learned
+1. **Reviewers catch SIBLING bugs.** The same trim-vs-raw length bug existed in a second function (`index.ts validate()`) the diff didn't touch; Reviewer A insisted the fix cover both. When fixing a bug, grep for the same pattern in sibling code paths before claiming it fixed.
+2. **`vi.doMock` after `vi.resetModules` (inside the loader) is the unambiguous module-isolation pattern.** Hoisted `vi.mock` + `resetModules` actually works (mock registry survives resetModules), but it reads as suspect to a careful reviewer; doMock-after-reset is self-evidently correct and avoids the debate.
+3. **`NEXT_PUBLIC_*` is build-time-inlined — a "ship inert, activate later" client flag silently stays off after a runtime env change until rebuild.** Documented the rebuild requirement in `.env.example` + PENDING_OPS so the owner doesn't set the Turnstile site key and wonder why no widget appears.
+4. **Vercel commit-status shows `failure` (deployment rate-limited) but is NOT a required check.** Required gates are the GitHub Actions check-runs `verify` + `build` + `mobile` (+ non-blocking `quality`); auto-merge fires on those. Read check-runs, not the combined commit status, to judge mergeability.
+5. **CORS as an ADDITIVE header layer is the safe way to "lock down" without breaking server-to-server.** Reflect ACAO only for the allowlist, never reject a request — Stripe webhook / mobile Bearer / internal API carry no Origin and are untouched; disallowed cross-origin browser reads are blocked by the absent ACAO.
+
+### Merge outcome
+PRs #136–141 all merged (verify ✓ build ✓ mobile ✓ quality ✓). Gate green on merged default: 1036 tests, tsc + determinism + lint(full) clean.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 36** (last ran Run 32). Run a full read-only sweep before scouting next run.
+- **Track G remaining:** G1/G3 still substantially-done-but-unticked (a future audit should verify coverage across ALL expensive/auth endpoints + error hygiene, then tick); G2 (server-side validation completeness — verify); G4 (login lockout/backoff — needs a server-side login route; password-reset/verification enumeration guards); G5 signup captcha (owner-side Supabase config — see PENDING_OPS).
+- **E7 remaining:** wire the rest of the lifecycle sends (activation after signup, upgrade after checkout webhook, habit/win-back) — these touch signup/checkout call sites, review carefully; visitor/trial/conversion analytics pulls (owner-credentialed); per-channel social live clients.
+- **Human-gated (unchanged):** migrations 019–023 apply; A5/F3 eval CI job; F4 Playwright CI wiring (suite exists, #133); D3 screenshots; Turnstile keys (PENDING_OPS); all live secrets.
+
+---
+
 ## Run 2026-06-27 (Run 34)
 
 ### State on entry
