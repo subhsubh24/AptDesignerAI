@@ -337,6 +337,19 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   **(PRs #46 #47)**
 - [x] B5. Parity with the web app's value (a user can reach a beautiful room on phone).
   **(PR #65 — native share from saved designs)**
+- [ ] B6. **Mobile BUILD + SUBMIT config — make "EAS-ready" REAL (don't trust B1's tick).**
+  B1 is ticked "EAS-ready" but there is no `mobile/eas.json`, so there is no pipeline to
+  produce an actual store binary — a ticked-box-not-backed-by-the-artifact gap (BUILDS ≠ WORKS).
+  Close it (this is app source the loop OWNS — NOT under .github/, so build it; do NOT touch
+  signing/secrets/accounts): create `mobile/eas.json` with real build profiles
+  (development / preview / production) and a `submit` profile shape; ensure
+  `mobile/app.json` carries everything a production build needs (bundle id `ai.aptdesigner.app`,
+  version + build number, icon/splash, permission usage strings, `extra.eas.projectId` read from
+  env so it's not hardcoded); confirm a production-profile build CONFIG is valid (e.g.
+  `npx eas build --profile production --platform ios --dry-run` / config check) without running a
+  real cloud build. The HUMAN-ONLY parts stay in PENDING_OPS (Apple/Google accounts, EAS project
+  creation, signing/provisioning, the actual `eas build` + `eas submit` + TestFlight). VERIFY B1's
+  EAS-readiness claim is now actually true; if it is not, UN-TICK B1.
 
 ### Track C — Monetization (subscription)
 - [x] C1. Subscription model: monthly + annual tiers, a free trial, and a clear
