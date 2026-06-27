@@ -6,6 +6,14 @@ and when to STOP*. Read it every run alongside `VISION.md`. The loop builds towa
 the **Definition of Done** below, phase by phase, and then **stops building and
 hands off** — it does not run forever.
 
+> **Operating standard (read every run):** `FACTORY_STANDARD.md` is the shared,
+> product-agnostic discipline EVERY factory follows identically — the loop, the
+> two-gate readiness, BUILDS≠WORKS, the independent QUALITY_SCORECARD, the
+> business-case strength loop-back, growth-data-as-signal, the model split, the
+> value bar, the disjoint rule, and the brakes. FOLLOW IT. This ROADMAP + `VISION.md`
+> hold the **product-specific** details (what to build, the security model, the ship
+> target, the stack) and win on any specific. Identical factories, different products.
+
 ## The goal (one sentence)
 Drive BOTH the **product** (web app + native iOS/Android app, store-acceptable with
 high confidence, subscription-monetized) AND the **marketing engine** to **100% of
