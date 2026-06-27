@@ -10,7 +10,7 @@ import {
   publishPost,
   PLATFORM_MAX_BODY,
 } from "@/lib/social";
-import { flushDueQueue } from "@/lib/social/queue";
+import { enqueuePost, flushDueQueue } from "@/lib/social/queue";
 import { GET, POST } from "@/app/api/internal/social-queue/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
@@ -53,6 +53,14 @@ describe("lib/social provider abstraction", () => {
 
     const tooLong = await publishPost({ platform: "x", body: "a".repeat(PLATFORM_MAX_BODY.x + 1) });
     expect(tooLong.error).toBeTruthy();
+  });
+
+  it("publishPost validates the TRIMMED body length (whitespace padding is not over-counted)", async () => {
+    const padded = "  " + "a".repeat(PLATFORM_MAX_BODY.x) + "  ";
+    const res = await publishPost({ platform: "x", body: padded });
+    // At the cap once trimmed → must NOT be rejected for length.
+    expect(res.error).toBeFalsy();
+    expect(res.dryRun).toBe(true);
   });
 });
 
@@ -204,6 +212,31 @@ function flushFakeAdmin(dueRows: Array<{ id: string; platform: string; body: str
     },
   };
 }
+
+describe("enqueuePost length validation", () => {
+  it("validates the TRIMMED body length, not the raw input (whitespace padding can't be over-counted)", async () => {
+    // A body that is exactly at the cap once trimmed, but padded with whitespace
+    // so its RAW length exceeds the cap. The trimmed body is what we store, so it
+    // must be accepted — the old check on input.body.length wrongly rejected it.
+    const padded = "  " + "a".repeat(PLATFORM_MAX_BODY.x) + "  ";
+    const res = await enqueuePost(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fakeAdmin({ insertId: "post-99" }) as any,
+      { platform: "x", body: padded },
+    );
+    expect(res).toEqual({ ok: true, id: "post-99" });
+  });
+
+  it("still rejects a body that exceeds the cap after trimming", async () => {
+    const tooLong = "a".repeat(PLATFORM_MAX_BODY.x + 1);
+    const res = await enqueuePost(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fakeAdmin() as any,
+      { platform: "x", body: tooLong },
+    );
+    expect(res.ok).toBe(false);
+  });
+});
 
 describe("flushDueQueue", () => {
   const orig = { ...process.env };

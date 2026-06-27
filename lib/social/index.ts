@@ -81,7 +81,9 @@ function validate(post: SocialPost): string | null {
   const body = post.body?.trim();
   if (!body) return "Empty post body";
   const max = PLATFORM_MAX_BODY[post.platform];
-  if (post.body.length > max) return `Body exceeds ${max} characters for ${post.platform}`;
+  // Validate the trimmed length (what publishPost actually sends), not the raw
+  // input — otherwise whitespace padding is wrongly counted against the cap.
+  if (body.length > max) return `Body exceeds ${max} characters for ${post.platform}`;
   if (post.mediaUrls && post.mediaUrls.some((u) => typeof u !== "string" || !u.trim())) {
     return "Invalid media URL";
   }
