@@ -337,6 +337,32 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   any internal tooling that makes ongoing growth cheap to run. Marketing is "100%"
   only when the owner could launch demand-gen the same day they connect accounts.
   **(PR #62 — content calendar; PR #63 — press kit; PR #64 — email lifecycle; PR #65 — mobile share)**
+- [ ] E7. **Growth EXECUTION engine (the thing the Growth Agent + owner credentials plug
+  into).** E1–E6 produced staged CONTENT; E7 is the live PLUMBING that turns it into
+  demand-gen the moment the owner connects channels. The daily Growth Agent prepares +
+  queues; the DEPLOYED APP holds the secrets and does the sending — the agent never holds
+  credentials. Build, owner-credentials-pluggable + server-side:
+  1. **Waitlist capture to a real datastore** (Supabase) + double-opt-in, so funnel
+     numbers (visitors → signups) actually report — today they're 0/null because nothing
+     is wired. Add RLS + rate limit + CAPTCHA (Track G) on the public signup endpoint.
+  2. **Email send integration** behind one provider abstraction (Resend / SendGrid /
+     Mailchimp — keys read from env, owner-supplied), wired to the E4/E6 email lifecycle
+     so welcome → activation → conversion → win-back can actually fire.
+  3. **Publishing queue**: a server-side queue + a provider abstraction for social
+     (X / Instagram / TikTok / Reddit) where the app posts via the owner's connected API
+     keys/OAuth. The Growth Agent writes drafts INTO the queue; the app sends. Start with
+     a no-op/dry-run mode so it's safe before any channel is connected.
+  4. **Analytics pull**: an internal read API the Growth Agent calls each run to get REAL
+     funnel/conversion/retention numbers (web analytics + Stripe + email provider) to
+     populate GROWTH_STATUS — never invented.
+  5. **A "growth settings" surface** (server-side config / env contract) listing exactly
+     which env vars / OAuth connections the owner must set per channel — and document it
+     in docs/growth/CONNECT.md (the owner's 20-minute setup runbook). Until a channel's
+     creds are present, that channel stays in dry-run and GROWTH_STATUS shows
+     awaiting_connect: true.
+  Live secrets/keys are HUMAN-APPLIED (PENDING_OPS) — build the pluggable engine + the
+  runbook; the owner supplies the credentials. This unblocks the Growth Agent's execute
+  mode (engine_built: true).
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
