@@ -352,6 +352,7 @@ try: d = (yaml.safe_load(m.group(1)) or {}).get("GROWTH_STATUS") or {}
 except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
 if d.get("phase") not in ("pre_launch","launching","post_launch"): print("bad phase"); sys.exit(1)
 if not isinstance(d.get("funnel"), dict): print("missing funnel"); sys.exit(1)
+if not isinstance(d.get("engine_built"), bool): print("engine_built must be a boolean"); sys.exit(1)
 print("ok", d["phase"])
 PY
 then pass "GROWTH_STATUS: valid, parseable YAML block"

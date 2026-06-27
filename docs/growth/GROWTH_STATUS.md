@@ -18,7 +18,7 @@ GROWTH_STATUS:
   project: AptDesignerAI
   as_of: 2026-06-26
   phase: pre_launch              # pre_launch | launching | post_launch
-  engine_built: false            # is the growth-execution engine live in code?
+  engine_built: true             # is the growth-execution engine live in code?
   channels_connected: []         # owner-authorized channels actually wired (e.g. [x, instagram, email])
   awaiting_connect: true         # true => agent only prepares creative; takes NO external action
   funnel:                        # REAL numbers only; 0/null until a connected source reports them
@@ -59,7 +59,7 @@ GROWTH_STATUS:
 
 ## How to read it (owner)
 
-- awaiting_connect: true + engine_built: false => agent is in honest prepare mode; see owner_blockers.
+- awaiting_connect: true + engine_built: true => engine code is live but channels not yet connected; agent prepares creative, takes no external action; see owner_blockers.
 - funnel is the headline: waitlist signups pre-launch, then trial->paid + MRR + churn post-launch.
 - experiments is where compounding happens post-launch; learnings is the data-grounded read.
 
