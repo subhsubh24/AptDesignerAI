@@ -353,6 +353,15 @@ except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
 if d.get("phase") not in ("pre_launch","launching","post_launch"): print("bad phase"); sys.exit(1)
 if not isinstance(d.get("funnel"), dict): print("missing funnel"); sys.exit(1)
 if not isinstance(d.get("engine_built"), bool): print("engine_built must be a boolean"); sys.exit(1)
+# engine_built:true is a load-bearing CLAIM the dashboard + Growth Agent trust — it must be
+# backed by the E7 execution-engine code physically existing, not flippable on a technicality.
+if d.get("engine_built") is True:
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.dirname(sys.argv[1])))  # .../docs/growth/X -> repo root
+    required = ["lib/email/index.ts", "lib/social/queue.ts", "lib/growth/metrics.ts",
+                "app/api/waitlist/confirm/route.ts"]
+    missing = [p for p in required if not os.path.exists(os.path.join(root, p))]
+    if missing: print("engine_built:true but E7 code missing:", ", ".join(missing)); sys.exit(1)
 print("ok", d["phase"])
 PY
 then pass "GROWTH_STATUS: valid, parseable YAML block"
