@@ -25,12 +25,13 @@ machine-readable owner action list is in `PENDING_OPS.md` (`OWNER_ACTIONS`).
 | Funnel-metrics pull API | **Built**, closed until token set | `INTERNAL_METRICS_TOKEN` |
 | Email lifecycle sending | **Built**, dry-run until key set | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
 | Paid-API spend ceiling (G7) | **Live** (default cap) | optional: `DAILY_PAID_CALL_LIMIT` |
-| Social publishing queue | **Not yet built** — content is staged in docs | n/a this release |
+| Social publishing queue | **Built**, dry-run until a channel's key is set | per channel — see Step 4 |
 
-> Social publishing (X / Instagram / TikTok / Reddit) is **not wired yet**. The
-> creative is staged in `docs/social-drafts.md` and `docs/content-calendar.md`;
-> the server-side publishing queue is a planned build (ROADMAP E7.3). Do not
-> expect the app to post to social channels in this release.
+> Social publishing (X / Instagram / TikTok / Reddit) now has a **server-side
+> queue** (ROADMAP E7.3): the Growth Agent enqueues drafts and the app flushes
+> them through per-platform providers. Every channel ships in **dry-run** until
+> you set its credential (Step 4) — nothing is posted publicly before then. The
+> creative is staged in `docs/social-drafts.md` and `docs/content-calendar.md`.
 
 ---
 
@@ -99,6 +100,41 @@ endpoints, on top of the per-route rate limits. Default is **60/user/day**.
 
 ---
 
+## Step 4 — Social publishing queue (per channel) · ~10 min each
+
+The queue (`/api/internal/social-queue`) is closed by default (returns `503`
+until `INTERNAL_METRICS_TOKEN` from Step 2 is set) and posts in **dry-run** until
+a channel's primary credential is present. The Growth Agent enqueues drafts with
+`POST { action: "enqueue", platform, body, ... }`; the app flushes due posts with
+`POST { action: "flush" }`. `GROWTH_SOCIAL_DRY_RUN=1` forces dry-run on every
+channel regardless of credentials.
+
+Connect a channel by setting its credential on the deployment (then complete that
+provider's full OAuth/app-review as the platform requires):
+
+| Channel | Primary credential (flips out of dry-run) |
+|---|---|
+| X (Twitter) | `X_API_KEY` (plus the v2 app's secret/token set) |
+| Instagram | `INSTAGRAM_ACCESS_TOKEN` (Graph API business account) |
+| TikTok | `TIKTOK_ACCESS_TOKEN` (TikTok for Developers) |
+| Reddit | `REDDIT_CLIENT_ID` (plus the script-app secret) |
+
+**Verify (safe, no public post):** with only `INTERNAL_METRICS_TOKEN` set,
+
+```bash
+curl -s https://YOUR_DOMAIN/api/internal/social-queue \
+  -H "Authorization: Bearer $INTERNAL_METRICS_TOKEN" | jq   # queue status counts
+```
+
+Enqueue a draft, then flush — the response reports `dryRun` until a credential is
+set, confirming nothing was posted publicly.
+
+> Connecting + authorizing the social accounts (and passing each platform's API
+> app review) is owner work — the queue is built and safe; only the credentials
+> and account approvals are human-applied.
+
+---
+
 ## What stays human-only
 
 These cannot be done by the loop and are tracked in `PENDING_OPS.md`:
@@ -106,7 +142,8 @@ These cannot be done by the loop and are tracked in `PENDING_OPS.md`:
 - Supplying the live secrets above.
 - Domain DNS verification for email.
 - Provider-dashboard hard spend caps + billing alerts.
-- Connecting/funding social + ad accounts (when the publishing queue ships).
+- Connecting/funding/authorizing social + ad accounts and passing each
+  platform's API app review (the publishing queue is built; see Step 4).
 
 Once Steps 1–2 are done, `awaiting_connect` flips to `false` for email and
 metrics, and the Growth Agent can begin executing the staged lifecycle and
