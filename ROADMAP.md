@@ -576,6 +576,17 @@ coverage so every DoD gate is independently re-verified, at minimum:
 - **Business-case honesty** — inputs sourced + defensible; NO lever's adoption % chosen
   merely to clear the revenue floor; the machine-readable summary block matches the body
   AND the real billing config (Stripe/RevenueCat prices).
+- **Business-case STRENGTH & lever-completeness (this lens can send the project BACK into
+  building).** Honesty is necessary but NOT sufficient — also judge whether the honest case
+  is STRONG. If the honest median is BELOW the $100K floor, readiness is REJECTED outright.
+  And even AT/above the floor, if the auditor can name a SPECIFIC, buildable, value-bar-
+  clearing revenue lever / feature / architecture change that is NOT yet built and would
+  materially strengthen the case — a higher-value Pro/Studio tier or annual plan, a
+  conversion improvement (paywall timing/onboarding/time-to-wow), a retention/expansion/
+  referral loop, a distribution/SEO/ASO channel, or a margin/COGS reduction — that is a GAP:
+  do NOT declare ready. Add it to the ROADMAP as build work and RE-ENTER BUILD MODE. "Ready"
+  requires the honest case to clear the floor AND the high-ROI levers to be actually BUILT,
+  not merely listed in the business case.
 - **Artifact reality** — every ticked box's artifact genuinely exists AND functions;
   every doc matches current code; no contradictions.
 - **Store acceptance** (re-audit vs current Apple/Google guidelines via research),
@@ -586,11 +597,28 @@ gap → UN-TICK that box, queue the fix, and DO NOT open the issue this run — 
 **Declaration rule.** Open `FACTORY: ready for submission` ONLY when BOTH gates pass —
 preflight exits 0 AND all ≥3 adversarial auditors independently fail to find any real gap
 — and PASTE both the preflight output AND the readiness-audit findings (who verified what)
-into the issue as evidence. **Convergence still holds:** this makes "ready" harder, not
-impossible — the loop still STOPS and hands off when genuinely done. If, after building
-all defensible revenue levers, the honest median STILL can't reach the $100K floor, open
-an FYI issue to the owner with the gap + options rather than faking convergence or looping
-forever.
+into the issue as evidence.
+
+**A weak business case RE-OPENS building (the loop-back).** A `ready` declaration is BLOCKED
+while the honest median is below the $100K floor — and the response is NOT to open the issue,
+nor to open an FYI and stop. Instead the loop turns the strength auditor's findings into
+ROADMAP build work — new revenue-driving features, architecture changes, and the pricing /
+conversion / retention / expansion / distribution / margin levers that would raise the honest
+number — RE-ENTERS BUILD MODE, builds them through the normal review+gates path, and only
+re-attempts the readiness gate once the case is genuinely STRONGER. Iterate this until the
+honest case clears the floor with the high-ROI levers actually built. Each "ready" attempt
+that fails on strength should leave the next attempt with a materially stronger business case,
+not the same one re-submitted.
+
+**Convergence still holds (this is BOUNDED, not a runaway).** The trigger to keep building is
+always a SPECIFIC, buildable, value-bar-clearing item the audit can name — NEVER the open-ended
+"the number could always be higher." When the honest case clears the floor AND no further
+value-bar-clearing revenue work remains to build, the loop CONVERGES and hands off; squeezing
+the optimistic ceiling beyond that point with real post-launch conversion/retention data is the
+owner's job, not a reason to loop forever (see the MAXIMIZE-revenue section). ONLY as a genuine
+last resort — after the loop has actually BUILT every defensible lever and the honest median
+STILL can't reach the floor (a real market-ceiling limit, not unbuilt work) — open an FYI issue
+to the owner with the gap + options rather than faking convergence or looping forever.
 
 ## Owner Handoff — remaining steps, IN ORDER (only what the loop CANNOT do)
 When Done, the `FACTORY: ready for submission` issue MUST contain a NUMBERED,
