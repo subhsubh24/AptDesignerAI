@@ -23,6 +23,9 @@ const PUBLIC_PATH_PREFIXES = ["/guides"];
 // /api/mobile/*       — mobile clients authenticate via Bearer token in the
 //                       Authorization header (no session cookie); each route
 //                       calls supabase.auth.getUser(token) directly.
+// /api/internal/*     — internal tooling (e.g. growth-metrics) authenticates
+//                       via the INTERNAL_METRICS_TOKEN shared secret in the
+//                       Authorization header; each route MUST verify it.
 const PUBLIC_API_PATHS = new Set(["/api/waitlist", "/api/billing/webhook"]);
 
 export async function updateSession(request: NextRequest) {
@@ -83,7 +86,8 @@ export async function updateSession(request: NextRequest) {
   const isPublicApi =
     PUBLIC_API_PATHS.has(pathname) ||
     pathname.startsWith("/api/shared/") ||
-    pathname.startsWith("/api/mobile/");
+    pathname.startsWith("/api/mobile/") ||
+    pathname.startsWith("/api/internal/");
   const isApi = pathname.startsWith("/api/");
 
   if (!user && !isPublicPath && !isAuthCallback && !isPublicApi) {
