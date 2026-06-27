@@ -23,15 +23,15 @@ QUALITY_SCORECARD:
   overall: null                       # A+|A|B|C|D|F|null — null until first independent grade
   ship_gate_met: false                # true only when every ship_critical dim is A or A+
   dimensions:                         # grade null until the auditor's first run
-    functional_reality:    { grade: null, ship_critical: true,  gap: null }
-    correctness:           { grade: null, ship_critical: true,  gap: null }
-    security_rls:          { grade: null, ship_critical: true,  gap: null }
-    design_taste:          { grade: null, ship_critical: true,  gap: null }
-    store_readiness:       { grade: null, ship_critical: true,  gap: null }
-    artifact_integrity:    { grade: null, ship_critical: true,  gap: null }
-    business_case_strength:{ grade: null, ship_critical: true,  gap: null }
-    tests_evals:           { grade: null, ship_critical: false, gap: null }
-    performance:           { grade: null, ship_critical: false, gap: null }
+    functional_reality: { grade: null, ship_critical: true, gap: null }
+    correctness: { grade: null, ship_critical: true, gap: null }
+    security_rls: { grade: null, ship_critical: true, gap: null }
+    design_taste: { grade: null, ship_critical: true, gap: null }
+    store_readiness: { grade: null, ship_critical: true, gap: null }
+    artifact_integrity: { grade: null, ship_critical: true, gap: null }
+    business_case_strength: { grade: null, ship_critical: true, gap: null }
+    tests_evals: { grade: null, ship_critical: false, gap: null }
+    performance: { grade: null, ship_critical: false, gap: null }
   top_gaps: []                        # ordered: [{dimension, gap, severity}] — the work to drive grades up
 ```
 
