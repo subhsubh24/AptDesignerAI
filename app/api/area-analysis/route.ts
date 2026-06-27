@@ -27,6 +27,7 @@ import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const { room_id, project_id } = await request.json();
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });

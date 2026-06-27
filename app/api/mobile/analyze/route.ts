@@ -6,6 +6,7 @@ import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { withCostLedger, recordUsage } from "@/lib/observability/cost-meter";
 import type { AIContentBlock } from "@/lib/ai/provider";
 
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest) {
       },
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: { image_url?: unknown; room_type?: unknown };
   try {

@@ -4,6 +4,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
@@ -41,6 +42,9 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
     return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });

@@ -16,6 +16,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
 import { withTrace } from "@/lib/observability/tracing";
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const body = await request.json();
   const { room_id } = body;

@@ -16,6 +16,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -77,6 +78,9 @@ export async function POST(request: NextRequest) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const body = await request.json();
   const { room_id, content } = body as { room_id?: string; content?: string };
