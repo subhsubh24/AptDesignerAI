@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { applyCorsHeaders } from "@/lib/security/cors";
 
 const PUBLIC_PATHS = new Set([
   "/login",
@@ -44,6 +45,16 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // CORS (G6): answer the preflight for API routes before any auth logic. CORS
+  // headers are reflected ONLY for allowlisted origins (no wildcard), so a
+  // disallowed cross-origin browser request gets no ACAO and is blocked by the
+  // browser. Server-to-server callers send no Origin and are unaffected.
+  const origin = request.headers.get("origin");
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+  if (isApiRoute && request.method === "OPTIONS") {
+    return applyCorsHeaders(new NextResponse(null, { status: 204 }), origin);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -55,7 +66,8 @@ export async function updateSession(request: NextRequest) {
       redir.pathname = "/dashboard";
       return NextResponse.redirect(redir);
     }
-    return NextResponse.next({ request });
+    const devRes = NextResponse.next({ request });
+    return isApiRoute ? applyCorsHeaders(devRes, origin) : devRes;
   }
 
   // Real Supabase auth — refresh session via cookies
@@ -96,11 +108,13 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/shared/") ||
     pathname.startsWith("/api/mobile/") ||
     pathname.startsWith("/api/internal/");
-  const isApi = pathname.startsWith("/api/");
 
   if (!user && !isPublicPath && !isAuthCallback && !isPublicApi) {
-    if (isApi) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isApiRoute) {
+      return applyCorsHeaders(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+        origin,
+      );
     }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -114,5 +128,5 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(dashUrl);
   }
 
-  return supabaseResponse;
+  return isApiRoute ? applyCorsHeaders(supabaseResponse, origin) : supabaseResponse;
 }
