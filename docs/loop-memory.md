@@ -131,6 +131,65 @@ PRs #105, #106, #107 all merged (all green: verify ✓ build ✓ mobile ✓ qual
 
 ---
 
+## Run 2026-06-27 (Run 32)
+
+### State on entry
+- Context compacted from Run 31 mid-task: refine-chat/route.ts import was added but POST handler rate limit check was NOT yet inserted.
+- 952 tests passing, tsc clean on entry (PRs #105–107 confirmed merged from Run 31).
+- Deep audit was overdue (last ran Run 27, 5 runs ago; due every ~4 runs). DEEP AUDIT BLOCK ran at session start via parallel Haiku scouts.
+- Primary actionable: Track G (pre-launch security & abuse hardening, G1-G7) entirely untouched.
+- Secondary: 2 a11y gaps from rotation guide (icon-only delete + download buttons).
+- Artifact inconsistency: `engine_built: false` in GROWTH_STATUS.md despite E1-E6 all merged.
+
+### Area served this run
+**Track G (G1/G2/G3/G6 — rate limiting, error hygiene, CSP header) + A11y rotation (2 icon-aria gaps) + artifact correction (GROWTH_STATUS engine_built).**
+
+### What was done
+
+**PR #111 — `g1-g3/rate-limits-error-hygiene`:**
+`lib/utils/rate-limiter.ts`: 7 new RATE_LIMITS constants for all previously-unprotected expensive routes: `analyzeApartment` (5/hr), `apartmentResearch` (3/hr), `computerUseVerify` (2/hr), `billingCheckout` (10/hr), `userDelete` (3/day), `areaAnalysisRefineChat` (20/min), `areaAnalysisRefineFull` (5/5min).
+All 7 routes updated: `analyze-apartment`, `apartment-research`, `computer-use/product-verify`, `billing/checkout`, `user/delete`, `area-analysis/refine`, `area-analysis/refine-chat` — each with per-user 429 + Retry-After guard immediately after auth check.
+Error hygiene (G3): raw LLM/Stripe/Supabase messages in HTTP responses replaced with generic strings in `computer-use/product-verify`, `billing/checkout`, `analyze-apartment`, `apartment-research`, `area-analysis/refine` catch block, `area-analysis/refine-chat` DB error + catch block.
+Reviewer 1 caught: `user/delete` missing Retry-After; 2 refine-route error leaks. Reviewer 2 caught: same Retry-After gap; noted in-memory rate limiter resets on cold start (acceptable pre-launch, flagged for Redis/Upstash migration before scale). All fixed before merge.
+
+**PR #112 — `a11y/icon-aria-labels-r32`:**
+`app/saved/page.tsx`: Delete button (Trash2 icon) → `aria-label={\`Delete ${design.title}\`}`.
+`app/projects/.../mockups/page.tsx`: Download button → `aria-label={\`Download mockup from ${new Date(mockup.created_at).toLocaleDateString()}\`}`.
+Reviewer 1 (REQUEST_CHANGES) correctly insisted on context-specific labels (design title / creation date) not generic "Delete design" / "Download mockup" — WCAG 2.1 SC 4.1.2 requires unique names in list contexts. Applied before merge.
+
+**PR #113 — `fix/growth-status-engine-built`:**
+`docs/growth/GROWTH_STATUS.md`: `engine_built: false` → `engine_built: true`; stale prose example on line 62 updated to match.
+`scripts/preflight.sh`: Added `isinstance(d.get("engine_built"), bool)` to GROWTH_STATUS parse block — rejects "yes" / 1 / null that YAML parses without error but dashboard misinterprets.
+Reviewer 1 caught stale line 62 prose; fixed before merge.
+
+**PR #114 — `g6/csp-header`:**
+`next.config.ts`: Added `Content-Security-Policy` header via a `cspDirectives` map for readability/diffability.
+Reviewer 1 caught functional breakages: missing `https://www.google.com` in `frame-src` (Google Maps embed iframes in dashboard) and `https://maps.googleapis.com` in `script-src` (Maps JS API loaded via `<Script>`). Reviewer 2 caught missing `worker-src 'self'` (explicit prevents future `default-src` widening from silently opening worker exfiltration). All 3 fixes applied before merge. Reviewer 2 also noted that `'unsafe-inline'` in `script-src` weakens XSS protection significantly — inline comment acknowledges this and documents the nonce-migration path.
+
+### Lessons learned
+
+1. **Both reviewers independently caught different CSP breakages.** Reviewer 1 found missing Google Maps origins (functional breakage); Reviewer 2 found missing `worker-src` (future-proofing gap). Neither found the other's issue. CSP reviews must run at least 2 independent reviewers with different prompts — one security-focused, one functional-breakage-focused.
+
+2. **`'unsafe-inline'` in script-src is the correct INTERIM state for Next.js 14, but must be tracked.** Once the app is post-launch and stable, replacing `'unsafe-inline'` with a nonce-per-request (via Next.js middleware) would harden script-src against XSS meaningfully. This should be done before adding any user-generated-content rendering.
+
+3. **In-memory rate limiters reset on cold start / new function instance.** On Vercel serverless, each instance has its own counter. A user who hits different instances can exceed the per-user limit. Pre-launch this is acceptable; before scale, rate limit state should move to Upstash Redis (1 Vercel integration install). Record this decision explicitly so future reviewers don't spend time re-debating.
+
+4. **Context-specific aria-labels are required, not optional, for WCAG list contexts.** "Delete design" (generic) vs "Delete Living Room" (specific) is the difference between WCAG compliance and a screen reader that announces "button Delete design, button Delete design, button Delete design" down a list. Always use the item's name/identifier in the label.
+
+5. **Two-stage error hygiene: log internal details, return generic client string.** The pattern `console.error("[route] Error:", err); return NextResponse.json({ error: "X failed. Please try again." })` is OWASP information exposure best practice. Both the logging AND the generic string are required — one without the other is wrong.
+
+### Merge outcome
+PRs #111, #112, #113, #114 all merged. 952 tests, tsc clean, 0 failures.
+
+### Rotation guide for next run
+- **Track G remaining:** G4 (auth failure-case hardening: lockout/backoff on wrong passwords, password-reset email enumeration guard, signup enumeration guard); G5 (CAPTCHA/Turnstile on public forms — waitlist, signup); G7 (code-level per-user/day circuit breaker on paid-API calls — provider-side spend caps are already in PENDING_OPS.md but the code circuit breaker is loop work).
+- **CSP nonce migration** (flagged by Reviewer 2): Replace `'unsafe-inline'` in script-src with Next.js middleware-generated nonces. Medium complexity; wait until post-launch stability.
+- **Rate limiter Redis migration** (flagged by Reviewer 2): Move rate limit state from in-memory to Upstash Redis before significant traffic. Record as a PENDING_OPS owner action or implement if Upstash is already in the stack.
+- **Track F remaining:** F4 Playwright CI wiring (human-applied). lib/supabase/admin.ts still zero test coverage.
+- **Track D:** screenshots (D3) still require a human on a device.
+
+---
+
 ## Run 2026-06-26 (Run 30)
 
 ### State on entry
