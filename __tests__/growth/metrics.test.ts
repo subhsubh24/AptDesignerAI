@@ -14,6 +14,8 @@ interface Counts {
   waitlist7d: number;
   activeSubs: number;
   annualSubs: number;
+  cancelledSubs: number;
+  cancelled30d: number;
 }
 
 // Minimal Supabase-shaped fake: each query is a thenable that resolves to a
@@ -21,29 +23,39 @@ interface Counts {
 function fakeAdmin(counts: Counts, error: unknown = null) {
   return {
     from(table: string) {
-      const state = { table, dateFilter: false, annualTier: false, statusActive: false };
+      const state = {
+        table,
+        gteCol: null as string | null,
+        annualTier: false,
+        status: null as string | null,
+      };
       const builder = {
         select: () => builder,
-        gte: () => {
-          state.dateFilter = true;
+        gte: (col: string) => {
+          state.gteCol = col;
           return builder;
         },
-        in: () => builder, // .in("tier", ["pro","pro_annual"]) — the active-subs path
+        in: () => builder, // .in("tier", ["pro","pro_annual"]) — the multi-tier path
         eq: (col: string, val: string) => {
           if (col === "tier" && val === "pro_annual") state.annualTier = true;
-          if (col === "status" && val === "active") state.statusActive = true;
+          if (col === "status") state.status = val;
           return builder;
         },
         then(resolve: (v: { count: number | null; error: unknown }) => unknown) {
           let count = 0;
           if (state.table === "waitlist_emails") {
-            count = state.dateFilter ? counts.waitlist7d : counts.waitlistTotal;
+            count = state.gteCol === "created_at" ? counts.waitlist7d : counts.waitlistTotal;
           } else if (state.table === "stripe_customers") {
-            // Only return the active-subscriber counts when status=active was
-            // applied; a dropped filter surfaces inactive rows (+100) and trips
-            // the count assertions, so the test actually guards that filter.
-            const inactivePadding = state.statusActive ? 0 : 100;
-            count = (state.annualTier ? counts.annualSubs : counts.activeSubs) + inactivePadding;
+            if (state.status === "active") {
+              count = state.annualTier ? counts.annualSubs : counts.activeSubs;
+            } else if (state.status === "cancelled") {
+              // The 30d query adds a gte on updated_at; the lifetime one doesn't.
+              count = state.gteCol === "updated_at" ? counts.cancelled30d : counts.cancelledSubs;
+            } else {
+              // A dropped status filter surfaces every row (+100) and trips the
+              // assertions, so the test actually guards that the filter is applied.
+              count = (state.annualTier ? counts.annualSubs : counts.activeSubs) + 100;
+            }
           }
           return Promise.resolve(error ? { count: null, error } : { count, error: null }).then(resolve);
         },
@@ -55,7 +67,14 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
 
 describe("gatherGrowthMetrics", () => {
   it("returns real counts keyed by table and filter", async () => {
-    const admin = fakeAdmin({ waitlistTotal: 42, waitlist7d: 7, activeSubs: 5, annualSubs: 2 });
+    const admin = fakeAdmin({
+      waitlistTotal: 42,
+      waitlist7d: 7,
+      activeSubs: 5,
+      annualSubs: 2,
+      cancelledSubs: 9,
+      cancelled30d: 3,
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const m = await gatherGrowthMetrics(admin as any);
     expect(m.source).toBe("supabase");
@@ -64,14 +83,17 @@ describe("gatherGrowthMetrics", () => {
       waitlist_signups_7d: 7,
       active_subscribers: 5,
       annual_subscribers: 2,
+      cancelled_subscribers: 9,
+      cancelled_30d: 3,
     });
     expect(typeof m.as_of).toBe("string");
   });
 
   it("throws when an underlying query errors", async () => {
-    const admin = fakeAdmin({ waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, annualSubs: 0 }, {
-      message: "db down",
-    });
+    const admin = fakeAdmin(
+      { waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, annualSubs: 0, cancelledSubs: 0, cancelled30d: 0 },
+      { message: "db down" },
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(gatherGrowthMetrics(admin as any)).rejects.toBeTruthy();
   });
@@ -121,7 +143,14 @@ describe("GET /api/internal/growth-metrics", () => {
   it("returns 200 with metrics for a valid token", async () => {
     process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
     mockGetAdmin.mockReturnValue(
-      fakeAdmin({ waitlistTotal: 11, waitlist7d: 2, activeSubs: 4, annualSubs: 1 }),
+      fakeAdmin({
+        waitlistTotal: 11,
+        waitlist7d: 2,
+        activeSubs: 4,
+        annualSubs: 1,
+        cancelledSubs: 6,
+        cancelled30d: 2,
+      }),
     );
     const res = await GET(req({ authorization: "Bearer correct-secret-value" }, "10.0.0.5"));
     expect(res.status).toBe(200);
@@ -129,12 +158,21 @@ describe("GET /api/internal/growth-metrics", () => {
     expect(body.funnel.waitlist_signups_total).toBe(11);
     expect(body.funnel.active_subscribers).toBe(4);
     expect(body.funnel.annual_subscribers).toBe(1);
+    expect(body.funnel.cancelled_subscribers).toBe(6);
+    expect(body.funnel.cancelled_30d).toBe(2);
   });
 
   it("rate-limits after the per-IP window is exceeded (429)", async () => {
     process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
     mockGetAdmin.mockReturnValue(
-      fakeAdmin({ waitlistTotal: 1, waitlist7d: 0, activeSubs: 0, annualSubs: 0 }),
+      fakeAdmin({
+        waitlistTotal: 1,
+        waitlist7d: 0,
+        activeSubs: 0,
+        annualSubs: 0,
+        cancelledSubs: 0,
+        cancelled30d: 0,
+      }),
     );
     const ip = "10.9.9.9";
     // Limit is 30/min/IP. Exhaust it, then expect a 429 on the next call.
