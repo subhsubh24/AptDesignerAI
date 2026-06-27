@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runProductVerifier } from "@/lib/agents/computer-use/product-verifier";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 
 const log = createLogger("api-computer-use-product-verify");
 
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 3600000) / 1000)) } },
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const body = await request.json();
   const { product_url, expected_title, expected_color, expected_size } = body as {

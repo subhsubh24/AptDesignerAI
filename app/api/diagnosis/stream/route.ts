@@ -6,6 +6,7 @@ import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
@@ -48,6 +49,9 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
+
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // Fetch room + images
   const { data: room } = await supabase
