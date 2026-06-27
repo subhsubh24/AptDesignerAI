@@ -11,6 +11,7 @@
  * see which sequence fired without parsing subject lines.
  *
  * Doc mapping:
+ *   waitlist_confirm                         -> double opt-in confirmation (E7.1; precedes the welcome sequence)
  *   waitlist_welcome_1..3 / waitlist_launch  -> docs/email-welcome-sequence.md (Emails 1–4)
  *   activation_1..3        -> docs/email-lifecycle.md Sequence 1 (A1–A3)
  *   habit_1..3             -> docs/email-lifecycle.md Sequence 2 (B1–B3)
@@ -20,6 +21,7 @@
  *   referral_share_1       -> docs/email-lifecycle.md Sequence 6 (F1)
  */
 export type EmailStage =
+  | "waitlist_confirm"
   | "waitlist_welcome_1"
   | "waitlist_welcome_2"
   | "waitlist_welcome_3"

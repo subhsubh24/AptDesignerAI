@@ -13,7 +13,9 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 // /guides has sub-routes (/guides/color-palette-guide, etc.) — use prefix match below.
-const PUBLIC_PATH_PREFIXES = ["/guides"];
+// /waitlist has the double opt-in landing page (/waitlist/confirmed) reached from
+// an emailed link by an unauthenticated visitor — keep the whole tree public.
+const PUBLIC_PATH_PREFIXES = ["/guides", "/waitlist"];
 
 // API routes that must accept unauthenticated requests.
 // /api/billing/webhook — Stripe POSTs here with its own signature verification.
@@ -26,7 +28,11 @@ const PUBLIC_PATH_PREFIXES = ["/guides"];
 // /api/internal/*     — internal tooling (e.g. growth-metrics) authenticates
 //                       via the INTERNAL_METRICS_TOKEN shared secret in the
 //                       Authorization header; each route MUST verify it.
-const PUBLIC_API_PATHS = new Set(["/api/waitlist", "/api/billing/webhook"]);
+const PUBLIC_API_PATHS = new Set([
+  "/api/waitlist",
+  "/api/waitlist/confirm",
+  "/api/billing/webhook",
+]);
 
 export async function updateSession(request: NextRequest) {
   // Redirect root to dashboard always

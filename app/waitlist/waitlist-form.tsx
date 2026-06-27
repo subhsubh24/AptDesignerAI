@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, MailCheck } from "lucide-react";
 
-type State = "idle" | "loading" | "success" | "duplicate" | "error";
+type State = "idle" | "loading" | "pending" | "duplicate" | "error";
 
 export function WaitlistForm() {
   const [email, setEmail] = useState("");
@@ -25,7 +25,7 @@ export function WaitlistForm() {
         body: JSON.stringify({ email: email.trim() }),
       });
       const data = (await res.json()) as {
-        success?: boolean;
+        pendingConfirmation?: boolean;
         alreadySubscribed?: boolean;
         error?: string;
       };
@@ -41,22 +41,25 @@ export function WaitlistForm() {
         return;
       }
 
-      setState("success");
+      // Double opt-in: address stored as pending; the user must click the link
+      // in the confirmation email before they're counted on the list.
+      setState("pending");
     } catch {
       setErrorMsg("Network error. Please check your connection and try again.");
       setState("error");
     }
   };
 
-  if (state === "success") {
+  if (state === "pending") {
     return (
       <div className="flex flex-col items-center gap-3 py-4 animate-in fade-in duration-300">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-          <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+          <MailCheck className="h-6 w-6 text-emerald-500" />
         </div>
-        <p className="text-base font-semibold">You&apos;re on the list!</p>
+        <p className="text-base font-semibold">Check your inbox</p>
         <p className="text-sm text-muted-foreground text-center max-w-xs">
-          We&apos;ll email you when the iOS and Android apps launch. No spam, one email.
+          We sent a confirmation link to <span className="font-medium text-foreground">{email.trim()}</span>.
+          Click it to lock in your spot — that&apos;s the only way we&apos;ll add you.
         </p>
       </div>
     );

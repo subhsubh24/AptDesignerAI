@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/email";
+import { buildWaitlistConfirmEmail } from "@/lib/email/templates/waitlist";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
@@ -20,6 +23,32 @@ function isRateLimited(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return true;
   entry.count++;
   return false;
+}
+
+/** 64-char unguessable hex token mailed in the confirmation link. */
+function newConfirmationToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+/** Absolute base URL for confirm links: explicit site URL in prod, else the request origin. */
+function siteOrigin(req: NextRequest): string {
+  return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") ?? req.nextUrl.origin;
+}
+
+/**
+ * Send the double opt-in confirmation email. Never throws — the lib/email layer
+ * is dry-run until RESEND_API_KEY is set, so a sign-up succeeds (and is stored
+ * as pending) whether or not a real send happens.
+ */
+async function sendConfirmation(req: NextRequest, email: string, token: string): Promise<void> {
+  const confirmUrl = `${siteOrigin(req)}/api/waitlist/confirm?token=${token}`;
+  const { subject, html, text } = buildWaitlistConfirmEmail(confirmUrl);
+  const result = await sendEmail({ to: email, subject, html, text, stage: "waitlist_confirm" });
+  if (result.error) {
+    // Log only; the address is already stored as pending and the user is told to
+    // check their inbox. A transient provider failure must not 500 the sign-up.
+    console.error("[waitlist] confirmation email not sent:", result.error);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -58,11 +87,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { error } = await admin.from("waitlist_emails").insert({ email, source: "waitlist" });
+  const token = newConfirmationToken();
+  const { error } = await admin.from("waitlist_emails").insert({
+    email,
+    source: "waitlist",
+    confirmation_token: token,
+    token_sent_at: new Date().toISOString(),
+  });
 
   if (error) {
     if (error.code === "23505") {
-      // Unique constraint violation — already on the list
+      // Address already captured. If it was already confirmed, say so; if it is
+      // still pending, re-issue a fresh token and resend the confirmation so a
+      // lost first email isn't a dead end.
+      const { data: existing } = await admin
+        .from("waitlist_emails")
+        .select("id, confirmed_at")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (existing && existing.confirmed_at == null) {
+        const resendToken = newConfirmationToken();
+        const { error: updateError } = await admin
+          .from("waitlist_emails")
+          .update({ confirmation_token: resendToken, token_sent_at: new Date().toISOString() })
+          .eq("id", existing.id)
+          .is("confirmed_at", null);
+        if (!updateError) {
+          await sendConfirmation(req, email, resendToken);
+          return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
+        }
+      }
+
       return NextResponse.json({ alreadySubscribed: true }, { status: 200 });
     }
     return NextResponse.json(
@@ -71,5 +127,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  await sendConfirmation(req, email, token);
+  return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
 }
