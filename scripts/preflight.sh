@@ -419,6 +419,25 @@ PY
 then pass "OWNER_ACTIONS: valid, parseable YAML block"
 else fail "OWNER_ACTIONS: missing or UNPARSEABLE"; fi
 
+# ── Dashboard feed: QUALITY_SCORECARD must parse (independent quality grade) ────
+if python3 - "$REPO_ROOT/docs/quality/QUALITY_SCORECARD.md" <<'PY'
+import sys, re, yaml
+try: txt = open(sys.argv[1]).read()
+except OSError: print("QUALITY_SCORECARD.md missing"); sys.exit(1)
+m = re.search(r"ya?ml\s*\n(.*?QUALITY_SCORECARD.*?)\n```", txt, re.S)
+if not m: print("no QUALITY_SCORECARD block"); sys.exit(1)
+try: d = (yaml.safe_load(m.group(1)) or {}).get("QUALITY_SCORECARD") or {}
+except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
+GRADES = {"A+","A","B","C","D","F",None}
+if not isinstance(d.get("dimensions"), dict): print("dimensions must be a map"); sys.exit(1)
+if d.get("overall") not in GRADES: print("bad overall grade"); sys.exit(1)
+for name, dim in d["dimensions"].items():
+    if (dim or {}).get("grade") not in GRADES: print("bad grade for", name); sys.exit(1)
+print("ok", d.get("overall"))
+PY
+then pass "QUALITY_SCORECARD: valid, parseable YAML block"
+else fail "QUALITY_SCORECARD: missing or UNPARSEABLE"; fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
