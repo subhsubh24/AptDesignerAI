@@ -415,6 +415,19 @@ web app where clean to do so — extract shared modules rather than copy-paste).
      in docs/growth/CONNECT.md (the owner's 20-minute setup runbook). Until a channel's
      creds are present, that channel stays in dry-run and GROWTH_STATUS shows
      awaiting_connect: true.
+  6. **Analytics SURFACE for data-science (powers the Growth Agent as an analyst).** Beyond
+     the raw funnel pull (4), expose privacy-safe, SERVER-COMPUTED AGGREGATES the agent can
+     analyze: funnel-STEP breakdowns (where users drop off), simple COHORTS (by signup week),
+     TIME SERIES (trend, not just a snapshot), and segment splits — all aggregated/anonymized,
+     NEVER raw PII or event-level rows to the agent. This is what lets the Growth Agent diagnose
+     the binding constraint with real numbers instead of a single ratio. Follows the method in
+     docs/growth/ANALYSIS_PLAYBOOK.md.
+  7. **Experiment engine (so hypotheses get TESTED, not just designed).** Deterministic variant
+     assignment + result capture + lift measurement, so an A/B test the Growth Agent designs
+     actually RUNS and returns a measured lift with sample size. Without this, "experiments" stay
+     hypotheses. Expose an internal results read so the agent reports real lift AND whether it is
+     statistically meaningful (and "insufficient data" when N is too small). This is the
+     dependency that turns the Growth Agent from analyst into experiment-driven data scientist.
   Live secrets/keys are HUMAN-APPLIED (PENDING_OPS) — build the pluggable engine + the
   runbook; the owner supplies the credentials. This unblocks the Growth Agent's execute
   mode (engine_built: true).
