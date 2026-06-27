@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-06-26
+  as_of: 2026-06-27
   items:
     - id: spend-caps
       title: Set HARD daily API spend caps + alerts in every provider dashboard
@@ -31,6 +31,13 @@ OWNER_ACTIONS:
       why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
       how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
       blocks: annual-billing
+    - id: rate-limit-redis
+      title: "Move rate limiter state from in-memory to Upstash Redis before scaling"
+      priority: normal
+      status: open
+      why: "The in-memory rate limiter (added Run 32, PR #111) resets on cold start and is per-Vercel-function-instance. On multi-instance deployments a single user can bypass per-user limits by hitting different instances. Pre-launch this is acceptable; before significant traffic the state must move to a shared store."
+      how: "Install the Upstash Redis Vercel integration (1-click from Vercel dashboard → Integrations), set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN env vars, swap lib/utils/rate-limiter.ts to use @upstash/ratelimit with a Sliding Window algorithm."
+      blocks: rate-limiting-at-scale
 ```
 
 ## Pending
