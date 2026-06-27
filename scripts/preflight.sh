@@ -129,6 +129,31 @@ else
   warn "mobile/tsconfig.json not found — skipping mobile tsc"
 fi
 
+# ── GATE 1b: Functional journeys actually RUN green (BUILDS != WORKS) ──────────
+# A green build proves the app COMPILES, not that it WORKS for a user. This gate
+# requires the runtime journey suite + route inventory to EXIST and to have
+# actually RUN GREEN (signup → working dashboard, paywall, nav, authed-vs-anon),
+# with the AUTHENTICATED journeys exercised (not skipped). "It builds" must NOT
+# pass as "it works": a signup that lands on a dead/"not available" dashboard FAILS.
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 1b — Functional journeys RUN green (builds != works)"
+echo "════════════════════════════════════════════════════════════════"
+check_file_exists "Journey suite"   "e2e/journeys.spec.ts"
+check_file_exists "Route inventory" "e2e/ROUTE_INVENTORY.md"
+info "Running the runtime functional journey suite (needs a served app + seeded auth backend)..."
+if JOUT="$(bash scripts/run-journeys.sh 2>&1)"; then
+  if printf '%s' "$JOUT" | grep -q "E2E_JOURNEYS_PASSED=1"; then
+    pass "Functional journeys — ran GREEN (real user outcomes asserted, authed included)"
+  else
+    fail "Functional journeys — runner did not confirm E2E_JOURNEYS_PASSED=1"
+    printf '%s\n' "$JOUT" | tail -20
+  fi
+else
+  fail "Functional journeys — did not run green ('it builds' must NOT pass as 'it works'); authed journeys must be exercised, not skipped"
+  printf '%s\n' "$JOUT" | tail -20
+fi
+
 # ── GATE 2: Required artifacts exist ─────────────────────────────────────────
 
 echo ""

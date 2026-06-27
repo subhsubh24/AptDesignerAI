@@ -150,6 +150,51 @@ PR #87 adds `playwright.config.ts`, `e2e/public-pages.spec.ts`, and `e2e/a11y.sp
 
 ---
 
+### Functional JOURNEY suite — CI wiring for the AUTHENTICATED tier (added 2026-06-27 — BUILDS ≠ WORKS gate)
+
+`e2e/journeys.spec.ts` + `e2e/helpers/seed.ts` + `e2e/ROUTE_INVENTORY.md` + `scripts/run-journeys.sh`
+add runtime, outcome-asserting journeys. The PUBLIC/STRUCTURAL tier runs with no backend (verified
+green locally on the dedicated port 3100). The AUTHENTICATED tier (sign-in → **working populated
+dashboard**, core-flow entry, paywall, account) self-seeds a confirmed user via the admin client and
+needs a **real auth backend** — it SKIPS until one is provided. `scripts/preflight.sh` (GATE 1b) now
+fails unless the journey suite RAN GREEN with the authed tier exercised — so this must be wired for
+the readiness gate to ever pass. The loop cannot edit `.github/`.
+
+**Steps:**
+1. In the e2e CI job, stand up an ephemeral, FULLY-MIGRATED Supabase-local DB before the tests:
+   ```yaml
+   # in the e2e job, before `npx playwright test`:
+   - run: npx supabase start            # Postgres + GoTrue auth + PostgREST (docker)
+   - run: npx supabase db reset --yes   # applies ALL supabase/migrations (+ pgvector/pg_trgm)
+   - run: npm run build
+   - run: npm run start &               # serve the app against the local stack
+     env:
+       NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_LOCAL_ANON_KEY }}
+       SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_LOCAL_SERVICE_ROLE_KEY }}
+       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TEST }}
+   - run: bash scripts/run-journeys.sh  # fails red on any broken journey
+     env:
+       E2E_AUTH_STACK: "1"
+       PLAYWRIGHT_BASE_URL: "http://localhost:3000"
+       NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+       SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_LOCAL_SERVICE_ROLE_KEY }}
+   ```
+   Local Supabase auto-confirms signups, so the seeded confirmed users sign in without an email link.
+   Captcha/bot protection fails open without a key, so seeded signups work. For Stripe-dependent paywall
+   assertions, set Stripe **test-mode** keys (`STRIPE_SECRET_KEY` test) so checkout entry renders.
+2. Keep `e2e` a required check (already covered above).
+
+**Manual-only — cannot run headlessly; verify by hand, never assume working:**
+- Real **payment capture** on a live card (Stripe live mode) → entitlement unlock.
+- **Email deliverability** (signup confirmation + lifecycle) to a real inbox.
+- **Native/device store purchases** (StoreKit / RevenueCat **sandbox**) in the Expo app.
+- **Push delivery** to a real device.
+After the next deploy, manually confirm **signup → confirmation email → login → working dashboard** on
+the deployed URL (guards against prod env/migration drift, e.g. migrations 022/023 not yet applied).
+
+---
+
 ### 020_fix_saved_designs_rls_column_filter.sql — security: fix share-link RLS policy mismatch (added 2026-06-25, PR #84)
 
 Migration 019 (not yet applied) and migration 020 (new this run) must be applied **together, in order**, on the same deployment:
