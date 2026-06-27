@@ -60,11 +60,12 @@ script). A live send returns `{ delivered: true }`; dry-run returns
 
 ## Step 2 — Funnel-metrics pull API · ~5 min
 
-`GET /api/internal/growth-metrics` returns **real** funnel numbers (waitlist
-sign-ups total + last 7 days, active subscribers, active Pro subscribers) so the
-Growth Agent can populate `GROWTH_STATUS.md` from data that actually happened.
-It is **closed by default** (returns `503` until the token is set) and
-rate-limited by IP.
+`GET /api/internal/growth-metrics` returns **real** funnel numbers
+(`waitlist_signups_total`, `waitlist_signups_7d`, `active_subscribers` — active
+recurring subscribers across the pro + pro_annual tiers, excluding the one-time
+apartment tier — and `annual_subscribers`) so the Growth Agent can populate
+`GROWTH_STATUS.md` from data that actually happened. It is **closed by default**
+(returns `503` until the token is set) and rate-limited by IP.
 
 1. Generate a long random secret: `openssl rand -hex 32`.
 2. Set `INTERNAL_METRICS_TOKEN` to that value on the deployment.
