@@ -229,6 +229,38 @@ This applies to every track box AND every Definition-of-Done box, including the 
 "ready for submission" decision: do not open `FACTORY: ready for submission` until you
 have re-verified the whole DoD against real artifacts and a green gate in that run.
 
+## BUILDS ≠ WORKS — every page & flow validated AT RUNTIME, as a user (hard guard)
+A change that COMPILES and whose unit tests pass can still be functionally BROKEN for a real
+user — and that is a FAIL, exactly as severe as a red test. "It builds" and "the route file
+exists" prove NOTHING about whether the feature does what it is INTENDED to do. The canonical
+failure this guard kills: a user creates an account and lands on a blank / "not available" /
+error dashboard instead of a working home screen — everything builds, the product is broken.
+Never let that ship or count as done. This applies to EVERY aspect of the project, no exceptions.
+- **Validate at RUNTIME, end to end, as a user — NOT by reading code.** Every page and every
+  user flow must be exercised against a RUNNING app (real browser / real device path) and
+  asserted to produce its INTENDED OUTCOME — not just a `<400` status or "the handler is wired."
+  Assert real state: after signup the dashboard renders the user's actual, functional home
+  (not empty/error); paywall→checkout→entitlement actually UNLOCKS the gated feature; the core
+  photo→understand→diagnose→source→mockup actually returns a real mockup; every nav target
+  resolves to a working screen with no dead ends, broken buttons, infinite spinners, or wrong
+  results.
+- **Cover EVERYTHING — keep a route/flow INVENTORY so nothing is missed.** Maintain an enumerated
+  list of every route/page and every user journey (public, authed, billing, core product,
+  account/settings, empty/error states, the mobile core flow). Each entry must have a runtime
+  check asserting it is reachable AND functional AND correct. A route/flow with no
+  outcome-asserting runtime test is an UNVALIDATED GAP — it may NOT be certified "works."
+- **Check it CONTINUOUSLY, not only at the end.** Functional reality is a standing lens of the
+  DEEP AUDIT (every audit RUNS the flows; it does not merely read them) and a hard gate in both
+  preflight and the readiness audit. A regression that breaks a working flow is a release-blocking
+  bug the moment it lands — caught the same run, not at "ready."
+- **Be HONEST about what can't be exercised headlessly.** Real payment capture, real email
+  deliverability, device StoreKit/RevenueCat sandbox purchases, and push must be covered in
+  test/sandbox mode where possible and otherwise EXPLICITLY flagged on the human checklist
+  (PENDING_OPS.md) as "must be manually verified" — NEVER silently assumed working. Overclaiming
+  a flow you did not actually exercise is the SAME failure as a broken flow.
+A green build with a broken user journey is wasted work. See Track F (F4 — functional E2E) and
+the READINESS AUDIT GATE (Functional reality must be an actual RUN).
+
 ## Tracks & phases
 
 ### Track A — Web app (exists; bring to paid quality)
@@ -399,11 +431,24 @@ required gate or a recurring audit, not a nicety.
   scoring against a GROWING gold set of real fixtures. Wire a scheduled eval run so
   AI-output-quality regressions are caught before users/reviewers see them.
   **[Eval files complete (PR #105): all 5 stages — diagnosis, sourcing, grounding, refine, area-analysis. CI wiring (RUN_EVALS=1 job) still pending — human-applied per PENDING_OPS.md.]**
-- [ ] F4. **E2E + accessibility + visual + performance gates (UX is the product).**
-  Playwright end-to-end tests for the core journey (web; and the mobile core flow as
-  feasible); automated accessibility checks (e.g. axe) on key pages with no critical
-  violations; visual-regression on the design-bar surfaces; a Lighthouse/performance
-  budget on the hot paths. These catch what unit tests cannot.
+- [ ] F4. **Functional end-to-end validation — every page & flow WORKS as intended, at
+  runtime (UX is the product; enforces "BUILDS ≠ WORKS").** Today's E2E only checks that
+  PUBLIC pages render — the authed, billing, and core-product journeys are never RUN. Close
+  that: a real-browser Playwright suite that exercises EVERY user journey against a RUNNING
+  app with a seeded test environment (test Supabase + Stripe TEST mode + deterministic
+  provider behavior), asserting INTENDED OUTCOMES, not just HTTP status —
+  (1) signup/login → lands on a working, POPULATED dashboard (the canonical guard against the
+  "account → dashboard not available" break); (2) paywall → checkout (Stripe test mode) →
+  entitlement actually UNLOCKS the gated feature; (3) the core
+  photo→understand→diagnose→source→mockup journey returns a REAL mockup; (4) account/settings,
+  save/share, and every nav target resolve to working screens with no dead ends; (5) auth-gated
+  routes behave correctly logged-IN and logged-OUT; (6) real empty/loading/error states render,
+  not crashes. Maintain the route/flow INVENTORY (per the BUILDS ≠ WORKS guard) so coverage is
+  provably COMPLETE — nothing missing. PLUS automated accessibility (axe) on key pages with no
+  critical violations, visual-regression on the design-bar surfaces, and a Lighthouse/perf
+  budget on hot paths. WIRE `npm run test:e2e` into the gate (CI + `scripts/preflight.sh`) so a
+  broken flow BLOCKS merge and readiness. (Mobile core flow exercised via Expo/Detox or its CI
+  as feasible; what truly can't run headlessly goes on the human checklist, never assumed.)
 - [ ] F5. **Periodic DEEP AUDIT (holistic, not per-diff).** On a recurring cadence
   (see the routine), a whole-codebase audit beyond per-change review: security/RLS,
   performance, accessibility, dead/duplicate code, consistency with the design system,
@@ -532,6 +577,12 @@ while any DoD box is unchecked, never while any proof is missing.
 Build this script (Track-F / quality work) and keep it current. It MUST, in one run:
 - re-run the full gate green (`npx tsc --noEmit`, `npm test`, `npm run check:determinism`,
   the prod `build`, and `cd mobile && npx tsc --noEmit`);
+- RUN the functional end-to-end suite (F4, `npm run test:e2e`) against a served app and EXIT
+  NON-ZERO on ANY failure — every route/flow in the inventory must pass with its INTENDED
+  OUTCOME asserted (not just `<400`). "It builds" must NOT pass as "it works": a green build
+  with a broken user journey (e.g. signup landing on a dead/"not available" dashboard) FAILS
+  preflight. Flows that genuinely cannot run headlessly must be on the human checklist, not
+  silently skipped;
 - assert every required artifact physically EXISTS (rendered images/icons/screenshots are
   real committed files, not 0-byte/placeholder; migrations, docs, routes present);
 - parse the Definition of Done and EXIT NON-ZERO if ANY DoD checkbox is unchecked
@@ -570,9 +621,14 @@ Build this script (Track-F / quality work) and keep it current. It MUST, in one 
 each told: *"The loop claims AptDesignerAI is submission-ready. PROVE IT IS NOT. Default to
 NOT-READY unless you genuinely cannot find a single real gap. Be adversarial."* Divide
 coverage so every DoD gate is independently re-verified, at minimum:
-- **Functional reality** — actually exercise the critical journeys end-to-end (signup →
-  paywall → checkout → entitlement unlock; and the core photo→understand→diagnose→source→
-  mockup flow). Any stub / TODO / placeholder / dead path on a critical path = NOT ready.
+- **Functional reality (an ACTUAL RUN, not a code read)** — RUN the functional E2E suite (F4)
+  against a served app and CONFIRM it passes, then manually drive any journey it does not yet
+  cover: signup → working POPULATED dashboard, paywall → checkout → entitlement unlock, and the
+  core photo→understand→diagnose→source→mockup flow — asserting each produces its INTENDED
+  OUTCOME, not just a 200. A flow that BUILDS but is broken for a user (dead end, error /
+  "not available" screen, button that does nothing, wrong result), OR any critical journey with
+  no outcome-asserting runtime test, = NOT ready. Any stub / TODO / placeholder / dead path on a
+  critical path = NOT ready.
 - **Business-case honesty** — inputs sourced + defensible; NO lever's adoption % chosen
   merely to clear the revenue floor; the machine-readable summary block matches the body
   AND the real billing config (Stripe/RevenueCat prices).
