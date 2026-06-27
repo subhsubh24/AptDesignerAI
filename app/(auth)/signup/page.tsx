@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, CheckCircle2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { trackEvent } from "@/lib/analytics";
+import { isAlreadyRegisteredError, isNewUserSignup } from "@/lib/auth/signup-errors";
 
 export default function SignupPage() {
   const supabase = createClient();
@@ -31,7 +32,7 @@ export default function SignupPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -42,10 +43,22 @@ export default function SignupPage() {
     });
 
     if (error) {
+      // G4: never reveal that an email is already registered — show the same
+      // neutral "check your email" screen a brand-new signup gets, so the two
+      // cases are indistinguishable to an attacker probing for accounts.
+      if (isAlreadyRegisteredError(error)) {
+        setSuccess(true);
+        setLoading(false);
+        return;
+      }
       setError((error as { message: string })?.message || "Signup failed");
       setLoading(false);
     } else {
-      trackEvent("signup_complete");
+      // Existing (confirmed) addresses come back with no error and an empty
+      // identities array; only count a genuinely new user in the funnel.
+      if (isNewUserSignup(data.user?.identities?.length)) {
+        trackEvent("signup_complete");
+      }
       setSuccess(true);
       setLoading(false);
     }
