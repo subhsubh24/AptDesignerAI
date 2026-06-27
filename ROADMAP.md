@@ -167,6 +167,31 @@ the binding constraint — then build the highest-ROI fix.
   Growth INFORMS pricing with willingness-to-pay signal; the factory SETS it in code. Neither
   agent commands the other; the human owner stays the integrator.
 
+## QUALITY RUBRIC (A+ → F) — graded by an INDEPENDENT auditor, backed by mechanical signals
+"It passes review" can hide mediocrity. The product is GRADED A+ → F against
+`docs/quality/QUALITY_RUBRIC.md` across the audit dimensions (functional reality, correctness,
+security/RLS, design/taste, store-readiness, artifact integrity, business-case strength, tests/evals,
+performance). Anything below the bar gets a NAMED root cause and is driven up toward A+.
+- **Graded by an INDEPENDENT auditor, never the maker (maker ≠ checker).** The standalone Quality
+  Auditor routine (read-only; writes only `docs/quality/QUALITY_SCORECARD.md` + files issues, never
+  code) OWNS the grade and re-grades each cycle. Within a factory run, per-change/readiness grades
+  are emitted by FRESH adversarial subagents that did not write the diff. The factory reads the
+  scorecard as DATA and drives low grades up — it NEVER grades itself.
+- **Backed by mechanical signals, never vibes.** A grade may not exceed what the evidence supports
+  (e.g. security can't be A while preflight RLS checks fail; functional reality can't be A unless the
+  journey suite ran green). Every grade cites evidence; a bare letter is rejected. Anti-inflation is
+  the whole point — a self-flattering grade is a FAILURE, like gaming the business-case number.
+- **Ship gate:** readiness requires **A or A+ on every ship-critical dimension** and **≥ B**
+  elsewhere (or a named, value-bar-justified reason). This is the operational meaning of
+  "world-class / would be accepted."
+- **Bounded drive to A+ (does NOT break convergence).** Pursue the next grade ONLY via a SPECIFIC,
+  named, value-bar-clearing improvement — never open-ended polishing, never gold-plating a dimension
+  that doesn't move ship-quality or revenue (same bound as the business-case STRENGTH loop-back).
+  When every ship-critical dimension is A/A+ and no value-bar-clearing improvement remains, STOP.
+- **Wired in:** the periodic DEEP AUDIT emits a per-dimension grade + evidence + the named gap for
+  anything < A; the READINESS AUDIT GATE requires the ship-critical grades to be A/A+ (independently
+  graded + mechanically backed). The dashboard reads the QUALITY_SCORECARD block.
+
 ## Full autonomy (granted)
 You have full autonomy to do whatever genuinely advances the goal: create any files
 or pages, add routes/features, spin up new code, build INTERNAL TOOLS (admin dashboards,
