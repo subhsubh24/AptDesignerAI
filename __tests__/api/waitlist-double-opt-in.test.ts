@@ -9,6 +9,7 @@ import { sendEmail } from "@/lib/email";
 import { POST } from "@/app/api/waitlist/route";
 import { GET as CONFIRM } from "@/app/api/waitlist/confirm/route";
 import { buildWaitlistConfirmEmail } from "@/lib/email/templates/waitlist";
+import { buildWaitlistWelcomeEmail } from "@/lib/email/templates/waitlist-welcome";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockSendEmail = sendEmail as unknown as Mock;
@@ -140,9 +141,21 @@ function confirmReq(token: string) {
   return new NextRequest(`http://localhost/api/waitlist/confirm?token=${token}`);
 }
 
+describe("buildWaitlistWelcomeEmail", () => {
+  it("returns a non-empty subject and grounded HTML/text (no confirm-link CTA)", () => {
+    const { subject, html, text } = buildWaitlistWelcomeEmail();
+    expect(subject.length).toBeGreaterThan(0);
+    expect(html).toContain("early-access");
+    expect(text).toContain("App Store");
+    // The welcome email is post-confirmation: it must NOT contain a confirm link.
+    expect(html).not.toContain("/api/waitlist/confirm");
+  });
+});
+
 describe("GET /api/waitlist/confirm", () => {
   beforeEach(() => {
     mockGetAdmin.mockReset();
+    mockSendEmail.mockClear();
   });
 
   it("redirects to ?status=invalid for a malformed token without touching the DB", async () => {
@@ -151,23 +164,36 @@ describe("GET /api/waitlist/confirm", () => {
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/waitlist/confirmed");
     expect(res.headers.get("location")).toContain("status=invalid");
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it("confirms a pending row and redirects to the success page", async () => {
+  it("confirms a pending row, sends the welcome email once, and redirects to success", async () => {
     const token = "a".repeat(64);
-    mockGetAdmin.mockReturnValue(fakeAdmin({ updateResult: () => ({ data: [{ id: "row-3" }], error: null }) }));
+    mockGetAdmin.mockReturnValue(
+      fakeAdmin({ updateResult: () => ({ data: [{ id: "row-3", email: "new@example.com" }], error: null }) }),
+    );
     const res = await CONFIRM(confirmReq(token));
     expect(res.status).toBe(307);
     const loc = res.headers.get("location") ?? "";
     expect(loc).toContain("/waitlist/confirmed");
     expect(loc).not.toContain("status=invalid");
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.stage).toBe("waitlist_welcome_1");
+    expect(arg.to).toBe("new@example.com");
+    // The mock bypasses sendEmail's own validators, so assert the route passed a
+    // real subject + body (guards against accidentally sending empty content).
+    expect(typeof arg.subject).toBe("string");
+    expect(arg.subject.length).toBeGreaterThan(0);
+    expect(arg.html.length).toBeGreaterThan(0);
   });
 
-  it("treats an unknown/used token as invalid (no row updated)", async () => {
+  it("treats an unknown/used token as invalid (no row updated, no welcome email)", async () => {
     const token = "b".repeat(64);
     mockGetAdmin.mockReturnValue(fakeAdmin({ updateResult: () => ({ data: [], error: null }) }));
     const res = await CONFIRM(confirmReq(token));
     expect(res.headers.get("location")).toContain("status=invalid");
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });
 

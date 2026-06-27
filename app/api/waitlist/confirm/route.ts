@@ -10,6 +10,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/email";
+import { buildWaitlistWelcomeEmail } from "@/lib/email/templates/waitlist-welcome";
 
 // Tokens are exactly 64 hex chars (randomBytes(32)). Match that exactly so a
 // junk query string can't trigger a wide scan or odd Postgres behaviour.
@@ -36,16 +38,35 @@ export async function GET(req: NextRequest) {
   }
 
   // Only match a still-pending row; a used (confirmed) link has its token cleared
-  // and therefore won't be found. select() lets us detect whether a row changed.
+  // and therefore won't be found. select() lets us detect whether a row changed
+  // and returns the address so we can send the one-time welcome email.
   const { data, error } = await admin
     .from("waitlist_emails")
     .update({ confirmed_at: new Date().toISOString(), confirmation_token: null })
     .eq("confirmation_token", token)
     .is("confirmed_at", null)
-    .select("id");
+    .select("id, email");
 
   if (error || !data || data.length === 0) {
     return redirectTo(req, "invalid");
+  }
+
+  // First (and only) confirmation: send the welcome email. Because the token is
+  // cleared above, a replayed link won't match a pending row, so this fires at
+  // most once per subscriber. Dry-run until RESEND_API_KEY is set; sendEmail
+  // never throws, so a send failure must not turn a real confirmation into an
+  // "invalid" message.
+  const email = data[0]?.email;
+  if (typeof email === "string" && email) {
+    const { subject, html, text } = buildWaitlistWelcomeEmail();
+    const result = await sendEmail({ to: email, subject, html, text, stage: "waitlist_welcome_1" });
+    if (result.error) {
+      console.error("[waitlist] welcome email not sent:", result.error);
+    }
+  } else {
+    // A confirmed row with no email is a data-integrity anomaly — confirmation
+    // still succeeds, but surface it so it isn't an invisible "no welcome" hole.
+    console.warn("[waitlist] confirmed row missing email; welcome not sent");
   }
 
   return redirectTo(req, "confirmed");
