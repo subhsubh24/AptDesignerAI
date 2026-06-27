@@ -438,10 +438,12 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   API; per-channel LIVE API clients are a follow-on); sub-item 4 analytics-pull read API
   DONE (PR #118) + churn signal added (Run 34, PR #125 — cancelled_subscribers +
   approximate cancelled_30d); sub-item 5 growth-settings/env-contract + CONNECT.md
-  runbook DONE (PR #120). REMAINING before E7 ticks: wire the E4/E6 email lifecycle send
-  calls to lib/email; add visitor/trial/conversion-rate analytics pulls (need Vercel
-  Analytics + Stripe reporting APIs); per-channel social live API clients. Keep E7
-  unchecked until those land.]**
+  runbook DONE (PR #120). FIRST lifecycle SEND wired Run 35 (PR #139): a one-time welcome
+  email fires after waitlist double-opt-in confirmation (waitlist_welcome_1). REMAINING
+  before E7 ticks: wire the rest of the E4/E6 lifecycle send calls (activation after signup,
+  upgrade after checkout, habit/win-back — careful, touch signup/checkout call sites); add
+  visitor/trial/conversion-rate analytics pulls (need Vercel Analytics + Stripe reporting
+  APIs); per-channel social live API clients. Keep E7 unchecked until those land.]**
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
@@ -529,8 +531,19 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   enumeration guards. Keep G4 unchecked until those land.]**
 - [ ] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
-- [ ] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
+  **[Partial — Run 35 (PR #141): Cloudflare Turnstile on the WAITLIST form
+  (`lib/security/turnstile.ts` server verify + `components/ui/turnstile.tsx` widget),
+  closed-but-inert until the owner sets TURNSTILE_SECRET_KEY + NEXT_PUBLIC_TURNSTILE_SITE_KEY
+  (see PENDING_OPS). REMAINING before G5 ticks: protect the signup form — it's a client-side
+  Supabase auth call, so the right fix is Supabase's built-in CAPTCHA (owner config in the
+  Supabase dashboard) rather than loop code. Keep G5 unchecked until signup is covered.]**
+- [x] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
   security headers (CSP / HSTS / X-Content-Type-Options, etc.); align to OWASP basics.
+  **(Security headers — CSP (PR #114), HSTS / X-Frame-Options / X-Content-Type-Options /
+  Referrer-Policy (next.config.ts) — already shipped. CORS allowlist added Run 35, PR #140
+  (`lib/security/cors.ts` + middleware: ACAO reflected only for NEXT_PUBLIC_SITE_URL/APP_URL
+  + localhost, never `*`; OPTIONS preflight 204; additive so server-to-server is unaffected).
+  Gate green Run 35: 1036 tests, tsc + determinism + lint clean.)**
 - [x] G7. **API spend ceiling + alerts**: a code-level usage cap / circuit-breaker per
   user/day on paid-API calls, AND record in PENDING_OPS.md the human-only step to set HARD
   daily caps + 50%-of-cap alerts in the Gemini/Anthropic/provider dashboards (the loop
