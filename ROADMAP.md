@@ -238,8 +238,12 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
   it clears the value bar. TWO failure modes to avoid equally: (a) STALE — write-once
   docs that drift out of date; (b) CHURN — rewriting things for their own sake. The
   rule is *consistency with reality*, not constant rewriting: refresh an artifact when
-  its subject changes; do NOT churn STABLE ANCHORS (VISION.md, the cost/determinism
-  rules, the guard tests) just to look busy — those are intentionally stable ratchets.
+  its subject changes; do NOT churn STABLE ANCHORS (VISION.md, FACTORY_STANDARD.md, the
+  cost/determinism rules, the guard tests) just to look busy — those are intentionally
+  stable ratchets. `FACTORY_STANDARD.md` in particular is the SHARED cross-factory
+  discipline and is byte-identical across every factory repo: NEVER edit or paraphrase it
+  to fit this product (product-specifics belong in THIS ROADMAP/VISION); it changes ONLY
+  by a deliberate canonical sync, never as loop work.
 
 ## Progress format contract (machine-readable — the dashboard reads THIS)
 Record progress as MARKDOWN CHECKBOXES, not prose. An external dashboard derives
