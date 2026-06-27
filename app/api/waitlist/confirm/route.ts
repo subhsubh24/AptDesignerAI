@@ -11,9 +11,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 
-// Tokens are 64 hex chars (randomBytes(32)). Bound the input so a junk query
-// string can't trigger a wide scan or odd Postgres behaviour.
-const TOKEN_RE = /^[a-f0-9]{32,128}$/;
+// Tokens are exactly 64 hex chars (randomBytes(32)). Match that exactly so a
+// junk query string can't trigger a wide scan or odd Postgres behaviour.
+const TOKEN_RE = /^[a-f0-9]{64}$/;
 
 function redirectTo(req: NextRequest, status: "confirmed" | "invalid"): NextResponse {
   const url = req.nextUrl.clone();

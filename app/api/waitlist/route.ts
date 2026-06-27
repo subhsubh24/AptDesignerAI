@@ -11,6 +11,10 @@ const MAX_EMAIL_LENGTH = 254;
 // Acceptable for a single-instance deployment; swap for Upstash Redis if needed.
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT = 5;
+
+// Don't re-send a confirmation email to a still-pending address more than once
+// per this window, so the public endpoint can't be used to spam an inbox.
+const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 const ipBucket = new Map<string, { count: number; resetAt: number }>();
 
 function isRateLimited(ip: string): boolean {
@@ -102,11 +106,21 @@ export async function POST(req: NextRequest) {
       // lost first email isn't a dead end.
       const { data: existing } = await admin
         .from("waitlist_emails")
-        .select("id, confirmed_at")
+        .select("id, confirmed_at, token_sent_at")
         .eq("email", email)
         .maybeSingle();
 
       if (existing && existing.confirmed_at == null) {
+        // Throttle resends so the public endpoint can't be used to flood a
+        // victim's inbox (the per-IP limit doesn't stop distributed IPs). If a
+        // confirm email went out recently, acknowledge as pending WITHOUT
+        // resending — the subscriber already has a live link.
+        const lastSent = existing.token_sent_at ? Date.parse(existing.token_sent_at as string) : 0;
+        const throttled = Number.isFinite(lastSent) && Date.now() - lastSent < RESEND_COOLDOWN_MS;
+        if (throttled) {
+          return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
+        }
+
         const resendToken = newConfirmationToken();
         const { error: updateError } = await admin
           .from("waitlist_emails")

@@ -104,11 +104,12 @@ describe("POST /api/waitlist (double opt-in)", () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it("re-sends the confirmation for an existing PENDING address", async () => {
+  it("re-sends the confirmation for an existing PENDING address (no recent send)", async () => {
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     mockGetAdmin.mockReturnValue(
       fakeAdmin({
         insert: () => ({ error: { code: "23505" } }),
-        maybeSingle: () => ({ data: { id: "row-2", confirmed_at: null } }),
+        maybeSingle: () => ({ data: { id: "row-2", confirmed_at: null, token_sent_at: longAgo } }),
         updateResult: () => ({ error: null }),
       }),
     );
@@ -117,6 +118,21 @@ describe("POST /api/waitlist (double opt-in)", () => {
     const body = await res.json();
     expect(body.pendingConfirmation).toBe(true);
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("throttles the resend when a confirmation was sent recently (no second email)", async () => {
+    const justNow = new Date(Date.now() - 30 * 1000).toISOString();
+    mockGetAdmin.mockReturnValue(
+      fakeAdmin({
+        insert: () => ({ error: { code: "23505" } }),
+        maybeSingle: () => ({ data: { id: "row-5", confirmed_at: null, token_sent_at: justNow } }),
+      }),
+    );
+    const res = await POST(postReq("pending@example.com", "5.5.5.7"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pendingConfirmation).toBe(true);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });
 

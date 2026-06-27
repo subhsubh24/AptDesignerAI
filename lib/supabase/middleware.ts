@@ -5,6 +5,10 @@ const PUBLIC_PATHS = new Set([
   "/login",
   "/signup",
   "/waitlist",
+  // Double opt-in landing page, reached from an emailed link by an
+  // unauthenticated visitor. Listed explicitly (not as a /waitlist prefix) so a
+  // future /waitlist/* sub-route can't become public by accident.
+  "/waitlist/confirmed",
   "/pricing",
   "/faq",
   "/privacy",
@@ -13,9 +17,7 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 // /guides has sub-routes (/guides/color-palette-guide, etc.) — use prefix match below.
-// /waitlist has the double opt-in landing page (/waitlist/confirmed) reached from
-// an emailed link by an unauthenticated visitor — keep the whole tree public.
-const PUBLIC_PATH_PREFIXES = ["/guides", "/waitlist"];
+const PUBLIC_PATH_PREFIXES = ["/guides"];
 
 // API routes that must accept unauthenticated requests.
 // /api/billing/webhook — Stripe POSTs here with its own signature verification.
