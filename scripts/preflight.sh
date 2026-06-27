@@ -353,16 +353,26 @@ except Exception as e: print("UNPARSEABLE:", e); sys.exit(1)
 if d.get("phase") not in ("pre_launch","launching","post_launch"): print("bad phase"); sys.exit(1)
 if not isinstance(d.get("funnel"), dict): print("missing funnel"); sys.exit(1)
 if not isinstance(d.get("engine_built"), bool): print("engine_built must be a boolean"); sys.exit(1)
-# engine_built:true is a load-bearing CLAIM the dashboard + Growth Agent trust — it must be
+# engine_built + engine_pct are load-bearing CLAIMS the dashboard + Growth Agent trust — they must be
 # backed by the E7 execution-engine code physically existing, not flippable on a technicality.
-if d.get("engine_built") is True:
-    import os
-    root = os.path.dirname(os.path.dirname(os.path.dirname(sys.argv[1])))  # .../docs/growth/X -> repo root
-    required = ["lib/email/index.ts", "lib/social/queue.ts", "lib/growth/metrics.ts",
-                "app/api/waitlist/confirm/route.ts"]
-    missing = [p for p in required if not os.path.exists(os.path.join(root, p))]
-    if missing: print("engine_built:true but E7 code missing:", ", ".join(missing)); sys.exit(1)
-print("ok", d["phase"])
+# The 5 engine pieces, each pinned to its anchor file; pct is computed from reality, never hand-set.
+import os
+root = os.path.dirname(os.path.dirname(os.path.dirname(sys.argv[1])))  # .../docs/growth/X -> repo root
+PIECES = {
+    "waitlist": "app/api/waitlist/confirm/route.ts",
+    "email":    "lib/email/index.ts",
+    "queue":    "lib/social/queue.ts",
+    "metrics":  "lib/growth/metrics.ts",
+    "runbook":  "docs/growth/CONNECT.md",
+}
+shipped = [k for k, p in PIECES.items() if os.path.exists(os.path.join(root, p))]
+computed_pct = round(len(shipped) * 100 / len(PIECES))
+if not isinstance(d.get("engine_pct"), int): print("engine_pct must be an integer 0-100"); sys.exit(1)
+if d["engine_pct"] != computed_pct:
+    print(f"engine_pct={d['engine_pct']} but real shipped pieces give {computed_pct}% ({sorted(shipped)})"); sys.exit(1)
+if d.get("engine_built") is not (computed_pct == 100):
+    print(f"engine_built={d.get('engine_built')} disagrees with engine_pct={computed_pct} (built iff 100%)"); sys.exit(1)
+print("ok", d["phase"], f"engine {computed_pct}%")
 PY
 then pass "GROWTH_STATUS: valid, parseable YAML block"
 else fail "GROWTH_STATUS: missing or UNPARSEABLE"; fi
