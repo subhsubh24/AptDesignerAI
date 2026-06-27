@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { thinkingFor } from "@/lib/ai/thinking";
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`analyze-apartment:${user.id}`, RATE_LIMITS.analyzeApartment);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many analysis requests. Please wait before retrying." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 3600000) / 1000)) } },
+    );
+  }
 
   const { project_id } = await request.json();
   if (!project_id) return NextResponse.json({ error: "project_id required" }, { status: 400 });
@@ -372,7 +381,7 @@ ${synthInput}
       status: "failed",
       error_message: errorMessage,
     });
-    return NextResponse.json({ error: `Analysis failed: ${errorMessage}` }, { status: 500 });
+    return NextResponse.json({ error: "Analysis failed. Please try again." }, { status: 500 });
   }
 }
 

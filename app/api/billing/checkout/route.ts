@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createCheckoutSession, type BillingTier } from "@/lib/billing/stripe";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 /**
  * POST /api/billing/checkout
@@ -17,6 +18,14 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`billing-checkout:${user.id}`, RATE_LIMITS.billingCheckout);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many checkout requests. Please wait before trying again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 3600000) / 1000)) } },
+    );
   }
 
   let body: { tier?: unknown };
@@ -49,8 +58,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ sessionId, url });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create checkout session";
-    console.error("[api/billing/checkout]", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[api/billing/checkout]", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Failed to create checkout session. Please try again." }, { status: 500 });
   }
 }

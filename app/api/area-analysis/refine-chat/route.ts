@@ -15,6 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -69,6 +70,14 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const limit = checkRateLimit(`area-refine-chat:${user.id}`, RATE_LIMITS.areaAnalysisRefineChat);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many chat requests. Please wait before retrying." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+
   const body = await request.json();
   const { room_id, content } = body as { room_id?: string; content?: string };
   if (!room_id || !content || typeof content !== "string" || content.trim().length === 0) {
@@ -111,7 +120,7 @@ export async function POST(request: NextRequest) {
     .single();
   if (userInsertErr) {
     return NextResponse.json(
-      { error: `Failed to record message: ${userInsertErr.message}` },
+      { error: "Failed to record message. Please try again." },
       { status: 500 },
     );
   }
@@ -200,6 +209,6 @@ export async function POST(request: NextRequest) {
       status: "failed",
       error_message: errorMessage,
     });
-    return NextResponse.json({ error: `Refinement failed: ${errorMessage}` }, { status: 500 });
+    return NextResponse.json({ error: "Refinement failed. Please try again." }, { status: 500 });
   }
 }

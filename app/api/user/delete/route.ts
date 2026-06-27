@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 export async function DELETE() {
   const supabase = await createClient();
@@ -8,6 +9,14 @@ export async function DELETE() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`user-delete:${user.id}`, RATE_LIMITS.userDelete);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many deletion requests. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 86400000) / 1000)) } },
+    );
+  }
 
   const admin = getAdminClient();
   if (!admin) {
