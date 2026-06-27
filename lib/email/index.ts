@@ -30,25 +30,26 @@ export class DryRunProvider implements EmailProvider {
 }
 
 /**
- * Whether email sending is in dry-run mode.
+ * Whether email sending is in dry-run mode. Single source of truth:
+ * getEmailProvider() returns the live provider iff this is false, so callers can
+ * rely on `!isEmailDryRun()` meaning "a real send will be attempted".
  * - GROWTH_EMAIL_DRY_RUN=1 forces dry-run even if a key is present.
- * - GROWTH_EMAIL_DRY_RUN=0 forces live (requires RESEND_API_KEY).
- * - Unset: dry-run unless RESEND_API_KEY is configured.
+ * - No RESEND_API_KEY ⇒ always dry-run (a live send is impossible without a key),
+ *   even when GROWTH_EMAIL_DRY_RUN=0 tries to force live.
+ * - Key present and not force-dry-run (flag "0" or unset) ⇒ live.
  */
 export function isEmailDryRun(): boolean {
-  const flag = process.env.GROWTH_EMAIL_DRY_RUN;
-  if (flag === "1") return true;
-  if (flag === "0") return false;
-  return !process.env.RESEND_API_KEY;
+  if (process.env.GROWTH_EMAIL_DRY_RUN === "1") return true;
+  if (!process.env.RESEND_API_KEY) return true;
+  return false;
 }
 
 /** Resolve the active email provider based on the environment. */
 export function getEmailProvider(): EmailProvider {
   if (isEmailDryRun()) return new DryRunProvider();
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return new DryRunProvider();
+  // isEmailDryRun() === false guarantees RESEND_API_KEY is present.
   const from = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM;
-  return new ResendProvider(apiKey, from);
+  return new ResendProvider(process.env.RESEND_API_KEY as string, from);
 }
 
 function isValidEmail(email: string): boolean {
@@ -60,8 +61,13 @@ function isValidEmail(email: string): boolean {
  * Validates input and never throws — always returns a result the caller can log.
  */
 export async function sendEmail(message: EmailMessage): Promise<EmailSendResult> {
+  // Validation failures short-circuit before any provider runs, so dryRun is
+  // false (no dry-run send happened — see EmailSendResult.dryRun).
   if (!isValidEmail(message.to)) {
     return { delivered: false, dryRun: false, error: "Invalid recipient address" };
+  }
+  if (message.replyTo && !isValidEmail(message.replyTo)) {
+    return { delivered: false, dryRun: false, error: "Invalid reply-to address" };
   }
   if (!message.subject.trim()) {
     return { delivered: false, dryRun: false, error: "Missing subject" };

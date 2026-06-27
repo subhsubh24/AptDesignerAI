@@ -46,6 +46,8 @@ describe("email dry-run resolution", () => {
   it("falls back to dry-run when forced live but no key is present", () => {
     delete process.env.RESEND_API_KEY;
     process.env.GROWTH_EMAIL_DRY_RUN = "0";
+    // isEmailDryRun must agree with getEmailProvider — no key means no live send.
+    expect(isEmailDryRun()).toBe(true);
     expect(getEmailProvider()).toBeInstanceOf(DryRunProvider);
   });
 });
@@ -72,6 +74,12 @@ describe("sendEmail validation", () => {
     expect(r.delivered).toBe(false);
     expect(r.dryRun).toBe(false);
     expect(r.error).toMatch(/recipient/i);
+  });
+
+  it("rejects an invalid reply-to address without sending", async () => {
+    const r = await sendEmail({ ...VALID, replyTo: "nope" });
+    expect(r.delivered).toBe(false);
+    expect(r.error).toMatch(/reply-to/i);
   });
 
   it("rejects an empty subject", async () => {

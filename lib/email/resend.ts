@@ -39,18 +39,16 @@ export class ResendProvider implements EmailProvider {
       });
 
       if (!res.ok) {
-        // Log the full provider response server-side; return a generic summary.
-        let detail = "";
-        try {
-          detail = JSON.stringify(await res.json());
-        } catch {
-          detail = res.statusText;
-        }
-        console.error(`[email:resend] send failed (${res.status}):`, detail);
+        // Log status only — the provider error body can contain the recipient
+        // address and other PII, so it must not land in the log aggregator.
+        console.error(`[email:resend] send failed: ${res.status} ${res.statusText}`);
         return { delivered: false, dryRun: false, error: `Email provider returned ${res.status}` };
       }
 
       const data = (await res.json().catch(() => ({}))) as { id?: string };
+      if (!data.id) {
+        console.warn("[email:resend] send accepted but no message id was returned");
+      }
       return { delivered: true, dryRun: false, id: data.id };
     } catch (err) {
       console.error("[email:resend] network error:", err);

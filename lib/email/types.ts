@@ -58,7 +58,11 @@ export interface EmailMessage {
 export interface EmailSendResult {
   /** True only when a live provider actually accepted the message. */
   delivered: boolean;
-  /** True when no provider was configured (dry-run / staged mode). */
+  /**
+   * True when the dry-run provider handled the send (no provider configured /
+   * staged mode). False for a live send AND for validation failures, where no
+   * provider ran at all.
+   */
   dryRun: boolean;
   /** Provider message id, when available. */
   id?: string;
