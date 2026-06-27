@@ -112,4 +112,18 @@ export const RATE_LIMITS = {
   bundleEvaluate: { maxRequests: 10, windowMs: 60_000 },
   /** Product evaluate — 30 per minute */
   productEvaluate: { maxRequests: 30, windowMs: 60_000 },
+  /** Apartment analysis (heavy LLM, multi-room) — 5 per hour */
+  analyzeApartment: { maxRequests: 5, windowMs: 60 * 60_000 },
+  /** Building research (Gemini + Maps) — 3 per hour */
+  apartmentResearch: { maxRequests: 3, windowMs: 60 * 60_000 },
+  /** Computer-use product verifier (Browserbase ~$5-20/session) — 2 per hour */
+  computerUseVerify: { maxRequests: 2, windowMs: 60 * 60_000 },
+  /** Billing checkout session creation — 10 per hour */
+  billingCheckout: { maxRequests: 10, windowMs: 60 * 60_000 },
+  /** Account deletion — 3 per day (highly destructive) */
+  userDelete: { maxRequests: 3, windowMs: 24 * 60 * 60_000 },
+  /** Area analysis refine chat — 20 per minute */
+  areaAnalysisRefineChat: { maxRequests: 20, windowMs: 60_000 },
+  /** Area analysis refine (full re-run) — 5 per 5 minutes */
+  areaAnalysisRefineFull: { maxRequests: 5, windowMs: 5 * 60_000 },
 } as const;

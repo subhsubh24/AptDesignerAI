@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -439,6 +440,14 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`apartment-research:${user.id}`, RATE_LIMITS.apartmentResearch);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many research requests. Please wait before retrying." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 3600000) / 1000)) } },
+    );
+  }
 
   const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id, latitude, longitude } = await request.json();
 
@@ -1009,8 +1018,7 @@ CONFIDENCE RULES:
 
     return NextResponse.json({ research });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Research failed";
     console.error("[apartment-research]", error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: "Research failed. Please try again." }, { status: 500 });
   }
 }

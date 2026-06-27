@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runProductVerifier } from "@/lib/agents/computer-use/product-verifier";
 import { createLogger } from "@/lib/logging/logger";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 const log = createLogger("api-computer-use-product-verify");
 
@@ -25,6 +26,14 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`computer-use-verify:${user.id}`, RATE_LIMITS.computerUseVerify);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many verification requests. Please wait before retrying." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 3600000) / 1000)) } },
+    );
+  }
 
   const body = await request.json();
   const { product_url, expected_title, expected_color, expected_size } = body as {
@@ -47,8 +56,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (e) {
-    const msg = (e as Error).message;
-    log.error("Product verifier failed", { error: msg });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    log.error("Product verifier failed", { error: (e as Error).message });
+    return NextResponse.json({ error: "Verification request failed. Please try again." }, { status: 500 });
   }
 }

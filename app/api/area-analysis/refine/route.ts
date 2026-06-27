@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
@@ -17,6 +18,14 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limit = checkRateLimit(`area-refine:${user.id}`, RATE_LIMITS.areaAnalysisRefineFull);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many refinement requests. Please wait before retrying." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 300000) / 1000)) } },
+    );
+  }
 
   const { room_id, project_id, user_feedback, previous_analysis } = await request.json();
   if (!room_id || !user_feedback) {
@@ -402,6 +411,6 @@ CRITICAL RULES:
       status: "failed",
       error_message: errorMessage,
     });
-    return NextResponse.json({ error: `Refinement failed: ${errorMessage}` }, { status: 500 });
+    return NextResponse.json({ error: "Refinement failed. Please try again." }, { status: 500 });
   }
 }
