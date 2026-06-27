@@ -27,6 +27,19 @@ export interface GrowthMetrics {
     active_subscribers: number;
     /** Subset of active_subscribers on the annual (pro_annual) plan. */
     annual_subscribers: number;
+    /**
+     * All-time cancelled recurring subscribers (status = cancelled on a
+     * subscription tier). A lifetime churn signal for the business case.
+     */
+    cancelled_subscribers: number;
+    /**
+     * Recurring subscribers whose row was cancelled in the last 30 days —
+     * APPROXIMATE: keyed on `updated_at`, which the Stripe webhook stamps to
+     * `now()` on the cancellation event (no dedicated `cancelled_at` column
+     * yet). Good enough for a recent-churn gauge; precise cohort churn needs a
+     * `cancelled_at` column (future work).
+     */
+    cancelled_30d: number;
   };
   notes: string;
 }
@@ -49,9 +62,19 @@ async function toCount(query: CountResult): Promise<number> {
  * Counts run concurrently; throws if any underlying query errors.
  */
 export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<GrowthMetrics> {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const now = Date.now();
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const tiers = SUBSCRIPTION_TIERS as unknown as string[];
 
-  const [waitlistTotal, waitlist7d, activeSubscribers, annualSubscribers] = await Promise.all([
+  const [
+    waitlistTotal,
+    waitlist7d,
+    activeSubscribers,
+    annualSubscribers,
+    cancelledSubscribers,
+    cancelled30d,
+  ] = await Promise.all([
     toCount(admin.from("waitlist_emails").select("id", { count: "exact", head: true })),
     toCount(
       admin
@@ -64,7 +87,7 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
         .from("stripe_customers")
         .select("id", { count: "exact", head: true })
         .eq("status", "active")
-        .in("tier", SUBSCRIPTION_TIERS as unknown as string[]),
+        .in("tier", tiers),
     ),
     toCount(
       admin
@@ -72,6 +95,21 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
         .select("id", { count: "exact", head: true })
         .eq("status", "active")
         .eq("tier", "pro_annual"),
+    ),
+    toCount(
+      admin
+        .from("stripe_customers")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "cancelled")
+        .in("tier", tiers),
+    ),
+    toCount(
+      admin
+        .from("stripe_customers")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "cancelled")
+        .in("tier", tiers)
+        .gte("updated_at", thirtyDaysAgo),
     ),
   ]);
 
@@ -83,8 +121,13 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
       waitlist_signups_7d: waitlist7d,
       active_subscribers: activeSubscribers,
       annual_subscribers: annualSubscribers,
+      cancelled_subscribers: cancelledSubscribers,
+      cancelled_30d: cancelled30d,
     },
     notes:
-      "Visitor, trial-start and conversion-rate metrics require the Vercel Analytics and Stripe reporting APIs — see docs/growth/CONNECT.md.",
+      "Cancelled counts are sourced from stripe_customers (status = cancelled); " +
+      "cancelled_30d is approximate (keyed on updated_at, set by the cancellation " +
+      "webhook). Visitor, trial-start and conversion-rate metrics require the " +
+      "Vercel Analytics and Stripe reporting APIs — see docs/growth/CONNECT.md.",
   };
 }

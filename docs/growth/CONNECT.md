@@ -64,9 +64,11 @@ script). A live send returns `{ delivered: true }`; dry-run returns
 `GET /api/internal/growth-metrics` returns **real** funnel numbers
 (`waitlist_signups_total`, `waitlist_signups_7d`, `active_subscribers` — active
 recurring subscribers across the pro + pro_annual tiers, excluding the one-time
-apartment tier — and `annual_subscribers`) so the Growth Agent can populate
-`GROWTH_STATUS.md` from data that actually happened. It is **closed by default**
-(returns `503` until the token is set) and rate-limited by IP.
+apartment tier — `annual_subscribers`, plus churn signal `cancelled_subscribers`
+(all-time) and `cancelled_30d` (approximate recent churn, keyed on the cancellation
+webhook's `updated_at`)) so the Growth Agent can populate `GROWTH_STATUS.md` from
+data that actually happened. It is **closed by default** (returns `503` until the
+token is set) and rate-limited by IP.
 
 1. Generate a long random secret: `openssl rand -hex 32`.
 2. Set `INTERNAL_METRICS_TOKEN` to that value on the deployment.
@@ -83,7 +85,9 @@ token returns `401`; an unset token returns `503`.
 
 > Visitor, trial-start and conversion-rate metrics are **not** in this response
 > — they live in Vercel Analytics and Stripe's reporting API and stay `null` in
-> `GROWTH_STATUS.md` until those sources are separately wired (planned E7.4 work).
+> `GROWTH_STATUS.md` until those sources are separately wired. Precise cohort
+> churn likewise awaits a dedicated `cancelled_at` column; `cancelled_30d` is an
+> `updated_at`-based approximation in the meantime.
 
 ---
 
