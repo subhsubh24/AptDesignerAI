@@ -49,15 +49,21 @@ GROWTH_STATUS:
     published_7d: 0
     scheduled_next_7d: 0
     organic_sessions_7d: 0
-  learnings: []                  # short, data-grounded bullets: what's working / what's not
-  next_actions:                  # what the agent will do next run
-    - "Wire the E4/E6 email lifecycle send calls to the lib/email abstraction"
-    - "Enqueue staged social drafts into the new social_post_queue (dry-run until channels connected)"
-    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts (incl. churn) into this block"
-  owner_blockers:                # things needing the owner before the agent can execute externally
-    - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md"
-    - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503)"
+  learnings:
+    - "All funnel metrics are 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers."
+    - "Engine is built and all code ships dry-run; the owner connecting Resend + setting INTERNAL_METRICS_TOKEN are the two highest-leverage unblocking actions."
+    - "Win-back E1 email now fires automatically on subscription cancellation (PR #127); dry-run until RESEND_API_KEY is set."
+    - "Activation email templates (A1/A2/A3) built and ready; triggers require a signup event hook (next run priority)."
+  next_actions:
+    - "Wire activation email triggers: hook into user signup (auth.users insert / Supabase Edge Function) to fire Sequence 1 (A1 at T+1d, A2 at T+3d, A3 at T+7d) when no analysis has been started"
+    - "Enqueue staged social drafts from docs/content-calendar.md into social_post_queue (dry-run; will be live once channels connected)"
+    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts into this block each run"
+    - "Upgrade email preference page at /account to explicitly support email opt-out (current CAN-SPAM compliance links there; a dedicated pref toggle would strengthen it)"
+  owner_blockers:
+    - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md Step 1"
+    - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503) — docs/growth/CONNECT.md Step 2"
     - "Connect/authorize social accounts (publishing queue built + dry-run; live per-channel API client is a follow-on) — docs/growth/CONNECT.md Step 4"
+    - "Apply DB migrations 021/022/023 to prod (see PENDING_OPS.md)"
   links:
     in_app_analytics: null
     owner_doc: docs/growth/GROWTH_STATUS.md
