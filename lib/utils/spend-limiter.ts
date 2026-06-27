@@ -48,15 +48,19 @@ function maybeCleanup(now: number): void {
   }
 }
 
-export interface SpendCheckResult {
-  allowed: boolean;
-  /** Calls used today (including this one when allowed). */
-  used: number;
-  /** The active daily limit. */
-  limit: number;
-  /** Milliseconds until the daily window resets (0 when allowed). */
-  retryAfterMs: number;
-}
+/**
+ * Result of a daily-spend check. Discriminated on `allowed` so that, inside an
+ * `if (!result.allowed)` guard, the type narrows to BlockedSpendResult — making
+ * it a compile error to pass an allowed result to dailySpendExceededResponse().
+ * `used` = calls used today; `limit` = active daily limit; `retryAfterMs` = ms
+ * until reset (0 when allowed).
+ */
+export type SpendCheckResult =
+  | { allowed: true; used: number; limit: number; retryAfterMs: 0 }
+  | { allowed: false; used: number; limit: number; retryAfterMs: number };
+
+/** A spend result that has been rejected — the only valid input to the 429 helper. */
+export type BlockedSpendResult = Extract<SpendCheckResult, { allowed: false }>;
 
 /**
  * Record a paid-API call for `userId` and report whether it is within the daily
@@ -84,7 +88,7 @@ export function checkDailySpend(userId: string, now: number = Date.now()): Spend
 }
 
 /** Uniform 429 response for an exceeded daily ceiling — keeps route wiring DRY. */
-export function dailySpendExceededResponse(result: SpendCheckResult): NextResponse {
+export function dailySpendExceededResponse(result: BlockedSpendResult): NextResponse {
   return NextResponse.json(
     { error: "Daily usage limit reached. Please try again tomorrow." },
     {

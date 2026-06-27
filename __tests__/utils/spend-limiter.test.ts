@@ -59,6 +59,16 @@ describe("checkDailySpend", () => {
     expect(checkDailySpend("u4", T0).limit).toBe(60);
   });
 
+  it("falls back to the default limit when env is zero", () => {
+    process.env.DAILY_PAID_CALL_LIMIT = "0";
+    expect(checkDailySpend("u4b", T0).limit).toBe(60);
+  });
+
+  it("falls back to the default limit when env is negative", () => {
+    process.env.DAILY_PAID_CALL_LIMIT = "-5";
+    expect(checkDailySpend("u4c", T0).limit).toBe(60);
+  });
+
   it("uses the default limit when env is unset", () => {
     delete process.env.DAILY_PAID_CALL_LIMIT;
     expect(checkDailySpend("u5", T0).limit).toBe(60);
