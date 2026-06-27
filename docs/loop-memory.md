@@ -4,6 +4,41 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-27 (Run 34)
+
+### State on entry
+- Default tip #121 (post Run 33). Local working branch was STALE on entry (migrations only to 013) — `git reset --hard origin/<default>` fixed it; always reset-to-origin on a cold container, don't trust the local checkout.
+- Last DEEP AUDIT: Run 32 (same day) → not due this run (due every ~4 runs / ~24h).
+- Lowest incomplete buildable: **E7 (growth execution engine)** remaining sub-items + **Track G** (G4/G5/G6 open).
+
+### Area served this run
+**E7 (E7.1 double opt-in, E7.3 social publishing queue, E7.4 churn metrics) + G4 (signup user-enumeration).** 4 file-disjoint changes, all merged.
+
+### What was done
+- **PR #122 — E7.1 waitlist double opt-in** (migration 022 + `app/api/waitlist/*` + `/waitlist/confirmed` + lib/email confirmation template + middleware): sign-up stored PENDING with a 64-hex single-use token; confirmed only on emailed-link click. Makes the long-claimed `double_opt_in: true` real. 10 tests. Review fixes: exact-length token regex, 5-min resend throttle (token_sent_at), `/waitlist/confirmed` allowlisted explicitly (not a `/waitlist` prefix).
+- **PR #123 — E7.3 social publishing queue** (migration 023 admin-only + `lib/social/*` dry-run providers mirroring lib/email + `app/api/internal/social-queue` + CONNECT.md Step 4): Growth Agent enqueues, app flushes; status-guarded claim prevents double-post; nothing posts publicly without a per-channel credential. 15 tests. Review fixes: NaN flush-limit guard, flush test coverage, CONNECT honesty (credential gates live publishing but live client is a follow-on).
+- **PR #124 — G4 signup enumeration** (`lib/auth/signup-errors.ts` + signup page): already-registered now shows the same neutral "check your email" screen as a new signup; only a genuinely-new user fires `signup_complete`. 6 tests.
+- **PR #125 — E7.4 churn metrics** (`lib/growth/metrics.ts`): `cancelled_subscribers` + approximate `cancelled_30d` (updated_at proxy) from existing stripe_customers columns; honestly disclosed in 3 places. 8 tests.
+
+### Lessons learned
+1. **Reviewers run on a STATIC diff file in scratchpad, not the branch.** Wrote each PR's `git diff origin/<default>...<branch>` to scratchpad and pointed reviewers at it — reviewers (fresh agents) can't see feature branches otherwise. Re-generate the diff file after each fix cycle before re-review.
+2. **Branch-switching resets the harness's Read-tracking AND reverts disjoint files to base** — the "file was modified" notes on checkout are just the working tree following the branch; expect to re-Read every file before Edit after a `git checkout`.
+3. **Merge API: `merge_method` must be lowercase `squash`** (not `SQUASH`); auto-merge enable only works while checks are PENDING — once CI is already green, merge directly. The "unstable/failing" state right after a push is the checks re-running; confirm via the workflow-run conclusion before assuming a real failure.
+4. **Disjointness held perfectly across 4 PRs sharing the `/api/internal/*` + migration namespaces** — two new internal routes (social-queue vs growth-metrics, different files), consecutive migrations 022/023, and the duplicated 6-line `tokenMatches` helper (intentional, to avoid editing growth-metrics route in the social PR). Duplicating a tiny helper beats breaking the disjoint rule.
+5. **Honesty caveats for approximate metrics go in 3 places** (JSDoc, the API response `notes`, the owner doc) — Reviewer B specifically checks all consumer-facing surfaces for the "never invented" E7 rule.
+
+### Merge outcome
+PRs #122, #123, #124, #125 all merged (verify ✓ build ✓ mobile ✓). Gate green: 997+ tests, tsc + determinism + lint + prod build clean.
+
+### Rotation guide for next run
+- **E7 remaining (lowest incomplete):** wire the E4/E6 email lifecycle SEND calls to lib/email (welcome/activation/upgrade/winback triggers — careful, touches signup/checkout call sites); visitor/trial/conversion-rate analytics pulls (need Vercel Analytics API + Stripe reporting API — likely owner-credentialed); per-channel social LIVE API clients (X/IG/TikTok/Reddit — each needs the owner's app + API review). Waitlist welcome email after CONFIRM (currently only the confirm email fires) is a clean next step.
+- **Track G remaining:** G4 login lockout/backoff (needs a server-side login route — currently login is client-side Supabase) + password-reset/verification enumeration guards; G5 CAPTCHA/Turnstile on waitlist+signup (waitlist route just changed — now safe to add); G6 CORS allowlist (scouts judged default-deny already adequate — low priority, don't manufacture).
+- **Reconcile note:** G1/G3 still appear substantially done but left unticked (coverage not rigorously re-verified); a future audit should confirm + tick.
+- **Human-gated (unchanged):** migrations 022/023 apply (PENDING_OPS), A5/F3 eval CI job, F4 Playwright CI wiring, D3 screenshots, all live secrets.
+- **DEEP AUDIT:** last ran Run 32. Due again around Run 36 (~4 runs) — run a full codebase audit then.
+
+---
+
 ## Run 2026-06-27 (Run 33)
 
 ### State on entry

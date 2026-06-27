@@ -31,6 +31,13 @@ OWNER_ACTIONS:
       why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
       how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
       blocks: annual-billing
+    - id: apply-migrations-022-023
+      title: "Apply migrations 022 (waitlist double opt-in) + 023 (social publishing queue) to prod"
+      priority: normal
+      status: open
+      why: "Run 34 added double opt-in columns to waitlist_emails (022) and the social_post_queue table (023). Until 022 is applied, waitlist sign-ups can't be stored/confirmed as pending; until 023 is applied, the social publishing queue has no table. Both are idempotent and admin-only (RLS enabled, no policy on 023; 017's boundary unchanged on 022)."
+      how: "Run `supabase db push` (or paste supabase/migrations/022_waitlist_double_opt_in.sql then 023_social_post_queue.sql into the Supabase SQL Editor, in order)."
+      blocks: growth-execution
     - id: rate-limit-redis
       title: "Move rate limiter state from in-memory to Upstash Redis before scaling"
       priority: normal
@@ -71,8 +78,12 @@ The growth execution engine ships **closed by default**; set these on the deploy
 |---------|-----------|------------------|
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Email lifecycle sending (E7.2) | Dry-run — emails logged, not sent |
 | `GROWTH_EMAIL_DRY_RUN` | Email mode override (optional) | Unset = auto-live once key present |
-| `INTERNAL_METRICS_TOKEN` | Growth-metrics pull API (E7.4) | Endpoint returns 503 (closed) |
+| `INTERNAL_METRICS_TOKEN` | Growth-metrics pull API (E7.4) + social-queue API (E7.3) | Both endpoints return 503 (closed) |
 | `DAILY_PAID_CALL_LIMIT` | Paid-API spend ceiling tune (G7, optional) | Defaults to 60/user/day |
+| `X_API_KEY` / `INSTAGRAM_ACCESS_TOKEN` / `TIKTOK_ACCESS_TOKEN` / `REDDIT_CLIENT_ID` (+ each provider's secret set) | Social publishing per channel (E7.3) | That channel stays dry-run — queue flush reports `dryRun: true`, nothing posts publicly |
+| `GROWTH_SOCIAL_DRY_RUN` | Social mode override (optional) | `1` forces dry-run on every channel regardless of credentials |
+
+> **Note (E7.3, Run 34):** the social publishing queue ships the safe dry-run path only; the per-channel *live API client* is a follow-on build, so setting a channel credential prepares it but does not yet post publicly this release. See docs/growth/CONNECT.md Step 4.
 
 Full step-by-step + verify commands: **docs/growth/CONNECT.md**.
 

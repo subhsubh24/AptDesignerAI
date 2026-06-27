@@ -51,13 +51,13 @@ GROWTH_STATUS:
     organic_sessions_7d: 0
   learnings: []                  # short, data-grounded bullets: what's working / what's not
   next_actions:                  # what the agent will do next run
-    - "Build E7.3 social publishing queue (server-side, dry-run default)"
-    - "Wire the E4/E6 email lifecycle send calls to the new lib/email abstraction"
-    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts into this block"
+    - "Wire the E4/E6 email lifecycle send calls to the lib/email abstraction"
+    - "Enqueue staged social drafts into the new social_post_queue (dry-run until channels connected)"
+    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts (incl. churn) into this block"
   owner_blockers:                # things needing the owner before the agent can execute externally
     - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md"
     - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503)"
-    - "Connect/authorize social accounts (publishing queue not yet built)"
+    - "Connect/authorize social accounts (publishing queue built + dry-run; live per-channel API client is a follow-on) — docs/growth/CONNECT.md Step 4"
   links:
     in_app_analytics: null
     owner_doc: docs/growth/GROWTH_STATUS.md
