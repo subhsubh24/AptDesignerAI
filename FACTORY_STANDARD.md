@@ -80,6 +80,18 @@ an action that yields no real artifact) is a release-blocking FAIL equal to a re
 Maintain an outcome-asserting functional journey suite + a route/flow inventory so
 coverage is provably complete; anything that genuinely can't run headlessly goes on the
 human checklist, never silently assumed working.
+**SEE WHAT THE USER SEES (visual verification).** Outcome assertions check the DOM, not how
+the page LOOKS — a page can pass every assertion while rendering blank/white, with overlapping
+or unstyled elements (CSS didn't load), broken images, or generic "vibe-coded" slop. So the
+journey suite also CAPTURES a SCREENSHOT of every page and every key state (empty / loading /
+error, authed and logged-out) and commits them as artifacts. A screenshot only CONFIRMS
+anything if something JUDGES it: the design/taste DEEP-AUDIT lens (§10) and the readiness gate
+(§7) VISUALLY REVIEW each screenshot (the loops run on a vision-capable model — actually LOOK at
+the image) against the VISION design bar. A page that renders blank, broken, overlapping,
+unstyled, or off-brand/"vibe-coded" is a release-blocking FAIL equal to a red test, EVEN IF its
+DOM assertions pass. (Optional: visual-regression vs a committed baseline to catch unintended
+visual changes between runs.) BOUNDED: capture screenshots in the journey suite and JUDGE them
+in the periodic deep audit + at the readiness gate — not a vision pass on every micro-change.
 
 ## 7. Readiness = TWO gates (you may NOT self-certify "ready")
 Declare "ready" / open the single readiness issue ONLY when BOTH pass IN THE SAME RUN:
@@ -93,7 +105,8 @@ Declare "ready" / open the single readiness issue ONLY when BOTH pass IN THE SAM
   (maker ≠ checker, none did the building), each told *"PROVE IT IS NOT ready. Default to
   NOT-READY unless you genuinely cannot find a single real gap. Be adversarial."* Divide
   coverage so every DoD gate is independently re-verified: **functional reality (an ACTUAL
-  RUN, not a code read)**, **business-case honesty**, **business-case STRENGTH &
+  RUN, not a code read — incl. VISUALLY REVIEWING the page screenshots, §6: every page renders
+  correctly + on-brand, none blank/broken/slop)**, **business-case honesty**, **business-case STRENGTH &
   lever-completeness** (§9), **independent quality grade** (§8), **artifact reality**,
   **ship/store acceptance**, **security/abuse** (§12), **quality gates**, **completeness**.
   A box stays `[x]` only if an independent auditor CONFIRMS it; any real gap → un-tick,
@@ -133,7 +146,9 @@ ship-critical dimension and ≥B elsewhere.
 ## 10. Periodic deep audit (~daily; read-only discovery)
 Spawn read-only audit subagents (Haiku), each a DIFFERENT lens across the WHOLE codebase:
 correctness & dead code; **functional reality (an ACTUAL RUN)**; **quality-grade reconcile**
-(§8); **security & abuse** (§12); performance & cost; accessibility & design/taste; test &
+(§8); **security & abuse** (§12); performance & cost; **accessibility & design/taste (VISUALLY
+review the journey-suite page screenshots, §6: a blank/broken/overlapping/unstyled/off-brand or
+"vibe-coded" page is a design BUG to fix)**; test &
 eval coverage; dependency & config health; **artifact freshness & consistency** (do the
 docs still match current code/pricing/positioning?). Distill a PRIORITIZED list, record a
 dated "DEEP AUDIT — <date>" in the loop-memory file, turn top findings into this run's work.
