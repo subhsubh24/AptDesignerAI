@@ -21,7 +21,7 @@ interface Counts {
 function fakeAdmin(counts: Counts, error: unknown = null) {
   return {
     from(table: string) {
-      const state = { table, dateFilter: false, annualTier: false };
+      const state = { table, dateFilter: false, annualTier: false, statusActive: false };
       const builder = {
         select: () => builder,
         gte: () => {
@@ -31,6 +31,7 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
         in: () => builder, // .in("tier", ["pro","pro_annual"]) — the active-subs path
         eq: (col: string, val: string) => {
           if (col === "tier" && val === "pro_annual") state.annualTier = true;
+          if (col === "status" && val === "active") state.statusActive = true;
           return builder;
         },
         then(resolve: (v: { count: number | null; error: unknown }) => unknown) {
@@ -38,7 +39,11 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
           if (state.table === "waitlist_emails") {
             count = state.dateFilter ? counts.waitlist7d : counts.waitlistTotal;
           } else if (state.table === "stripe_customers") {
-            count = state.annualTier ? counts.annualSubs : counts.activeSubs;
+            // Only return the active-subscriber counts when status=active was
+            // applied; a dropped filter surfaces inactive rows (+100) and trips
+            // the count assertions, so the test actually guards that filter.
+            const inactivePadding = state.statusActive ? 0 : 100;
+            count = (state.annualTier ? counts.annualSubs : counts.activeSubs) + inactivePadding;
           }
           return Promise.resolve(error ? { count: null, error } : { count, error: null }).then(resolve);
         },
