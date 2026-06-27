@@ -12,6 +12,9 @@ exactly like it reads BUSINESS_CASE_SUMMARY in docs/BUSINESS_CASE.md.
 - Cross-project shape: identical keys across AptDesignerAI / HighlightMagic / GroceryManager.
 - phase advances pre_launch -> launching -> post_launch. Post-launch is the most important window.
 - as_of is stamped every update; a stale as_of is itself a signal.
+- HOW to fill funnel/experiments/learnings honestly (diagnose the binding constraint, compute
+  significance, never fabricate, "insufficient data" when N is small): follow the data-science
+  method in docs/growth/ANALYSIS_PLAYBOOK.md.
 
 ```yaml
 GROWTH_STATUS:
