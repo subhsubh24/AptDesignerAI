@@ -1,19 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle2, Loader2, MailCheck } from "lucide-react";
+import { Turnstile } from "@/components/ui/turnstile";
 
 type State = "idle" | "loading" | "pending" | "duplicate" | "error";
+
+// Bot protection is active only once the owner sets the public site key; until
+// then the widget renders nothing and the form behaves exactly as before.
+const CAPTCHA_ENABLED = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export function WaitlistForm() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<State>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  const handleCaptchaToken = useCallback((token: string | null) => {
+    setCaptchaToken(token);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || state === "loading") return;
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setErrorMsg("Please complete the verification below.");
+      setState("error");
+      return;
+    }
 
     setState("loading");
     setErrorMsg("");
@@ -22,7 +37,7 @@ export function WaitlistForm() {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim(), turnstileToken: captchaToken }),
       });
       const data = (await res.json()) as {
         pendingConfirmation?: boolean;
@@ -98,7 +113,7 @@ export function WaitlistForm() {
         type="submit"
         variant="warm"
         size="lg"
-        disabled={state === "loading" || !email.trim()}
+        disabled={state === "loading" || !email.trim() || (CAPTCHA_ENABLED && !captchaToken)}
         className="shrink-0"
       >
         {state === "loading" ? (
@@ -113,6 +128,8 @@ export function WaitlistForm() {
           </>
         )}
       </Button>
+      {/* Bot-protection challenge — renders only when a site key is configured. */}
+      <Turnstile onToken={handleCaptchaToken} className="w-full" />
       {state === "error" && errorMsg && (
         <p className="text-xs text-destructive w-full mt-1">{errorMsg}</p>
       )}
