@@ -363,6 +363,13 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   Live secrets/keys are HUMAN-APPLIED (PENDING_OPS) — build the pluggable engine + the
   runbook; the owner supplies the credentials. This unblocks the Growth Agent's execute
   mode (engine_built: true).
+  **[Partial — Run 33: sub-item 1 waitlist capture to Supabase already live (migration
+  017 + /api/waitlist; double-opt-in still pending); sub-item 2 email send abstraction
+  DONE (PR #117, dry-run default); sub-item 4 analytics-pull read API DONE (PR #118,
+  real funnel counts); sub-item 5 growth-settings/env-contract + CONNECT.md runbook DONE
+  (PR #120). REMAINING: sub-item 1 double-opt-in; sub-item 3 social publishing queue;
+  and wiring the email lifecycle send calls + analytics visitor/trial/conversion pulls.
+  Keep E7 unchecked until those land.]**
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
@@ -435,10 +442,14 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
 - [ ] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
   security headers (CSP / HSTS / X-Content-Type-Options, etc.); align to OWASP basics.
-- [ ] G7. **API spend ceiling + alerts**: a code-level usage cap / circuit-breaker per
+- [x] G7. **API spend ceiling + alerts**: a code-level usage cap / circuit-breaker per
   user/day on paid-API calls, AND record in PENDING_OPS.md the human-only step to set HARD
   daily caps + 50%-of-cap alerts in the Gemini/Anthropic/provider dashboards (the loop
   cannot set those — the owner must).
+  **(PR #119 — `lib/utils/spend-limiter.ts` per-user/UTC-day circuit breaker, default 60,
+  wired into the 12 paid routes; the human-only provider hard-cap/alert step + the
+  in-memory→Redis migration note are recorded in PENDING_OPS.md. Gate green Run 33: 962
+  tests, tsc + determinism + lint clean.)**
 Secrets stay server-side (already enforced); if exposure is ever suspected, record a
 PENDING_OPS handoff to regenerate the key immediately.
 
