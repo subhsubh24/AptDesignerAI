@@ -143,6 +143,7 @@ export default function SavedDesignsPage() {
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       onClick={() => handleDelete(design.id)}
                       disabled={deleting === design.id}
+                      aria-label={`Delete ${design.title}`}
                     >
                       {deleting === design.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </Button>

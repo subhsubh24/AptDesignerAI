@@ -233,7 +233,7 @@ export default function MockupsPage() {
                           text="Made with AptDesigner"
                           url={mockup.result_image_url}
                         />
-                        <Button size="sm" variant="ghost" asChild>
+                        <Button size="sm" variant="ghost" asChild aria-label={`Download mockup from ${new Date(mockup.created_at).toLocaleDateString()}`}>
                           <a href={mockup.result_image_url} download target="_blank" rel="noopener noreferrer">
                             <Download className="h-3.5 w-3.5" />
                           </a>
