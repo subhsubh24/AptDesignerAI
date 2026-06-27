@@ -38,7 +38,10 @@ export async function enqueuePost(
   if (!isSocialPlatform(input.platform)) return { ok: false, error: "Unknown platform" };
   const body = typeof input.body === "string" ? input.body.trim() : "";
   if (!body) return { ok: false, error: "Empty post body" };
-  if (input.body.length > PLATFORM_MAX_BODY[input.platform]) {
+  // Validate the LENGTH OF WHAT WE ACTUALLY STORE (the trimmed body inserted
+  // below) — not the raw input. Checking input.body.length let a post padded
+  // with leading/trailing whitespace slip past the platform cap.
+  if (body.length > PLATFORM_MAX_BODY[input.platform]) {
     return { ok: false, error: `Body exceeds ${PLATFORM_MAX_BODY[input.platform]} characters` };
   }
   const mediaUrls = input.mediaUrls ?? [];
