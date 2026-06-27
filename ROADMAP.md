@@ -363,13 +363,17 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   Live secrets/keys are HUMAN-APPLIED (PENDING_OPS) — build the pluggable engine + the
   runbook; the owner supplies the credentials. This unblocks the Growth Agent's execute
   mode (engine_built: true).
-  **[Partial — Run 33: sub-item 1 waitlist capture to Supabase already live (migration
-  017 + /api/waitlist; double-opt-in still pending); sub-item 2 email send abstraction
-  DONE (PR #117, dry-run default); sub-item 4 analytics-pull read API DONE (PR #118,
-  real funnel counts); sub-item 5 growth-settings/env-contract + CONNECT.md runbook DONE
-  (PR #120). REMAINING: sub-item 1 double-opt-in; sub-item 3 social publishing queue;
-  and wiring the email lifecycle send calls + analytics visitor/trial/conversion pulls.
-  Keep E7 unchecked until those land.]**
+  **[Partial — sub-item 1 waitlist capture to Supabase live (migration 017) + DOUBLE
+  OPT-IN now DONE (Run 34, PR #122 — migration 022, pending token + confirm flow);
+  sub-item 2 email send abstraction DONE (PR #117, dry-run default); sub-item 3 social
+  publishing queue DONE (Run 34, PR #123 — migration 023, dry-run providers + internal
+  API; per-channel LIVE API clients are a follow-on); sub-item 4 analytics-pull read API
+  DONE (PR #118) + churn signal added (Run 34, PR #125 — cancelled_subscribers +
+  approximate cancelled_30d); sub-item 5 growth-settings/env-contract + CONNECT.md
+  runbook DONE (PR #120). REMAINING before E7 ticks: wire the E4/E6 email lifecycle send
+  calls to lib/email; add visitor/trial/conversion-rate analytics pulls (need Vercel
+  Analytics + Stripe reporting APIs); per-channel social live API clients. Keep E7
+  unchecked until those land.]**
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
@@ -438,6 +442,10 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   passwords; password-reset does NOT reveal whether an email exists; email-verification
   link is idempotent (double-click safe); signup with an existing email does NOT leak that
   it's already registered (no user enumeration). Add a test for each case.
+  **[Partial — Run 34 (PR #124): signup user-enumeration CLOSED — already-registered shows
+  the same neutral screen as a new signup (lib/auth/signup-errors.ts, 6 tests). REMAINING:
+  login lockout/backoff (needs a server-side login route) + password-reset/verification
+  enumeration guards. Keep G4 unchecked until those land.]**
 - [ ] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
 - [ ] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
