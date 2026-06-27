@@ -109,15 +109,24 @@ a channel's primary credential is present. The Growth Agent enqueues drafts with
 `POST { action: "flush" }`. `GROWTH_SOCIAL_DRY_RUN=1` forces dry-run on every
 channel regardless of credentials.
 
-Connect a channel by setting its credential on the deployment (then complete that
-provider's full OAuth/app-review as the platform requires):
+Each channel's primary credential is the env var that *gates* live publishing for
+it (no credential ⇒ that channel can never leave dry-run). Set it on the
+deployment and complete that provider's full OAuth/app-review as the platform
+requires:
 
-| Channel | Primary credential (flips out of dry-run) |
+| Channel | Primary credential (gates live publishing) |
 |---|---|
 | X (Twitter) | `X_API_KEY` (plus the v2 app's secret/token set) |
 | Instagram | `INSTAGRAM_ACCESS_TOKEN` (Graph API business account) |
 | TikTok | `TIKTOK_ACCESS_TOKEN` (TikTok for Developers) |
 | Reddit | `REDDIT_CLIENT_ID` (plus the script-app secret) |
+
+> **This release ships the queue + the safe dry-run path only.** The per-channel
+> *live API client* is added in a follow-on change. Until then, a flush still
+> reports `dryRun: true` even with a credential set — setting the credential
+> prepares the channel but does not yet post publicly. (This is intentional: the
+> queue and provider seam are proven first; the live send is wired per channel as
+> each account is connected and approved.)
 
 **Verify (safe, no public post):** with only `INTERNAL_METRICS_TOKEN` set,
 

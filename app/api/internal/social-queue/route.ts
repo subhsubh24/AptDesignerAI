@@ -109,7 +109,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === "flush") {
-    const limit = typeof body.limit === "number" ? body.limit : undefined;
+    // Guard NaN/Infinity: they pass `typeof === "number"` and aren't nullish, so
+    // they'd slip past flushDueQueue's `?? 25` default and reach Supabase .limit().
+    const limit =
+      typeof body.limit === "number" && Number.isFinite(body.limit) ? body.limit : undefined;
     try {
       const summary = await flushDueQueue(admin, { limit });
       return NextResponse.json({ summary });

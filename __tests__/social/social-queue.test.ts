@@ -10,6 +10,7 @@ import {
   publishPost,
   PLATFORM_MAX_BODY,
 } from "@/lib/social";
+import { flushDueQueue } from "@/lib/social/queue";
 import { GET, POST } from "@/app/api/internal/social-queue/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
@@ -154,5 +155,75 @@ describe("/api/internal/social-queue", () => {
       req("POST", "correct-secret-value", { action: "explode" }, "8.0.0.6"),
     );
     expect(res.status).toBe(400);
+  });
+
+  it("POST flush on an empty queue returns a zero summary", async () => {
+    process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
+    mockGetAdmin.mockReturnValue(fakeAdmin());
+    const res = await POST(req("POST", "correct-secret-value", { action: "flush" }, "8.0.0.7"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).toEqual({ claimed: 0, published: 0, dryRun: 0, failed: 0 });
+  });
+
+  it("POST flush ignores a non-finite limit (no crash)", async () => {
+    process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
+    mockGetAdmin.mockReturnValue(fakeAdmin());
+    const res = await POST(
+      req("POST", "correct-secret-value", { action: "flush", limit: Number.NaN }, "8.0.0.8"),
+    );
+    expect(res.status).toBe(200);
+  });
+});
+
+// Stateful fake for the flush path: serves one due row, then claims + records it.
+function flushFakeAdmin(dueRows: Array<{ id: string; platform: string; body: string; media_urls: unknown }>) {
+  return {
+    from() {
+      const state = { isUpdate: false };
+      const builder: Record<string, unknown> = {};
+      Object.assign(builder, {
+        select: () => builder,
+        eq: () => builder,
+        or: () => builder,
+        order: () => builder,
+        update: () => {
+          state.isUpdate = true;
+          return builder;
+        },
+        // Terminal of the "due rows" query.
+        limit: () => Promise.resolve({ data: dueRows, error: null }),
+        // Terminal of claim (update…select) and result (update…eq) chains. A
+        // claim must return a row so flushDueQueue treats it as owned.
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve(
+            state.isUpdate ? { data: [{ id: "claimed" }], error: null } : { data: [], error: null },
+          ).then(resolve),
+      });
+      return builder;
+    },
+  };
+}
+
+describe("flushDueQueue", () => {
+  const orig = { ...process.env };
+  afterEach(() => {
+    process.env = { ...orig };
+  });
+
+  it("claims a due post and records it as a dry-run publish (no live send)", async () => {
+    delete process.env.X_API_KEY;
+    delete process.env.GROWTH_SOCIAL_DRY_RUN;
+    const admin = flushFakeAdmin([{ id: "p1", platform: "x", body: "Launch day!", media_urls: [] }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const summary = await flushDueQueue(admin as any);
+    expect(summary).toEqual({ claimed: 1, published: 0, dryRun: 1, failed: 0 });
+  });
+
+  it("marks an unknown-platform row as failed without throwing", async () => {
+    const admin = flushFakeAdmin([{ id: "p2", platform: "myspace", body: "x", media_urls: [] }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const summary = await flushDueQueue(admin as any);
+    expect(summary).toEqual({ claimed: 1, published: 0, dryRun: 0, failed: 1 });
   });
 });
