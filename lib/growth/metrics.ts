@@ -20,13 +20,21 @@ export interface GrowthMetrics {
     waitlist_signups_total: number;
     /** Waitlist sign-ups in the last 7 days. */
     waitlist_signups_7d: number;
-    /** Subscriptions with status = active (any paid tier). */
+    /**
+     * Active recurring subscribers — status = active on a subscription tier
+     * (pro or pro_annual). Excludes the one-time `apartment` purchase tier.
+     */
     active_subscribers: number;
-    /** Active subscriptions on the Pro tier specifically. */
-    paid_pro_subscribers: number;
+    /** Subset of active_subscribers on the annual (pro_annual) plan. */
+    annual_subscribers: number;
   };
   notes: string;
 }
+
+// Recurring subscription tiers. `apartment` is a one-time purchase, not a
+// subscription, so it is excluded from subscriber counts. Keep in sync with the
+// tier CHECK constraint in supabase/migrations (018 + 021) and lib/entitlements.
+const SUBSCRIPTION_TIERS = ["pro", "pro_annual"] as const;
 
 type CountResult = PromiseLike<{ count: number | null; error: unknown }>;
 
@@ -43,26 +51,27 @@ async function toCount(query: CountResult): Promise<number> {
 export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<GrowthMetrics> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [waitlistTotal, waitlist7d, activeSubscribers, proSubscribers] = await Promise.all([
-    toCount(admin.from("waitlist_emails").select("*", { count: "exact", head: true })),
+  const [waitlistTotal, waitlist7d, activeSubscribers, annualSubscribers] = await Promise.all([
+    toCount(admin.from("waitlist_emails").select("id", { count: "exact", head: true })),
     toCount(
       admin
         .from("waitlist_emails")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .gte("created_at", sevenDaysAgo),
     ),
     toCount(
       admin
         .from("stripe_customers")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "active"),
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active")
+        .in("tier", SUBSCRIPTION_TIERS as unknown as string[]),
     ),
     toCount(
       admin
         .from("stripe_customers")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .eq("status", "active")
-        .eq("tier", "pro"),
+        .eq("tier", "pro_annual"),
     ),
   ]);
 
@@ -73,7 +82,7 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
       waitlist_signups_total: waitlistTotal,
       waitlist_signups_7d: waitlist7d,
       active_subscribers: activeSubscribers,
-      paid_pro_subscribers: proSubscribers,
+      annual_subscribers: annualSubscribers,
     },
     notes:
       "Visitor, trial-start and conversion-rate metrics require the Vercel Analytics and Stripe reporting APIs — see docs/growth/CONNECT.md.",

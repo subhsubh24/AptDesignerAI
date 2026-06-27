@@ -6,15 +6,18 @@
 // until the token is configured, so the endpoint is closed by default.
 
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { gatherGrowthMetrics } from "@/lib/growth/metrics";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
 
+// Constant-time comparison that does not leak the expected token's length:
+// HMAC both sides to a fixed-width digest before comparing, so a length
+// mismatch can't be inferred from an early return.
 function tokenMatches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
+  const key = "growth-metrics-token-compare";
+  const a = createHmac("sha256", key).update(provided).digest();
+  const b = createHmac("sha256", key).update(expected).digest();
   return timingSafeEqual(a, b);
 }
 

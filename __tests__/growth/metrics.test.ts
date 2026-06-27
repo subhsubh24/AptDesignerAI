@@ -13,7 +13,7 @@ interface Counts {
   waitlistTotal: number;
   waitlist7d: number;
   activeSubs: number;
-  proSubs: number;
+  annualSubs: number;
 }
 
 // Minimal Supabase-shaped fake: each query is a thenable that resolves to a
@@ -21,15 +21,16 @@ interface Counts {
 function fakeAdmin(counts: Counts, error: unknown = null) {
   return {
     from(table: string) {
-      const state = { table, dateFilter: false, proTier: false };
+      const state = { table, dateFilter: false, annualTier: false };
       const builder = {
         select: () => builder,
         gte: () => {
           state.dateFilter = true;
           return builder;
         },
+        in: () => builder, // .in("tier", ["pro","pro_annual"]) — the active-subs path
         eq: (col: string, val: string) => {
-          if (col === "tier" && val === "pro") state.proTier = true;
+          if (col === "tier" && val === "pro_annual") state.annualTier = true;
           return builder;
         },
         then(resolve: (v: { count: number | null; error: unknown }) => unknown) {
@@ -37,7 +38,7 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
           if (state.table === "waitlist_emails") {
             count = state.dateFilter ? counts.waitlist7d : counts.waitlistTotal;
           } else if (state.table === "stripe_customers") {
-            count = state.proTier ? counts.proSubs : counts.activeSubs;
+            count = state.annualTier ? counts.annualSubs : counts.activeSubs;
           }
           return Promise.resolve(error ? { count: null, error } : { count, error: null }).then(resolve);
         },
@@ -49,7 +50,7 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
 
 describe("gatherGrowthMetrics", () => {
   it("returns real counts keyed by table and filter", async () => {
-    const admin = fakeAdmin({ waitlistTotal: 42, waitlist7d: 7, activeSubs: 5, proSubs: 3 });
+    const admin = fakeAdmin({ waitlistTotal: 42, waitlist7d: 7, activeSubs: 5, annualSubs: 2 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const m = await gatherGrowthMetrics(admin as any);
     expect(m.source).toBe("supabase");
@@ -57,13 +58,13 @@ describe("gatherGrowthMetrics", () => {
       waitlist_signups_total: 42,
       waitlist_signups_7d: 7,
       active_subscribers: 5,
-      paid_pro_subscribers: 3,
+      annual_subscribers: 2,
     });
     expect(typeof m.as_of).toBe("string");
   });
 
   it("throws when an underlying query errors", async () => {
-    const admin = fakeAdmin({ waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, proSubs: 0 }, {
+    const admin = fakeAdmin({ waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, annualSubs: 0 }, {
       message: "db down",
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,12 +116,28 @@ describe("GET /api/internal/growth-metrics", () => {
   it("returns 200 with metrics for a valid token", async () => {
     process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
     mockGetAdmin.mockReturnValue(
-      fakeAdmin({ waitlistTotal: 11, waitlist7d: 2, activeSubs: 4, proSubs: 1 }),
+      fakeAdmin({ waitlistTotal: 11, waitlist7d: 2, activeSubs: 4, annualSubs: 1 }),
     );
     const res = await GET(req({ authorization: "Bearer correct-secret-value" }, "10.0.0.5"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.funnel.waitlist_signups_total).toBe(11);
-    expect(body.funnel.paid_pro_subscribers).toBe(1);
+    expect(body.funnel.active_subscribers).toBe(4);
+    expect(body.funnel.annual_subscribers).toBe(1);
+  });
+
+  it("rate-limits after the per-IP window is exceeded (429)", async () => {
+    process.env.INTERNAL_METRICS_TOKEN = "correct-secret-value";
+    mockGetAdmin.mockReturnValue(
+      fakeAdmin({ waitlistTotal: 1, waitlist7d: 0, activeSubs: 0, annualSubs: 0 }),
+    );
+    const ip = "10.9.9.9";
+    // Limit is 30/min/IP. Exhaust it, then expect a 429 on the next call.
+    let last = 200;
+    for (let i = 0; i < 31; i++) {
+      const res = await GET(req({ authorization: "Bearer correct-secret-value" }, ip));
+      last = res.status;
+    }
+    expect(last).toBe(429);
   });
 });
