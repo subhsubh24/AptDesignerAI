@@ -5,6 +5,10 @@ const PUBLIC_PATHS = new Set([
   "/login",
   "/signup",
   "/waitlist",
+  // Double opt-in landing page, reached from an emailed link by an
+  // unauthenticated visitor. Listed explicitly (not as a /waitlist prefix) so a
+  // future /waitlist/* sub-route can't become public by accident.
+  "/waitlist/confirmed",
   "/pricing",
   "/faq",
   "/privacy",
@@ -26,7 +30,11 @@ const PUBLIC_PATH_PREFIXES = ["/guides"];
 // /api/internal/*     — internal tooling (e.g. growth-metrics) authenticates
 //                       via the INTERNAL_METRICS_TOKEN shared secret in the
 //                       Authorization header; each route MUST verify it.
-const PUBLIC_API_PATHS = new Set(["/api/waitlist", "/api/billing/webhook"]);
+const PUBLIC_API_PATHS = new Set([
+  "/api/waitlist",
+  "/api/waitlist/confirm",
+  "/api/billing/webhook",
+]);
 
 export async function updateSession(request: NextRequest) {
   // Redirect root to dashboard always

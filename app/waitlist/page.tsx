@@ -61,7 +61,7 @@ export default function WaitlistPage() {
             <WaitlistForm />
 
             <p className="mt-4 text-xs text-muted-foreground">
-              One email at launch. No spam. Unsubscribe any time.
+              We&apos;ll send one link to confirm, then one email at launch. No spam.
             </p>
           </div>
         </section>
