@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 import { buildWaitlistConfirmEmail } from "@/lib/email/templates/waitlist";
+import { verifyTurnstile } from "@/lib/security/turnstile";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
@@ -81,6 +82,27 @@ export async function POST(req: NextRequest) {
 
   if (!email || email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
     return NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 });
+  }
+
+  // Bot protection (G5). No-op until TURNSTILE_SECRET_KEY is set; once enabled,
+  // a request must carry a valid Turnstile token. The widget puts it on the body
+  // as `turnstileToken`.
+  const captchaToken =
+    typeof (body as Record<string, unknown>).turnstileToken === "string"
+      ? ((body as Record<string, unknown>).turnstileToken as string)
+      : null;
+  const captcha = await verifyTurnstile(captchaToken, ip);
+  if (captcha.reason === "unreachable") {
+    // Failed open during a Cloudflare outage — surface it so a silent
+    // bypass window is visible in logs (rate limiting still applies).
+    console.warn("[waitlist] turnstile verification unreachable; allowed");
+  }
+  if (!captcha.success) {
+    console.warn("[waitlist] turnstile rejected sign-up:", captcha.reason);
+    return NextResponse.json(
+      { error: "Couldn't verify you're human. Please try again." },
+      { status: 400 },
+    );
   }
 
   const admin = getAdminClient();
