@@ -4,6 +4,41 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-27 (Run 33)
+
+### State on entry
+- Detached HEAD at default tip #116 (post Run 32). 952 tests baseline; deps not installed (ran `npm install`).
+- Last DEEP AUDIT: Run 32 (previous run) → not due this run.
+- Lowest incomplete buildable track: **E7 (growth EXECUTION engine)** — waitlist capture already lived (migration 017 + /api/waitlist), but email send, analytics-pull API, the owner runbook, and the social publishing queue were all unbuilt. Track G also had G4/G5/G7 open.
+
+### Area served this run
+**Track E7 (growth execution engine — E7.2 email, E7.4 metrics-pull, E7.5 connect runbook) + Track G7 (paid-API spend circuit breaker).** 4 file-disjoint changes, all merged.
+
+### What was done
+- **PR #117 — E7.2 email provider abstraction** (`lib/email/`): Resend REST provider (no SDK), DryRunProvider default until RESEND_API_KEY present, `sendEmail()` validation that never throws, `EmailStage` union mirroring the email-lifecycle docs. 12 tests.
+- **PR #118 — E7.4 internal growth-metrics API** (`lib/growth/metrics.ts` + `app/api/internal/growth-metrics/route.ts`): real funnel counts (waitlist total/7d, active subscribers across pro+pro_annual excluding one-time apartment tier, annual subscribers); INTERNAL_METRICS_TOKEN HMAC timing-safe gate, 503-until-configured, IP rate limit, `/api/internal/*` middleware bypass. 8 tests.
+- **PR #119 — G7 per-user/day spend circuit breaker** (`lib/utils/spend-limiter.ts`): in-memory per-UTC-day cap (DAILY_PAID_CALL_LIMIT, default 60) across ALL 12 paid routes; discriminated-union result; excludes cheap places/photo + revenue billing/checkout. 10 tests. Ticked G7 in ROADMAP.
+- **PR #120 — E7.5 owner connect runbook** (`docs/growth/CONNECT.md` + `.env.example`): ~20-min setup runbook + env contract; capability table honest (email/metrics/spend Built; social publishing NOT built).
+
+### Lessons learned
+1. **Reviewers can't see sibling feature branches — pass them a STATIC diff file, and merge code BEFORE doc-that-describes-it.** The CONNECT.md doc (change 4) documented code living on the three sibling branches; both reviewers correctly rejected it round 1 because greps of the working tree (default base) found no `lib/email` etc. Fix: merge the code PRs first, rebase the doc branch onto the updated default, THEN re-review — reviewers then confirm the doc against real on-disk code. Writing diffs to scratchpad files (not inline, not "read the branch") is the reliable reviewer hand-off.
+2. **A subscriber count must include EVERY paid tier.** The metrics gatherer first filtered `.eq("tier","pro")`, silently dropping `pro_annual` (migration 021) and conflating the one-time `apartment` tier into "active subscribers". Reviewer A caught it. Rule: when counting by an enum column, enumerate against the migration's CHECK constraint + lib/entitlements, not memory.
+3. **Discriminated unions beat boolean-property narrowing for "only valid in the failure case" helpers.** Typing `dailySpendExceededResponse(result: SpendCheckResult & {allowed:false})` failed to narrow at call sites because `SpendCheckResult` was a plain interface with `allowed: boolean`. Converting `SpendCheckResult` to a union discriminated on `allowed` made `if (!spend.allowed)` narrow correctly and made misuse a compile error.
+4. **Timing-safe token compare must not early-return on length** — HMAC both sides to a fixed-width digest before `timingSafeEqual`, else the expected token's length leaks via timing.
+5. **Branch-switching resets the harness's Read-tracking** — after `git checkout`, the Edit tool requires a fresh Read of each file before editing (the working tree changed under it). Expect to re-Read on every branch hop.
+6. **`npm install` is needed on a cold container** before tsc/vitest (deps absent on entry).
+
+### Merge outcome
+PRs #117, #118, #119, #120 all merged (verify ✓ build ✓ mobile ✓; the Vercel preview status was rate-limited but is NOT a required merge check). Gate green: 962 tests, tsc + determinism + lint clean.
+
+### Rotation guide for next run
+- **E7 remaining (lowest incomplete buildable):** sub-item 1 double-opt-in on waitlist; sub-item 3 **social publishing queue** (server-side queue + provider abstraction, dry-run default — the biggest remaining E7 piece, needs a migration for the queue table); wire the E4/E6 lifecycle send calls to `lib/email`; extend metrics with visitor/trial/conversion (needs Vercel Analytics + Stripe reporting APIs).
+- **Track G remaining:** G2 (server-side validation on every write — verify completeness), G4 (auth failure-case hardening + tests: lockout, password-reset + signup enumeration guards), G5 (CAPTCHA/Turnstile on waitlist+signup), G6 CORS allowlist (security headers done, CORS NOT — leave G6 unticked until CORS lands).
+- **Reconcile note:** G1/G3 appear substantially done (rate limits + error hygiene across expensive routes) but were left unticked this run because "every endpoint incl. auth" coverage wasn't rigorously verified — a future audit should confirm and tick them.
+- **Human-gated (unchanged):** A5/F3 eval CI job, F4 Playwright CI wiring, D3 screenshots.
+
+---
+
 ## Run 2026-06-25 (Run 27)
 
 ### State on entry

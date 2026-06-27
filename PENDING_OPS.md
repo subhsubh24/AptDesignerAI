@@ -35,12 +35,46 @@ OWNER_ACTIONS:
       title: "Move rate limiter state from in-memory to Upstash Redis before scaling"
       priority: normal
       status: open
-      why: "The in-memory rate limiter (added Run 32, PR #111) resets on cold start and is per-Vercel-function-instance. On multi-instance deployments a single user can bypass per-user limits by hitting different instances. Pre-launch this is acceptable; before significant traffic the state must move to a shared store."
-      how: "Install the Upstash Redis Vercel integration (1-click from Vercel dashboard → Integrations), set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN env vars, swap lib/utils/rate-limiter.ts to use @upstash/ratelimit with a Sliding Window algorithm."
+      why: "The in-memory rate limiter (added Run 32, PR #111) AND the per-user/day spend limiter (added Run 33, PR #119, lib/utils/spend-limiter.ts) both reset on cold start and are per-Vercel-function-instance. On multi-instance deployments a single user can bypass per-user limits by hitting different instances. Pre-launch this is acceptable; before significant traffic the state must move to a shared store."
+      how: "Install the Upstash Redis Vercel integration (1-click from Vercel dashboard → Integrations), set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN env vars, swap lib/utils/rate-limiter.ts AND lib/utils/spend-limiter.ts to use @upstash/ratelimit (Sliding Window) / a shared Redis counter."
       blocks: rate-limiting-at-scale
+    - id: connect-email-resend
+      title: "Connect Resend to switch the email lifecycle from dry-run to live (E7.2)"
+      priority: high
+      status: open
+      why: "lib/email (PR #117) ships in dry-run by default — it logs every send but transmits nothing until a provider key is present. The staged E4/E6 email lifecycle cannot actually reach users until this is connected."
+      how: "Create a Resend account, verify your sending domain (SPF/DKIM DNS records), create a sending API key, then set RESEND_API_KEY + RESEND_FROM_EMAIL (an address on the verified domain) on the deployment. Leave GROWTH_EMAIL_DRY_RUN unset to go live automatically. Full runbook: docs/growth/CONNECT.md Step 1."
+      blocks: growth-execution
+    - id: set-metrics-token
+      title: "Set INTERNAL_METRICS_TOKEN to open the growth-metrics pull API (E7.4)"
+      priority: high
+      status: open
+      why: "GET /api/internal/growth-metrics (PR #118) is closed by default (returns 503) until the token is set. The daily Growth Agent needs it to read REAL funnel numbers (waitlist + subscriber counts) into GROWTH_STATUS instead of leaving them 0/null."
+      how: "Generate a long random secret (`openssl rand -hex 32`) and set INTERNAL_METRICS_TOKEN on the deployment. Verify per docs/growth/CONNECT.md Step 2 (curl with Authorization: Bearer)."
+      blocks: growth-execution
+    - id: tune-daily-spend-cap
+      title: "(Optional) tune DAILY_PAID_CALL_LIMIT for the paid-API spend ceiling (G7)"
+      priority: low
+      status: open
+      why: "The per-user/day spend circuit breaker (PR #119) defaults to 60 paid calls/user/day. This is a code-level backstop; the durable protection is the provider-dashboard hard caps in the `spend-caps` item above."
+      how: "Set DAILY_PAID_CALL_LIMIT (integer > 0) on the deployment only if 60/user/day is too low/high for your real usage; otherwise leave unset."
+      blocks: none
 ```
 
 ## Pending
+
+### Growth-engine env vars (added 2026-06-27, Run 33 — PRs #117/#118/#120) — see docs/growth/CONNECT.md
+
+The growth execution engine ships **closed by default**; set these on the deployment (Vercel → Environment Variables) to switch each capability live. None are committed.
+
+| Env var | Capability | Effect until set |
+|---------|-----------|------------------|
+| `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | Email lifecycle sending (E7.2) | Dry-run — emails logged, not sent |
+| `GROWTH_EMAIL_DRY_RUN` | Email mode override (optional) | Unset = auto-live once key present |
+| `INTERNAL_METRICS_TOKEN` | Growth-metrics pull API (E7.4) | Endpoint returns 503 (closed) |
+| `DAILY_PAID_CALL_LIMIT` | Paid-API spend ceiling tune (G7, optional) | Defaults to 60/user/day |
+
+Full step-by-step + verify commands: **docs/growth/CONNECT.md**.
 
 ### 021_stripe_customers_annual_tier.sql — extend tier CHECK constraint for pro_annual (added 2026-06-26, PR #98 — apply before enabling annual billing)
 

@@ -16,7 +16,7 @@ exactly like it reads BUSINESS_CASE_SUMMARY in docs/BUSINESS_CASE.md.
 ```yaml
 GROWTH_STATUS:
   project: AptDesignerAI
-  as_of: 2026-06-26
+  as_of: 2026-06-27
   phase: pre_launch              # pre_launch | launching | post_launch
   engine_built: true             # is the growth-execution engine live in code?
   channels_connected: []         # owner-authorized channels actually wired (e.g. [x, instagram, email])
@@ -50,8 +50,14 @@ GROWTH_STATUS:
     scheduled_next_7d: 0
     organic_sessions_7d: 0
   learnings: []                  # short, data-grounded bullets: what's working / what's not
-  next_actions: []               # what the agent will do next run
-  owner_blockers: []             # things needing the owner before the agent can execute externally
+  next_actions:                  # what the agent will do next run
+    - "Build E7.3 social publishing queue (server-side, dry-run default)"
+    - "Wire the E4/E6 email lifecycle send calls to the new lib/email abstraction"
+    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts into this block"
+  owner_blockers:                # things needing the owner before the agent can execute externally
+    - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md"
+    - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503)"
+    - "Connect/authorize social accounts (publishing queue not yet built)"
   links:
     in_app_analytics: null
     owner_doc: docs/growth/GROWTH_STATUS.md
