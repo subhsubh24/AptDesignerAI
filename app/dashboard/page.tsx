@@ -457,10 +457,11 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-3 block">
+            <label htmlFor="apartment-sqft" className="text-sm font-medium text-muted-foreground mb-3 block">
               Square footage <span className="text-xs opacity-60">(optional — helps match your exact unit plan)</span>
             </label>
             <input
+              id="apartment-sqft"
               type="number"
               inputMode="numeric"
               min={100}
@@ -696,10 +697,11 @@ export default function DashboardPage() {
                         if (place.placeId) setBuildingPlaceId(place.placeId);
                       }}
                     />
-                    <p className="text-xs text-muted-foreground pl-1">
+                    <label htmlFor="building-name-manual" className="text-xs text-muted-foreground pl-1 block">
                       Or type a name manually:
-                    </p>
+                    </label>
                     <input
+                      id="building-name-manual"
                       type="text"
                       value={buildingName}
                       onChange={(e) => setBuildingName(e.target.value)}
@@ -996,13 +998,14 @@ export default function DashboardPage() {
             <Card>
               <CardContent className="pt-6 pb-5 space-y-4">
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">
+                  <label htmlFor="room-photo-context" className="text-sm font-medium mb-1.5 block">
                     Anything we should know about these photos?
                   </label>
                   <p className="text-xs text-muted-foreground mb-3">
                     Optional — mention anything temporary, out of place, or not obvious from the photos.
                   </p>
                   <textarea
+                    id="room-photo-context"
                     value={roomContext[selectedRoom] || ""}
                     onChange={(e) =>
                       setRoomContext((prev) => ({ ...prev, [selectedRoom]: e.target.value }))
