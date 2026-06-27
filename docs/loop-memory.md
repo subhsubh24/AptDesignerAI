@@ -4,6 +4,34 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Owner change 2026-06-27 — BUILDS ≠ WORKS: runtime functional journey suite
+
+A green build + green unit tests prove the app COMPILES, not that it WORKS for a user. The gates
+never RAN the authed/billing/core journeys; the only E2E covered public pages. A signup that builds
+but lands on a dead/"not available" dashboard would pass everything. Closed it:
+- `e2e/journeys.spec.ts` (+ `e2e/helpers/seed.ts`, `e2e/ROUTE_INVENTORY.md`, `scripts/run-journeys.sh`):
+  OUTCOME-asserting journeys (signup→working dashboard, paywall, nav, authed-vs-anon), public/structural
+  tier runs anywhere + authed tier self-seeds a CONFIRMED user via the admin client (signup is double
+  opt-in, so UI-only signup can't reach the dashboard — seed + sign in).
+- `scripts/preflight.sh` GATE 1b + ROADMAP readiness/deep-audit now require the suite to RUN GREEN with
+  the authed tier exercised. "It builds" no longer reaches "ready".
+
+**Three runtime-validation traps this exposed (verify by RUNNING, never by reading code):**
+1. **CI-only browser path** — `playwright.config.ts` hardcoded `/opt/pw-browsers/...`, absent off-CI, so
+   the suite "built but wouldn't run". Fixed: `existsSync` fallback to the managed browser.
+2. **A faithful authed run needs a seeded DB + auth backend** — Supabase GoTrue, not just Postgres.
+   Docker was down locally → authed tier is gated to CI (supabase-local); documented in PENDING_OPS.
+3. **`reuseExistingServer: true` on the default port silently tested the WRONG app** — GroceryManager was
+   on :3000 (NextAuth `/signin?callbackUrl=`), so the run hit it, not AptDesignerAI (on :3001). The
+   redirect-to-`/signin` (vs our `/login`) was the tell. Fixed: dedicated local port 3100. Lesson: assert
+   app IDENTITY, don't trust the port. Public/structural tier verified GREEN against the real app on 3100.
+
+**Honest-diagnosis rule:** a symptom that doesn't reproduce on a clean, correctly-targeted env is itself a
+finding — localize to env/target/migration drift, don't fabricate a code fix. (Here the "broken redirects"
+were testing the wrong app, not an AptDesignerAI bug.)
+
+---
+
 ## Run 2026-06-27 (Run 34)
 
 ### State on entry

@@ -13,7 +13,8 @@
     "eval": "RUN_EVALS=1 vitest run evals/__tests__",
     "check:determinism": "tsx scripts/check-determinism.ts",
     "test:e2e": "playwright test",
-    "test:e2e:a11y": "playwright test e2e/a11y.spec.ts"
+    "test:e2e:a11y": "playwright test e2e/a11y.spec.ts",
+    "test:journeys": "playwright test e2e/journeys.spec.ts"
   },
   "dependencies": {
     "@google/genai": "^1.46.0",
