@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 
 export async function GET(
   _request: Request,
@@ -17,7 +18,7 @@ export async function GET(
     .eq("projects.user_id", user.id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 404 : 500 });
+  if (error) return apiError("rooms.byId", error, error.code === "PGRST116" ? 404 : 500, error.code === "PGRST116" ? "Not found" : "Something went wrong. Please try again.");
   return NextResponse.json(data);
 }
 
@@ -64,7 +65,7 @@ export async function PATCH(
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("rooms.byId", error);
   return NextResponse.json(data);
 }
 
@@ -87,6 +88,6 @@ export async function DELETE(
   if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { error } = await supabase.from("rooms").delete().eq("id", roomId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("rooms.byId", error);
   return NextResponse.json({ success: true });
 }

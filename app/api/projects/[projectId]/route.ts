@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 
 export async function GET(
   _request: Request,
@@ -17,7 +18,7 @@ export async function GET(
     .eq("user_id", user.id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("projects.byId", error);
   return NextResponse.json(data);
 }
 
@@ -61,8 +62,7 @@ async function updateProject(
     .single();
 
   if (error) {
-    console.error(`[projects/${projectId}] Update failed:`, error.message, "Fields:", Object.keys(allowedFields));
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError("projects.byId", error);
   }
   return NextResponse.json(data);
 }
@@ -80,6 +80,6 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("user_id", user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("projects.byId", error);
   return NextResponse.json({ success: true });
 }

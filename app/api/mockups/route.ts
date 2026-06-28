@@ -3,6 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { validateMockupPrompt } from "@/lib/agents/mockup-prompt-validator";
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("mockups", error);
 
   return NextResponse.json(data);
 }

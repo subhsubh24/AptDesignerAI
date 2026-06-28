@@ -22,6 +22,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createLogger } from "@/lib/logging/logger";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbedding } from "@/lib/store/embedding-index";
@@ -82,7 +83,7 @@ export async function PATCH(
     .order("created_at", { ascending: false })
     .limit(1);
   if (fetchErr) {
-    return NextResponse.json({ error: String(fetchErr) }, { status: 500 });
+    return apiError("identified-products.confirm", fetchErr);
   }
   const diagnosisRow = Array.isArray(diagnoses) ? diagnoses[0] : diagnoses;
   if (!diagnosisRow) {
@@ -189,7 +190,7 @@ export async function PATCH(
     .eq("id", diagnosisRow.id);
 
   if (updateErr) {
-    return NextResponse.json({ error: String(updateErr) }, { status: 500 });
+    return apiError("identified-products.confirm", updateErr);
   }
 
   return NextResponse.json({

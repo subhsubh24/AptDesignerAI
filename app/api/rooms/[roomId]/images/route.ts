@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 
 export async function GET(
@@ -20,7 +21,7 @@ export async function GET(
     .eq("room_id", roomId)
     .order("created_at", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("rooms.images", error);
   return NextResponse.json(data);
 }
 
@@ -61,7 +62,7 @@ export async function POST(
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("rooms.images", error);
   return NextResponse.json(data, { status: 201 });
 }
 
@@ -96,6 +97,6 @@ export async function DELETE(
     .eq("id", image_id)
     .eq("room_id", roomId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("rooms.images", error);
   return NextResponse.json({ success: true });
 }

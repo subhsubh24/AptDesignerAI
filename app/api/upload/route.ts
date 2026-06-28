@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       upsert: true,
     });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("upload", error);
   if (!data) return NextResponse.json({ error: "Upload failed" }, { status: 500 });
 
   const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path);
