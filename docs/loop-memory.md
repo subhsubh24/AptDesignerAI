@@ -4,6 +4,55 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-28 (Run 36) — DEEP AUDIT + 7 disjoint changes
+
+### State on entry
+- Default tip #147 (FACTORY_STANDARD visual verification) + #148 (F7 journey screenshots, another routine). Cold container → `npm install` (root) + `cd mobile && npm install`; `git reset --hard origin/<default>`.
+- Last DEEP AUDIT: Run 32 → **due this run** (rotation guide flagged ~Run 36). Ran it first.
+- No open PRs/issues blocking. Lowest incomplete buildable: **B6** (no mobile/eas.json), then **E7** tail, **F4/G** hardening.
+
+### DEEP AUDIT 2026-06-28 (holistic, 8 read-only Haiku lenses across the whole codebase)
+Findings, distilled + prioritized (→ what became this run's work):
+- **Security/RLS: CLEAN overall.** Every public table has correct RLS (tenant on auth.uid(); shared/internal RLS-on-no-policy). Real gaps found: (a) `handle_new_user()` SECURITY DEFINER had **mutable search_path** → fixed (PR #151); (b) **G3 error hygiene** — many routes return raw `error.message` (Supabase errors leak schema) — NOT fixed this run, queued; (c) in-memory rate-limiter isn't multi-instance-safe (known; Redis migration already in PENDING_OPS).
+- **Mobile B6: real gap** — no eas.json, app.json missing build metadata + env projectId → built (PR #149).
+- **E7: hollow plumbing** — templates exist, sends mostly unwired. Built the conversion send (PR #155). Remaining: activation-after-signup + habit-after-first-analysis triggers (need a scheduler/cron + signup/analysis hooks), visitor/trial/conversion analytics pulls (need Vercel/Stripe reporting tokens), per-channel social live clients.
+- **Performance:** products/evaluate had 3 serial independent fetches → parallelized (PR #153). Other candidates (bundles/saved-designs deep-nesting payload trim) deferred — risky without verifying client consumers.
+- **Artifact freshness:** store-listing missing Pro Annual → fixed (PR #150); mobile paywall fallback prices 4–8× off + ungrounded "7-day" trial → fixed (PR #154). Lower-sev (subtitle brand-kit vs store-listing mismatch; domain aptdesigner.app vs .com in pre-submission-checklist) — queued, not done.
+- **Correctness/dead-code:** mostly clean (no TODO/FIXME debt, no dead exports). One real find: deepseek tool-call JSON.parse unguarded → fixed (PR #152).
+- **Tests/evals/F4:** biggest standing gap = **route-level API tests** (46 routes, ~4 tested — billing webhook, mobile entitlements, auth callback untested) + **critical agents untested** (orchestrator, diagnostician, etc.). A5/F3 eval files exist but only 2 gold fixtures (Unsplash URLs, not committed). F4 axe a11y spec already exists; core-pipeline + checkout→entitlement E2E need a seeded DB (CI, human-gated). All queued — high-value for next runs.
+- **A11y/design-bar:** a few empty `alt=""` on room photos; tier/verdict colors use ad-hoc Tailwind accents vs tokens; global-error.tsx hardcoded hex (likely intentional — renders outside app CSS). Queued, lower priority.
+
+### What was done (7 file-disjoint changes, all merged #149–155)
+- **#149 B6** mobile EAS config (eas.json + app.config.ts). **B6 ticked.**
+- **#150** store-listing Pro Annual tier.
+- **#151** migration 024: pin search_path on handle_new_user (security).
+- **#152** deepseek tool-call JSON.parse guard (AI robustness).
+- **#153** parallelize products/evaluate context fetches (perf).
+- **#154** mobile paywall real pricing + honest trial copy.
+- **#155 E7** welcome-to-Pro email on free→paid (conversion send; E7 still partial).
+14 reviewers (2 Sonnet per change) all APPROVED. Gate green throughout (tsc, 1036→1038 tests, determinism, lint; mobile tsc+lint).
+
+### Lessons learned
+1. **`app.config.ts` overlaying `app.json` is the clean way to env-source `extra.eas.projectId`** without editing the static config or hardcoding an id. `export default ({ config }) => ({ ...config, name: config.name ?? ..., extra: { ...config.extra, eas: id ? {projectId:id} : config.extra?.eas } })` — restate name/slug to satisfy the ExpoConfig required-fields type under strict mode. Verified via `EAS_PROJECT_ID=x npx expo config --json`.
+2. **`appVersionSource: "remote"` in eas.json sidesteps the "missing buildNumber/versionCode" finding** — EAS manages versions remotely, so nothing to hardcode/drift. Apple submit creds go in via `$EXPO_*` env interpolation (eas.json supports `$VAR`), keeping secrets out of the repo.
+3. **The win-back webhook pattern generalizes cleanly to a conversion send**: read prior status BEFORE upsert, gate on `!wasAlreadyActive` for new→active. Renewals (status stays active) and Stripe redelivery are both suppressed; cancel→re-subscribe legitimately re-fires. Fire-and-forget + helper-never-throws keeps the 200-to-Stripe invariant.
+4. **Full test suite is fast (~8s, 1036 tests)** — running the whole gate per web branch is cheap; no need to skimp. Mobile deps must be installed (`cd mobile && npm install`) before mobile tsc/lint works on a cold container.
+5. **Deep audit as 8 parallel Haiku lenses → fold into candidate pool** worked well: surfaced exactly the disjoint, value-bar-clearing set. Security/correctness lenses confirmed the codebase is largely clean (few real finds), which is itself a useful signal — most "findings" were no-ops.
+
+### Rotation guide for next run
+- **DEEP AUDIT done Run 36** → next due ~Run 40.
+- **Highest-value queued (from this audit), all file-disjoint candidates:**
+  - **G3 error hygiene** — wrap raw `error.message` returns in generic client messages + server-side logging (a `lib/utils/api-error.ts` helper applied across routes). Security-bar; real gap.
+  - **Route-level API tests** — billing webhook, mobile/entitlements, auth/callback (headless, mock DB/providers). Closes the F4/test-coverage gap; high value.
+  - **Critical-agent unit tests** — orchestrator/diagnostician with mocked providers + fixtures.
+  - **A11y** — empty `alt=""` on room photos; consolidate tier/verdict colors to design tokens.
+  - **E7 tail** — activation/habit email triggers (needs a scheduler + signup/analysis hooks — bigger, touches sensitive call sites), analytics pulls (owner tokens).
+  - **Artifact** — reconcile brand-kit subtitle vs store-listing; standardize domain (aptdesigner.app vs .com) in pre-submission-checklist.
+- **Human-gated (unchanged):** migrations 019–024 apply; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets (RESEND_API_KEY makes the new welcome email actually send).
+- **Not yet graded:** docs/quality/QUALITY_SCORECARD.md is still all-null (independent auditor hasn't run). DoD readiness cannot pass until ship-critical dims are A/A+ — do NOT attempt the ready issue until the scorecard is populated and green.
+
+---
+
 ## Owner change 2026-06-27 — BUILDS ≠ WORKS: runtime functional journey suite
 
 A green build + green unit tests prove the app COMPILES, not that it WORKS for a user. The gates

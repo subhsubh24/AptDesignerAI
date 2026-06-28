@@ -38,6 +38,12 @@ OWNER_ACTIONS:
       why: "Run 34 added double opt-in columns to waitlist_emails (022) and the social_post_queue table (023). Until 022 is applied, waitlist sign-ups can't be stored/confirmed as pending; until 023 is applied, the social publishing queue has no table. Both are idempotent and admin-only (RLS enabled, no policy on 023; 017's boundary unchanged on 022)."
       how: "Run `supabase db push` (or paste supabase/migrations/022_waitlist_double_opt_in.sql then 023_social_post_queue.sql into the Supabase SQL Editor, in order)."
       blocks: growth-execution
+    - id: apply-migration-024
+      title: "Apply migration 024_harden_handle_new_user_search_path.sql to prod (security hardening)"
+      priority: normal
+      status: open
+      why: "Run 36 (PR #151): pins search_path on the SECURITY DEFINER signup-trigger handle_new_user() (Supabase 'Function Search Path Mutable' lint / privilege-escalation surface). Idempotent, behaviour-preserving (body already fully-qualifies public.profiles)."
+      how: "Run `supabase db push` (or paste supabase/migrations/024_harden_handle_new_user_search_path.sql into the SQL Editor). Verify: `select proname, proconfig from pg_proc where proname='handle_new_user';` should show `{search_path=}`."
     - id: rate-limit-redis
       title: "Move rate limiter state from in-memory to Upstash Redis before scaling"
       priority: normal
@@ -310,26 +316,28 @@ Note: Only link paths listed in `paths` will open the app. The list above restri
 
 `use-push-notifications.ts` resolves the EAS project ID via `Constants.expoConfig?.extra?.eas?.projectId`. Without it, `getExpoPushTokenAsync` uses a development fallback that may not work in standalone builds.
 
-**Steps:**
+**Steps (UPDATED Run 36, PR #149 — now env-driven, no hardcoding):**
 1. Create an EAS project at https://expo.dev if you haven't already:
    ```bash
    cd mobile && npx eas init
    ```
-2. Add the project ID to `mobile/app.json`:
-   ```json
-   {
-     "expo": {
-       "extra": {
-         "eas": {
-           "projectId": "<your-eas-project-id>"
-         }
-       }
-     }
-   }
-   ```
-3. Also add to EAS environment variables for CI builds.
+   (`eas init` writes the id into the config; the dynamic `mobile/app.config.ts` will pick it up.)
+2. **Preferred:** set `EAS_PROJECT_ID=<your-eas-project-id>` rather than hardcoding it.
+   `mobile/app.config.ts` (added PR #149) overlays `app.json` and reads
+   `extra.eas.projectId` from `process.env.EAS_PROJECT_ID`. Set it in:
+   - `mobile/.env.local` (gitignored) for local dev, and
+   - EAS environment variables for CI/cloud builds.
+   No need to edit `app.json` — keep the project id out of the committed config.
 
 Verify: build a standalone app → install on a physical device → launch → accept notification permission → check AsyncStorage `expoPushToken` key contains a valid `ExponentPushToken[...]` string.
+
+**EAS build/submit config (added Run 36, PR #149):** `mobile/eas.json` now defines
+development/preview/production build profiles and preview/production submit profiles.
+For `eas submit`, set these EAS environment variables (referenced as `$EXPO_*` in eas.json,
+so no Apple creds are committed): `EXPO_APPLE_ID`, `EXPO_ASC_APP_ID` (App Store Connect app id),
+`EXPO_APPLE_TEAM_ID`. Android submit uses the production track — supply the Play service-account
+key via EAS (`serviceAccountKeyPath` or the EAS-stored credential). The actual `eas build` +
+`eas submit` + TestFlight remain human steps (require the Apple/Google accounts + signing).
 
 ### Future: server-side push token storage (added 2026-06-24, PR #56 — implement when re-engagement sends are needed)
 
