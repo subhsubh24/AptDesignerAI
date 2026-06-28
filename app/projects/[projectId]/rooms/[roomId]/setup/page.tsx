@@ -145,10 +145,10 @@ export default function RoomSetupPage() {
         <CardContent className="space-y-4">
           {images.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-              {images.map((img) => (
+              {images.map((img, i) => (
                 <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt="" className="h-full w-full object-cover" />
+                  <img src={img.url} alt={`Room photo ${i + 1}`} className="h-full w-full object-cover" />
                 </div>
               ))}
             </div>
@@ -285,10 +285,10 @@ export default function RoomSetupPage() {
             </p>
             {referenceImages.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                {referenceImages.map((img) => (
+                {referenceImages.map((img, i) => (
                   <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.url} alt="" className="h-full w-full object-cover" />
+                    <img src={img.url} alt={`Reference photo ${i + 1}`} className="h-full w-full object-cover" />
                   </div>
                 ))}
               </div>
