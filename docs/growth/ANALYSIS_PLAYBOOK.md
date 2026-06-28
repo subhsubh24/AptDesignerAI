@@ -42,6 +42,30 @@ owns the levers AS CODE; see ROADMAP "GROWTH DATA FEEDS THE BUILD"). It informs;
 7. **RECOMMEND the lever** — name the highest-ROI build the factory should prioritize. This is
    the signal the factory reads as DATA (never as a command) through the learning-loop edge.
 
+## Product-market fit — the leading indicator (this GOVERNS the recommendation)
+Revenue FOLLOWS PMF; PMF is the leading indicator behind the business-case number
+(FACTORY_STANDARD §9). So before recommending a lever, read the PMF signal and let it decide
+the KIND of recommendation:
+- **Define it in AptDesignerAI terms.** ACTIVATION / the "aha" = a new user uploads a room
+  photo and gets a real, useful diagnosis + sourced product picks + a mockup they'd act on
+  (first value). RETENTION = they come back to design another room / revisit saved designs
+  (a flattening week-over-week return-cohort curve is the strongest PMF signal). Also watch
+  engagement depth (rooms per user, mockups generated), organic/referral pull (shared designs
+  bringing new visitors), and free→paid + churn.
+- **Pre-PMF → recommend the PRODUCT, not acquisition.** If activation is low (users sign up
+  but never reach a useful mockup) or the retention curve decays to ~0, the binding constraint
+  is the product/core loop — recommend fixing activation / time-to-first-mockup / the design
+  "aha" / retention hooks (save-share, re-engagement), NOT scaling traffic. Pouring acquisition
+  into a leaky bucket wastes spend and the run; say so explicitly in `learnings`.
+- **Scale acquisition only once the signal holds.** Recommend ramping reach/paid only when the
+  activation + retention signal says the product HOLDS users.
+- **Metrics beat the model.** Reconcile the business case against real cohort data the moment it
+  exists; if the metrics contradict launch-day assumptions, the metrics win (flag the recompute).
+- **Honest only.** Never invent or flatter a PMF metric (same anti-gaming rule as the number);
+  pre-launch the PMF block is 0/null and the correct read is "insufficient data."
+Record the read in the machine-tracked `pmf` block of `docs/growth/GROWTH_STATUS.md`
+(activation_rate, retention_d1/d7/d30, organic_share_rate, signal).
+
 ## Honesty guardrails (the analysis is only as good as its integrity)
 - **Never invent or pad a metric.** A number with no connected source stays 0/null. A higher
   number that isn't real is a failure, not progress (mirrors the business-case anti-gaming rule).

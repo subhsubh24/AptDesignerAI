@@ -78,6 +78,11 @@ Worked the Run 36 rotation guide's queued, file-disjoint candidates (validated +
   - **A11y/design tokens** — `components/ui/badge.tsx` + `toast.tsx` semantic colors are ad-hoc Tailwind vs the `--score-*` tokens (borderline — only if it's genuinely the best work, not churn).
 - **Human-gated (unchanged):** migrations 017–024 apply; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets.
 - **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue until the independent scorecard is populated and ship-critical dims are A/A+.
+---
+## SYNC 2026-06-28 — PMF as the leading indicator + FACTORY_STANDARD a first-class read
+- **Repo:** appended the verbatim PRODUCT-MARKET FIT paragraph to FACTORY_STANDARD §9 (byte-identical across factories); added a "Product-market fit — the leading indicator" section to docs/growth/ANALYSIS_PLAYBOOK.md that GOVERNS the recommendation (pre-PMF → product/retention fixes, NOT scaling acquisition); added a "PMF FIRST" bullet to ROADMAP "GROWTH DATA FEEDS THE BUILD"; added a machine-tracked `pmf` block to docs/growth/GROWTH_STATUS.md (activation_rate, retention_d1/d7/d30, organic_share_rate, signal — 0/null/none pre-launch, YAML verified parseable). AptDesignerAI activation/"aha" = room photo → useful diagnosis+sourcing+mockup; retention = returns to design more / revisit saved.
+- **Routines:** added `FACTORY_STANDARD.md` as the FIRST item of the orient read list in the product factory routine AND the Growth Agent routine (read list only; model/cron/sources/allowed_tools/MCP unchanged; byte-verified). Pure digest routines untouched (already disabled).
+- **Why:** revenue follows PMF; pouring acquisition into a leaky bucket wastes the run. Pre-PMF the priority is the PRODUCT. Metrics beat the spreadsheet model when they contradict it. Honest measurement only (same anti-gaming rule as the number).
 
 ---
 

@@ -42,6 +42,13 @@ GROWTH_STATUS:
     ltv_usd: null
     ltv_cac_ratio: null
     top_channel: null
+  pmf:                           # LEADING indicator behind the number (FACTORY_STANDARD S9); 0/null pre-launch
+    activation_rate: null        # share of new users who reach first value (room photo -> useful mockup / the "aha")
+    retention_d1: null
+    retention_d7: null
+    retention_d30: null          # a flattening return-cohort curve is the strongest PMF signal
+    organic_share_rate: null     # share of new visitors arriving via shared designs / referral (self-spread)
+    signal: none                 # none | weak | emerging | strong  (pre-PMF => prioritize PRODUCT, not acquisition)
   channels: []                   # [{name, status, reach_7d, clicks_7d, signups_7d, ctr, notes}]
   experiments: []                # [{id, hypothesis, status, result, lift_pct, started, decided}]
   email:
