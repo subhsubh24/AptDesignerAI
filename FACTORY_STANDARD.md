@@ -115,7 +115,12 @@ silent dead-end — either gate/disable it with honest messaging, or it is a rel
 on the human checklist (PENDING_OPS) AND the gate must still prove the flow COMPLETES with the
 secret set in sandbox/test. A critical-path flow (signup, login, billing) that depends on an
 unverified side-effect is NOT "done." Overclaiming a side-effect you did not observe is the SAME
-failure as a broken flow.
+failure as a broken flow. **DECISION COROLLARY (make the smart call up front):** do NOT introduce a
+feature or a hard gate whose dependency loop does not exist yet — e.g. do NOT require email
+verification / 2FA / a confirmation step when the email/SMS send is not wired and round-trip-tested.
+Either WIRE the dependency and prove the loop end-to-end, or DON'T gate on it (ship the flow working
+without the gate). A gate on an unbuilt loop is a self-inflicted outage; choosing it is a worse error
+than a bug, because it was a decision. When you hit this, decide explicitly and record the call.
 **DEEP DIAGNOSIS — when it builds/deploys but the user hits an error, observe the REAL system
 FIRST.** Reading code and theorizing is the slow, wrong first move. Full method:
 `docs/autonomous-loop/DEEP_DIAGNOSIS.md` — follow it on every such incident and record the
