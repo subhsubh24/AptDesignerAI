@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { constructWebhookEvent, extractBillingInfoFromEvent } from "@/lib/billing/stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
-import { buildWinBackEmail1 } from "@/lib/email/templates/lifecycle";
+import { buildWinBackEmail1, buildPaidWelcomeEmail1 } from "@/lib/email/templates/lifecycle";
 
 // Subscription tiers (exclude one-time `apartment` purchase — not a recurring sub).
 const SUBSCRIPTION_TIERS = new Set(["pro", "pro_annual"]);
@@ -27,6 +27,27 @@ async function maybeSendWinBackEmail(userId: string, admin: ReturnType<typeof ge
   }
 }
 
+// Attempt to send the "welcome to Pro" email when a subscription first becomes
+// active (the free->paid conversion moment). Symmetric to maybeSendWinBackEmail.
+// Never throws — a failed lookup or send must not turn a successful DB write
+// into a non-200 that makes Stripe retry the event.
+async function maybeSendPaidWelcomeEmail(userId: string, admin: ReturnType<typeof getAdminClient>): Promise<void> {
+  if (!admin) return;
+  try {
+    const { data } = await admin.auth.admin.getUserById(userId);
+    const email = data?.user?.email;
+    if (!email) return;
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.ai").replace(/\/+$/, "");
+    const { subject, html, text } = buildPaidWelcomeEmail1(siteUrl);
+    const result = await sendEmail({ to: email, subject, html, text, stage: "paid_welcome_1" });
+    if (result.error) {
+      console.error("[webhook] paid-welcome email not sent:", result.error);
+    }
+  } catch (err) {
+    console.error("[webhook] paid-welcome email lookup/send failed:", err);
+  }
+}
+
 /**
  * POST /api/billing/webhook
  *
@@ -34,7 +55,9 @@ async function maybeSendWinBackEmail(userId: string, admin: ReturnType<typeof ge
  * at <app-url>/api/billing/webhook. Requires STRIPE_WEBHOOK_SECRET (see PENDING_OPS.md).
  *
  * Handles:
- *   checkout.session.completed      → upsert stripe_customers row (status=active)
+ *   checkout.session.completed      → upsert stripe_customers row (status=active);
+ *                                     on a genuine free→paid activation, send the
+ *                                     welcome-to-Pro email
  *   customer.subscription.updated   → update status + current_period_end
  *   customer.subscription.deleted   → mark status=cancelled; send win-back E1 email
  *
@@ -66,19 +89,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
   }
 
-  // Check the previous status BEFORE upserting so we can detect a genuine
-  // status transition. This makes win-back sends idempotent: if the row was
-  // already 'cancelled' (e.g. Stripe re-delivered the event after a slow
-  // response), we do not send a second email.
-  let wasAlreadyCancelled = false;
-  if (billing.status === "cancelled" && SUBSCRIPTION_TIERS.has(billing.tier)) {
+  // Read the previous status BEFORE upserting so we can detect genuine status
+  // transitions. This keeps both lifecycle sends idempotent against Stripe's
+  // at-least-once redelivery: if the row was already in the target state (e.g.
+  // the event was re-delivered after a slow response), we do not re-send.
+  let previousStatus: string | undefined;
+  if (
+    SUBSCRIPTION_TIERS.has(billing.tier) &&
+    (billing.status === "cancelled" || billing.status === "active")
+  ) {
     const { data: existing } = await admin
       .from("stripe_customers")
       .select("status")
       .eq("user_id", billing.userId)
       .maybeSingle();
-    wasAlreadyCancelled = existing?.status === "cancelled";
+    previousStatus = existing?.status;
   }
+  const wasAlreadyCancelled = previousStatus === "cancelled";
+  const wasAlreadyActive = previousStatus === "active";
 
   const { error } = await admin.from("stripe_customers").upsert(
     {
@@ -105,6 +133,14 @@ export async function POST(request: NextRequest) {
   // and a failed send must not turn a successful DB write into a 500.
   if (billing.status === "cancelled" && SUBSCRIPTION_TIERS.has(billing.tier) && !wasAlreadyCancelled) {
     void maybeSendWinBackEmail(billing.userId, admin);
+  }
+
+  // Trigger the welcome-to-Pro email only on a genuine free->paid activation
+  // (no prior active row). Renewals keep status 'active', so wasAlreadyActive
+  // suppresses re-sends; a re-subscribe after cancellation legitimately fires.
+  // Fire-and-forget for the same reason as win-back above.
+  if (billing.status === "active" && SUBSCRIPTION_TIERS.has(billing.tier) && !wasAlreadyActive) {
+    void maybeSendPaidWelcomeEmail(billing.userId, admin);
   }
 
   return NextResponse.json({ received: true, processed: true, type: event.type });
