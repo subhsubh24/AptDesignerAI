@@ -4,6 +4,7 @@ import { extractFromUrl } from "@/lib/agents/product-extractor";
 import { scoreProduct, type ScoringContext } from "@/lib/agents/fit-scorer";
 import { evaluateBundle, type BundleContext } from "@/lib/agents/bundle-optimizer";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { logServerError } from "@/lib/utils/api-error";
 import type { CandidateProduct } from "@/lib/types/database";
 
 /**
@@ -143,16 +144,18 @@ export async function POST(request: Request) {
           .single();
 
         if (saveErr || !saved) {
-          return { category: item.category, url, product: null, error: saveErr?.message || "Save failed" };
+          logServerError("products/evaluate-set save", saveErr);
+          return { category: item.category, url, product: null, error: "Could not save this product." };
         }
 
         return { category: item.category, url, product: saved as CandidateProduct };
       } catch (err) {
+        logServerError("products/evaluate-set extract", err);
         return {
           category: item.category,
           url,
           product: null,
-          error: err instanceof Error ? err.message : "Unknown error",
+          error: "Could not process this product URL.",
         };
       }
     })

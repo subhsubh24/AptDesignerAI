@@ -5,6 +5,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { logServerError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
@@ -465,7 +466,8 @@ export async function POST(request: Request) {
           validation: result.data.validation,
         });
       } catch (err) {
-        send("error", { error: err instanceof Error ? err.message : "Search failed" });
+        logServerError("search/stream", err);
+        send("error", { error: "Search failed. Please try again." });
       } finally {
         controller.close();
       }

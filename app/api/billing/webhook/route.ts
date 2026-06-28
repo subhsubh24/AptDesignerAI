@@ -16,7 +16,7 @@ async function maybeSendWinBackEmail(userId: string, admin: ReturnType<typeof ge
     const { data } = await admin.auth.admin.getUserById(userId);
     const email = data?.user?.email;
     if (!email) return;
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.ai").replace(/\/+$/, "");
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.com").replace(/\/+$/, "");
     const { subject, html, text } = buildWinBackEmail1(siteUrl);
     const result = await sendEmail({ to: email, subject, html, text, stage: "winback_1" });
     if (result.error) {
@@ -37,7 +37,7 @@ async function maybeSendPaidWelcomeEmail(userId: string, admin: ReturnType<typeo
     const { data } = await admin.auth.admin.getUserById(userId);
     const email = data?.user?.email;
     if (!email) return;
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.ai").replace(/\/+$/, "");
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.com").replace(/\/+$/, "");
     const { subject, html, text } = buildPaidWelcomeEmail1(siteUrl);
     const result = await sendEmail({ to: email, subject, html, text, stage: "paid_welcome_1" });
     if (result.error) {
@@ -72,9 +72,12 @@ export async function POST(request: NextRequest) {
   try {
     event = constructWebhookEvent(rawBody, signature);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Webhook signature verification failed";
+    // Log the real verification failure server-side; return a generic message
+    // so the raw Stripe error (which can echo signing/header internals) never
+    // reaches the caller.
+    const msg = err instanceof Error ? err.message : String(err);
     console.error("[webhook] signature error:", msg);
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: "Webhook signature verification failed" }, { status: 400 });
   }
 
   const billing = extractBillingInfoFromEvent(event);
