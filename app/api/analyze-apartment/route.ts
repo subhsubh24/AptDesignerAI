@@ -49,7 +49,13 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const { project_id } = await request.json();
+  let body: { project_id?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { project_id } = body;
   if (!project_id) return NextResponse.json({ error: "project_id required" }, { status: 400 });
 
   // Load project with building research

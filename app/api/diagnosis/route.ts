@@ -47,7 +47,12 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const body = await request.json();
+  let body: { room_id?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const { room_id } = body;
 
   // Wrap the rest of the handler so every agent/logger call inherits a
