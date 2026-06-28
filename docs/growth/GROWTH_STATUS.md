@@ -25,6 +25,7 @@ GROWTH_STATUS:
   engine_pct: 100                # % of the 5 engine pieces shipped (preflight-verified): waitlist, email, queue, metrics, runbook
   channels_connected: []         # owner-authorized channels actually wired (e.g. [x, instagram, email])
   awaiting_connect: true         # true => agent only prepares creative; takes NO external action
+  site_gate_up: false            # pre-launch SITE GATE (E8) confirmed up? HARD precondition for pre_launch execute-mode outreach
   funnel:                        # REAL numbers only; 0/null until a connected source reports them
     visitors_7d: 0
     waitlist_signups_total: 0

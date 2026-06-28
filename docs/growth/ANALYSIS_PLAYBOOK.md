@@ -64,9 +64,12 @@ eagerness. Read GROWTH_STATUS.phase + the scorecard each run and act accordingly
 - **pre_launch (product NOT ready: any ship-critical QUALITY_SCORECARD dim < A, or store not
   live):** WAITLIST-ONLY. Market the *promise*; drive every click to the PUBLIC waitlist /
   "coming soon" landing (and the App Store "coming soon" / TestFlight link if that's the
-  channel). Do NOT send the public to the app itself. Before driving ANY traffic, CONFIRM the
-  pre-launch SITE GATE is up (the app is password-gated, the waitlist/landing route exempt —
-  ROADMAP E8); if it isn't, set awaiting_connect + an owner_blocker and HOLD public outreach.
+  channel). Do NOT send the public to the app itself. **HARD BLOCK (no exceptions): EXECUTE-mode
+  public outreach is FORBIDDEN — stay in PREPARE mode — until BOTH (a) the owner has connected +
+  authorized a channel AND (b) the pre-launch SITE GATE is confirmed UP (`GROWTH_STATUS.site_gate_up:
+  true`, set once the owner applies E8's `SITE_GATE_PASSWORD`).** If the gate is not confirmed up,
+  drive ZERO external traffic — record the owner_blocker, keep awaiting_connect, and stay in PREPARE
+  (sharpen creative only). The gate requirement lifts only at launch (gate intentionally removed).
   Run waitlist-growth experiments; the headline metric is waitlist signups.
 - **launching (readiness met: every ship-critical dim A/A+ AND the factory readiness gate
   passed / store live):** recommend taking the SITE GATE down (open the app), announce to the
