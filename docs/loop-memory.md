@@ -4,6 +4,14 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — LOOP HEALTH metric + abandoned-change classification (measure "is the loop getting better")
+- **Gap (vs loop-engineering best practice):** we had no measurable "is the loop improving" signal, and abandoned build-changes weren't classified/stored (risking re-attempting dead-ends).
+- **Added:** `docs/autonomous-loop/LOOP_HEALTH.md` — seeded machine-readable block the factory updates EVERY bookkeeping run with REAL counts: changes shipped vs abandoned (+classified `abandoned_reasons`), verify/review failures, circuit-breaker trips, rolling reverts + readiness attempts/rejections, recurring_failures, harness_proposals_open, and a `signal` (bootstrapping|improving|steady|churning|stuck). Dashboard-readable; observability only, NOT a ship gate; honest counts only.
+- **Wired:** FACTORY_STANDARD §10b ("Loop health") + ROADMAP LIVING-ARTIFACTS/bookkeeping note. Two enforced rules: (1) classify every abandoned change so the loop doesn't repeat the failed path; (2) churning/stuck → open ONE `loop: harness improvement proposal` (the META channel — the only way the loop's own rules improve, since it can't edit its routine/.claude).
+- **Why seeded (not bootstrapped):** like QUALITY_SCORECARD, a brand-new file risks the loop never creating it — seeded with zeros so the loop just updates it.
+
+---
+
 ## SYNC 2026-06-28 — visual verification is now DUAL-AXIS (functional + design), not design-only
 - **Gap closed in spec:** the screenshot + vision-judge harness (F7 / FACTORY_STANDARD §6) was framed for DESIGN only; functional verification was DOM-only (blind to visibly-wrong/empty/placeholder/broken outcomes the DOM "passes"). Now the same journey screenshots are vision-judged on TWO axes: (A) FUNCTIONAL — does the screen visibly show the INTENDED OUTCOME of that step (populated working screen, the REAL produced artifact e.g. an actual rendered mockup not a placeholder, correct data/state); (B) DESIGN — clears the VISION bar. A FAIL on EITHER axis is release-blocking even if DOM assertions pass.
 - **Scope broadened:** capture at every page AND every key STEP of every end-to-end journey + key states, at mobile AND desktop widths.

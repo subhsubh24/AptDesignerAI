@@ -237,10 +237,18 @@ and isn't yet on this ROADMAP, add it as a new phase and build it.
   run (or Apple) has to reject.
 - **Track the plan:** when a phase's checklist item is genuinely done, tick it in
   this file (in the final bookkeeping PR, same rules as the other ledger files).
+- **LOOP HEALTH — measure whether the loop is getting BETTER, not just busier.** Every
+  bookkeeping run, update `docs/autonomous-loop/LOOP_HEALTH.md` (FACTORY_STANDARD §10b) with
+  REAL counts: changes shipped vs. abandoned, rolling reverts + readiness attempts/rejections,
+  recurring failures. CLASSIFY every abandoned change with a reason (gate_tsc/gate_test/
+  review_value/circuit_breaker/dead_end/blocked_owner/…) in loop-memory + the block, so the loop
+  never re-attempts the same dead-end. If the `signal` is churning or stuck, open ONE
+  `loop: harness improvement proposal` issue (the META channel — the loop can't edit its own
+  routine, so that's how its operating rules improve). Observability only, never a ship gate.
 - **LIVING ARTIFACTS — every artifact stays consistent with reality.** Every doc,
   copy, and config the loop produces — README, ARCHITECTURE.md, the business case,
   marketing copy, store-listing/ASO, privacy/data-safety docs, the pre-submission
-  checklist, loop-memory, IMPROVEMENT_LOG, PENDING_OPS, ROADMAP — is LIVING: when the
+  checklist, loop-memory, IMPROVEMENT_LOG, PENDING_OPS, ROADMAP, LOOP_HEALTH — is LIVING: when the
   thing it describes changes (code, pricing, positioning, data flows, architecture),
   UPDATE the artifact in the SAME work so it never contradicts reality. A doc that
   contradicts the current product is a BUG (and a store/review/trust risk), and fixing
