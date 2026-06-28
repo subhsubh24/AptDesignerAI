@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (bundleError) return NextResponse.json({ error: bundleError.message }, { status: 500 });
+  if (bundleError) return apiError("bundles", bundleError);
 
   // Add items if provided
   if (product_ids && product_ids.length > 0) {

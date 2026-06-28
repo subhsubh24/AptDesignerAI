@@ -62,7 +62,10 @@ async function updateProject(
     .single();
 
   if (error) {
-    return apiError("projects.byId", error);
+    // Keep the rich server-side diagnostic (which field set triggered the DB
+    // error) while returning a generic message to the client.
+    console.error(`[projects/${projectId}] Update failed:`, error.message, "Fields:", Object.keys(allowedFields));
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
   return NextResponse.json(data);
 }

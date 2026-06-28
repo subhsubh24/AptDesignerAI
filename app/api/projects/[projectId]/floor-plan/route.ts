@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
 import { createLogger } from "@/lib/logging/logger";
@@ -126,7 +127,7 @@ export async function POST(
 
   if (updateErr) {
     log.warn("Failed to save floor plan", { projectId, error: updateErr.message });
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return apiError("projects.floor-plan", updateErr);
   }
 
   log.info("Floor plan saved", {
@@ -174,7 +175,7 @@ export async function DELETE(
     .eq("id", projectId);
 
   if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return apiError("projects.floor-plan", updateErr);
   }
 
   return NextResponse.json({ success: true });

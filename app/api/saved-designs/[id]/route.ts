@@ -62,7 +62,7 @@ export async function PATCH(
 
   // `data` is null when no rows matched (e.g. deleted between read and write)
   if (error || !updated) {
-    return NextResponse.json({ error: error?.message ?? "Update failed" }, { status: 500 });
+    return apiError("saved-designs.byId", error ?? "Update failed");
   }
 
   return NextResponse.json({ share_token, is_public });
