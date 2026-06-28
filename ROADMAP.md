@@ -543,7 +543,7 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   touch signup/analysis call sites); add visitor/trial/conversion-rate analytics pulls (need
   Vercel Analytics + Stripe reporting APIs); per-channel social live API clients. Keep E7
   unchecked until those land.]**
-- [ ] E8. **Pre-launch SITE GATE (so the public can't see a half-baked app before launch).**
+- [x] E8. **Pre-launch SITE GATE (so the public can't see a half-baked app before launch).**
   An env-driven gate the Growth Agent relies on when it starts pre-launch outreach: a middleware
   that PASSWORD-protects the deployed app (reads `SITE_GATE_PASSWORD` from env; gate is ON whenever
   the env var is set) but EXEMPTS the public marketing routes (the waitlist / "coming soon"
@@ -557,6 +557,13 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   before driving traffic and recommends taking it down at launch. **BLOCKING:** pre-launch
   execute-mode outreach is FORBIDDEN until the gate is confirmed up (`GROWTH_STATUS.site_gate_up:
   true`) — until then the Growth Agent stays in PREPARE mode and drives zero external traffic.
+  **[BUILT Run 39, PR #173 — `lib/security/site-gate.ts` + wired into `lib/supabase/middleware.ts`.
+  When `SITE_GATE_PASSWORD` is set: non-exempt browser routes redirect to `/waitlist`, API routes
+  get 503; exempt set = `/waitlist`, `/waitlist/confirmed`, `/privacy`, `/terms`, `/support`,
+  `/faq`, `/pricing`, `/guides/*`, `/api/waitlist*` (login/signup stay gated). Owner unlocks via
+  `?gate=<password>` → httpOnly cookie holding a SHA-256-derived token (raw password never stored
+  or committed). No-op (ships inert) when the env var is unset. 17 tests; gate green. HUMAN STEP:
+  owner sets `SITE_GATE_PASSWORD` + flips `GROWTH_STATUS.site_gate_up: true` (PENDING_OPS).]**
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner

@@ -29,7 +29,7 @@ OWNER_ACTIONS:
       priority: high
       status: open
       why: "Before the Growth Agent drives any pre-launch traffic, the app should be password-gated so the public can't see the unfinished product; the waitlist/landing routes stay exempt so people can still join. Once the product is launch-ready (ship-critical QUALITY_SCORECARD A/A+ + readiness), unset it to open the app."
-      how: "After E8 ships the gate middleware, set SITE_GATE_PASSWORD=deepster on the deployment (Vercel env). Verify: the app routes prompt for the password while /waitlist + /api/waitlist + legal pages stay public. At launch, UNSET SITE_GATE_PASSWORD to open the app. Never commit the value."
+      how: "The gate middleware now ships (Run 39, PR #173 — lib/security/site-gate.ts). Set SITE_GATE_PASSWORD to a value of your choice on the deployment (Vercel env). Behavior once set: non-exempt browser routes redirect to /waitlist (API routes return 503) while /waitlist + /api/waitlist + legal/marketing pages stay public; unlock your own browser by visiting any URL once with ?gate=<password> (sets an httpOnly cookie). Then flip GROWTH_STATUS.site_gate_up: true so the Growth Agent can begin pre-launch outreach. At launch, UNSET SITE_GATE_PASSWORD to open the app. Never commit the value."
       blocks: pre-launch-marketing
     - id: apply-migration-021
       title: "Apply migration 021_stripe_customers_annual_tier.sql to prod before enabling annual billing"
