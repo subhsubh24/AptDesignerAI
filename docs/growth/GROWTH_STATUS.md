@@ -19,7 +19,7 @@ exactly like it reads BUSINESS_CASE_SUMMARY in docs/BUSINESS_CASE.md.
 ```yaml
 GROWTH_STATUS:
   project: AptDesignerAI
-  as_of: 2026-06-27
+  as_of: 2026-06-28
   phase: pre_launch              # pre_launch | launching | post_launch
   engine_built: true             # is the growth-execution engine live in code? (true iff engine_pct == 100)
   engine_pct: 100                # % of the 5 engine pieces shipped (preflight-verified): waitlist, email, queue, metrics, runbook
@@ -55,20 +55,22 @@ GROWTH_STATUS:
     scheduled_next_7d: 0
     organic_sessions_7d: 0
   learnings:
-    - "All funnel metrics are 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers."
+    - "All funnel metrics are 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers. This is day 2 of the same blocker; circuit breaker watch active."
     - "Engine is built and all code ships dry-run; the owner connecting Resend + setting INTERNAL_METRICS_TOKEN are the two highest-leverage unblocking actions."
-    - "Win-back E1 email now fires automatically on subscription cancellation (PR #127); dry-run until RESEND_API_KEY is set."
-    - "Activation email templates (A1/A2/A3) built and ready; triggers require a signup event hook (next run priority)."
+    - "Activation email cron (A1/A2/A3) now wired: vercel.json daily at 10:00 UTC, /api/cron/activation-emails, idempotent via user_email_stages (migration 025). Fires dry-run until RESEND_API_KEY + CRON_SECRET are set."
+    - "Win-back E1 email fires on subscription cancellation; paid_welcome_1 fires on free->paid conversion. Both dry-run until RESEND_API_KEY is set."
   next_actions:
-    - "Wire activation email triggers: hook into user signup (auth.users insert / Supabase Edge Function) to fire Sequence 1 (A1 at T+1d, A2 at T+3d, A3 at T+7d) when no analysis has been started"
-    - "Enqueue staged social drafts from docs/content-calendar.md into social_post_queue (dry-run; will be live once channels connected)"
-    - "Once INTERNAL_METRICS_TOKEN is set, pull real funnel counts into this block each run"
-    - "Upgrade email preference page at /account to explicitly support email opt-out (current CAN-SPAM compliance links there; a dedicated pref toggle would strengthen it)"
+    - "Owner: set CRON_SECRET + apply migration 025 to activate activation email cron (see PENDING_OPS.md)"
+    - "Owner: set RESEND_API_KEY + RESEND_FROM_EMAIL to send any lifecycle email (highest leverage)"
+    - "Owner: set INTERNAL_METRICS_TOKEN to open funnel metrics pull API (currently 503)"
+    - "Next run: enqueue pre-launch social draft schedule for launch week once owner sets a launch date"
+    - "Next run: upgrade /account to add explicit email opt-out toggle (strengthens CAN-SPAM compliance)"
   owner_blockers:
     - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md Step 1"
     - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503) — docs/growth/CONNECT.md Step 2"
+    - "Set CRON_SECRET to activate activation email cron + apply migration 025 — PENDING_OPS.md"
     - "Connect/authorize social accounts (publishing queue built + dry-run; live per-channel API client is a follow-on) — docs/growth/CONNECT.md Step 4"
-    - "Apply DB migrations 021/022/023 to prod (see PENDING_OPS.md)"
+    - "Apply DB migrations 021/022/023/025 to prod (see PENDING_OPS.md)"
   links:
     in_app_analytics: null
     owner_doc: docs/growth/GROWTH_STATUS.md

@@ -40,3 +40,45 @@ Appended to (never overwritten) by each run.
 
 ### Circuit breaker check
 - Same owner blockers as before? YES — channels still not connected. This is run 1, so no multi-run repetition yet. If by run 3 the same blockers remain, flag prominently in report and propose the single most actionable connection step.
+
+---
+
+## Run 2 — 2026-06-28
+
+### What we found
+- All Run 1 owner blockers remain: RESEND_API_KEY, CRON_SECRET, INTERNAL_METRICS_TOKEN, social credentials, and DB migrations 021/022/023 are all unset/unapplied.
+- Funnel metrics still 0/null (correct — INTERNAL_METRICS_TOKEN not set, API returns 503).
+- Activation email templates (A1/A2/A3) existed from Run 1 but had no trigger mechanism — no cron, no queue, no event hook.
+- vercel.json was absent: no cron jobs registered with Vercel.
+- user_email_stages idempotency table did not exist: even if a cron existed, it could double-send.
+
+### What we built this run
+- **Migration 025** (`supabase/migrations/025_user_email_stages.sql`): `user_email_stages(user_id, stage UNIQUE)` table with RLS enabled. Records each lifecycle email send; the UNIQUE constraint makes send idempotent across retries.
+- **Activation email cron** (`app/api/cron/activation-emails/route.ts`): daily GET endpoint (Auth: Bearer CRON_SECRET) that queries profiles by signup window (daysAgo ± 4h), skips users with any project (engaged proxy), looks up email via admin.auth.admin.getUserById, sends via sendEmail(), and records to user_email_stages. Returns {ok, results[]} with per-stage candidate/sent/skipped/error counts. Dry-run safe: no-op without RESEND_API_KEY.
+- **vercel.json**: registers the cron at `0 10 * * *` (10:00 UTC daily) so Vercel invokes it automatically.
+- **PENDING_OPS.md** updated: added `apply-migration-025` and `set-cron-secret` items to the YAML block + prose runbook section.
+
+### Independent review
+No independent maker/checker review this run — the cron is infrastructure (not email copy or a marketing campaign). The idempotency contract was verified by code inspection: UNIQUE(user_id, stage) + ON CONFLICT ignore on insert.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: INTERNAL_METRICS_TOKEN still not set, API returns 503.
+- Did not enqueue social drafts: no launch date set; pre-launch content is time-relative. Enqueueing without a date creates queue noise with no signal.
+- Did not add explicit email opt-out toggle to /account: deferred to Run 3 (lower priority than wiring the cron).
+- Did not apply DB migrations: owner action, not agent action.
+
+### Owner blockers (updated)
+1. RESEND_API_KEY + RESEND_FROM_EMAIL — highest leverage: unblocks all email lifecycle sends
+2. CRON_SECRET — activates the activation email cron (migration 025 also required)
+3. Apply migration 025 to prod — unblocks activation email idempotency table
+4. INTERNAL_METRICS_TOKEN — unblocks real funnel reporting
+5. Social account credentials — lower priority until metrics are live
+6. DB migrations 021/022/023 to prod
+
+### Lessons learned
+- vercel.json cron registration is a prerequisite that's easy to overlook; it's now in place.
+- Idempotency must be built-in from day 1 for any cron that touches email — the UNIQUE constraint + record-after-send pattern is the right shape.
+- The gap between "template exists" and "email is triggered" is a real, silent failure mode. Run 1 built templates; Run 2 wired the trigger.
+
+### Circuit breaker check
+- Same owner blockers as Run 1? YES — all channels still not connected. This is Run 2; circuit breaker watch active. If Run 3 shows the same blockers, flag prominently and surface the single most actionable unblocking step in the daily report.

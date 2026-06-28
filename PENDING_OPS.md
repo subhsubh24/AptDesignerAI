@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-06-27
+  as_of: 2026-06-28
   items:
     - id: spend-caps
       title: Set HARD daily API spend caps + alerts in every provider dashboard
@@ -72,6 +72,20 @@ OWNER_ACTIONS:
       why: "lib/email (PR #117) ships in dry-run by default — it logs every send but transmits nothing until a provider key is present. The staged E4/E6 email lifecycle cannot actually reach users until this is connected."
       how: "Create a Resend account, verify your sending domain (SPF/DKIM DNS records), create a sending API key, then set RESEND_API_KEY + RESEND_FROM_EMAIL (an address on the verified domain) on the deployment. Leave GROWTH_EMAIL_DRY_RUN unset to go live automatically. Full runbook: docs/growth/CONNECT.md Step 1."
       blocks: growth-execution
+    - id: apply-migration-025
+      title: "Apply migration 025_user_email_stages.sql to prod (activation email idempotency)"
+      priority: normal
+      status: open
+      why: "The daily activation email cron (/api/cron/activation-emails) uses the user_email_stages table to ensure each lifecycle stage (activation_1/2/3) is sent exactly once per user. Without this table, the cron errors on every run and no activation emails fire."
+      how: "Run `supabase db push` (or paste supabase/migrations/025_user_email_stages.sql into the Supabase SQL Editor)."
+      blocks: activation-emails
+    - id: set-cron-secret
+      title: "Set CRON_SECRET to activate the activation email cron job"
+      priority: normal
+      status: open
+      why: "The daily cron at /api/cron/activation-emails (vercel.json, 10:00 UTC) sends A1/A2/A3 activation emails to new users who have not started an analysis. It returns 503 until CRON_SECRET is set. Vercel automatically includes Authorization: Bearer {CRON_SECRET} on cron invocations."
+      how: "Generate: `openssl rand -hex 32`. Set CRON_SECRET in Vercel environment variables (Production + Preview). No code change needed."
+      blocks: activation-emails
     - id: set-metrics-token
       title: "Set INTERNAL_METRICS_TOKEN to open the growth-metrics pull API (E7.4)"
       priority: high
@@ -89,6 +103,33 @@ OWNER_ACTIONS:
 ```
 
 ## Pending
+
+### Activation email cron + migration 025 (added 2026-06-28, Growth Agent Run 2)
+
+The daily activation email cron fires A1 (T+1d), A2 (T+3d), and A3 (T+7d) to new users who have not yet started an analysis. Two owner steps are required to activate it:
+
+**1. Apply migration 025** (`supabase/migrations/025_user_email_stages.sql`):
+```sh
+supabase db push
+# or paste the file into Supabase SQL Editor
+```
+Creates `user_email_stages (user_id, stage UNIQUE)` — the idempotency table that prevents double-sends if the cron re-runs or Vercel retries.
+
+**2. Set `CRON_SECRET`** in Vercel environment variables:
+```sh
+openssl rand -hex 32   # generates a secure secret
+# paste the result as CRON_SECRET in Vercel → Settings → Environment Variables
+```
+Vercel automatically passes `Authorization: Bearer $CRON_SECRET` on cron invocations (see [Vercel Cron docs](https://vercel.com/docs/cron-jobs)). The endpoint returns 503 until the secret is set.
+
+**Also required to actually send emails:** `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (see connect-email-resend item above). Without these, cron runs in dry-run: it logs what it *would* send but transmits nothing.
+
+**Verify (after all three are set):**
+1. Trigger the cron manually: `curl -H "Authorization: Bearer $CRON_SECRET" https://aptdesignerai.com/api/cron/activation-emails`
+2. Response: `{ "ok": true, "results": [{"stage":"activation_1",...},...] }`
+3. Check Resend dashboard for a delivered email (or Vercel logs for dry-run output if RESEND_API_KEY not yet set).
+
+---
 
 ### Cloudflare Turnstile — bot protection on public forms (added 2026-06-27, Run 35 — PR #141, Track G5)
 
