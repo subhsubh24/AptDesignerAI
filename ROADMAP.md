@@ -648,6 +648,12 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
 - [ ] G3. **Error-message hygiene**: generic user-facing errors ("not found"), full
   context logged SERVER-SIDE only; never leak schema/table/column names, stack traces, or
   query logic to the client. No enumeration via error differences.
+  **[Partial — Run 37 (PR #164): `lib/utils/api-error.ts` (apiError/logServerError) applied
+  across ~20 JSON API routes — raw Supabase/Postgres error strings no longer reach clients;
+  full error logged server-side; PGRST116→404 preserved. REMAINING before G3 ticks: the two
+  STREAMING (SSE) routes (`diagnosis/stream`, `search/stream`) still send `err.message` in an
+  error event, and the Stripe webhook returns the raw signature-verification message. Keep G3
+  unchecked until those are genericized.]**
 - [ ] G4. **Auth failure-case hardening + tests**: lockout/backoff on repeated wrong
   passwords; password-reset does NOT reveal whether an email exists; email-verification
   link is idempotent (double-click safe); signup with an existing email does NOT leak that
