@@ -554,6 +554,18 @@ required gate or a recurring audit, not a nicety.
   stubbed. See the READINESS AUDIT GATE section. (The ≥3-auditor adversarial pass is run
   by the loop at declaration time; this script is the un-gameable mechanical half.)
   **[Script built and merged (PR #106). Currently exits 1 (8 unchecked DoD boxes) — correct behavior.]**
+- [ ] F7. **Visual-verification artifacts (SEE what the user sees — FACTORY_STANDARD §6).**
+  The functional journey suite (F4) must CAPTURE a screenshot of every page + every key state
+  (empty / loading / error, authed and logged-out) and commit them as artifacts (e.g.
+  `e2e/__screenshots__/` for web via Playwright `page.screenshot()`; the Expo app via component
+  snapshots). These exist so the visual-review lenses have real artifacts to JUDGE: the DEEP AUDIT
+  design/taste lens (F5) and the READINESS AUDIT GATE both VISUALLY review each screenshot (the loop
+  + auditors are vision-capable — actually LOOK at the image) against the VISION design bar; a page
+  that renders blank/broken/overlapping/unstyled/off-brand/"vibe-coded" is a release-blocking FAIL
+  even if its DOM assertions pass. (Optional: visual-regression vs a committed baseline.) NOTE: this
+  is the AUTOMATED journey-screenshot artifact — distinct from D3 store-listing screenshots, which
+  need a human on a device. DoD: screenshots captured for every route in e2e/ROUTE_INVENTORY.md and
+  the design/taste lens reviews them each deep audit.
 
 ### Track G — Pre-launch security & abuse hardening (vibe-coded apps get sued/drained)
 RLS is necessary but not sufficient. A live app that calls PAID APIs (Gemini, Tavily,
