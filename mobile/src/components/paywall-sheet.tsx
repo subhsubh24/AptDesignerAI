@@ -22,15 +22,15 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
   {
     pkg: null,
     label: 'Annual',
-    price: '$79.99 / year',
-    subline: '$6.67 per month · 7-day free trial',
+    price: '$399 / year',
+    subline: '$33.25 per month · free trial included',
     badge: 'Best value',
   },
   {
     pkg: null,
     label: 'Monthly',
-    price: '$9.99 / month',
-    subline: '7-day free trial',
+    price: '$49 / month',
+    subline: 'Free trial included',
     badge: null,
   },
 ];
@@ -45,9 +45,9 @@ function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
       label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
       price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
       subline: isAnnual
-        ? '7-day free trial · best value'
+        ? 'Free trial included · best value'
         : isMonthly
-          ? '7-day free trial'
+          ? 'Free trial included'
           : pkg.product.description,
       badge: isAnnual ? 'Best value' : null,
     };
