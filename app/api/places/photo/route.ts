@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
         "X-Goog-FieldMask": "photos",
         "X-Goog-Api-Key": apiKey,
       },
+      // Bound the external call so a stalled Google connection can't hold the
+      // serverless function open to its full budget.
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!detailsRes.ok) {
@@ -64,6 +67,7 @@ export async function GET(req: NextRequest) {
     const mediaRes = await fetch(mediaUrl, {
       redirect: "follow",
       headers: { "X-Goog-Api-Key": apiKey },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!mediaRes.ok) {
