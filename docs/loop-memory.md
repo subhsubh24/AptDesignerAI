@@ -4,6 +4,45 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-28 (Run 39) — 7 disjoint changes (E8 site gate ✓ + reliability + perf + correctness + monetization + store-compliance + tests)
+
+### State on entry
+- Default tip `90a0b03` (post Run 38 #167–172 + Growth Agent commits: activation-email cron + migration 025, FACTORY_STANDARD S9/PMF). Cold container → `npm install` (root) + `cd mobile && npm install`; reset to `origin/<default>`.
+- Last DEEP AUDIT: Run 36 → **not due** this run (every ~4 runs; next ~Run 40). No deep audit.
+- QUALITY_SCORECARD still all-null (independent auditor hasn't run) → readiness gate cannot pass; did NOT attempt the ready issue.
+- Baseline gate green on entry: tsc clean, **1094 tests**, determinism clean, eslint 0 errors (1 known pre-existing warning in mobile/app.config.ts).
+
+### Area served this run
+7-scout Haiku sweep across the phase needs. Lowest fully-loop-buildable incomplete item was **E8 (pre-launch site gate)** — A5/D3/F3/F4 completion is human-gated, E7 is growth-agent-owned + owner-blocked. Selected the maximal file-disjoint, value-bar-clearing set: **E8 site gate, places/photo timeouts, search N+1, request.json guards ×3 routes, mobile free-save limit, privacy-doc Vercel Analytics, spatial-math tests.** 7 changes, all merged #173–179. Security scout = CLEAN (no findings).
+
+### What was done (all merged, gate green per PR)
+- **#173 E8 → E8 TICKED** — `lib/security/site-gate.ts` + middleware wiring. Env-driven (`SITE_GATE_PASSWORD`); non-exempt browser routes → `/waitlist`, API → 503; exempt = marketing/legal/waitlist (login/signup stay gated); unlock via `?gate=<pw>` → httpOnly SHA-256-token cookie. Ships inert when unset. 17 tests.
+- **#174 reliability** — `AbortSignal.timeout(5000)` on the 2 Google Places fetches (the last external fetches missing a timeout; closes the Run 38 rotation item).
+- **#175 perf** — `Promise.all` for project+diagnosis after room on the `/api/search` hot path.
+- **#176 correctness** — `request.json()` try/catch on analyze-apartment + diagnosis + diagnosis/stream (400 not 500); completes the #160 class.
+- **#177 monetization** — mobile free-save limit 1→3 to match server (`FREE_SAVE_LIMIT=3`) + web; mobile users were paywalled after 1 save.
+- **#178 store** — disclosed Vercel Web Analytics in app-privacy.md (both store tables) + corrected the stale "no third-party SDK" notes.
+- **#179 tests** — `spatial-math.test.ts` (32 assertions, parseDimensions + computeSpatialConstraints).
+- 14 per-change Sonnet reviewers, all APPROVE. 7 Haiku scouts + 14 reviewers = 21 subagents (well under the 50 ceiling).
+
+### Lessons learned
+1. **The middleware entrypoint here is `proxy.ts` (Next 15 naming), not `middleware.ts`** — it imports `updateSession` from `lib/supabase/middleware.ts`. Site-gate/auth logic lives in `updateSession`. A `find middleware.ts` at root returns nothing; don't conclude "no middleware."
+2. **Edge-runtime crypto: `crypto.subtle.digest` works in Next middleware** (async). Used it for the site-gate SHA-256 token so the raw password is never stored in the cookie. Reviewers confirmed valid in the Edge Runtime.
+3. **A scout-flagged collision must be resolved by MERGING concerns or DROPPING one.** The reliability scout proposed parallelizing `diagnosis/stream` AND the AI scout proposed a `request.json` guard there — same file. Dropped the lower-value perf change, folded diagnosis/stream into the json-guard PR (3 routes, one coherent class). Keeps the disjoint rule intact without losing the higher-value fix.
+4. **E8 became tickable because it was pure loop work** (the gate code), with the password value the only human-applied piece (PENDING_OPS already had a `set-site-gate-password` item — I updated its `how` to match the real behavior, since the placeholder said "prompts for the password" but the implementation redirects + uses `?gate=`). When a doc describes unbuilt behavior, fix it to reality the same run the behavior ships.
+5. **Auto-merge fired fast on disjoint PRs** — 6 of 7 merged within ~minutes of CI green; the open-PR list emptying is the reliable signal (Vercel commit-status is NOT a required check — `verify`/`build`/`mobile` are).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 40** (last ran Run 36). Run a full read-only sweep before scouting.
+- **Highest-value queued, file-disjoint:**
+  - **Route/agent tests** — the test scout mapped large untested critical modules: `lib/agents/orchestrator.ts`, `room-diagnostician.ts`, `design-coordinator.ts`, `shopping-researcher.ts`, `product-extractor.ts`, `post-search-coordinator.ts` (mock providers); pure math modules `harmony-math.ts`, `proportion-math.ts`, `lookups.ts` (deterministic, like spatial-math this run); route-level tests for `diagnosis`, `mockups`, `rooms`, `upload`.
+  - **G4** — login lockout/backoff (needs a server-side login route; login is still client-side Supabase). NOTE: there is NO password-reset flow at all, so the password-reset enumeration guard is moot until one is built.
+  - **AI robustness** — AI scout's lower-sev finds: in-flight coalescing on `area-analysis` rejecting forever on an early throw (verify), zero-product-for-category diagnostic signal in orchestrator.
+- **Human-gated (unchanged):** migrations 021/022/023/024/025 apply; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys (both forms); EAS init/projectId + Apple/Play accounts; all live secrets; **NEW: set `SITE_GATE_PASSWORD` + flip `GROWTH_STATUS.site_gate_up: true` to activate the E8 gate.**
+- **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue until the independent scorecard is populated and ship-critical dims are A/A+.
+
+---
+
 ## SYNC 2026-06-28 — Growth Agent: strategic outreach (curated, human-reviewed drafts only)
 - **Repo:** added docs/growth/OUTREACH.md (the strategic-outreach playbook — draft-only, human sends; high-confidence + named + researched targets only; never a cold-blast; never an invented/scraped contact; honest + CAN-SPAM/GDPR-clean; pre-launch links to the waitlist; maker!=checker review). Added a "Strategic outreach" pointer to docs/growth/ANALYSIS_PLAYBOOK.md and an `outreach` block to docs/growth/GROWTH_STATUS.md (drafted_7d, owner_sent_7d, replies_7d, signal — 0/none, replies owner-reported, YAML parseable).
 - **Routine:** Growth Agent routine gains a STRATEGIC OUTREACH capability (create Gmail DRAFTS for the owner to review+send; the agent never sends — the Gmail tool is create_draft only) + OUTREACH.md in its read list.
