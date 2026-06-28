@@ -93,6 +93,38 @@ DOM assertions pass. (Optional: visual-regression vs a committed baseline to cat
 visual changes between runs.) BOUNDED: capture screenshots in the journey suite and JUDGE them
 in the periodic deep audit + at the readiness gate — not a vision pass on every micro-change.
 
+## 6b. Design taste — ELIMINATE generic-AI frontend (every UI change)
+Before ANY layout / component / branding / color / motion / visual decision, adopt a higher
+design bar: the interface must not merely FUNCTION — it must feel intentional, premium,
+opinionated, polished, and clearly designed by someone with taste. Built, edited, and judged by
+taste — NOT assembled from the average of the internet. This is product-agnostic and applies to
+every UI surface in every factory; product-specific brand/voice/tokens live in VISION.md.
+- **THE DESIGNER QUESTION (the kill-switch, run on EVERY UI change):** *"Would an experienced
+  product designer intentionally make this decision?"* If no, improve it before proceeding —
+  do not ship it.
+- **AVOID BY DEFAULT (generic-AI slop — never ships):** cookie-cutter SaaS dashboards · excessive
+  cards everywhere · default/unstyled Tailwind/shadcn aesthetics · weak typography · random /
+  inconsistent spacing · decorative gradients / blur / visual noise for its own sake ·
+  over-engineered interfaces · design-by-template thinking · uninspired landing pages · generic
+  startup-website patterns · emoji-as-iconography · three competing accent colors ·
+  centered-everything hero blandness. A layout that could belong to ANY startup is a FAIL.
+- **GENERATE BETTER (optimize FOR):** strong visual hierarchy · exceptional typography ·
+  deliberate spacing & rhythm · clear information architecture · premium product aesthetics ·
+  thoughtful interaction & meaningful motion · cohesive visual system · high-quality component
+  composition · intentional color · human-designed, opinionated decisions · product-level polish.
+- **Audit lenses (rank fixes by design impact; first-impression surfaces first — onboarding,
+  paywall, landing, the core loop):** layout structure, type scale, spacing, visual hierarchy,
+  component quality, color system, navigation, motion, landing/dashboard quality, responsiveness,
+  a11y, information density.
+- **FINAL STANDARD:** simplicity without blandness; functionality without visual clutter.
+- **ENFORCED, not aspirational:** Reviewer B applies THE DESIGNER QUESTION to EVERY UI diff
+  (REJECT generated-looking slop even if technically correct); the periodic DEEP AUDIT design/taste
+  lens (§10) hunts the LIVE UI (via the §6 screenshots) for slop; the readiness gate's visual
+  review (§7) judges the captured screenshots against this bar. A generated-looking/"vibe-coded"
+  surface is a release-blocking FAIL equal to a red test. (If a "Taste Skill" / design-taste-frontend
+  Skill is available in the run environment, use it — but this in-repo standard + the gates are the
+  guarantee, independent of any skill being installed.)
+
 ## 7. Readiness = TWO gates (you may NOT self-certify "ready")
 Declare "ready" / open the single readiness issue ONLY when BOTH pass IN THE SAME RUN:
 - **Gate 1 — mechanical preflight (`scripts/preflight.sh`, exit 0):** re-runs the full
