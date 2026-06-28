@@ -13,7 +13,7 @@ import { ConfigContext, ExpoConfig } from "expo/config";
 // `use-push-notifications.ts` resolves the id via
 // `Constants.expoConfig?.extra?.eas?.projectId`, so this is the single source
 // of truth for Expo push token registration and EAS project linking.
-export default ({ config }: ConfigContext): ExpoConfig => {
+const appConfig = ({ config }: ConfigContext): ExpoConfig => {
   const projectId = process.env.EAS_PROJECT_ID;
 
   return {
@@ -28,3 +28,5 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
   };
 };
+
+export default appConfig;

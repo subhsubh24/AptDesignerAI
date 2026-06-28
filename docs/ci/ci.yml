@@ -1,0 +1,126 @@
+# READY-TO-APPLY workflow — copy this to .github/workflows/ci.yml (workflow scope; the loop can't).
+# = the existing verify/mobile/build jobs + a REQUIRED `lint` (replaces the old non-blocking
+# `quality`) + the new `journeys` gate (BUILDS != WORKS). After applying: push on a throwaway
+# branch, confirm `lint` and `journeys` go GREEN, THEN add them to branch-protection required
+# checks. Do NOT require `journeys` until you've seen it green (a red required check halts auto-merge).
+name: CI
+
+on:
+  push:
+    branches: ["claude/ai-apartment-design-app-iHAdb", main, develop]
+  pull_request:
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Tests
+        run: npm test
+      - name: Determinism
+        run: npx --yes tsx scripts/check-determinism.ts
+
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Mobile gate (type/lint/test when /mobile exists)
+        run: |
+          if [ ! -f mobile/package.json ]; then
+            echo "No /mobile app yet — mobile gate is a no-op (passes)."
+            exit 0
+          fi
+          cd mobile
+          npm install --no-audit --no-fund
+          if [ -f tsconfig.json ]; then npx tsc --noEmit; else echo "No tsconfig.json — skipping type check."; fi
+          npm run -s lint --if-present || echo "mobile lint: non-fatal issues (see logs)"
+          npm test --if-present || echo "mobile tests: non-fatal issues (see logs)"
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+
+  # NEW — required lint gate (eslint at zero; replaces the old non-blocking `quality`).
+  # The loop keeps its own diff lint-clean; this stops a lint-dirty change auto-merging.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npx eslint .
+
+  # NEW — functional JOURNEY gate (BUILDS != WORKS): replays real end-to-end user journeys
+  # against a built app + an ephemeral Supabase-local DB and asserts intended outcomes.
+  # Self-contained: `supabase start` provides the DB + keys (NO prod secrets needed).
+  journeys:
+    name: journeys
+    runs-on: ubuntu-latest
+    env:
+      CI: "1"
+      E2E_AUTH_STACK: "1"                       # so the AUTHENTICATED journeys run (not skipped)
+      NEXT_PUBLIC_SITE_URL: "http://localhost:3100"   # gotcha (a): auth/redirect resolves on localhost
+      PLAYWRIGHT_BASE_URL: "http://localhost:3100"
+      E2E_RATE_LIMIT_BYPASS: "1"                # gotcha (b): one CI IP would trip per-IP limits (code honors this; prod never sets it)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start ephemeral Supabase + apply migrations
+        run: |
+          supabase start
+          supabase db reset --no-seed
+      - name: Export local Supabase keys for build + seeder
+        run: |
+          supabase status -o env > /tmp/sb.env
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(grep -E '^API_URL=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep -E '^ANON_KEY=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(grep -E '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+      - name: Install deps + browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Start app + run journeys
+        run: |
+          npm run start -- -p 3100 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3100 >/dev/null 2>&1 && break; sleep 2; done
+          bash scripts/run-journeys.sh

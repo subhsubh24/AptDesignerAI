@@ -1,5 +1,12 @@
 # PROPOSED CI — make the loop's quality gates REQUIRED checks (owner applies)
 
+> **Ready-to-apply file:** `docs/ci/ci.yml` is the COMPLETE merged workflow (existing
+> verify/mobile/build + a required `lint` + the new `journeys` gate). Copy it to
+> `.github/workflows/ci.yml` (workflow scope), confirm `lint`+`journeys` go GREEN on a throwaway
+> branch, THEN add them to branch-protection required checks. The sections below explain each part
+> + the optional auto-migrate job.
+
+
 **Why:** today the required checks are `verify` (tsc+tests) / `build` / `mobile`. The
 **functional journey suite** (BUILDS≠WORKS) and **lint** are NOT required — so a change that
 builds + passes unit tests but is broken for a real user, or that's lint-dirty, can still
