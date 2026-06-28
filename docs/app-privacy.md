@@ -14,7 +14,7 @@ stay consistent.
 | Email address | Contact Info | Account creation + authentication | Yes |
 | Room photos (user-uploaded) | Photos or Videos | AI room analysis pipeline | Yes |
 | Design preferences & history | Other User Content | Saved designs, design direction history | Yes |
-| App interaction events | Usage Data | In-app navigation + feature usage (no third-party SDK today) | No |
+| App interaction events | Usage Data | In-app navigation + feature usage (via Vercel Web Analytics — cookieless, no ad identifiers) | No |
 
 **Not collected:** name, phone number, physical address, precise or coarse location,
 health data, financial info, browsing history, search history, sensitive info,
@@ -27,10 +27,13 @@ contacts, user content beyond room photos, messages, third-party social IDs.
 ### Does the app collect data? → **Yes**
 
 ### Data Used to Track You
-**None.** The app does not use any Advertising ID, third-party analytics SDK,
-or cross-app tracking. Select **No** on the "Does this app use third-party
-advertising networks, analytics tools, or SDKs to track users across apps and
-websites owned by other companies?" question.
+**None.** The app uses no Advertising ID and does no cross-app tracking. It does
+use Vercel Web Analytics, but it is cookieless and collects only aggregate usage
+events with no advertising identifiers, so it does not "track" users in Apple's
+sense (it never links data with third-party data for ads or shares it with data
+brokers). Select **No** on the "Does this app use third-party advertising
+networks, analytics tools, or SDKs to track users across apps and websites owned
+by other companies?" question.
 
 > ATT prompt: **Not required** (no tracking).
 
@@ -49,8 +52,8 @@ websites owned by other companies?" question.
 ### Data Not Linked to You
 **Usage Data**
 - App usage data (screen views, feature interactions) — *Analytics* — collected
-  only via server-side logs (no third-party SDK). Not linked to a persistent
-  advertising identity.
+  via Vercel Web Analytics (cookieless, no cross-app advertising identifiers) and
+  server-side logs. Not linked to a persistent advertising identity.
 
 ### Third-party data sharing disclosures
 
@@ -63,12 +66,15 @@ websites owned by other companies?" question.
 | Google (Maps/Places API) | Product image search queries — no PII | Product imagery — fetching photos of identified furniture products |
 | Browserbase | Screenshots of product pages — no PII; no user data transmitted | Product verification — computer-vision agent confirms product images match descriptions |
 | DeepSeek | Design analysis text, product descriptions — no PII | AI analysis (optional secondary provider for cost optimization) |
+| Vercel (Web Analytics) | Aggregate app-usage events (screen views, feature interactions) — no PII; cookieless | Analytics — measure usage and funnel; no cross-app ad identifiers |
 
 None of the above use this data to build ad profiles or track users across apps
 per their published data processing agreements. Tavily and Google Maps queries
 contain only design-derived product terms; no email, photo, or other personal
 data is included. Stripe processes payments under its own PCI-DSS certification.
 DeepSeek is used only for design text analysis, never for user-identifying data.
+Vercel Web Analytics is cookieless and collects only aggregate usage events with
+no advertising identifiers.
 
 ---
 
@@ -95,6 +101,7 @@ DeepSeek is used only for design text analysis, never for user-identifying data.
 | Google (Maps/Places API) | Product search terms (no PII) | App functionality — product imagery |
 | Browserbase | Product page screenshots (no PII) | App functionality — product verification |
 | DeepSeek | Design text (no PII) | App functionality — AI analysis (optional provider) |
+| Vercel (Web Analytics) | Aggregate usage events (no PII; cookieless) | Analytics — usage measurement |
 
 ### Security practices
 
