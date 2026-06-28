@@ -4,6 +4,13 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — visual verification is now DUAL-AXIS (functional + design), not design-only
+- **Gap closed in spec:** the screenshot + vision-judge harness (F7 / FACTORY_STANDARD §6) was framed for DESIGN only; functional verification was DOM-only (blind to visibly-wrong/empty/placeholder/broken outcomes the DOM "passes"). Now the same journey screenshots are vision-judged on TWO axes: (A) FUNCTIONAL — does the screen visibly show the INTENDED OUTCOME of that step (populated working screen, the REAL produced artifact e.g. an actual rendered mockup not a placeholder, correct data/state); (B) DESIGN — clears the VISION bar. A FAIL on EITHER axis is release-blocking even if DOM assertions pass.
+- **Scope broadened:** capture at every page AND every key STEP of every end-to-end journey + key states, at mobile AND desktop widths.
+- **Edited:** FACTORY_STANDARD §6 "SEE WHAT THE USER SEES" + ROADMAP F7 (DoD now records a dual-axis verdict). preflight GATE 1c artifact guard is unchanged (axis-agnostic — it just blocks fake-ticking; the dual-axis verdict is enforced by the deep audit + readiness auditors). Still built by the factory in order, not hand-built.
+
+---
+
 ## SYNC 2026-06-28 — F7 (visual verification) spec hardened + preflight honest-tick guard (build deferred to the loop)
 - **Decision:** do NOT hand-build F7 (screenshot-every-page + vision-judge). It's normal repo test/infra code = the factory's job; it depends on F4 being fully wired (screenshots are captured BY the journey suite), so it should be built in order. Hand-building it would erode the autonomy thesis and invert priority. Instead, HARDEN the spec + gate so the loop builds it correctly and can't fake-tick it.
 - **ROADMAP F7 DoD sharpened:** BOTH required — (1) ARTIFACTS: a real committed NON-ZERO PNG in `e2e/__screenshots__/` for EVERY route/state in ROUTE_INVENTORY, captured by the suite (`page.screenshot()` + `playwright.config.ts` screenshot on); (2) VISION VERDICT: the deep-audit design lens + readiness gate actually OPEN each PNG on the vision model and RECORD a per-screenshot verdict (loop-memory for the audit; readiness evidence for the gate). Capture-and-forget does NOT satisfy F7.

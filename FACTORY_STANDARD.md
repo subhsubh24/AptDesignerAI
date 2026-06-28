@@ -80,18 +80,26 @@ an action that yields no real artifact) is a release-blocking FAIL equal to a re
 Maintain an outcome-asserting functional journey suite + a route/flow inventory so
 coverage is provably complete; anything that genuinely can't run headlessly goes on the
 human checklist, never silently assumed working.
-**SEE WHAT THE USER SEES (visual verification).** Outcome assertions check the DOM, not how
-the page LOOKS — a page can pass every assertion while rendering blank/white, with overlapping
-or unstyled elements (CSS didn't load), broken images, or generic "vibe-coded" slop. So the
-journey suite also CAPTURES a SCREENSHOT of every page and every key state (empty / loading /
-error, authed and logged-out) and commits them as artifacts. A screenshot only CONFIRMS
-anything if something JUDGES it: the design/taste DEEP-AUDIT lens (§10) and the readiness gate
+**SEE WHAT THE USER SEES (visual verification — functional AND design).** Outcome assertions
+check the DOM, not what the user actually SEES — a screen can pass every DOM assertion while
+visibly showing the WRONG or EMPTY result (a placeholder/blank mockup, a stuck spinner, a broken
+image, stale/wrong data, a dead-end), OR while rendering blank/white, overlapping, unstyled (CSS
+didn't load), or generic "vibe-coded" slop. So the journey suite also CAPTURES a SCREENSHOT at
+every page AND every key STEP of every end-to-end journey + key state (empty / loading / error,
+authed and logged-out), at mobile AND desktop widths, and commits them as artifacts. A screenshot
+only CONFIRMS anything if something JUDGES it: the DEEP-AUDIT lens (§10) and the readiness gate
 (§7) VISUALLY REVIEW each screenshot (the loops run on a vision-capable model — actually LOOK at
-the image) against the VISION design bar. A page that renders blank, broken, overlapping,
-unstyled, or off-brand/"vibe-coded" is a release-blocking FAIL equal to a red test, EVEN IF its
-DOM assertions pass. (Optional: visual-regression vs a committed baseline to catch unintended
-visual changes between runs.) BOUNDED: capture screenshots in the journey suite and JUDGE them
-in the periodic deep audit + at the readiness gate — not a vision pass on every micro-change.
+the image) on TWO axes: (1) **FUNCTIONAL REALITY** — does the screen VISIBLY show the INTENDED
+OUTCOME of that journey step (a populated working screen; the REAL produced artifact, e.g. an
+actual rendered mockup/result, not a placeholder; the correct data/state), catching what DOM
+assertions miss — a visibly wrong/empty/broken result a real user would hit even though the DOM
+"passed"; and (2) **DESIGN** — intentional, on-brand, clears the VISION design bar (not
+blank/broken/overlapping/unstyled/off-brand/"vibe-coded"). A FAIL on EITHER axis is a
+release-blocking FAIL equal to a red test, EVEN IF the DOM assertions pass. This is how we know
+the app WORKS *and* looks right — replaying the real end-to-end journeys and judging the actual
+pixels, not just the DOM. (Optional: visual-regression vs a committed baseline to catch unintended
+changes between runs.) BOUNDED: capture screenshots in the journey suite and JUDGE them in the
+periodic deep audit + at the readiness gate — not a vision pass on every micro-change.
 **SIDE-EFFECT INTEGRITY — verify the EFFECT, not the message (a "success" the user can't
 verify is a LIE).** The most dangerous failure is the one that REPORTS success: a flow that
 tells the user "confirmation email sent" / "saved" / "payment processed" while the real

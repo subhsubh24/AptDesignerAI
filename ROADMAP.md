@@ -635,28 +635,35 @@ required gate or a recurring audit, not a nicety.
   stubbed. See the READINESS AUDIT GATE section. (The ≥3-auditor adversarial pass is run
   by the loop at declaration time; this script is the un-gameable mechanical half.)
   **[Script built and merged (PR #106). Currently exits 1 (8 unchecked DoD boxes) — correct behavior.]**
-- [ ] F7. **Visual-verification artifacts (SEE what the user sees — FACTORY_STANDARD §6).**
-  The functional journey suite (F4) must CAPTURE a screenshot of every page + every key state
-  (empty / loading / error, authed and logged-out) and commit them as artifacts (e.g.
-  `e2e/__screenshots__/` for web via Playwright `page.screenshot()`; the Expo app via component
-  snapshots). These exist so the visual-review lenses have real artifacts to JUDGE: the DEEP AUDIT
-  design/taste lens (F5) and the READINESS AUDIT GATE both VISUALLY review each screenshot (the loop
-  + auditors are vision-capable — actually LOOK at the image) against the VISION design bar; a page
-  that renders blank/broken/overlapping/unstyled/off-brand/"vibe-coded" is a release-blocking FAIL
-  even if its DOM assertions pass. (Optional: visual-regression vs a committed baseline.) NOTE: this
+- [ ] F7. **Visual-verification artifacts — SEE what the user sees, FUNCTIONAL + DESIGN (FACTORY_STANDARD §6).**
+  The functional journey suite (F4) must CAPTURE a screenshot at every page + every key STEP of every
+  end-to-end journey + key state (empty / loading / error, authed and logged-out), at mobile AND
+  desktop widths, and commit them as artifacts (e.g. `e2e/__screenshots__/` for web via Playwright
+  `page.screenshot()`; the Expo app via component snapshots). These exist so the visual-review lenses
+  have real artifacts to JUDGE on TWO axes: the DEEP AUDIT lens (F5) and the READINESS AUDIT GATE both
+  VISUALLY review each screenshot (the loop + auditors are vision-capable — actually LOOK at the image)
+  for — (A) FUNCTIONAL: does the screen VISIBLY show the INTENDED OUTCOME of that journey step (a
+  populated working screen; the REAL produced artifact, e.g. an actual rendered mockup, not a
+  placeholder; correct data/state), catching what DOM assertions miss (a visibly wrong/empty/broken
+  result, a stuck spinner, a broken image, a dead-end the DOM "passed"); and (B) DESIGN: intentional,
+  on-brand, clears the VISION design bar (not blank/broken/overlapping/unstyled/off-brand/"vibe-coded").
+  A FAIL on EITHER axis is release-blocking even if DOM assertions pass — this proves the app WORKS
+  end-to-end as a user sees it, not just that it builds. (Optional: visual-regression vs a committed
+  baseline.) NOTE: this
   is the AUTOMATED journey-screenshot artifact — distinct from D3 store-listing screenshots, which
   need a human on a device. DoD (BOTH required; F7 stays [ ] until both are REAL — preflight
   enforces the artifact half, the readiness auditors enforce completeness + the verdict):
   (1) **ARTIFACTS** — a real, committed, NON-ZERO PNG in `e2e/__screenshots__/` for EVERY
-  route/state in `e2e/ROUTE_INVENTORY.md`, captured BY the journey suite (`page.screenshot()`,
-  `screenshot` capture enabled in `playwright.config.ts`) — never placeholders/0-byte.
-  (2) **VISION VERDICT** — the deep-audit design/taste lens (F5) AND the readiness gate actually
-  OPEN each PNG on the vision-capable model and RECORD a per-screenshot verdict (pass / blank /
-  broken / overlapping / unstyled / off-brand) — in `docs/loop-memory.md` for the deep audit and in
-  the readiness-issue evidence for the gate; a FAIL verdict is release-blocking even if DOM
-  assertions pass. **Capture-and-forget (screenshots with no recorded visual judgement) does NOT
-  satisfy F7**, and F7 may not be ticked without real committed screenshots (preflight fails the
-  tick otherwise).
+  route/state/journey-step in `e2e/ROUTE_INVENTORY.md`, captured BY the journey suite
+  (`page.screenshot()`, `screenshot` capture enabled in `playwright.config.ts`) — never placeholders/0-byte.
+  (2) **DUAL-AXIS VISION VERDICT** — the deep-audit lens (F5) AND the readiness gate actually
+  OPEN each PNG on the vision-capable model and RECORD a per-screenshot verdict on BOTH axes:
+  FUNCTIONAL (intended-outcome-visible / wrong / empty / placeholder / broken / dead-end) AND DESIGN
+  (pass / blank / broken / overlapping / unstyled / off-brand) — in `docs/loop-memory.md` for the deep
+  audit and in the readiness-issue evidence for the gate; a FAIL on EITHER axis is release-blocking
+  even if DOM assertions pass. **Capture-and-forget (screenshots with no recorded visual judgement)
+  does NOT satisfy F7**, and F7 may not be ticked without real committed screenshots (preflight fails
+  the tick otherwise).
 
 ### Track G — Pre-launch security & abuse hardening (vibe-coded apps get sued/drained)
 RLS is necessary but not sufficient. A live app that calls PAID APIs (Gemini, Tavily,
