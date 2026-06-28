@@ -31,7 +31,13 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const { room_id, project_id, user_feedback, previous_analysis } = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { room_id, project_id, user_feedback, previous_analysis } = body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!room_id || !user_feedback) {
     return NextResponse.json({ error: "room_id and user_feedback required" }, { status: 400 });
   }

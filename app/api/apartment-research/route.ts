@@ -453,7 +453,13 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id, latitude, longitude } = await request.json();
+  let payload: Record<string, unknown>;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { building_name, building_url, city, state, neighborhood, project_id, bedrooms, bathrooms, apartment_sqft, building_place_id, latitude, longitude } = payload as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
