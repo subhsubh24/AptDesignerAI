@@ -384,32 +384,36 @@ export async function POST(request: Request) {
     }
 
     if (evalRows.length > 0) {
-      await supabase.from("product_evaluations").insert(evalRows);
-      await supabase
-        .from("candidate_products")
-        .update({ status: "evaluated" })
-        .in("id", evaluatedIds);
+      // Independent writes to different tables — run them concurrently.
+      await Promise.all([
+        supabase.from("product_evaluations").insert(evalRows),
+        supabase
+          .from("candidate_products")
+          .update({ status: "evaluated" })
+          .in("id", evaluatedIds),
+      ]);
     }
   }
 
-  // Update search session — persist trace summary for post-run debugging
-  await supabase
-    .from("search_sessions")
-    .update({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-      metadata: {
-        trace_summary: result.data.trace?.summary || null,
-        tokens_used: result.data.stats.tokensUsed,
-      },
-    })
-    .eq("id", session?.id);
-
-  // Update room status
-  await supabase
-    .from("rooms")
-    .update({ status: "sourcing", updated_at: new Date().toISOString() })
-    .eq("id", room_id);
+  // Persist the search-session summary and room status concurrently —
+  // independent writes to different tables on the completion hot path.
+  await Promise.all([
+    supabase
+      .from("search_sessions")
+      .update({
+        status: "completed",
+        updated_at: new Date().toISOString(),
+        metadata: {
+          trace_summary: result.data.trace?.summary || null,
+          tokens_used: result.data.stats.tokensUsed,
+        },
+      })
+      .eq("id", session?.id),
+    supabase
+      .from("rooms")
+      .update({ status: "sourcing", updated_at: new Date().toISOString() })
+      .eq("id", room_id),
+  ]);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
