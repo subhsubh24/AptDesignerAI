@@ -4,6 +4,45 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-28 (Run 37) — 6 disjoint changes (security + tests + perf + correctness + a11y + artifacts)
+
+### State on entry
+- Default tip #159 (post Run 36 #149–155 + owner FACTORY_STANDARD/growth commits #157–159 + the signup email-verification fix). Cold container → `npm install` (root) + `cd mobile && npm install`; `git reset --hard origin/<default>`.
+- Last DEEP AUDIT: Run 36 → **not due** this run (every ~4 runs; next ~Run 40). No deep audit run.
+- QUALITY_SCORECARD still all-null (independent auditor hasn't run) → readiness gate cannot pass; did NOT attempt the ready issue.
+- No open PRs/issues blocking. Baseline gate green on entry: tsc clean, 1038 tests.
+
+### Area served this run
+Worked the Run 36 rotation guide's queued, file-disjoint candidates (validated + extended by a 6-scout Haiku sweep): **G3 error hygiene, critical-path API tests, perf parallelization, request.json robustness, a11y empty-alt, artifact freshness.** 6 changes, all merged #160–165.
+
+### What was done
+- **#164 G3 error hygiene** — `lib/utils/api-error.ts` + ~20 routes: stop returning raw Supabase error strings to clients (log server-side, generic client message). PGRST116→404 + projects field-context log preserved. SSE + Stripe-webhook routes deferred. **G3 substantially advanced (NOT ticked — SSE routes still leak).**
+- **#165 critical-path tests** — +23 headless tests: billing/webhook, mobile/entitlements, auth/signup (money / revenue gate / funnel entry, previously zero route-level coverage).
+- **#161 perf** — Promise.all on independent DB writes in search + analyze-apartment completion paths.
+- **#160 correctness** — try/catch around `request.json()` on 4 routes (400 not 500).
+- **#162 a11y** — indexed alt text on 3 room-photo grids (WCAG 1.1.1).
+- **#163 artifact freshness** — canonical domain (aptdesignerai.com) + brand-kit subtitle aligned to store-listing.
+- 12 per-change Sonnet reviewers + 2 fresh re-reviewers (G3, tests). Gate green throughout; merged result: tsc clean, 1061 tests, determinism clean, eslint 0 errors (1 pre-existing warning in mobile/app.config.ts from #149).
+
+### Lessons learned
+1. **Scout greps miss leaks under non-`error` variable names.** The G3 scout matched `error.message`/`String(error)` literally and found 14 routes; a post-fix grep for `<anyVar>.message` in NextResponse found 6 MORE leaking routes (`roomsError`, `saveError`, `bundleError`, `updateErr`…). When sweeping for a pattern, grep the SHAPE (`error: <ident>.message` in a NextResponse), not one variable name — then you fix the whole class in one PR instead of leaving a reviewer to catch the gap.
+2. **Disjointness needs cross-scout file reconciliation.** Three scouts independently flagged `products/evaluate-set` (perf + correctness + G3) and `area-analysis/refine` (perf + correctness). Assigning each FILE to exactly ONE change this run (and deferring the other concerns for that file) kept all 6 branches conflict-free. Pick the highest-value concern per contested file; defer the rest.
+3. **Fire-and-forget side-effects need `vi.waitFor`, not a single `setTimeout(0)` flush.** The webhook's lifecycle emails are `void maybeSend...` with TWO awaits (getUserById → sendEmail); a one-turn microtask flush races. `await vi.waitFor(() => expect(mockSendEmail)...)` is deterministic. (Suppress-case "not called" assertions are fine with a plain flush — nothing is scheduled.)
+4. **Branch-hopping resets the harness Read-tracking AND reverts disjoint files to base** — re-Read every file after `git checkout` before Edit. (Recurring; confirmed again.)
+5. **Auto-merge fires fast on disjoint PRs.** All 6 squash-auto-merged within minutes once `verify`/`build`/`mobile` went green; the open-PR list emptying is the reliable signal they landed (confirm with `git log origin/<default>`).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 40** (last ran Run 36).
+- **Highest-value queued, file-disjoint:**
+  - **G3 tail** — genericize the SSE error leaks (`diagnosis/stream`, `search/stream` `sendEvent("error", {message})`) + the Stripe webhook sig message; then G3 can be ticked. (Careful: streams send to a live client UI — keep a useful generic message.)
+  - **More route/agent tests** — billing/checkout, user/delete, internal growth-metrics + social-queue (all headlessly mockable per the scout); orchestrator/diagnostician agents with mocked providers.
+  - **Perf** — `analyze-apartment` outer room loop is still serial (per-room calls); the per-room insert/update is now parallel but the loop could fan out (verify ordering/cost first).
+  - **A11y/design tokens** — `components/ui/badge.tsx` + `toast.tsx` semantic colors are ad-hoc Tailwind vs the `--score-*` tokens (borderline — only if it's genuinely the best work, not churn).
+- **Human-gated (unchanged):** migrations 017–024 apply; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets.
+- **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue until the independent scorecard is populated and ship-critical dims are A/A+.
+
+---
+
 ## INCIDENT 2026-06-28 — signup required email verification but no email ever sent (DEEP DIAGNOSIS)
 - **Symptom (owner-reported):** creating an account showed "Check your email — we sent a confirmation link," but the email never arrived → every new user dead-ended, could not log in.
 - **Evidence / root cause (CODE + CONFIG, not a transient):** `app/(auth)/signup/page.tsx` called `supabase.auth.signUp` and UNCONDITIONALLY rendered the "check your email" success screen regardless of whether any email was sent (fake success). The actual send relied on Supabase's built-in auth email, which is unconfigured pre-launch (no custom SMTP/Resend + verified domain — an owner-set secret). So the verification LOOP did not exist: a hard gate was introduced on a dependency that was never wired.
