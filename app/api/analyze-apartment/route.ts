@@ -348,21 +348,24 @@ ${synthInput}
         || analysisRooms[room.room_type];
       if (!roomAnalysis) continue;
 
-      await supabase.from("room_diagnoses").insert({
-        room_id: room.id,
-        diagnosis_json: roomAnalysis,
-        design_direction_json: { overall: analysis.overall },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
-        model_used: model,
-      });
-
-      await supabase
-        .from("rooms")
-        .update({ status: "diagnosed" })
-        .eq("id", room.id);
+      // Insert the diagnosis and flip the room status concurrently —
+      // independent writes to different tables.
+      await Promise.all([
+        supabase.from("room_diagnoses").insert({
+          room_id: room.id,
+          diagnosis_json: roomAnalysis,
+          design_direction_json: { overall: analysis.overall },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+          missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+          action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
+          model_used: model,
+        }),
+        supabase
+          .from("rooms")
+          .update({ status: "diagnosed" })
+          .eq("id", room.id),
+      ]);
     }
 
     await supabase
