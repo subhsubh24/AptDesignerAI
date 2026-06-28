@@ -4,6 +4,13 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — Growth Agent: strategic outreach (curated, human-reviewed drafts only)
+- **Repo:** added docs/growth/OUTREACH.md (the strategic-outreach playbook — draft-only, human sends; high-confidence + named + researched targets only; never a cold-blast; never an invented/scraped contact; honest + CAN-SPAM/GDPR-clean; pre-launch links to the waitlist; maker!=checker review). Added a "Strategic outreach" pointer to docs/growth/ANALYSIS_PLAYBOOK.md and an `outreach` block to docs/growth/GROWTH_STATUS.md (drafted_7d, owner_sent_7d, replies_7d, signal — 0/none, replies owner-reported, YAML parseable).
+- **Routine:** Growth Agent routine gains a STRATEGIC OUTREACH capability (create Gmail DRAFTS for the owner to review+send; the agent never sends — the Gmail tool is create_draft only) + OUTREACH.md in its read list.
+- **Why:** 1:1 curated outreach (press/partners/community) is high-leverage, esp. pre-launch, and safe because it's draft-only + human-sent. Rails prevent the failure modes (mass cold-blast, fabricated/scraped contacts, busywork, dishonest claims).
+
+---
+
 ## Run 2026-06-28 (Run 38) — 5 disjoint changes (reliability + G3 ✓ + G5 ✓ + 2× critical-path tests)
 
 ### State on entry

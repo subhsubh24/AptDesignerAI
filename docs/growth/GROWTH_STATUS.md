@@ -61,6 +61,11 @@ GROWTH_STATUS:
     published_7d: 0
     scheduled_next_7d: 0
     organic_sessions_7d: 0
+  outreach:                      # curated 1:1 strategic email DRAFTS for the owner to send (docs/growth/OUTREACH.md); real numbers only
+    drafted_7d: 0                # high-confidence outreach drafts the agent queued for owner review
+    owner_sent_7d: 0             # owner-reported sends (the agent never sends)
+    replies_7d: 0                # owner-reported replies; never fabricate
+    signal: none                 # none | weak | emerging | strong
   learnings:
     - "All funnel metrics are 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers. This is day 2 of the same blocker; circuit breaker watch active."
     - "Engine is built and all code ships dry-run; the owner connecting Resend + setting INTERNAL_METRICS_TOKEN are the two highest-leverage unblocking actions."

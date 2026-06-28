@@ -66,6 +66,14 @@ the KIND of recommendation:
 Record the read in the machine-tracked `pmf` block of `docs/growth/GROWTH_STATUS.md`
 (activation_rate, retention_d1/d7/d30, organic_share_rate, signal).
 
+## Strategic outreach (curated, human-reviewed email drafts)
+A high-leverage channel you MAY run: a FEW deeply-personalized 1:1 outreach emails to genuinely
+strategic targets (press/partners/community), drafted as Gmail DRAFTS for the OWNER to review and
+send — never sent by you, never a cold-blast, never an invented/scraped contact. Draft only when
+you can name the specific target, why they'd care, and the anticipated reply. Full method, rails,
+and target/format spec: `docs/growth/OUTREACH.md`. Track in the `outreach` block of GROWTH_STATUS
+(real numbers only; replies are owner-reported).
+
 ## Honesty guardrails (the analysis is only as good as its integrity)
 - **Never invent or pad a metric.** A number with no connected source stays 0/null. A higher
   number that isn't real is a failure, not progress (mirrors the business-case anti-gaming rule).
