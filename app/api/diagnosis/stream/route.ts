@@ -7,6 +7,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { logServerError } from "@/lib/utils/api-error";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
@@ -320,7 +321,8 @@ export async function POST(request: Request) {
           .single();
 
         if (saveError) {
-          sendEvent("error", { error: saveError.message });
+          logServerError("diagnosis/stream save", saveError);
+          sendEvent("error", { error: "Unable to save the diagnosis. Please try again." });
           controller.close();
           return;
         }
@@ -351,7 +353,8 @@ export async function POST(request: Request) {
           },
         });
       } catch (err) {
-        sendEvent("error", { error: err instanceof Error ? err.message : "Diagnosis failed unexpectedly" });
+        logServerError("diagnosis/stream", err);
+        sendEvent("error", { error: "Diagnosis failed unexpectedly. Please try again." });
       } finally {
         controller.close();
       }
