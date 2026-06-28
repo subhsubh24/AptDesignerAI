@@ -645,8 +645,18 @@ required gate or a recurring audit, not a nicety.
   that renders blank/broken/overlapping/unstyled/off-brand/"vibe-coded" is a release-blocking FAIL
   even if its DOM assertions pass. (Optional: visual-regression vs a committed baseline.) NOTE: this
   is the AUTOMATED journey-screenshot artifact — distinct from D3 store-listing screenshots, which
-  need a human on a device. DoD: screenshots captured for every route in e2e/ROUTE_INVENTORY.md and
-  the design/taste lens reviews them each deep audit.
+  need a human on a device. DoD (BOTH required; F7 stays [ ] until both are REAL — preflight
+  enforces the artifact half, the readiness auditors enforce completeness + the verdict):
+  (1) **ARTIFACTS** — a real, committed, NON-ZERO PNG in `e2e/__screenshots__/` for EVERY
+  route/state in `e2e/ROUTE_INVENTORY.md`, captured BY the journey suite (`page.screenshot()`,
+  `screenshot` capture enabled in `playwright.config.ts`) — never placeholders/0-byte.
+  (2) **VISION VERDICT** — the deep-audit design/taste lens (F5) AND the readiness gate actually
+  OPEN each PNG on the vision-capable model and RECORD a per-screenshot verdict (pass / blank /
+  broken / overlapping / unstyled / off-brand) — in `docs/loop-memory.md` for the deep audit and in
+  the readiness-issue evidence for the gate; a FAIL verdict is release-blocking even if DOM
+  assertions pass. **Capture-and-forget (screenshots with no recorded visual judgement) does NOT
+  satisfy F7**, and F7 may not be ticked without real committed screenshots (preflight fails the
+  tick otherwise).
 
 ### Track G — Pre-launch security & abuse hardening (vibe-coded apps get sued/drained)
 RLS is necessary but not sufficient. A live app that calls PAID APIs (Gemini, Tavily,

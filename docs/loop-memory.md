@@ -4,6 +4,14 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — F7 (visual verification) spec hardened + preflight honest-tick guard (build deferred to the loop)
+- **Decision:** do NOT hand-build F7 (screenshot-every-page + vision-judge). It's normal repo test/infra code = the factory's job; it depends on F4 being fully wired (screenshots are captured BY the journey suite), so it should be built in order. Hand-building it would erode the autonomy thesis and invert priority. Instead, HARDEN the spec + gate so the loop builds it correctly and can't fake-tick it.
+- **ROADMAP F7 DoD sharpened:** BOTH required — (1) ARTIFACTS: a real committed NON-ZERO PNG in `e2e/__screenshots__/` for EVERY route/state in ROUTE_INVENTORY, captured by the suite (`page.screenshot()` + `playwright.config.ts` screenshot on); (2) VISION VERDICT: the deep-audit design lens + readiness gate actually OPEN each PNG on the vision model and RECORD a per-screenshot verdict (loop-memory for the audit; readiness evidence for the gate). Capture-and-forget does NOT satisfy F7.
+- **preflight GATE 1c added:** if F7 is `[x]` but `e2e/__screenshots__/` has <5 non-zero PNGs → FAIL (blocks fake-ticking). No-op while F7 is `[ ]` (doesn't block current runs). bash -n clean; behaviour verified.
+- **Division of labor:** I harden spec + guard; the factory writes the F7 code in order; the gate keeps it honest. Same pattern to relay to the other factories.
+
+---
+
 ## Run 2026-06-28 (Run 39) — 7 disjoint changes (E8 site gate ✓ + reliability + perf + correctness + monetization + store-compliance + tests)
 
 ### State on entry

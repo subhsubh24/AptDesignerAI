@@ -154,6 +154,31 @@ else
   printf '%s\n' "$JOUT" | tail -20
 fi
 
+# ── GATE 1c: Visual-verification artifacts (F7) — honest-tick guard ────────────
+# F7 (FACTORY_STANDARD §6 "SEE WHAT THE USER SEES") may be ticked ONLY once the
+# journey suite actually commits real screenshots for the visual-review lenses to
+# judge. If F7 is [x] but e2e/__screenshots__/ has no non-zero PNGs, that's a
+# fake tick — fail it. While F7 is [ ] (not yet built), this is a no-op so it
+# never blocks current runs. (Completeness "every route" + the recorded vision
+# verdict are enforced by the deep audit + the readiness auditors.)
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 1c — Visual-verification artifacts (F7 honest-tick guard)"
+echo "════════════════════════════════════════════════════════════════"
+if grep -Eq '^\- \[x\] F7\.' ROADMAP.md; then
+  SHOTS=0
+  if [[ -d e2e/__screenshots__ ]]; then
+    SHOTS="$(find e2e/__screenshots__ -type f -name '*.png' -size +0c 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  if [[ "${SHOTS:-0}" -ge 5 ]]; then
+    pass "F7 visual verification — $SHOTS committed non-zero screenshot artifact(s) in e2e/__screenshots__/"
+  else
+    fail "F7 is checked [x] but e2e/__screenshots__/ has only ${SHOTS:-0} non-zero PNG(s) — capture a screenshot for every route in e2e/ROUTE_INVENTORY.md (page.screenshot()) before ticking F7; capture-and-forget / fake ticks are not allowed"
+  fi
+else
+  info "F7 (visual-verification artifacts) not yet checked — screenshot-artifact guard inactive (no-op until F7 is claimed)"
+fi
+
 # ── GATE 2: Required artifacts exist ─────────────────────────────────────────
 
 echo ""
