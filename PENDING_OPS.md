@@ -24,6 +24,13 @@ OWNER_ACTIONS:
       why: "The Growth Agent stays in honest prepare-only mode until the owner connects their own authorized channels; the staged marketing engine (Track E) cannot run demand-gen otherwise."
       how: "Connect your own accounts/keys (X/Instagram/TikTok/Reddit, an email provider) to the deployed app's growth settings, server-side. The agent never holds live secrets; the deployed app sends."
       blocks: growth-execution
+    - id: set-site-gate-password
+      title: "Set SITE_GATE_PASSWORD to gate the app pre-launch (waitlist stays public)"
+      priority: high
+      status: open
+      why: "Before the Growth Agent drives any pre-launch traffic, the app should be password-gated so the public can't see the unfinished product; the waitlist/landing routes stay exempt so people can still join. Once the product is launch-ready (ship-critical QUALITY_SCORECARD A/A+ + readiness), unset it to open the app."
+      how: "After E8 ships the gate middleware, set SITE_GATE_PASSWORD=deepster on the deployment (Vercel env). Verify: the app routes prompt for the password while /waitlist + /api/waitlist + legal pages stay public. At launch, UNSET SITE_GATE_PASSWORD to open the app. Never commit the value."
+      blocks: pre-launch-marketing
     - id: apply-migration-021
       title: "Apply migration 021_stripe_customers_annual_tier.sql to prod before enabling annual billing"
       priority: normal

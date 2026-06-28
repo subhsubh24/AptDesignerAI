@@ -57,6 +57,26 @@ Until a connected source reports, the funnel is 0/null and this loop is mostly a
 correct output is "insufficient data; here's the instrumentation/coverage gap to close," not a
 manufactured analysis. The data-scientist role activates with real traffic.
 
+## Marketing maturity gate & phases (WHEN to market, not just how)
+Do NOT market a half-baked product into the wild. Gate the marketing POSTURE on the same
+evidence the factory uses — the independent QUALITY_SCORECARD + the readiness gate — never on
+eagerness. Read GROWTH_STATUS.phase + the scorecard each run and act accordingly:
+- **pre_launch (product NOT ready: any ship-critical QUALITY_SCORECARD dim < A, or store not
+  live):** WAITLIST-ONLY. Market the *promise*; drive every click to the PUBLIC waitlist /
+  "coming soon" landing (and the App Store "coming soon" / TestFlight link if that's the
+  channel). Do NOT send the public to the app itself. Before driving ANY traffic, CONFIRM the
+  pre-launch SITE GATE is up (the app is password-gated, the waitlist/landing route exempt —
+  ROADMAP E8); if it isn't, set awaiting_connect + an owner_blocker and HOLD public outreach.
+  Run waitlist-growth experiments; the headline metric is waitlist signups.
+- **launching (readiness met: every ship-critical dim A/A+ AND the factory readiness gate
+  passed / store live):** recommend taking the SITE GATE down (open the app), announce to the
+  waitlist, convert waitlist → users, ramp public marketing.
+- **post_launch:** full growth — conversion / retention / referral experiments, scale winners,
+  feed learnings back to the factory + the business case.
+The phase advances ONLY on EVIDENCE (scorecard + readiness + the owner's one-time launch steps),
+never on eagerness. You PROPOSE the phase and RECOMMEND the gate flip; you never set secrets or
+flip product config yourself (the factory builds the gate; the owner sets the password).
+
 ## Dependencies (factory-built; track in ROADMAP)
 - **E7.4** analytics pull (DONE) — the raw funnel pipe.
 - **E7.6** analytics SURFACE — privacy-safe step/cohort/time-series/segment aggregates (this is

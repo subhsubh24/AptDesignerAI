@@ -497,6 +497,18 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   touch signup/analysis call sites); add visitor/trial/conversion-rate analytics pulls (need
   Vercel Analytics + Stripe reporting APIs); per-channel social live API clients. Keep E7
   unchecked until those land.]**
+- [ ] E8. **Pre-launch SITE GATE (so the public can't see a half-baked app before launch).**
+  An env-driven gate the Growth Agent relies on when it starts pre-launch outreach: a middleware
+  that PASSWORD-protects the deployed app (reads `SITE_GATE_PASSWORD` from env; gate is ON whenever
+  the env var is set) but EXEMPTS the public marketing routes (the waitlist / "coming soon"
+  landing, `/waitlist`, `/api/waitlist`, legal pages) so people can still JOIN THE WAITLIST. So
+  pre-launch: randoms hitting the app see a polished "coming soon + join the waitlist", not the
+  unfinished product; people with the password (you) get in. At launch (every ship-critical
+  QUALITY_SCORECARD dim A/A+ + readiness passed), the owner unsets the env var to open the app.
+  Build the gate + the exempt-route allowlist; the PASSWORD VALUE is HUMAN-APPLIED (owner sets
+  `SITE_GATE_PASSWORD` — recorded in PENDING_OPS), never committed. Ties to the Growth Agent's
+  marketing maturity gate (docs/growth/ANALYSIS_PLAYBOOK.md): the agent confirms the gate is up
+  before driving traffic and recommends taking it down at launch.
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
