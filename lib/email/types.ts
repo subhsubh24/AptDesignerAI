@@ -16,6 +16,7 @@
  *   activation_1..3        -> docs/email-lifecycle.md Sequence 1 (A1–A3)
  *   habit_1..3             -> docs/email-lifecycle.md Sequence 2 (B1–B3)
  *   upgrade_1..3           -> docs/email-lifecycle.md Sequence 3 (C1–C3)
+ *   paid_welcome_1         -> conversion-moment "welcome to Pro" (fires on free->paid activation)
  *   paid_engagement_1..2   -> docs/email-lifecycle.md Sequence 4 (D1–D2)
  *   winback_1..3           -> docs/email-lifecycle.md Sequence 5 (E1–E3)
  *   referral_share_1       -> docs/email-lifecycle.md Sequence 6 (F1)
@@ -35,6 +36,7 @@ export type EmailStage =
   | "upgrade_1"
   | "upgrade_2"
   | "upgrade_3"
+  | "paid_welcome_1"
   | "paid_engagement_1"
   | "paid_engagement_2"
   | "winback_1"

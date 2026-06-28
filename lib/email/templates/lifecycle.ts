@@ -325,3 +325,53 @@ export function buildWinBackEmail3(siteUrl: string): LifecycleEmail {
 
   return { subject, html: htmlWrap(body, accountUrl), text };
 }
+
+// ---------------------------------------------------------------------------
+// Conversion — Welcome to Pro (fires once when a subscription first activates)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sent on a genuine free→paid transition (checkout completed / subscription
+ * first active). The conversion-moment email: confirm the upgrade and point the
+ * new subscriber straight at the value they just unlocked. The symmetric
+ * counterpart to buildWinBackEmail1 (which fires on cancellation).
+ * Stage: paid_welcome_1
+ */
+export function buildPaidWelcomeEmail1(siteUrl: string): LifecycleEmail {
+  const appUrl = `${siteUrl}/dashboard`;
+  const accountUrl = `${siteUrl}/account`;
+  const subject = "Welcome to AptDesigner Pro";
+
+  const body = `
+    ${h1("You're in. Welcome to Pro.")}
+    ${p("Your AptDesigner Pro subscription is active — thank you for upgrading. Here's what's now unlocked:")}
+    <ul style="margin:0 0 16px 0;padding-left:20px;font-size:16px;line-height:1.8;color:#4a443c;">
+      <li>Unlimited apartments and projects — every room, every space</li>
+      <li>Cross-room style coherence and AI mockups across the whole apartment</li>
+      <li>Client-ready exports and priority support</li>
+    </ul>
+    ${p("The best next step is to point the AI at a room you've been meaning to redesign.")}
+    ${p("You can manage or cancel your subscription anytime from your account.")}
+    ${ctaButton("Start designing →", appUrl)}`;
+
+  const text = [
+    "You're in. Welcome to Pro.",
+    "",
+    "Your AptDesigner Pro subscription is active — thank you for upgrading.",
+    "Here's what's now unlocked:",
+    "- Unlimited apartments and projects — every room, every space",
+    "- Cross-room style coherence and AI mockups across the whole apartment",
+    "- Client-ready exports and priority support",
+    "",
+    "The best next step is to point the AI at a room you've been meaning to redesign.",
+    "",
+    "You can manage or cancel your subscription anytime from your account.",
+    "",
+    appUrl,
+    "",
+    "— AptDesigner",
+    unsubLine(accountUrl),
+  ].join("\n");
+
+  return { subject, html: htmlWrap(body, accountUrl), text };
+}
