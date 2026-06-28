@@ -1125,12 +1125,12 @@ function RoomUploadSection({
       </CardHeader>
       <CardContent>
         <div className="flex gap-3 flex-wrap">
-          {images.map((img) => (
+          {images.map((img, i) => (
             <div key={img.id} className="relative group">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={img.url}
-                alt=""
+                alt={`Uploaded room photo ${i + 1}`}
                 className="h-24 w-24 rounded-xl object-cover border shadow-sm transition-transform duration-200 group-hover:scale-105"
               />
               <button
