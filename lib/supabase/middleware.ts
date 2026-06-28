@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { applyCorsHeaders } from "@/lib/security/cors";
+import { applySiteGate } from "@/lib/security/site-gate";
 
 const PUBLIC_PATHS = new Set([
   "/login",
@@ -38,21 +39,30 @@ const PUBLIC_API_PATHS = new Set([
 ]);
 
 export async function updateSession(request: NextRequest) {
+  // CORS (G6): answer the preflight for API routes before any other logic. CORS
+  // headers are reflected ONLY for allowlisted origins (no wildcard), so a
+  // disallowed cross-origin browser request gets no ACAO and is blocked by the
+  // browser. Server-to-server callers send no Origin and are unaffected. The
+  // preflight is harmless (carries no credentials) so it is answered even when
+  // the pre-launch site gate is up.
+  const origin = request.headers.get("origin");
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+  if (isApiRoute && request.method === "OPTIONS") {
+    return applyCorsHeaders(new NextResponse(null, { status: 204 }), origin);
+  }
+
+  // Pre-launch SITE GATE (E8): when SITE_GATE_PASSWORD is set, hold the app
+  // behind a password (exempting the public marketing/waitlist routes) so
+  // visitors see "coming soon + join the waitlist" until launch. No-op when the
+  // env var is unset (today's default), so this ships inert.
+  const gated = await applySiteGate(request);
+  if (gated) return gated;
+
   // Redirect root to dashboard always
   if (request.nextUrl.pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
-  }
-
-  // CORS (G6): answer the preflight for API routes before any auth logic. CORS
-  // headers are reflected ONLY for allowlisted origins (no wildcard), so a
-  // disallowed cross-origin browser request gets no ACAO and is blocked by the
-  // browser. Server-to-server callers send no Origin and are unaffected.
-  const origin = request.headers.get("origin");
-  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
-  if (isApiRoute && request.method === "OPTIONS") {
-    return applyCorsHeaders(new NextResponse(null, { status: 204 }), origin);
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
