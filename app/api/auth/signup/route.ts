@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { verifyTurnstile } from "@/lib/security/turnstile";
 import { isAlreadyRegisteredError } from "@/lib/auth/signup-errors";
+import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
 
 /**
  * Server-side account creation — auto-confirmed, NO email verification.
@@ -33,6 +34,7 @@ const RATE_LIMIT = 5;
 const ipBucket = new Map<string, { count: number; resetAt: number }>();
 
 function isRateLimited(ip: string): boolean {
+  if (rateLimitBypassedForTest()) return false; // CI journey suite only (E2E_RATE_LIMIT_BYPASS)
   const now = Date.now();
   const entry = ipBucket.get(ip);
   if (!entry || now >= entry.resetAt) {

@@ -4,6 +4,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 import { buildWaitlistConfirmEmail } from "@/lib/email/templates/waitlist";
 import { verifyTurnstile } from "@/lib/security/turnstile";
+import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
@@ -19,6 +20,7 @@ const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 const ipBucket = new Map<string, { count: number; resetAt: number }>();
 
 function isRateLimited(ip: string): boolean {
+  if (rateLimitBypassedForTest()) return false; // CI journey suite only (E2E_RATE_LIMIT_BYPASS)
   const now = Date.now();
   const entry = ipBucket.get(ip);
   if (!entry || now >= entry.resetAt) {

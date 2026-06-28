@@ -42,6 +42,28 @@ export interface RateLimitResult {
   retryAfterMs?: number;
 }
 
+let _bypassWarned = false;
+/**
+ * TEST-ONLY rate-limit bypass for the CI functional-journey suite.
+ *
+ * A self-seeding journey suite hammers the API from ONE CI-runner IP and would
+ * trip per-IP limits. This bypass is gated SOLELY on E2E_RATE_LIMIT_BYPASS=1, an
+ * env var PRODUCTION MUST NEVER SET (the CI workflow sets it only on the journey
+ * job). Not gated on NODE_ENV because the suite runs against a production build
+ * (`next start`). It logs once, loudly, so an accidental prod set is visible.
+ */
+export function rateLimitBypassedForTest(): boolean {
+  const on = process.env.E2E_RATE_LIMIT_BYPASS === "1";
+  if (on && !_bypassWarned) {
+    _bypassWarned = true;
+    console.warn(
+      "[rate-limit] E2E_RATE_LIMIT_BYPASS active — rate limiting DISABLED. " +
+        "This is CI/test only; PRODUCTION must never set this env var.",
+    );
+  }
+  return on;
+}
+
 /**
  * Check rate limit for a given key.
  *
@@ -50,6 +72,9 @@ export interface RateLimitResult {
  *   if (!limit.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
  */
 export function checkRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
+  if (rateLimitBypassedForTest()) {
+    return { allowed: true, remaining: config.maxRequests, resetAt: Date.now() + config.windowMs };
+  }
   cleanup();
 
   const now = Date.now();

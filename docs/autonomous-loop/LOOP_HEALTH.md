@@ -38,7 +38,7 @@ LOOP_HEALTH:
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
     recurring_failures: []       # failures seen across >=2 runs (the "stuck" signal) — name them
-    harness_proposals_open: 0    # open 'loop: harness improvement proposal' issues
+    harness_proposals_open: 1    # open: "gates not enforced in CI" — journey+lint not required checks (staged docs/ci/PROPOSED_CI.md; owner applies)
   signal: bootstrapping          # bootstrapping | improving | steady | churning | stuck
 ```
 

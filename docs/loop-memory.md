@@ -4,6 +4,15 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — enforce loop gates as REQUIRED CI checks (staged; .github/ is human-applied)
+- **Gap (harness proposal "gates not enforced in CI"):** only verify/build/mobile are required checks; the functional JOURNEY suite (BUILDS≠WORKS) + lint are NOT — so a broken-for-a-user or lint-dirty change can auto-merge.
+- **Did (product side, mine):** added a TEST-ONLY rate-limit bypass `rateLimitBypassedForTest()` (gated on `E2E_RATE_LIMIT_BYPASS`, which PROD NEVER sets; logs loud if set) into `lib/utils/rate-limiter.ts` + the signup + waitlist inline limiters — so the self-seeding journey suite from one CI IP doesn't trip per-IP limits. Prereqs already existed (journey suite + ROUTE_INVENTORY + run-journeys.sh + lint F1).
+- **Staged (human-applies, can't touch .github/):** `docs/ci/PROPOSED_CI.md` — exact `lint` + `journeys` GitHub Actions jobs (supabase start → db reset → build → start :3100 → run-journeys.sh + lint) + the branch-protection required-checks list + the two gotchas: (a) set localhost base-URL env so auth redirect resolves (Supabase: NEXT_PUBLIC_SITE_URL/PLAYWRIGHT_BASE_URL; next-auth: AUTH_TRUST_HOST/AUTH_URL); (b) `E2E_RATE_LIMIT_BYPASS=1` only in the journeys job. + VERIFY-GREEN-BEFORE-REQUIRING (never make a flaky check required).
+- **Tracked:** OWNER_ACTION `enforce-ci-required-checks` (high) + LOOP_HEALTH `harness_proposals_open: 1` + a `loop: harness improvement proposal` issue (the META channel — the only way the loop's CI/rules improve, since it can't edit .github/).
+- **Lesson:** the loop can build the whole gate (suite + bypass + exact workflow) but the final `.github/` apply + branch-protection is irreducibly human (workflow scope). Stage everything, make the owner step one paste + a checkbox, and never require a check until it's proven green.
+
+---
+
 ## SYNC 2026-06-28 — LOOP HEALTH metric + abandoned-change classification (measure "is the loop getting better")
 - **Gap (vs loop-engineering best practice):** we had no measurable "is the loop improving" signal, and abandoned build-changes weren't classified/stored (risking re-attempting dead-ends).
 - **Added:** `docs/autonomous-loop/LOOP_HEALTH.md` — seeded machine-readable block the factory updates EVERY bookkeeping run with REAL counts: changes shipped vs abandoned (+classified `abandoned_reasons`), verify/review failures, circuit-breaker trips, rolling reverts + readiness attempts/rejections, recurring_failures, harness_proposals_open, and a `signal` (bootstrapping|improving|steady|churning|stuck). Dashboard-readable; observability only, NOT a ship gate; honest counts only.

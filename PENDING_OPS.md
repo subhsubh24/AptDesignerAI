@@ -10,6 +10,13 @@ OWNER_ACTIONS:
   project: AptDesignerAI
   as_of: 2026-06-28
   items:
+    - id: enforce-ci-required-checks
+      title: "Apply docs/ci/PROPOSED_CI.md — add lint + functional-journey CI jobs (needs workflow scope) + make them required checks"
+      priority: high
+      status: open
+      why: "Today only verify/build/mobile are required checks, so a BUILDS!=WORKS (broken-for-a-user) or lint-dirty change can still auto-merge. The headless loop cannot edit .github/, so it staged the exact workflow + steps. This closes the loop-health harness proposal 'gates not enforced in CI'."
+      how: "1) Merge the two jobs in docs/ci/PROPOSED_CI.md into .github/workflows/ci.yml (workflow scope). 2) Push on a throwaway branch and confirm the `journeys` job goes GREEN. 3) Settings -> Branches -> add `lint` + `journeys` to required status checks (keep verify/build/mobile). NEVER mark a flaky/red check required. Then close the linked 'loop: harness improvement proposal' issue."
+      blocks: gate-enforcement
     - id: spend-caps
       title: Set HARD daily API spend caps + alerts in every provider dashboard
       priority: urgent
