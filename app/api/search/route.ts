@@ -52,21 +52,22 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
-  // Fetch project for full building/apartment context
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", room.project_id)
-    .single();
-
-  // Fetch room diagnosis for design direction + what's working/not working
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("*")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  // Project (keyed on room.project_id) and the latest room diagnosis (keyed on
+  // room_id) are independent of each other — fetch them in parallel to save a
+  // round trip on this hot search entry point. Results are destructured by
+  // position, not completion order, so ordering stays deterministic.
+  const [{ data: project }, { data: diagnosis }] = await Promise.all([
+    // Fetch project for full building/apartment context
+    supabase.from("projects").select("*").eq("id", room.project_id).single(),
+    // Fetch room diagnosis for design direction + what's working/not working
+    supabase
+      .from("room_diagnoses")
+      .select("*")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
 
   // Create search session
   const { data: session } = await supabase
