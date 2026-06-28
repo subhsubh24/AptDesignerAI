@@ -92,6 +92,30 @@ unstyled, or off-brand/"vibe-coded" is a release-blocking FAIL equal to a red te
 DOM assertions pass. (Optional: visual-regression vs a committed baseline to catch unintended
 visual changes between runs.) BOUNDED: capture screenshots in the journey suite and JUDGE them
 in the periodic deep audit + at the readiness gate — not a vision pass on every micro-change.
+**SIDE-EFFECT INTEGRITY — verify the EFFECT, not the message (a "success" the user can't
+verify is a LIE).** The most dangerous failure is the one that REPORTS success: a flow that
+tells the user "confirmation email sent" / "saved" / "payment processed" while the real
+side-effect never happened. A green DOM and a happy toast prove the code RAN, not that the
+EFFECT occurred — and a DOM/screenshot assertion will pass right over it. Two non-negotiable
+rules: (1) **No fake success in the product.** Any user-facing success state must be causally
+DOWNSTREAM of the operation actually succeeding — await the real result, check it, and surface
+failure honestly. A message fired optimistically regardless of the provider's result (or while
+the provider is in dry-run / unconfigured) is a correctness bug, not a feature. You CANNOT ship
+email confirmation / 2FA / password-reset without proving the email actually LEAVES the system.
+(2) **Verify the EFFECT end-to-end.** For every side-effecting integration — email, SMS, push,
+payment charge/refund, outbound webhook, file/storage write, any third-party API write — "works"
+means the effect is OBSERVABLY produced in a test/sandbox environment, never that the UI showed
+success. For confirmation/reset/2FA email this means a real ROUND-TRIP in the journey suite:
+stand up an email capture (e.g. Mailpit/Mailhog, or a provider sandbox + its fetch API), assert
+the message was dispatched to the right recipient, then RETRIEVE it and follow the link to
+complete the flow; for payments, assert the sandbox charge/entitlement call actually fires. The
+escape hatch is NARROW: if a side-effect genuinely cannot be exercised even in sandbox (only the
+owner's live key/domain enables real production deliverability), the flow may NOT present users a
+silent dead-end — either gate/disable it with honest messaging, or it is a release-blocking gap
+on the human checklist (PENDING_OPS) AND the gate must still prove the flow COMPLETES with the
+secret set in sandbox/test. A critical-path flow (signup, login, billing) that depends on an
+unverified side-effect is NOT "done." Overclaiming a side-effect you did not observe is the SAME
+failure as a broken flow.
 
 ## 6b. Design taste — ELIMINATE generic-AI frontend (every UI change)
 Before ANY layout / component / branding / color / motion / visual decision, adopt a higher

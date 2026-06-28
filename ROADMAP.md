@@ -318,8 +318,32 @@ Never let that ship or count as done. This applies to EVERY aspect of the projec
   test/sandbox mode where possible and otherwise EXPLICITLY flagged on the human checklist
   (PENDING_OPS.md) as "must be manually verified" — NEVER silently assumed working. Overclaiming
   a flow you did not actually exercise is the SAME failure as a broken flow.
+- **SIDE-EFFECT INTEGRITY — verify the EFFECT, not the message (a "success" the user can't
+  verify is a LIE).** The canonical failure here: signup shows "confirmation email sent" but no
+  email is ever delivered — code ran, toast appeared, the user is dead in the water. DOM/screenshot
+  assertions pass right over this because email is a SIDE-EFFECT, not a screen. Two hard rules.
+  (1) **No fake success in the product:** any success state ("email sent" / "saved" / "charged")
+  MUST be causally downstream of the operation actually succeeding — await the real result, check
+  it, surface failure; a message fired regardless of the provider's result (or while it's in
+  dry-run/unconfigured) is a release-blocking correctness bug. You cannot ship email
+  confirmation / 2FA / password-reset without proving the email actually LEAVES the system.
+  (2) **Verify the effect end-to-end:** for every side-effecting integration (email, SMS, push,
+  payment charge/refund, outbound webhook, storage write, any 3rd-party write) "works" = the
+  effect is OBSERVABLY produced in sandbox. Confirmation/reset/2FA email = a real ROUND-TRIP in
+  the journey suite: capture the message (Mailpit/Mailhog or a provider sandbox + fetch API),
+  assert recipient+contents, RETRIEVE it, follow the link, complete the flow. The escape hatch is
+  narrow: if only the owner's live key/domain enables true production deliverability, the flow may
+  NOT show users a silent dead-end — gate it with honest messaging, record it on the human
+  checklist, AND the gate must still prove the flow COMPLETES with the secret set in sandbox. A
+  critical-path flow (signup/login/billing) gated on an unverified side-effect is NOT "done."
 A green build with a broken user journey is wasted work. See Track F (F4 — functional E2E) and
 the READINESS AUDIT GATE (Functional reality must be an actual RUN).
+
+> **P0 — fix the known defect this run:** signup currently reports a confirmation email was sent
+> while none is delivered (dry-run/unconfigured). Make the success message contingent on a real
+> send, and build the email round-trip into the journey suite (F4.1) so it can never silently
+> regress. Until the round-trip passes, signup-with-email-confirmation is UNVALIDATED and may not
+> be ticked.
 
 ## Tracks & phases
 
@@ -554,6 +578,17 @@ required gate or a recurring audit, not a nicety.
   budget on hot paths. WIRE `npm run test:e2e` into the gate (CI + `scripts/preflight.sh`) so a
   broken flow BLOCKS merge and readiness. (Mobile core flow exercised via Expo/Detox or its CI
   as feasible; what truly can't run headlessly goes on the human checklist, never assumed.)
+- [ ] F4.1. **Side-effect round-trip — prove the EFFECT, not the message (SIDE-EFFECT INTEGRITY
+  guard).** The journey suite asserts INTENDED OUTCOMES on screen, but side-effects (email/push/
+  charge) are invisible to DOM assertions — which is exactly how "confirmation email sent" can be
+  shown while nothing is delivered. Close it: stand up an email capture in the test env (Mailpit/
+  Mailhog or a provider sandbox + fetch API) and extend the suite so signup→**receive the real
+  confirmation email**→follow the link→confirmed→logged-in completes as a genuine ROUND-TRIP (same
+  for password-reset and any 2FA/magic-link). Assert the provider client was actually invoked with
+  the right recipient/payload, and that the product NEVER renders a success state ("sent"/"saved"/
+  "charged") unless the operation truly succeeded (no fake success; await + check the result).
+  Payments: assert the Stripe TEST-mode charge/entitlement call fires. WIRE into `test:e2e` + the
+  preflight gate so a fake-success or undelivered side-effect BLOCKS merge and readiness.
 - [ ] F5. **Periodic DEEP AUDIT (holistic, not per-diff).** On a recurring cadence
   (see the routine), a whole-codebase audit beyond per-change review: security/RLS,
   performance, accessibility, dead/duplicate code, consistency with the design system,
