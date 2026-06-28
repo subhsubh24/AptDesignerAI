@@ -1,11 +1,12 @@
 /**
  * Test seeding helpers for the runtime functional journey suite.
  *
- * The app's signup is double-opt-in (email confirmation) — a UI-only signup
- * cannot reach the dashboard without clicking the emailed link. To faithfully
- * exercise the AUTHENTICATED journeys (signup → working dashboard, paywall,
- * account), we seed a CONFIRMED user directly via the Supabase admin
- * (service-role) client, then sign in through the real UI.
+ * Signup itself no longer requires email verification (the server route
+ * auto-confirms — see app/api/auth/signup/route.ts), so a real UI signup now
+ * reaches the dashboard directly. These helpers still seed a CONFIRMED user via
+ * the Supabase admin (service-role) client for the journeys that need a
+ * pre-existing account (sign-in, account, paywall) without re-running the signup
+ * form each time.
  *
  * This requires a real auth backend (Supabase-local in CI). When the
  * service-role env is absent, `adminAvailable()` is false and the authed

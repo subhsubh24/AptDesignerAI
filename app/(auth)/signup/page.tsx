@@ -2,24 +2,29 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, CheckCircle2, Home } from "lucide-react";
+import { Loader2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { trackEvent } from "@/lib/analytics";
-import { isAlreadyRegisteredError, isNewUserSignup } from "@/lib/auth/signup-errors";
+
+// True when a real Supabase backend is configured. When absent (local/CI
+// without a backend) createClient() returns a mock and we sign up against it
+// directly instead of POSTing to the server route.
+const HAS_SUPABASE_BACKEND = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 export default function SignupPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,70 +37,47 @@ export default function SignupPage() {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-
-    if (error) {
-      // G4: never reveal that an email is already registered — show the same
-      // neutral "check your email" screen a brand-new signup gets, so the two
-      // cases are indistinguishable to an attacker probing for accounts.
-      if (isAlreadyRegisteredError(error)) {
-        setSuccess(true);
+    // 1) Create the account. There is NO email verification (no email pipeline
+    //    pre-launch — see PENDING_OPS): the server route creates an already-
+    //    confirmed user, so the account is usable immediately. We never claim to
+    //    send an email we can't send.
+    if (HAS_SUPABASE_BACKEND) {
+      let res: Response;
+      try {
+        res = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, password, fullName }),
+        });
+      } catch {
+        setError("Network error. Please try again.");
         setLoading(false);
         return;
       }
-      setError((error as { message: string })?.message || "Signup failed");
-      setLoading(false);
-    } else {
-      // Existing (confirmed) addresses come back with no error and an empty
-      // identities array; only count a genuinely new user in the funnel.
-      if (isNewUserSignup(data.user?.identities?.length)) {
-        trackEvent("signup_complete");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(data?.error || "Signup failed. Please try again.");
+        setLoading(false);
+        return;
       }
-      setSuccess(true);
-      setLoading(false);
+    } else {
+      // Local/dev without a backend: the mock client accepts any sign-up.
+      await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } });
     }
-  };
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
-        <div className="relative w-full max-w-md animate-fade-in-up">
-          <Card className="border-border/60 shadow-lg">
-            <CardHeader className="text-center pb-2">
-              <div className="flex justify-center mb-4">
-                <div className="h-14 w-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
-                  <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-                </div>
-              </div>
-              <CardTitle className="text-2xl font-bold tracking-tight">
-                Check your email
-              </CardTitle>
-              <CardDescription className="text-base mt-1">
-                We sent a confirmation link to <strong className="text-foreground">{email}</strong>.
-                Click the link to activate your account.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <Link href="/login">
-                <Button variant="outline" className="w-full">
-                  Back to Sign In
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+    // 2) Establish a session and land in the working app. A failure here stays
+    //    NEUTRAL (covers a wrong password on an existing email + transient
+    //    errors) so it never reveals whether the address already had an account.
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      setError("We couldn't sign you in. Check your details or sign in instead.");
+      setLoading(false);
+      return;
+    }
+    trackEvent("signup_complete");
+    router.push("/dashboard");
+    router.refresh();
+  };
 
   return (
     <div className="min-h-screen flex">

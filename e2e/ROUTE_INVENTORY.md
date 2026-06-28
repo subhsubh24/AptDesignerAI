@@ -17,6 +17,7 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | Route / flow | Tier | Outcome asserted | Spec |
 |---|---|---|---|
 | `/signup` | public | real form (`#name`/`#email`/`#password` + "Create Account"); no error boundary | ✅ |
+| `/signup` → `/dashboard` (real UI signup) | authed | new account is usable immediately, lands on a working dashboard, NO "check your email" dead-end (no email verification) | ✅ |
 | `/login` | public | real form (`#email`/`#password` + "Sign In") | ✅ |
 | `/dashboard` (logged out) | structural | redirects to `/login` | ✅ |
 | `/account` (logged out) | structural | redirects to `/login` | ✅ |
@@ -43,7 +44,9 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 
 ## Human-only (cannot run headlessly — verify manually, never assume working)
 - Real **payment capture** on a live card (Stripe live mode).
-- **Email deliverability** (signup confirmation, lifecycle) to a real inbox.
+- **Email deliverability** (waitlist confirmation, lifecycle) to a real inbox. NOTE: account
+  signup no longer depends on email (the route auto-confirms — see PENDING_OPS); if verification
+  is ever re-enabled, the signup→email round-trip must be covered before it ships.
 - **Native/device store purchases** (StoreKit / RevenueCat sandbox) in the mobile app.
 - **Push delivery** to a real device.
 

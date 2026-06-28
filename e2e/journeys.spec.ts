@@ -111,6 +111,24 @@ test.describe("authenticated journeys", () => {
     await expect(page.getByRole("button", { name: /start designing/i })).toBeVisible();
   });
 
+  test("REAL UI signup creates a usable account and lands on the dashboard (no email verification)", async ({
+    page,
+  }) => {
+    // Proves the no-email-verification fix end to end: a brand-new user filling
+    // the signup form must reach the WORKING dashboard — never the removed
+    // "check your email" dead-end (the verification loop that didn't exist).
+    const freshEmail = uniqueEmail("ui-signup");
+    await page.goto("/signup");
+    await page.locator("#name").fill("E2E Tester");
+    await page.locator("#email").fill(freshEmail);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /create account/i }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+    await expectNoErrorBoundary(page);
+    await expect(page.getByText(/check your email/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /start designing/i })).toBeVisible();
+  });
+
   test("core product flow entry: onboarding starts without error", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: /start designing/i }).click();

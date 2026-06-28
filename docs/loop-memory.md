@@ -4,6 +4,15 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## INCIDENT 2026-06-28 — signup required email verification but no email ever sent (DEEP DIAGNOSIS)
+- **Symptom (owner-reported):** creating an account showed "Check your email — we sent a confirmation link," but the email never arrived → every new user dead-ended, could not log in.
+- **Evidence / root cause (CODE + CONFIG, not a transient):** `app/(auth)/signup/page.tsx` called `supabase.auth.signUp` and UNCONDITIONALLY rendered the "check your email" success screen regardless of whether any email was sent (fake success). The actual send relied on Supabase's built-in auth email, which is unconfigured pre-launch (no custom SMTP/Resend + verified domain — an owner-set secret). So the verification LOOP did not exist: a hard gate was introduced on a dependency that was never wired.
+- **Decision:** REMOVE the verification gate (don't gate signup on an email loop that doesn't exist). New server route `app/api/auth/signup/route.ts` creates an already-confirmed user via the admin client (`email_confirm: true` — the same pattern the e2e seeder uses), hardened like the waitlist route (per-IP rate limit + Turnstile + enumeration-safe uniform response). The client then signs in and routes to `/dashboard`. The fake "check your email" screen is gone.
+- **Proof:** added an authed journey ("REAL UI signup ... lands on the dashboard (no email verification)") that drives the real form → asserts `/dashboard` + no error boundary + zero "check your email". tsc/eslint/tests green.
+- **Lesson (smarter decisions):** never introduce a feature whose dependency loop is unbuilt/unverifiable (email verification with no working email send; a "we sent X" message with no real X). Either wire + round-trip-test the dependency, or don't gate on it. Re-enabling verification later is recorded in PENDING_OPS (`email-verification-deferred`) and must come WITH the round-trip test (F4.1). Ties to FACTORY_STANDARD §6 (SIDE-EFFECT INTEGRITY) + docs/autonomous-loop/DEEP_DIAGNOSIS.md.
+
+---
+
 ## Run 2026-06-28 (Run 36) — DEEP AUDIT + 7 disjoint changes
 
 ### State on entry

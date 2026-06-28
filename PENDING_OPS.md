@@ -38,6 +38,13 @@ OWNER_ACTIONS:
       why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
       how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
       blocks: annual-billing
+    - id: email-verification-deferred
+      title: "Account email verification is intentionally OFF (no email pipeline) — re-enable ONLY with the round-trip test"
+      priority: low
+      status: open
+      why: "Signup previously required an email confirmation link, but no transactional-email pipeline exists pre-launch, so every new user dead-ended at 'check your email' with no email ever arriving. Decision: signup now creates an already-confirmed account server-side (app/api/auth/signup/route.ts) — no verification. This is the correct pre-launch call; do NOT 'fix' it back to requiring verification while the email loop is unverified."
+      how: "If you WANT email verification later: (1) connect a real provider for Supabase Auth (custom SMTP / Resend) with a verified domain; (2) FIRST add the signup->receive-email->click-link->confirmed round-trip to the journey suite (ROADMAP F4.1) so it is proven end to end; (3) only then switch the flow back to requiring confirmation. Never ship a verification gate whose email send is not round-trip-tested."
+      blocks: none
     - id: apply-migrations-022-023
       title: "Apply migrations 022 (waitlist double opt-in) + 023 (social publishing queue) to prod"
       priority: normal
