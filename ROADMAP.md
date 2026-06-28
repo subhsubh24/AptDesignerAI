@@ -508,7 +508,9 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   Build the gate + the exempt-route allowlist; the PASSWORD VALUE is HUMAN-APPLIED (owner sets
   `SITE_GATE_PASSWORD` — recorded in PENDING_OPS), never committed. Ties to the Growth Agent's
   marketing maturity gate (docs/growth/ANALYSIS_PLAYBOOK.md): the agent confirms the gate is up
-  before driving traffic and recommends taking it down at launch.
+  before driving traffic and recommends taking it down at launch. **BLOCKING:** pre-launch
+  execute-mode outreach is FORBIDDEN until the gate is confirmed up (`GROWTH_STATUS.site_gate_up:
+  true`) — until then the Growth Agent stays in PREPARE mode and drives zero external traffic.
 
 > **Marketing autonomy boundary:** the loop may BUILD and STAGE all of the above.
 > It may NOT publish publicly, send bulk email, or spend ad money until the owner
