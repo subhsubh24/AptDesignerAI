@@ -52,6 +52,10 @@ export async function verifyTurnstile(
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: body.toString(),
+      // This runs on every public-form POST (signup/waitlist). A stalled
+      // Cloudflare connection must not block the funnel: time out at 5s and
+      // fall through to the fail-open "unreachable" branch below.
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return { success: true, reason: "unreachable" };
     const data = (await res.json()) as { success?: boolean };

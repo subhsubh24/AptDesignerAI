@@ -160,6 +160,9 @@ async function tavilyPost<T>(path: string, body: Record<string, unknown>): Promi
   const apiKey = getApiKey();
   const url = `${TAVILY_BASE}${path}`;
 
+  // Bound every request: a stalled Tavily connection must never hold the
+  // serverless function open to its full budget. 15s is comfortably under the
+  // Vercel limit while leaving room for withRetry()'s backoff between attempts.
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -167,6 +170,7 @@ async function tavilyPost<T>(path: string, body: Record<string, unknown>): Promi
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {
