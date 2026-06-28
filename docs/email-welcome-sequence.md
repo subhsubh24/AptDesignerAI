@@ -120,7 +120,7 @@ Applies to the Apartment plan ($29 → $20.30) or Pro plan ($49/month → $34.30
 3. Choose the room type, wait about 30 seconds
 4. Read the analysis — it's going to say something true about the room
 
-If you run into anything, reply to this email or visit aptdesigner.app/support.
+If you run into anything, reply to this email or visit aptdesignerai.com/support.
 
 Thank you for waiting.
 

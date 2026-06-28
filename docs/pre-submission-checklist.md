@@ -77,9 +77,9 @@ Run `grep -r "TODO\|placeholder\|lorem ipsum" mobile/app.json` — should return
 - [ ] Short description ≤ 30 characters (Play Store subtitle)
 - [ ] Full description ≤ 4000 characters (both stores)
 - [ ] Keywords field filled (App Store only — 100 character limit)
-- [ ] Privacy Policy URL set in App Store Connect + Play Console: `https://aptdesigner.app/privacy`
-- [ ] Support URL set: `https://aptdesigner.app/support`
-- [ ] Marketing URL set: `https://aptdesigner.app`
+- [ ] Privacy Policy URL set in App Store Connect + Play Console: `https://aptdesignerai.com/privacy`
+- [ ] Support URL set: `https://aptdesignerai.com/support`
+- [ ] Marketing URL set: `https://aptdesignerai.com`
 
 ---
 
