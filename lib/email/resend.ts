@@ -36,6 +36,10 @@ export class ResendProvider implements EmailProvider {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        // Lifecycle emails fire from the request path (e.g. the Stripe webhook).
+        // A stalled provider connection must not hold the function open — time
+        // out at 10s and surface a clean "unreachable" result via the catch.
+        signal: AbortSignal.timeout(10000),
       });
 
       if (!res.ok) {
