@@ -111,11 +111,13 @@ form is unchanged.
 4. Verify: load `/waitlist` → the Turnstile widget renders → submit → a sign-up without solving the
    challenge is rejected (HTTP 400).
 
-**Signup form (completes G5 — owner-side, no loop code):** the signup page uses a client-side
-Supabase auth call, so the right place for its CAPTCHA is **Supabase's built-in bot protection**:
-Supabase dashboard → Authentication → Settings → enable CAPTCHA (Cloudflare Turnstile / hCaptcha)
-and paste the same Turnstile keys. Once both the waitlist (above) and signup are protected, G5 can
-be ticked.
+**Signup form (now loop-covered — Run 38, PR #169):** the signup page POSTs to the server route
+`/api/auth/signup`, which verifies the Turnstile token, and the page now renders the `<Turnstile>`
+widget (same closed-but-inert pattern as the waitlist). So there is **no separate owner step** for
+signup beyond setting the same two keys above and redeploying — once `TURNSTILE_SECRET_KEY` +
+`NEXT_PUBLIC_TURNSTILE_SITE_KEY` are set, BOTH the waitlist and signup forms enforce the challenge.
+Verify after deploy: load `/signup` → the widget renders → a sign-up without solving it is rejected.
+(G5 is ticked in the ROADMAP: the code covers both forms; only the keys are owner-applied.)
 
 ### Growth-engine env vars (added 2026-06-27, Run 33 — PRs #117/#118/#120) — see docs/growth/CONNECT.md
 

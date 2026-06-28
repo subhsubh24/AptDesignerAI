@@ -645,15 +645,15 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
 - [ ] G2. **Server-side validation on every write** (client Zod is UX, not security):
   re-validate types/lengths/shape on the server for every endpoint that writes to the DB
   or calls a paid API; reject malformed/oversized input.
-- [ ] G3. **Error-message hygiene**: generic user-facing errors ("not found"), full
+- [x] G3. **Error-message hygiene**: generic user-facing errors ("not found"), full
   context logged SERVER-SIDE only; never leak schema/table/column names, stack traces, or
   query logic to the client. No enumeration via error differences.
-  **[Partial — Run 37 (PR #164): `lib/utils/api-error.ts` (apiError/logServerError) applied
-  across ~20 JSON API routes — raw Supabase/Postgres error strings no longer reach clients;
-  full error logged server-side; PGRST116→404 preserved. REMAINING before G3 ticks: the two
-  STREAMING (SSE) routes (`diagnosis/stream`, `search/stream`) still send `err.message` in an
-  error event, and the Stripe webhook returns the raw signature-verification message. Keep G3
-  unchecked until those are genericized.]**
+  **[DONE — Run 37 (PR #164): `lib/utils/api-error.ts` (apiError/logServerError) across ~20
+  JSON API routes. Run 38 (PR #168): closed the tail — the two SSE routes (`diagnosis/stream`,
+  `search/stream`) now log full errors server-side + emit generic SSE `error` events; the
+  products/evaluate-set per-item errors and the Stripe webhook signature error are genericized.
+  A full app/api sweep (any-variable `.message` in a NextResponse/SSE error) confirms no
+  client-facing raw-error leaks remain.]**
 - [ ] G4. **Auth failure-case hardening + tests**: lockout/backoff on repeated wrong
   passwords; password-reset does NOT reveal whether an email exists; email-verification
   link is idempotent (double-click safe); signup with an existing email does NOT leak that
@@ -662,14 +662,14 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   the same neutral screen as a new signup (lib/auth/signup-errors.ts, 6 tests). REMAINING:
   login lockout/backoff (needs a server-side login route) + password-reset/verification
   enumeration guards. Keep G4 unchecked until those land.]**
-- [ ] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
+- [x] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
-  **[Partial — Run 35 (PR #141): Cloudflare Turnstile on the WAITLIST form
-  (`lib/security/turnstile.ts` server verify + `components/ui/turnstile.tsx` widget),
-  closed-but-inert until the owner sets TURNSTILE_SECRET_KEY + NEXT_PUBLIC_TURNSTILE_SITE_KEY
-  (see PENDING_OPS). REMAINING before G5 ticks: protect the signup form — it's a client-side
-  Supabase auth call, so the right fix is Supabase's built-in CAPTCHA (owner config in the
-  Supabase dashboard) rather than loop code. Keep G5 unchecked until signup is covered.]**
+  **[DONE — Run 35 (PR #141): Turnstile on the WAITLIST form. Run 38 (PR #169): Turnstile on
+  the SIGNUP form too — signup now POSTs to the server `/api/auth/signup` route, which already
+  verifies the token, so the loop owns both halves (server verify + `components/ui/turnstile.tsx`
+  widget on each form). Both ship closed-but-inert until the owner sets TURNSTILE_SECRET_KEY +
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY and rebuilds (see PENDING_OPS) — the same owner key step as any
+  live secret. Both public forms are covered in code.]**
 - [x] G6. **CORS locked down** (allowlist prod + localhost, block the rest) and sane
   security headers (CSP / HSTS / X-Content-Type-Options, etc.); align to OWASP basics.
   **(Security headers — CSP (PR #114), HSTS / X-Frame-Options / X-Content-Type-Options /

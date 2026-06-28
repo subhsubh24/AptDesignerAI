@@ -4,6 +4,44 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-28 (Run 38) — 5 disjoint changes (reliability + G3 ✓ + G5 ✓ + 2× critical-path tests)
+
+### State on entry
+- Default tip #166 (post Run 37). Cold container → `npm install` (root) + `cd mobile && npm install`.
+- Last DEEP AUDIT: Run 36 → **not due** this run (every ~4 runs; next ~Run 40). No deep audit.
+- QUALITY_SCORECARD still all-null (independent auditor hasn't run) → readiness gate cannot pass; did NOT attempt the ready issue.
+- No open PRs/issues blocking. Baseline gate green: tsc clean, 1061 tests, determinism clean.
+
+### Area served this run
+Worked the Run 37 rotation guide + a 7-scout Haiku sweep. Selected the maximal file-disjoint, value-bar-clearing set: **external-fetch timeouts (ROADMAP hard rule), G3 SSE/webhook tail, G5 signup CAPTCHA, billing-checkout+user-delete tests, internal growth-metrics+social-queue tests.** 5 changes, all merged #167–171. Gate on merged default: tsc clean, **1094 tests**, determinism clean.
+
+### What was done
+- **#167 reliability** — `AbortSignal.timeout` on Tavily(15s)/Resend(10s)/Turnstile(5s); the 3 external fetches that had none. Closes the ROADMAP "every external/LLM call needs a timeout" rule for these. (Scout noted 2 more in `places/photo` — left for a future run.)
+- **#168 G3 tail → G3 TICKED** — genericized the 2 SSE routes + products/evaluate-set + Stripe webhook sig error (logServerError + generic client message; SSE shape unchanged). Also `.ai`→`.com` webhook email fallback. Full app/api `.message`-in-response sweep = clean.
+- **#169 G5 signup CAPTCHA → G5 TICKED** — added `<Turnstile>` to the signup form (server `/api/auth/signup` already verified the token). Both public forms now covered in code; inert until owner keys. Fixed the now-stale PENDING_OPS note (signup is no longer Supabase-dashboard-side).
+- **#170 tests** — +14 for billing/checkout + user/delete (money + Apple-required deletion).
+- **#171 tests** — +19 for internal growth-metrics + social-queue.
+- 10 per-change Sonnet reviewers, all APPROVE. 7 Haiku scouts.
+
+### Lessons learned
+1. **The local default branch can be STALE — ALWAYS branch from `origin/<default>`, never the local branch.** On a cold container I `git reset --hard origin/<default>` (detached HEAD at the real tip), but then created a feature branch via `git checkout claude/... && git checkout -b ...` — the LOCAL `claude/...` branch was 100+ commits behind (no `app/api/billing` yet!), so my edits landed on a stale base and the first webhook Read failed with "file does not exist." Fix: `git branch -f claude/... origin/claude/...` once, and create every branch with `git checkout -b <name> origin/claude/ai-apartment-design-app-iHAdb` (explicit origin ref). The detached-HEAD-from-reset trick worked for the FIRST branch only by luck.
+2. **Haiku scouts over-call a11y/"missing aria-label" findings.** All 3 flagged buttons already had accessible names (visible text content, or an existing `aria-label="Dismiss error"`). A `<button>` with child text needs no aria-label. Verified each at the source and ABANDONED the a11y change rather than ship churn — better a quiet 5-change run than padding to 6.
+3. **G3/G5 became tickable this run because the LAST piece was loop-buildable.** G5's old note said "signup CAPTCHA is Supabase-dashboard owner config" — but signup had since moved to a server route that verifies the token, so the loop could own it. When a checkbox is blocked "owner-side," re-check whether the blocker still holds before deferring again.
+4. **Reviewers want the SSE event SHAPE preserved.** Genericizing SSE `error` events is safe only if the client still gets `{ error: "<string>" }` (clients do `throw new Error(data.error)` / `setSearchError(data.error)`). Confirmed before editing.
+5. **Auto-merge on disjoint PRs is fast** — all 5 squash-merged within ~minutes of CI green; the open-PR list emptying is the reliable signal (confirm with `git log origin/<default>`).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 40** (last ran Run 36). Run a full read-only sweep before scouting.
+- **Highest-value queued, file-disjoint:**
+  - **Reliability tail** — `app/api/places/photo/route.ts` has 2 Google Places fetches with no timeout (scout-confirmed); same one-line `AbortSignal.timeout` fix.
+  - **More route/agent tests** — orchestrator/room-diagnostician with mocked providers (scout mapped these); other internal/agent paths.
+  - **G4** — login lockout/backoff (needs a server-side login route; login is still client-side Supabase) + password-reset enumeration guards (owner email pipeline-gated).
+  - **A11y/design tokens** — badge.tsx/toast.tsx semantic colors → `--score-*` tokens (BORDERLINE — scout said colors already match the tokens, so it's pure routing → likely churn; skip unless paired with a real need).
+- **Human-gated (unchanged):** migrations apply; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys (now cover BOTH forms); EAS init/projectId + Apple/Play accounts; all live secrets.
+- **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue until the independent scorecard is populated and ship-critical dims are A/A+.
+
+---
+
 ## Run 2026-06-28 (Run 37) — 6 disjoint changes (security + tests + perf + correctness + a11y + artifacts)
 
 ### State on entry
