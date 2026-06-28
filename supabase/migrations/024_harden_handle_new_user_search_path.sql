@@ -1,0 +1,14 @@
+-- Harden the handle_new_user() SECURITY DEFINER trigger function by pinning its
+-- search_path. A SECURITY DEFINER function with a mutable search_path runs with
+-- the *caller's* search_path; an attacker who can create a schema/object earlier
+-- in that path could shadow an unqualified reference and have it execute with the
+-- definer's (elevated) privileges. This is the Supabase linter's
+-- "Function Search Path Mutable" finding and the standard Postgres hardening.
+--
+-- The function body already fully-qualifies its only object reference
+-- (public.profiles), so an empty search_path is safe and the strictest option:
+-- nothing is resolved via an attacker-controllable path.
+--
+-- Idempotent: ALTER FUNCTION ... SET only changes configuration; the function
+-- body is untouched, so re-applying is harmless.
+alter function public.handle_new_user() set search_path = '';
