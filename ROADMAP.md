@@ -336,6 +336,19 @@ Never let that ship or count as done. This applies to EVERY aspect of the projec
   NOT show users a silent dead-end — gate it with honest messaging, record it on the human
   checklist, AND the gate must still prove the flow COMPLETES with the secret set in sandbox. A
   critical-path flow (signup/login/billing) gated on an unverified side-effect is NOT "done."
+- **DEEP DIAGNOSIS for "builds/deploys but the user hits an error."** Reading code and
+  theorizing is the slow, wrong first move — observe the REAL system FIRST. Follow the full
+  method in `docs/autonomous-loop/DEEP_DIAGNOSIS.md` on every such incident, and record the
+  incident (symptom → evidence → root cause → fix → proof) in the loop-memory file. In short:
+  (1) pull production LOGS + query the live DB (Supabase MCP get_logs/execute_sql/get_advisors)
+  or reproduce the journey — logs usually name the cause in seconds; (2) separate CODE vs DATA
+  vs CONFIG with evidence before changing anything; (3) form ONE hypothesis and PROVE it against
+  the live system; (4) hunt the UNCAUGHT throw (bare auth/session read, loadEnv(), a DB/LLM call
+  outside the try or with no timeout); (5) verify the fix in the REAL data, not the build; (6) fix
+  the ROOT cause + add a regression test that fails LOUD; (7) PEEL stacked causes until the real
+  journey works end-to-end; (8) stay honest — never claim "fixed" without proof. Two hard rules:
+  every external/LLM call needs a timeout SHORTER than the serverless budget; an `.optional()`
+  env var a critical path requires must FAIL LOUD.
 A green build with a broken user journey is wasted work. See Track F (F4 — functional E2E) and
 the READINESS AUDIT GATE (Functional reality must be an actual RUN).
 

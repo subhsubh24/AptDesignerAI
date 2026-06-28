@@ -116,6 +116,22 @@ on the human checklist (PENDING_OPS) AND the gate must still prove the flow COMP
 secret set in sandbox/test. A critical-path flow (signup, login, billing) that depends on an
 unverified side-effect is NOT "done." Overclaiming a side-effect you did not observe is the SAME
 failure as a broken flow.
+**DEEP DIAGNOSIS — when it builds/deploys but the user hits an error, observe the REAL system
+FIRST.** Reading code and theorizing is the slow, wrong first move. Full method:
+`docs/autonomous-loop/DEEP_DIAGNOSIS.md` — follow it on every such incident and record the
+incident in the loop-memory file. In one line: (1) pull production LOGS + query the live DB
+(Supabase MCP get_logs/execute_sql/get_advisors) or reproduce the journey — logs usually name
+the cause in seconds; (2) separate CODE vs DATA vs CONFIG with evidence before changing anything
+("no new row + no DB error + no app→DB connection" → it's config); (3) form ONE hypothesis and
+PROVE it against the live system; (4) hunt the UNCAUGHT throw (a bare auth/session read, a
+loadEnv(), a DB/LLM call outside the try or with no timeout) — the error-boundary copy names the
+route; (5) verify the fix in the REAL data, not the build; (6) fix the ROOT cause + add a
+regression test that fails LOUD (never paper a config bug with a code workaround); (7) PEEL
+stacked causes until the real journey works end-to-end; (8) stay honest — never claim "fixed"
+without proof. Two hard rules from real outages: (a) every external/LLM call needs a timeout
+SHORTER than the serverless budget (a graceful try/catch is useless if the runtime kills the
+function first); (b) an `.optional()` env var a critical path requires is a latent outage — make
+it FAIL LOUD.
 
 ## 6b. Design taste — ELIMINATE generic-AI frontend (every UI change)
 Before ANY layout / component / branding / color / motion / visual decision, adopt a higher
