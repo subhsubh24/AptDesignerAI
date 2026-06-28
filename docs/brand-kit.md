@@ -130,7 +130,7 @@ Full store listing copy (App Store + Google Play) is staged at
 `docs/store-listing.md`.
 
 - **App name:** AptDesigner — AI Interior Design
-- **Subtitle (iOS):** AI-Powered Room Redesign
+- **Subtitle (iOS):** AI Interior Design for Any Room
 - **Short description (Android):** Photograph any room. Get an AI design plan instantly.
 - **Primary keyword cluster:** interior design app, room design AI, home decor planner
 
