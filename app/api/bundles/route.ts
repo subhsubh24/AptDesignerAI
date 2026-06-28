@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError("bundles", error);
   return NextResponse.json(data);
 }
 
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (bundleError) return NextResponse.json({ error: bundleError.message }, { status: 500 });
+  if (bundleError) return apiError("bundles", bundleError);
 
   // Add items if provided
   if (product_ids && product_ids.length > 0) {

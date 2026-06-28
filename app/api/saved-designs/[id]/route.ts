@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 
 export async function GET(
@@ -61,7 +62,7 @@ export async function PATCH(
 
   // `data` is null when no rows matched (e.g. deleted between read and write)
   if (error || !updated) {
-    return NextResponse.json({ error: error?.message ?? "Update failed" }, { status: 500 });
+    return apiError("saved-designs.byId", error ?? "Update failed");
   }
 
   return NextResponse.json({ share_token, is_public });
@@ -82,7 +83,7 @@ export async function DELETE(
     .eq("user_id", userId);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return apiError("saved-designs.byId", error);
   }
 
   return NextResponse.json({ deleted: true });

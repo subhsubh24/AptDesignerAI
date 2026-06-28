@@ -27,6 +27,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createLogger } from "@/lib/logging/logger";
 import { runProductVerifier } from "@/lib/agents/product-verifier";
 import { embedImage } from "@/lib/ai/embeddings";
@@ -83,7 +84,7 @@ export async function POST(
     .order("created_at", { ascending: false })
     .limit(1);
   if (fetchErr) {
-    return NextResponse.json({ error: String(fetchErr) }, { status: 500 });
+    return apiError("identified-products.correct", fetchErr);
   }
   const diagnosisRow = Array.isArray(diagnoses) ? diagnoses[0] : diagnoses;
   if (!diagnosisRow) {
@@ -235,7 +236,7 @@ export async function POST(
     .eq("id", diagnosisRow.id);
 
   if (updateErr) {
-    return NextResponse.json({ error: String(updateErr) }, { status: 500 });
+    return apiError("identified-products.correct", updateErr);
   }
 
   return NextResponse.json({

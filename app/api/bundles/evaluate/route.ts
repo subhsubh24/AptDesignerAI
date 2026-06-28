@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -136,7 +137,7 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (saveError) return NextResponse.json({ error: saveError.message }, { status: 500 });
+  if (saveError) return apiError("bundles.evaluate", saveError);
 
   await supabase
     .from("product_bundles")

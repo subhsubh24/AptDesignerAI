@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
 
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
   }
 
   const { data: rooms, error: roomsError } = await roomsQuery;
-  if (roomsError) return NextResponse.json({ error: roomsError.message }, { status: 500 });
+  if (roomsError) return apiError("picks", roomsError);
   if (!rooms?.length) return NextResponse.json([]);
 
   const roomIds = rooms.map((r: { id: string }) => r.id);
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);
 
-  if (prodError) return NextResponse.json({ error: prodError.message }, { status: 500 });
+  if (prodError) return apiError("picks", prodError);
 
   const enriched = (products ?? []).map((p: { room_id: string; [key: string]: unknown }) => ({
     ...p,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -173,7 +174,7 @@ export async function POST(request: Request) {
     .single();
 
   if (saveError) {
-    return NextResponse.json({ error: saveError.message }, { status: 500 });
+    return apiError("products.evaluate", saveError);
   }
 
   // Update product status
