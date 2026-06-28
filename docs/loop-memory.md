@@ -4,6 +4,14 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## SYNC 2026-06-28 — staged auto-migrate-on-deploy (kill recurring "apply migrations" toil)
+- **Why:** migrations were hand-applied every time the factory adds one (recurring owner step). Staged a `migrate` CI job (in docs/ci/PROPOSED_CI.md) that runs `supabase db push` post-merge, default-branch-only, after verify+build pass — forward-only, never reset.
+- **Safety rails baked in (auto-applying to prod is the risk the manual step avoided):** default-branch + post-gate only; migrations still go through the 2-reviewer + RLS gate pre-merge; recommended owner net = Supabase PITR/backups before enabling. Tradeoff (removes the human schema checkpoint) is stated in the doc + the OWNER_ACTION so the owner applies it consciously.
+- **Owner one-time:** 3 GitHub secrets (SUPABASE_ACCESS_TOKEN/PROJECT_REF/DB_PASSWORD) + enable PITR + apply the job (workflow scope). Then migrations self-apply forever. Tracked: OWNER_ACTION `auto-migrate-on-deploy` (normal, optional).
+- **Lesson:** the loop can stage even the deploy-time DB automation; the irreducible owner part shrinks to "set 3 secrets + apply 1 workflow, once." Still can't touch .github/ (headless permission prompt) — staged, human-applies.
+
+---
+
 ## SYNC 2026-06-28 — enforce loop gates as REQUIRED CI checks (staged; .github/ is human-applied)
 - **Gap (harness proposal "gates not enforced in CI"):** only verify/build/mobile are required checks; the functional JOURNEY suite (BUILDS≠WORKS) + lint are NOT — so a broken-for-a-user or lint-dirty change can auto-merge.
 - **Did (product side, mine):** added a TEST-ONLY rate-limit bypass `rateLimitBypassedForTest()` (gated on `E2E_RATE_LIMIT_BYPASS`, which PROD NEVER sets; logs loud if set) into `lib/utils/rate-limiter.ts` + the signup + waitlist inline limiters — so the self-seeding journey suite from one CI IP doesn't trip per-IP limits. Prereqs already existed (journey suite + ROUTE_INVENTORY + run-journeys.sh + lint F1).

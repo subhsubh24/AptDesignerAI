@@ -17,6 +17,13 @@ OWNER_ACTIONS:
       why: "Today only verify/build/mobile are required checks, so a BUILDS!=WORKS (broken-for-a-user) or lint-dirty change can still auto-merge. The headless loop cannot edit .github/, so it staged the exact workflow + steps. This closes the loop-health harness proposal 'gates not enforced in CI'."
       how: "1) Merge the two jobs in docs/ci/PROPOSED_CI.md into .github/workflows/ci.yml (workflow scope). 2) Push on a throwaway branch and confirm the `journeys` job goes GREEN. 3) Settings -> Branches -> add `lint` + `journeys` to required status checks (keep verify/build/mobile). NEVER mark a flaky/red check required. Then close the linked 'loop: harness improvement proposal' issue."
       blocks: gate-enforcement
+    - id: auto-migrate-on-deploy
+      title: "(Optional) enable auto-migrate-on-deploy so migrations stop being a manual step (docs/ci/PROPOSED_CI.md)"
+      priority: normal
+      status: open
+      why: "Migrations are currently hand-applied (`supabase db push`) every time the factory adds one — recurring owner toil. The staged `migrate` CI job applies new migrations automatically post-merge after the gate passes. TRADEOFF: removes the human checkpoint on schema changes (mitigated: 2-reviewer+RLS gate pre-merge, default-branch-only, forward-only push, never reset). Decide consciously."
+      how: "1) Enable Supabase PITR/backups (recoverability net). 2) Set GitHub Actions secrets SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF + SUPABASE_DB_PASSWORD (Settings->Secrets, or gh secret set). 3) Apply the `migrate` job from docs/ci/PROPOSED_CI.md (workflow scope). After this you never hand-apply a migration again. (Skip if you prefer keeping the manual checkpoint.)"
+      blocks: none
     - id: spend-caps
       title: Set HARD daily API spend caps + alerts in every provider dashboard
       priority: urgent

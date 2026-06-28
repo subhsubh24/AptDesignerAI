@@ -88,3 +88,46 @@ required regardless — it's deterministic).
   versions — if a key comes through empty, run `supabase status -o env` once in the job and adjust
   the `grep` keys.
 - Existing `verify` / `build` / `mobile` checks stay as-is; this only ADDS `lint` + `journeys`.
+
+---
+
+## Optional: auto-migrate-on-deploy (kill the recurring "apply migrations" toil)
+
+**What it does:** after a change merges to the default branch AND the gate passes, applies any new
+`supabase/migrations/*` to prod automatically — so the owner never hand-runs `supabase db push`
+again. **Tradeoff (decide consciously):** it removes the human checkpoint on schema changes.
+Mitigated by — migrations go through the 2-reviewer + RLS-reviewer gate before merge; the job runs
+ONLY on the default branch, ONLY after `verify`+`build` pass; `db push` is forward-only (NEVER a
+reset). **Strongly recommended safety net:** enable Supabase **Point-in-Time Recovery / daily
+backups** on the project before turning this on, so any bad migration is recoverable.
+
+### Add this job to `.github/workflows/ci.yml`
+```yaml
+  migrate:
+    # post-merge only — NEVER on PRs/previews — and only after the gate is green
+    if: github.event_name == 'push' && github.ref == 'refs/heads/claude/ai-apartment-design-app-iHAdb'
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - run: supabase db push            # forward-only; applies only NEW migrations. NEVER `db reset`.
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF:  ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD:  ${{ secrets.SUPABASE_DB_PASSWORD }}
+```
+*(Ensure the workflow's `on:` includes `push:` to the default branch. `db push` is non-interactive
+with `SUPABASE_DB_PASSWORD` set.)*
+
+### Owner one-time setup
+1. Set three **GitHub Actions secrets** (Repo → Settings → Secrets and variables → Actions — UI is
+   safest for secret values; or `gh secret set <NAME> --repo subhsubh24/AptDesignerAI`):
+   - `SUPABASE_ACCESS_TOKEN` (Supabase dashboard → Account → Access Tokens)
+   - `SUPABASE_PROJECT_REF` (your project ref)
+   - `SUPABASE_DB_PASSWORD` (the project DB password)
+2. Enable Supabase **PITR/backups** (the recoverability net).
+3. Apply the `migrate` job (workflow scope), like the lint/journeys jobs above.
+Once done, you never hand-apply a migration again — every future one self-applies post-merge.
