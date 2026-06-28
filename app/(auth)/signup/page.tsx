@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -10,12 +10,20 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Home } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
+import { Turnstile } from "@/components/ui/turnstile";
 import { trackEvent } from "@/lib/analytics";
 
 // True when a real Supabase backend is configured. When absent (local/CI
 // without a backend) createClient() returns a mock and we sign up against it
 // directly instead of POSTing to the server route.
 const HAS_SUPABASE_BACKEND = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+// Bot protection is active only once the owner sets the public site key; until
+// then the widget renders nothing and the form behaves exactly as before. The
+// /api/auth/signup route already verifies the token server-side (fail-open when
+// no secret is set), so this is the matching client half — without it, signups
+// would break the moment TURNSTILE_SECRET_KEY is set.
+const CAPTCHA_ENABLED = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export default function SignupPage() {
   const supabase = createClient();
@@ -25,10 +33,21 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  const handleCaptchaToken = useCallback((token: string | null) => {
+    setCaptchaToken(token);
+  }, []);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setError("Please complete the verification below.");
+      return;
+    }
+
     setLoading(true);
 
     if (password.length < 6) {
@@ -47,7 +66,7 @@ export default function SignupPage() {
         res = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, password, fullName }),
+          body: JSON.stringify({ email, password, fullName, turnstileToken: captchaToken }),
         });
       } catch {
         setError("Network error. Please try again.");
@@ -142,7 +161,15 @@ export default function SignupPage() {
                   </div>
                 )}
 
-                <Button type="submit" variant="warm" className="w-full h-11" disabled={loading}>
+                {/* Bot-protection challenge — renders only when a site key is configured. */}
+                <Turnstile onToken={handleCaptchaToken} className="w-full" />
+
+                <Button
+                  type="submit"
+                  variant="warm"
+                  className="w-full h-11"
+                  disabled={loading || (CAPTCHA_ENABLED && !captchaToken)}
+                >
                   {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Create Account
                 </Button>
