@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@aptdesigner:saves_used';
-const FREE_SAVES_LIMIT = 1;
+// Mirror the server gate (FREE_SAVE_LIMIT in lib/entitlements/server.ts) and the
+// web client (FREE_SAVE_LIMIT_WEB = 3). This is the client-side UX hint only —
+// the server enforces the real limit; keeping them aligned means a free user is
+// offered the same 3 saves everywhere, not paywalled early after 1 save on mobile.
+const FREE_SAVES_LIMIT = 3;
 
 export type FreeQuotaHook = {
   isLoading: boolean;
