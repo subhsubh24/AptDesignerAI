@@ -342,12 +342,24 @@ export const deepseekProvider: AIProvider = {
       const content = choice.message.content || "";
       const reasoningContent = choice.message.reasoning_content || "";
 
-      // Map function calls
-      const functionCalls = choice.message.tool_calls?.map((tc) => ({
-        id: tc.id,
-        name: tc.function.name,
-        args: JSON.parse(tc.function.arguments) as Record<string, unknown>,
-      }));
+      // Map function calls. The model occasionally emits malformed JSON in a
+      // tool call's `arguments` (a protocol/data error, not a transient network
+      // fault). Parse defensively so the failure surfaces as a clear, named
+      // error instead of an opaque "Unexpected token" SyntaxError — and so it is
+      // not mistaken for a retryable fault (the same prompt+seed would re-emit
+      // the same bad JSON, wasting retries).
+      const functionCalls = choice.message.tool_calls?.map((tc) => {
+        let args: Record<string, unknown>;
+        try {
+          args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `DeepSeek returned malformed JSON arguments for tool call "${tc.function.name}": ${reason}`,
+          );
+        }
+        return { id: tc.id, name: tc.function.name, args };
+      });
 
       // Detect truncation
       const truncated = choice.finish_reason === "length";
