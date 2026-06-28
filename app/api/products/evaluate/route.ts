@@ -41,31 +41,33 @@ export async function POST(request: Request) {
   const room = roomRes.data;
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
-  // Fetch project for full building/apartment context
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", room.project_id)
-    .single();
-
-  // Fetch room diagnosis for design direction
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("*")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  // Fetch project (building/apartment context), this room's latest diagnosis
+  // (design direction), and sibling rooms (cross-room coherence) in parallel —
+  // all three depend only on the already-resolved room, not on each other, so
+  // serializing them just stacked three round-trips on this per-product hot path.
+  const [projectRes, diagnosisRes, otherRoomsRes] = await Promise.all([
+    supabase.from("projects").select("*").eq("id", room.project_id).single(),
+    supabase
+      .from("room_diagnoses")
+      .select("*")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    supabase
+      .from("rooms")
+      .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
+      .eq("project_id", room.project_id)
+      .neq("id", room_id),
+  ]);
+  const project = projectRes.data;
+  const diagnosis = diagnosisRes.data;
+  const otherRooms = otherRoomsRes.data;
 
   const designProfile = buildDesignProfile(project);
 
   // Build cross-room context
   let otherRoomsContext: string | undefined;
-  const { data: otherRooms } = await supabase
-    .from("rooms")
-    .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
-    .eq("project_id", room.project_id)
-    .neq("id", room_id);
 
   if (otherRooms && otherRooms.length > 0) {
     // 90-day freshness window — filter out stale sibling diagnoses before
