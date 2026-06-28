@@ -52,6 +52,17 @@ replies_7d, signal) with REAL numbers only, and the durable lessons (what got re
 in `GROWTH_MEMORY.md` so targeting compounds. Replies are owner-reported; never fabricate a reply
 or a send.
 
+## Surfacing on the factory dashboard (so the owner sees drafts to review)
+The draft CONTENTS live in the owner's Gmail (the dashboard can't read them). Surface the STATUS so
+the owner knows to look, two ways:
+- **OWNER_ACTIONS (primary — the dashboard already renders this):** whenever there are outreach
+  drafts awaiting the owner, record/refresh ONE item in `PENDING_OPS.md` OWNER_ACTIONS, e.g.
+  `id: review-outreach-drafts`, `title: "Review + send N strategic outreach drafts (Gmail)"`,
+  `priority: normal`, `status: open`, with the count + a one-line who/why. Decrement/close it as the
+  owner sends; never leave a stale count. Honest counts only.
+- **GROWTH_STATUS `outreach` block:** keep `drafted_7d / owner_sent_7d / replies_7d / signal`
+  current with REAL numbers (replies owner-reported) so the dashboard can show an outreach tile.
+
 ## When NOT to do outreach
 If there's no genuinely strategic, researchable target this run — or pre-launch with the SITE GATE
 not up and nothing the owner has asked to tee up — do NONE. A quiet run with zero outreach drafts
