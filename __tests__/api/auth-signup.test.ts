@@ -68,6 +68,15 @@ describe("POST /api/auth/signup", () => {
     expect(createUser).not.toHaveBeenCalled();
   });
 
+  it("fails open (allows signup) when Turnstile is unreachable", async () => {
+    // When Cloudflare is unreachable the route logs a warning but must not
+    // dead-end a legitimate user — verifyTurnstile fails open (success:true).
+    mockVerify.mockResolvedValue({ success: true, reason: "unreachable" });
+    const res = await POST(signupReq(VALID));
+    expect(res.status).toBe(200);
+    expect(createUser).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 503 when the admin client is unavailable", async () => {
     mockGetAdmin.mockReturnValue(null);
     const res = await POST(signupReq(VALID));
@@ -86,6 +95,7 @@ describe("POST /api/auth/signup", () => {
     const res = await POST(signupReq(VALID));
     expect(res.status).toBe(500);
     const body = await res.json();
+    expect(typeof body.error).toBe("string");
     expect(body.error).not.toContain("boom");
   });
 

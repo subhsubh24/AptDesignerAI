@@ -138,8 +138,9 @@ describe("POST /api/billing/webhook", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.processed).toBe(true);
-    await flush();
-    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    // The send is fire-and-forget (getUserById → sendEmail, two awaits); wait
+    // for it deterministically rather than racing a single microtask flush.
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalledTimes(1));
     const arg = mockSendEmail.mock.calls[0][0];
     expect(arg.stage).toBe("paid_welcome_1");
     expect(arg.to).toBe("new@pro.com");
@@ -175,8 +176,7 @@ describe("POST /api/billing/webhook", () => {
     mockGetAdmin.mockReturnValue(fakeAdmin({ existingStatus: "active", userEmail: "leaving@pro.com" }));
     const res = await POST(webhookReq());
     expect(res.status).toBe(200);
-    await flush();
-    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalledTimes(1));
     expect(mockSendEmail.mock.calls[0][0].stage).toBe("winback_1");
   });
 
