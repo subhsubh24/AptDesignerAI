@@ -84,7 +84,13 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const { room_id, project_id } = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { room_id, project_id } = body as { room_id?: string; project_id?: string };
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
