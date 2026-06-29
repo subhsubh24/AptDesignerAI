@@ -21,6 +21,11 @@ import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
  *   done   — { products_found, stats, validation }  Final result
  *   error  — { error }                Error message
  */
+// Long-running LLM pipeline route (the full agentic search funnel). Without an
+// explicit maxDuration, Vercel applies a short platform default and can kill the
+// function mid-stream. 300s is the Vercel Pro ceiling.
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -307,11 +312,25 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let streamClosed = false;
       function send(event: string, data: unknown) {
+        if (streamClosed) return;
         try {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         } catch {
-          // Stream closed
+          // Client disconnected mid-stream — the controller is already closed.
+          // Latch it so a later send/close (e.g. in the catch/finally) can't
+          // throw a second, uncaught "Controller is already closed" error.
+          streamClosed = true;
+        }
+      }
+      function closeStream() {
+        if (streamClosed) return;
+        streamClosed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already closed by a client disconnect — nothing to do.
         }
       }
 
@@ -332,7 +351,7 @@ export async function POST(request: Request) {
             status: "failed",
             error_message: result.error,
           });
-          controller.close();
+          closeStream();
           return;
         }
 
@@ -469,7 +488,7 @@ export async function POST(request: Request) {
         logServerError("search/stream", err);
         send("error", { error: "Search failed. Please try again." });
       } finally {
-        controller.close();
+        closeStream();
       }
     },
   });
