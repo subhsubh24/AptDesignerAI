@@ -57,14 +57,21 @@ export async function POST(request: Request) {
 
   if (bundleError) return apiError("bundles", bundleError);
 
-  // Add items if provided
+  // Add items if provided. If this insert fails, the bundle would otherwise be
+  // returned as a 201 success with zero items — a silent partial failure that
+  // makes a later evaluate request score an empty bundle. Surface the error and
+  // remove the now-orphaned bundle row so the caller can safely retry.
   if (product_ids && product_ids.length > 0) {
     const items = product_ids.map((pid: string, i: number) => ({
       bundle_id: bundle.id,
       product_id: pid,
       sort_order: i,
     }));
-    await supabase.from("product_bundle_items").insert(items);
+    const { error: itemsError } = await supabase.from("product_bundle_items").insert(items);
+    if (itemsError) {
+      await supabase.from("product_bundles").delete().eq("id", bundle.id);
+      return apiError("bundles", itemsError);
+    }
   }
 
   return NextResponse.json(bundle, { status: 201 });
