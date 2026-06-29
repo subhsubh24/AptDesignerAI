@@ -2091,7 +2091,7 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
     }
 
     // Save as detailed diagnosis
-    await supabase.from("room_diagnoses").insert({
+    const { error: saveError } = await supabase.from("room_diagnoses").insert({
       room_id,
       diagnosis_json: { ...analysis, validation },
       design_direction_json: {
@@ -2105,6 +2105,18 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
       action_list: analysis.what_it_needs,
       model_used: selectModel("area_analysis"),
     });
+
+    // supabase-js returns the error in-band, so an unchecked insert would return
+    // a 200 with the analysis while nothing is persisted — the user sees a result
+    // that vanishes on reload. Surface the failure instead of faking success.
+    if (saveError) {
+      console.error("[area-analysis] Failed to save analysis:", saveError.message);
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: `Failed to save analysis: ${saveError.message}`,
+      });
+      return NextResponse.json({ error: "Unable to save the analysis. Please try again." }, { status: 500 });
+    }
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",

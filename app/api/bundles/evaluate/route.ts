@@ -139,10 +139,14 @@ export async function POST(request: Request) {
 
   if (saveError) return apiError("bundles.evaluate", saveError);
 
-  await supabase
+  // The evaluation is already persisted above; this only flips the bundle's
+  // status. supabase-js returns the error in-band, so log a failure rather than
+  // dropping it silently (which would leave the bundle stuck at "pending").
+  const { error: statusError } = await supabase
     .from("product_bundles")
     .update({ status: "evaluated", updated_at: new Date().toISOString() })
     .eq("id", bundle_id);
+  if (statusError) console.error("[bundles.evaluate] Failed to update bundle status:", statusError.message);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",

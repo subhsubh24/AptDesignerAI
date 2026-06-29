@@ -386,19 +386,24 @@ export async function POST(request: Request) {
 
     if (evalRows.length > 0) {
       // Independent writes to different tables — run them concurrently.
-      await Promise.all([
+      const [evalInsert, candUpdate] = await Promise.all([
         supabase.from("product_evaluations").insert(evalRows),
         supabase
           .from("candidate_products")
           .update({ status: "evaluated" })
           .in("id", evaluatedIds),
       ]);
+      // supabase-js returns DB errors in-band (no throw), so an unchecked write
+      // silently drops the persistence while the response still reports the
+      // products as evaluated. Surface failures instead of swallowing them.
+      if (evalInsert.error) console.error("[search] Failed to insert evaluations:", evalInsert.error.message);
+      if (candUpdate.error) console.error("[search] Failed to mark products evaluated:", candUpdate.error.message);
     }
   }
 
   // Persist the search-session summary and room status concurrently —
   // independent writes to different tables on the completion hot path.
-  await Promise.all([
+  const [sessionUpdate, roomUpdate] = await Promise.all([
     supabase
       .from("search_sessions")
       .update({
@@ -415,6 +420,8 @@ export async function POST(request: Request) {
       .update({ status: "sourcing", updated_at: new Date().toISOString() })
       .eq("id", room_id),
   ]);
+  if (sessionUpdate.error) console.error("[search] Failed to update search session:", sessionUpdate.error.message);
+  if (roomUpdate.error) console.error("[search] Failed to update room status:", roomUpdate.error.message);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
