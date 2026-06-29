@@ -109,10 +109,15 @@ jobs:
           supabase db reset --no-seed
       - name: Export local Supabase keys for build + seeder
         run: |
+          # `supabase status -o env` emits QUOTED values (KEY="val"); strip the quotes
+          # or the env var carries literal " and Next gets "Invalid supabaseUrl".
           supabase status -o env > /tmp/sb.env
-          echo "NEXT_PUBLIC_SUPABASE_URL=$(grep -E '^API_URL=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep -E '^ANON_KEY=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
-          echo "SUPABASE_SERVICE_ROLE_KEY=$(grep -E '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+          sb_url=$(grep -E '^API_URL=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          sb_anon=$(grep -E '^ANON_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          sb_srk=$(grep -E '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          echo "NEXT_PUBLIC_SUPABASE_URL=$sb_url" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$sb_anon" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$sb_srk" >> "$GITHUB_ENV"
       - name: Install deps + browser
         run: |
           npm ci
