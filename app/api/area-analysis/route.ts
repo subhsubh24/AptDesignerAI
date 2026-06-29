@@ -31,6 +31,12 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
+// Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
+// applies a short platform default and can kill the function mid-run — a
+// "builds green, request gets killed" failure on a core product path. 300s is
+// the Vercel Pro ceiling and covers the documented worst-case pipeline latency.
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
