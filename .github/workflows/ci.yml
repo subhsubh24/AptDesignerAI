@@ -94,6 +94,11 @@ jobs:
       NEXT_PUBLIC_SITE_URL: "http://localhost:3100"   # gotcha (a): auth/redirect resolves on localhost
       PLAYWRIGHT_BASE_URL: "http://localhost:3100"
       E2E_RATE_LIMIT_BYPASS: "1"                # gotcha (b): one CI IP would trip per-IP limits (code honors this; prod never sets it)
+      # gotcha (c): the app's instrumentation hook fail-closes at boot on missing LLM keys
+      # (lib/config/env.ts REQUIRED_PROD). The journeys don't call the LLMs, so DUMMY non-empty
+      # values satisfy the boot check without any real secret.
+      GEMINI_API_KEY: "ci-dummy-not-used-by-journeys"
+      DEEPSEEK_API_KEY: "ci-dummy-not-used-by-journeys"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
