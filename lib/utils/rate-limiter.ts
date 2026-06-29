@@ -43,14 +43,33 @@ export interface RateLimitResult {
 }
 
 let _bypassWarned = false;
+
+/**
+ * FAIL-CLOSED guard: the test bypass must NEVER be active on a deployed platform.
+ * If E2E_RATE_LIMIT_BYPASS is ever set on Vercel (any deploy — prod OR preview),
+ * REFUSE TO BOOT — a disabled rate limiter in production is a wallet-drain/abuse
+ * hole. CI/local have no `VERCEL` env, so the bypass works there. Runs at module
+ * load (first import on a serverless cold start), so a misconfigured deploy fails
+ * fast + loud instead of silently running unprotected.
+ */
+export function assertRateLimitBypassSafe(): void {
+  if (process.env.E2E_RATE_LIMIT_BYPASS === "1" && process.env.VERCEL) {
+    throw new Error(
+      "FATAL: E2E_RATE_LIMIT_BYPASS is set on a deployed (Vercel) environment — it " +
+        "DISABLES rate limiting and must only ever be set in CI. Unset it immediately.",
+    );
+  }
+}
+assertRateLimitBypassSafe();
+
 /**
  * TEST-ONLY rate-limit bypass for the CI functional-journey suite.
  *
  * A self-seeding journey suite hammers the API from ONE CI-runner IP and would
- * trip per-IP limits. This bypass is gated SOLELY on E2E_RATE_LIMIT_BYPASS=1, an
- * env var PRODUCTION MUST NEVER SET (the CI workflow sets it only on the journey
- * job). Not gated on NODE_ENV because the suite runs against a production build
- * (`next start`). It logs once, loudly, so an accidental prod set is visible.
+ * trip per-IP limits. Gated SOLELY on E2E_RATE_LIMIT_BYPASS=1, an env var
+ * PRODUCTION MUST NEVER SET (the CI workflow sets it only on the journey job).
+ * Not gated on NODE_ENV (the suite runs a production build via `next start`); the
+ * fail-closed guard above hard-refuses it on any Vercel deploy. Logs once, loudly.
  */
 export function rateLimitBypassedForTest(): boolean {
   const on = process.env.E2E_RATE_LIMIT_BYPASS === "1";
