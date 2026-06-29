@@ -111,6 +111,8 @@ export default function PhotoCaptureScreen() {
 
           {/* Photo preview / placeholder */}
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={selectedImageUri ? 'Change photo' : 'Choose a photo from your library'}
             style={[
               styles.preview,
               { backgroundColor: colors.muted, borderColor: colors.border },
