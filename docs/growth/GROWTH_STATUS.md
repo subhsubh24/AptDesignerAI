@@ -19,7 +19,7 @@ exactly like it reads BUSINESS_CASE_SUMMARY in docs/BUSINESS_CASE.md.
 ```yaml
 GROWTH_STATUS:
   project: AptDesignerAI
-  as_of: 2026-06-28
+  as_of: 2026-06-29
   phase: pre_launch              # pre_launch | launching | post_launch
   engine_built: true             # is the growth-execution engine live in code? (true iff engine_pct == 100)
   engine_pct: 100                # % of the 5 engine pieces shipped (preflight-verified): waitlist, email, queue, metrics, runbook
@@ -67,22 +67,24 @@ GROWTH_STATUS:
     replies_7d: 0                # owner-reported replies; never fabricate
     signal: none                 # none | weak | emerging | strong
   learnings:
-    - "All funnel metrics are 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers. This is day 2 of the same blocker; circuit breaker watch active."
-    - "Engine is built and all code ships dry-run; the owner connecting Resend + setting INTERNAL_METRICS_TOKEN are the two highest-leverage unblocking actions."
-    - "Activation email cron (A1/A2/A3) now wired: vercel.json daily at 10:00 UTC, /api/cron/activation-emails, idempotent via user_email_stages (migration 025). Fires dry-run until RESEND_API_KEY + CRON_SECRET are set."
-    - "Win-back E1 email fires on subscription cancellation; paid_welcome_1 fires on free->paid conversion. Both dry-run until RESEND_API_KEY is set."
+    - "CIRCUIT BREAKER FIRED (Run 3): same owner blockers for 3 consecutive runs. Single highest-leverage pair: set SITE_GATE_PASSWORD in Vercel (2 min) AND RESEND_API_KEY + RESEND_FROM_EMAIL (15 min)."
+    - "Funnel remains 0/null — INTERNAL_METRICS_TOKEN not yet set; no connected source has reported numbers. Correct and honest: no fabrication."
+    - "ASO keyword research conducted (Run 3): research-backed improvements identified but keyword update blocked by independent reviewer — competition estimates not verifiable via App Store Connect Search Ads. Findings logged in GROWTH_MEMORY.md for next run after owner validates."
+    - "All lifecycle email infrastructure built and dry-run-ready: activation cron (A1/A2/A3 via vercel.json), win-back (E1-E3), paid_welcome_1. Waiting only for RESEND_API_KEY to go live."
   next_actions:
-    - "Owner: set CRON_SECRET + apply migration 025 to activate activation email cron (see PENDING_OPS.md)"
-    - "Owner: set RESEND_API_KEY + RESEND_FROM_EMAIL to send any lifecycle email (highest leverage)"
+    - "CIRCUIT BREAKER -- Owner: set SITE_GATE_PASSWORD in Vercel (2-min setup) to enable execute-mode + flip site_gate_up to true in GROWTH_STATUS"
+    - "CIRCUIT BREAKER -- Owner: set RESEND_API_KEY + RESEND_FROM_EMAIL (15-min setup) to activate all lifecycle email sends"
+    - "Owner: set CRON_SECRET + apply migration 025 to activate activation email cron"
     - "Owner: set INTERNAL_METRICS_TOKEN to open funnel metrics pull API (currently 503)"
-    - "Next run: enqueue pre-launch social draft schedule for launch week once owner sets a launch date"
-    - "Next run: upgrade /account to add explicit email opt-out toggle (strengthens CAN-SPAM compliance)"
+    - "Factory: add explicit email opt-out toggle to /account page (CAN-SPAM compliance for when emails go live)"
+    - "Next run: verify ASO keyword competition claims via App Store Connect Search Ads before landing keyword change"
   owner_blockers:
-    - "Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain) to send lifecycle email — docs/growth/CONNECT.md Step 1"
-    - "Set INTERNAL_METRICS_TOKEN to open the funnel-metrics pull API (currently 503) — docs/growth/CONNECT.md Step 2"
-    - "Set CRON_SECRET to activate activation email cron + apply migration 025 — PENDING_OPS.md"
-    - "Connect/authorize social accounts (publishing queue built + dry-run; live per-channel API client is a follow-on) — docs/growth/CONNECT.md Step 4"
-    - "Apply DB migrations 021/022/023/025 to prod (see PENDING_OPS.md)"
+    - "PRIORITY 1 -- Set SITE_GATE_PASSWORD in Vercel (2 min): gates app pre-launch, unblocks execute-mode outreach -- PENDING_OPS.md item set-site-gate-password"
+    - "PRIORITY 2 -- Set RESEND_API_KEY + RESEND_FROM_EMAIL (verified domain, 15 min): unblocks ALL lifecycle email sends -- docs/growth/CONNECT.md Step 1"
+    - "PRIORITY 3 -- Set INTERNAL_METRICS_TOKEN: opens funnel metrics pull API (currently 503) -- docs/growth/CONNECT.md Step 2"
+    - "PRIORITY 4 -- Set CRON_SECRET + apply migration 025: activates daily activation email cron -- PENDING_OPS.md"
+    - "PRIORITY 5 -- Apply DB migrations 021/022/023 to prod -- PENDING_OPS.md"
+    - "PRIORITY 6 -- Connect/authorize social accounts -- docs/growth/CONNECT.md Step 4"
   links:
     in_app_analytics: null
     owner_doc: docs/growth/GROWTH_STATUS.md
