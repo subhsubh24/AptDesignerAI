@@ -82,3 +82,61 @@ No independent maker/checker review this run — the cron is infrastructure (not
 
 ### Circuit breaker check
 - Same owner blockers as Run 1? YES — all channels still not connected. This is Run 2; circuit breaker watch active. If Run 3 shows the same blockers, flag prominently and surface the single most actionable unblocking step in the daily report.
+
+---
+
+## Run 3 — 2026-06-29
+
+### CIRCUIT BREAKER FIRED
+
+All Run 1 + Run 2 owner blockers remain unresolved for a third consecutive run:
+- RESEND_API_KEY, RESEND_FROM_EMAIL — not set
+- CRON_SECRET — not set
+- INTERNAL_METRICS_TOKEN — not set; API returns 503
+- SITE_GATE_PASSWORD — not set; site_gate_up: false
+- DB migrations 021/022/023/025 — not applied to prod
+- Social account credentials — not connected
+
+Circuit breaker fires at Run 3. Flagged prominently in GROWTH_STATUS and Gmail report.
+
+### What we found
+- Funnel: all metrics still 0/null (correct — INTERNAL_METRICS_TOKEN not set).
+- Site gate (E8) was built in Run ~39 (PR #173) but SITE_GATE_PASSWORD has not been set by owner. site_gate_up remains false → HARD BLOCK on execute-mode outreach.
+- All lifecycle email infrastructure (A1/A2/A3 activation cron via vercel.json, E1-E3 win-back, paid_welcome_1) is built and dry-run-ready. Gap: RESEND_API_KEY only.
+- Existing marketing assets (email lifecycle sequences, content calendar, waitlist page) assessed as high quality; no changes needed.
+
+### What we did this run
+- **ASO keyword research**: identified candidate improvements to the Apple App Store keywords field (replacing "design ideas,style" with "room analysis,AI redesign"). Independent reviewer (maker≠checker) blocked the change — competition estimates cited to WebSearch results, not verifiable via App Store Connect Search Ads as the store-listing.md itself requires. Correct outcome: change NOT made.
+- **GROWTH_STATUS.md**: updated as_of to 2026-06-29; replaced learnings/next_actions/owner_blockers with circuit-breaker-aware content and PRIORITY ordering.
+- **GROWTH_MEMORY.md**: appended this Run 3 entry.
+
+### What we did NOT do (and why)
+- Did not update store-listing.md keywords: independent reviewer returned REQUEST_CHANGES; competition estimates unverifiable without App Store Connect Search Ads access. Findings preserved here for next run.
+- Did not create any outreach drafts: HARD BLOCK — site_gate_up: false. Zero outreach this run, correct.
+- Did not pull real funnel metrics: INTERNAL_METRICS_TOKEN still not set.
+- Did not enqueue social drafts: awaiting_connect: true, no launch date set.
+
+### ASO keyword research findings (to validate next run)
+Current keywords (97 chars): `interior design,room design,AI decor,home decor,room planner,furniture,palette,design ideas,style`
+
+Research-backed candidate swap (if competition validates):
+- Replace `design ideas,style` (12 chars) with `room analysis,AI redesign` (26 chars) → new total: ~111 chars — OVER LIMIT, needs trimming
+- Better candidate (99 chars): `interior design,room design,AI decor,home decor,room planner,palette,room analysis,AI redesign`
+  (drops `furniture` and `design ideas,style`; adds `room analysis,AI redesign`)
+- Owner must validate competition estimates in App Store Connect Search Ads before this change lands.
+
+### Owner blockers (updated with PRIORITY ordering)
+1. PRIORITY 1 — Set SITE_GATE_PASSWORD in Vercel (2 min): gates app pre-launch, unblocks execute-mode
+2. PRIORITY 2 — Set RESEND_API_KEY + RESEND_FROM_EMAIL (15 min): unblocks all lifecycle email sends
+3. PRIORITY 3 — Set INTERNAL_METRICS_TOKEN: opens funnel metrics API
+4. PRIORITY 4 — Set CRON_SECRET + apply migration 025: activates activation cron
+5. PRIORITY 5 — Apply DB migrations 021/022/023 to prod
+6. PRIORITY 6 — Connect/authorize social accounts
+
+### Lessons learned
+- The maker≠checker step caught an unverifiable claim in the ASO research. Correct to block: store-listing.md itself says "competition estimates are unverified — validate in App Store Connect Search Ads before submission." The lesson is to route ASO keyword changes through ASC Search Ads validation before drafting them as final.
+- The circuit breaker is now firing: 3 runs with the same blockers. The single most actionable pair is SITE_GATE_PASSWORD (2 min, enables execute-mode) + RESEND_API_KEY (15 min, enables all email). Neither requires new code — both are pure Vercel environment variable sets.
+- No new code was written this run — the growth engine is complete; the constraint is credentials, not code.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1 and 2? YES — circuit breaker FIRED (Run 3). Flagged prominently in report and GROWTH_STATUS.
