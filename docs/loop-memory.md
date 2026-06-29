@@ -4,6 +4,39 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-29 (Run 41) — 6 disjoint changes (correctness + reliability + 2× F2 tests + 2× a11y)
+
+### State on entry
+- Cold container at default tip `93cac2d` (post Run 40 #183–188 + the journey-gate CI commits + Growth Agent #189/#190). `npm install` (root + mobile); reset working branch to `origin/<default>`. Baseline gate green: tsc clean, **1164 tests**, determinism clean, eslint 0.
+- DEEP AUDIT **not due** (ran Run 40; next ~Run 44). QUALITY_SCORECARD still all-null → readiness gate cannot pass; did NOT attempt the ready issue.
+- 7-scout Haiku sweep (tests/F2, reliability, mobile, security/RLS, perf, web-a11y, correctness). Security scout = **CLEAN** through migration 025 (expected no-op).
+
+### What was done (6 file-disjoint changes, all merged #191–196)
+- **#195 correctness** — surfaced 4 unchecked supabase-js writes on core paths (errors returned in-band, not thrown): fatal `room_diagnoses` inserts in area-analysis POST + refine now 500 + mark the run failed (were faking 200 with data that vanished on reload); search completion-path `Promise.all` batches + bundles status-flip now log. Same class as #185.
+- **#191 reliability** — diagnosis SSE `sendEvent` had no closed-controller guard → a client disconnect produced a triple-throw (enqueue, then `sendEvent("error")` in the catch, then `controller.close()`), uncaught + un-finalized run. Added a `streamClosed` latch + idempotent `closeStream()` (search/stream precedent).
+- **#196 / #194 F2 tests** — `search-cache.test.ts` (10: LRU/TTL/key/bypass) + `harmony-math.test.ts` (9: orchestrator aggregation + lighting + cross-room gating + formatting).
+- **#192 web a11y** — dashboard map iframes given accessible `title`s (WCAG 4.1.2).
+- **#193 mobile a11y** — photo-picker preview Pressable given `accessibilityRole`/`accessibilityLabel`.
+- 12 per-change Sonnet reviewers + 1 re-reviewer; 7 Haiku scouts (20 subagents). 5 of 6 APPROVE first pass; search-cache needed 1 re-review cycle (in-cap).
+
+### Lessons learned
+1. **Perf candidates collided with higher-value correctness on the SAME files — correctness won cleanly via the disjoint rule.** The perf scout proposed parallelizing `area-analysis/refine` fetches and trimming `area-analysis` POST `select("*")`; the correctness scout found unchecked inserts in those exact two files. One change per file → took the data-loss fixes, dropped the modest (35–50ms) perf + the risky `select("*")` trim. The disjoint rule is the tiebreaker, not a constraint to work around.
+2. **supabase-js mutation errors are in-band on inserts/updates too, not just `.single()`.** An unchecked `.insert()`/`.update()` does NOT throw on a DB error — it resolves `{ error }` which, if ignored, yields fake success (200 + lost write). Confirmed by tracing: the area-analysis insert sits inside the outer try, but since it doesn't throw, the catch never fires and the route returns the result. Fix mirrors the diagnosis/stream save-error precedent (mark run failed + surface a 500), not a try/catch.
+3. **FATAL-vs-LOG severity split keeps the correctness fix honest without wasting compute.** Data-loss inserts (diagnosis/refinement) fail with a 500 so the user retries; non-fatal completion-path writes (status flips, already-persisted results) log-and-continue so an expensive computed result isn't thrown away. Reviewers explicitly validated this distinction.
+4. **A test that mocks a module-level `const` must restore it in teardown, not `vi.doUnmock`.** The search-cache bypass test set `DETERMINISTIC=true` then `vi.doUnmock`'d — which drops the mock entirely, so a reordered run could leak the real flag (true in CI) into the other 9 tests. Reviewer A caught it; fix = an `afterEach` that re-`doMock`s `false` + `resetModules`. `doUnmock` ≠ restore.
+5. **Haiku a11y scouts still over-flag — adjudicate before building.** The web-a11y scout flagged a theme-toggle "missing aria-label", but it already has `title` (a valid accessible name on a `<button>`), so it was dropped as borderline/churn; only the genuine no-accessible-name violation (iframes with no `title` at all) was built. Same discipline as Run 40 lesson 1.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 44** (last ran Run 40).
+- **Highest-value queued, file-disjoint (validated this run, not taken):**
+  - **Mockable-agent tests** — `room-diagnostician.ts`, `product-extractor.ts`, `shopping-researcher.ts`, `design-coordinator.ts`, `post-search-coordinator.ts` (provider-mocked; the tests scout mapped branch counts). Pure modules still open: none major left (harmony-math, search-cache, proportion-math, lookups, spatial-math now covered).
+  - **Reliability** — `app/api/search/stream/route.ts` has the SAME triple-throw shape as the diagnosis stream just fixed (raw `controller.close()` after a `send("error")` that can throw on disconnect) — apply the identical `streamClosed`/`closeStream` guard. Webhook email-failure audit table (needs a migration + RLS).
+  - **Perf (borderline, standalone only)** — `area-analysis/refine` fetch parallelization (~35–50ms) now unblocked (correctness landed on that file this run); `area-analysis` POST `select("*")` trim only if the consumed-fields claim is re-verified.
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets; set `SITE_GATE_PASSWORD`; decide the canonical domain (`.com` vs `.ai`) + reconcile `mobile/app.json` associatedDomains + `lib/email` from-address.
+- **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue.
+
+---
+
 ## DEEP AUDIT 2026-06-29 (Run 40) — holistic, 8 read-only Haiku lenses across the whole codebase
 
 Due this run (last ran Run 36). Findings distilled + prioritized (→ what became this run's work):
