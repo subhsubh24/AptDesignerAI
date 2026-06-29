@@ -4,10 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -22,9 +20,14 @@ export default function DashboardScreen() {
             <ThemedText type="title" style={styles.title}>
               AptDesignerAI
             </ThemedText>
-            <Pressable onPress={() => supabase.auth.signOut()} hitSlop={8}>
+            <Pressable
+              onPress={() => router.push('/settings')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Account settings"
+            >
               <ThemedText type="small" style={{ color: colors.mutedForeground }}>
-                Sign out
+                Account
               </ThemedText>
             </Pressable>
           </ThemedView>
