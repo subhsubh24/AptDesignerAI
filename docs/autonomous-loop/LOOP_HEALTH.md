@@ -23,17 +23,17 @@ dashboard reads this block.
 LOOP_HEALTH:
   project: AptDesignerAI
   as_of: 2026-06-29
-  last_run: 40                   # the Run N this reflects (null until first bookkeeping update)
+  last_run: 41                   # the Run N this reflects (null until first bookkeeping update)
   last_deep_audit: 40
   this_run:
-    changes_shipped: 5           # PRs merged this run (#183 #184 #185 #186 #187)
-    changes_abandoned: 0         # all 5 implemented changes shipped; traps/churn were dropped at SELECTION (pre-implementation), not abandoned mid-build
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): cache-bypass-under-DETERMINISTIC=dead_end(cost-contract trap), maybeSingle=dead_end(overstated non-bug), app.json-privacy-url=dead_end(audit wrong), perf-payload-trims+a11y-token=review_value(borderline)
+    changes_shipped: 6           # PRs merged this run (#191 #192 #193 #194 #195 #196)
+    changes_abandoned: 0         # all 6 implemented changes shipped; perf candidates were deselected at SELECTION (collided on-file with higher-value correctness fixes), not abandoned mid-build
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): area-analysis-refine-parallelize + area-analysis-POST-select-trim = conflict(same file as a chosen correctness fix); theme-toggle-aria-label = review_value(title already provides an accessible name)
     verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 4         # LOOP-3 REQUEST_CHANGES (proportion key-mismatch, bundles cleanup-log, account destructive-token, paywall in-app-browser) — all resolved within cap, re-reviewed APPROVE
+    review_rejections: 1         # LOOP-3 REQUEST_CHANGES (search-cache test: fragile vi.doUnmock teardown could leak DETERMINISTIC=true on reorder) — fixed with an afterEach restore, re-reviewed APPROVE in-cap
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 29               # Runs 37-40 product PRs (#160-179, #183-187) + sibling ci PRs
+    merged_prs: 28               # Runs 38-41 product PRs (#167-179, #183-187, #191-196) + sibling ci PRs
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
