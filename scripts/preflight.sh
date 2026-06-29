@@ -179,6 +179,22 @@ else
   info "F7 (visual-verification artifacts) not yet checked — screenshot-artifact guard inactive (no-op until F7 is claimed)"
 fi
 
+# ── GATE 1d: Self-validation capability manifest (every flow is CI-validatable) ─
+# The app must be able to validate every capability it depends on. validate-capabilities
+# (--readiness) fails if any external service is undeclared (env drift) OR needs an
+# owner-only secret to validate (ci_validatable:false). A capability the loop cannot
+# validate must NOT pass the ship gate — wire a substitute or surface it as an owner key.
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 1d — Self-validation capability manifest"
+echo "════════════════════════════════════════════════════════════════"
+if CAPOUT="$(node scripts/validate-capabilities.mjs --readiness 2>&1)"; then
+  pass "validate-capabilities — every capability is declared and CI-validatable"
+else
+  fail "validate-capabilities (readiness) FAILED — an app capability is undeclared or not CI-validatable; the loop cannot self-validate every flow:"
+  echo "$CAPOUT" | sed 's/^/    /'
+fi
+
 # ── GATE 2: Required artifacts exist ─────────────────────────────────────────
 
 echo ""

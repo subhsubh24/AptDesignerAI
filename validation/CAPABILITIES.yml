@@ -1,0 +1,199 @@
+# VALIDATION CAPABILITY MANIFEST — the single source of truth for what it takes to
+# VALIDATE every capability of the app in CI.
+#
+# WHY THIS EXISTS (the loop's self-validation guarantee):
+#   The factory must never ship work it cannot actually validate. Whenever the loop
+#   introduces a new external service (a new `process.env.*` credential), it MUST declare
+#   it here AND state HOW that capability is validated in CI. The required CI check
+#   `validate-capabilities` (scripts/validate-capabilities.mjs) fails closed if:
+#     1. app code reads an env var that is NOT declared here (a new undeclared service/key), OR
+#     2. a capability is not CI-validatable (needs an owner-only secret) AND the current PR
+#        touches it  -> that PR is BLOCKED (scoped) + the readiness gate is blocked globally
+#        + an URGENT OWNER_ACTION is surfaced in PENDING_OPS.
+#   So the loop physically cannot accumulate unvalidated work behind a missing capability.
+#
+# HARD RULE: declare the env var NAME only — NEVER a secret VALUE. Secrets live in the
+# deploy platform, never in the repo.
+#
+# FIELDS per capability:
+#   id            short slug
+#   summary       what the service does for the app
+#   env           the env var NAMES this capability owns (the credentials/config it needs)
+#   validation    HOW the flow using it is proven in CI:
+#                   local   - a real instance runs locally in CI (no prod secret)         [strongest]
+#                   sandbox - the provider's test/sandbox mode is wired in CI
+#                   mock    - a code-level mock/stub exercises the path in tests
+#                   dummy   - a non-empty placeholder satisfies boot; the path is NOT exercised in CI (justify)
+#                   none    - NOT validated in CI at all  -> requires an owner secret (ci_validatable: false)
+#   exercised_by  the test/journey that actually runs this capability's flow
+#   ci_validatable  true if CI can prove the flow without an owner-only secret (local/sandbox/mock/justified-dummy)
+#   owner_secret    true if PRODUCTION needs an owner-provided real value (informational -> OWNER_ACTIONS)
+#   note          anything load-bearing (e.g. a real round-trip is still a tracked follow-up)
+
+version: 1
+
+# Env vars that are internal tuning knobs / feature flags / non-credential config — NOT
+# external-service capabilities. They still must be listed (the manifest is the COMPLETE
+# env registry: every env the app reads is either a capability `env` or here), but they
+# do not gate validation of a flow. Add a one-liner here when you introduce a new knob.
+non_credential_allowlist:
+  - NODE_ENV
+  - VERCEL
+  - LOG_LEVEL
+  - AI_PROVIDER
+  - DETERMINISTIC_MODE
+  - DETERMINISTIC_SEED
+  - E2E_RATE_LIMIT_BYPASS        # test-only rate-limit bypass; guarded separately (fail-closed on Vercel)
+  - NEXT_PUBLIC_APP_URL
+  - NEXT_PUBLIC_SITE_URL
+  - COMPUTER_USE_MODEL
+  - TEXT_CEILING_MODEL
+  - IDENTIFIABLE_BRANDS_PATH
+  - IDENTIFY_PRODUCTS
+  - GROWTH_EMAIL_DRY_RUN
+  - GROWTH_SOCIAL_DRY_RUN
+  - DAILY_PAID_CALL_LIMIT
+  - DISABLE_SEMANTIC_EXTRACT
+  - ENABLE_DESIGN_COORDINATOR
+  - ENABLE_GEMINI_CACHE
+  - ENABLE_POST_SEARCH_COORDINATOR
+  - ENABLE_RERANK
+  - ENABLE_SEMANTIC_CACHE
+  - ACCESSORY_QUERY_CAP
+  - BACKFILL_EXTRACT_CAP
+  - EXTRACT_NO_CONTENT_CAP
+  - EXTRACT_RAW_CONTENT_CAP
+  - MAX_BACKFILL_TIERS
+  - MAX_BUNDLE_COMBOS
+  - MAX_BUNDLE_EVALS
+  - MAX_EXTRACT_PER_CAT_TIER
+  - MAX_RESULTS_PER_QUERY
+  - RERANK_TOP_K
+  - SEARCH_TOKEN_CAP
+  - SELF_CONSISTENCY_N
+  - SEMANTIC_CALL_TIMEOUT_MS
+  - GEMINI_CALL_TIMEOUT_MS
+  - GEMINI_MAX_CONCURRENCY
+  - DEEPSEEK_CALL_TIMEOUT_MS
+  - DEEPSEEK_MAX_CONCURRENCY
+  - TAVILY_CONCURRENCY
+  - TAVILY_MIN_RELEVANCE
+  - TAVILY_RATE_TIER
+  - TAVILY_RPM
+  - TAVILY_SEARCH_CONCURRENCY
+
+capabilities:
+  - id: supabase
+    summary: "Auth + Postgres — the app's database, sessions, and RLS"
+    env: [NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY]
+    validation: local            # supabase-local (CLI) in CI — a real DB + auth, no prod secret
+    exercised_by: "e2e/journeys.spec.ts (authed tier), __tests__/**"
+    ci_validatable: true
+    owner_secret: true
+    note: "Public journey tier is enforced now; the authed tier (signup->dashboard) on supabase-local is a tracked follow-up."
+
+  - id: gemini
+    summary: "Primary LLM provider (apartment/room understanding, diagnosis, extraction)"
+    env: [GEMINI_API_KEY]
+    validation: mock             # unit tests use the provider abstraction with mocked responses; journeys don't call LLMs (dummy key)
+    exercised_by: "__tests__/ai/**"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: deepseek
+    summary: "Alternate LLM provider (used when AI_PROVIDER != gemini)"
+    env: [DEEPSEEK_API_KEY]
+    validation: mock
+    exercised_by: "__tests__/ai/**"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: tavily
+    summary: "Web search for product discovery"
+    env: [TAVILY_API_KEY]
+    validation: mock
+    exercised_by: "__tests__/**/search*"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: browserbase
+    summary: "Computer-use product verifier (~$5-20/session, hard-gated)"
+    env: [BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID]
+    validation: mock
+    exercised_by: "__tests__/**/computer-use* (mocked; live session never run in CI by cost design)"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: stripe
+    summary: "Web subscription billing (checkout + webhook + entitlement)"
+    env: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID_APARTMENT, STRIPE_PRICE_ID_PRO_MONTHLY, STRIPE_PRICE_ID_PRO_ANNUAL]
+    validation: mock             # unit-tested with mocks; real checkout->entitlement is the deferred authed/paywall journey (Stripe test mode)
+    exercised_by: "__tests__/**/billing*"
+    ci_validatable: true
+    owner_secret: true
+    note: "Real checkout->entitlement round-trip (Stripe test mode) is part of the deferred authed journey tier — wire it before declaring the paywall flow validated end-to-end."
+
+  - id: revenuecat
+    summary: "Mobile subscription entitlements"
+    env: [REVENUECAT_SECRET_KEY]
+    validation: mock
+    exercised_by: "__tests__/**/revenuecat* / mobile tests"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: resend-email
+    summary: "Transactional + growth email"
+    env: [RESEND_API_KEY, RESEND_FROM_EMAIL]
+    validation: mock             # NO CI send round-trip exists
+    exercised_by: "__tests__/**/email* (mocked)"
+    ci_validatable: true
+    owner_secret: true
+    note: "Email DELIVERY is NOT round-trip-validated in CI. DECISION COROLLARY: no flow may HARD-GATE on email delivery (e.g. email verification) until a sandbox round-trip is wired here. This is why signup is auto-confirmed today."
+
+  - id: turnstile
+    summary: "Cloudflare Turnstile CAPTCHA on public forms"
+    env: [NEXT_PUBLIC_TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY]
+    validation: sandbox          # Cloudflare publishes always-pass/always-fail test keys for CI
+    exercised_by: "__tests__/**/turnstile* / signup+waitlist tests"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: google-maps
+    summary: "Google Maps / Places (building research, place photos)"
+    env: [NEXT_PUBLIC_GOOGLE_MAPS_API_KEY]
+    validation: mock
+    exercised_by: "__tests__/**/places* (mocked)"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: cron-auth
+    summary: "Shared secret authenticating scheduled cron routes"
+    env: [CRON_SECRET]
+    validation: dummy            # set to a dummy in CI; cron routes tested with the dummy
+    exercised_by: "__tests__/**/cron*"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: internal-metrics
+    summary: "Bearer token gating the internal metrics endpoint"
+    env: [INTERNAL_METRICS_TOKEN]
+    validation: dummy
+    exercised_by: "__tests__/**/metrics*"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: site-gate
+    summary: "Pre-launch password gate for the app (waitlist stays public)"
+    env: [SITE_GATE_PASSWORD]
+    validation: dummy
+    exercised_by: "__tests__/**/site-gate*"
+    ci_validatable: true
+    owner_secret: true
+
+  - id: otel
+    summary: "OpenTelemetry trace export endpoint (optional observability)"
+    env: [OTEL_EXPORTER_OTLP_ENDPOINT]
+    validation: dummy            # absent in CI; export is best-effort and never on a critical path
+    exercised_by: "n/a (optional, off in CI)"
+    ci_validatable: true
+    owner_secret: false
