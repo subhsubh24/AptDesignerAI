@@ -28,6 +28,12 @@ const ROOM_TYPES = new Set([
  *   recommended_palette, recommended_materials, recommended_textures,
  *   what_works, what_should_go } }
  */
+// Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
+// applies a short platform default and can kill the function mid-run — a
+// "builds green, request gets killed" failure on a core product path. 300s is
+// the Vercel Pro ceiling and covers the documented worst-case pipeline latency.
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   // Bearer token auth — mobile clients cannot use cookies
   const authHeader = request.headers.get("Authorization");
