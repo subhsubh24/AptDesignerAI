@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
 import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
@@ -11,6 +12,12 @@ import { RC_KEY } from '@/lib/rc-init';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
 const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
+
+// Open in an in-app browser so the user stays inside the purchase flow
+// (matches the ExternalLink pattern used elsewhere in the app).
+function openLegal(url: string) {
+  void openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+}
 
 type DisplayOption = {
   pkg: PurchasesPackage | null;
@@ -245,7 +252,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             <ThemedText
               type="small"
               style={[styles.legalLink, { color: colors.textSecondary }]}
-              onPress={() => Linking.openURL(TERMS_URL)}
+              onPress={() => openLegal(TERMS_URL)}
               accessibilityRole="link"
               accessibilityLabel="Terms of Service"
             >
@@ -255,7 +262,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             <ThemedText
               type="small"
               style={[styles.legalLink, { color: colors.textSecondary }]}
-              onPress={() => Linking.openURL(PRIVACY_URL)}
+              onPress={() => openLegal(PRIVACY_URL)}
               accessibilityRole="link"
               accessibilityLabel="Privacy Policy"
             >
@@ -344,5 +351,6 @@ const styles = StyleSheet.create({
   },
   legalLink: {
     textDecorationLine: 'underline',
+    opacity: 0.7,
   },
 });
