@@ -23,6 +23,13 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { runAnalysis } from "@/app/api/area-analysis/route";
 import { summarizeRefineChanges } from "@/lib/agents/refine-summarizer";
 
+// The POST handler re-runs the full area-analysis pipeline (`runAnalysis`) —
+// the same 3–5 min multi-pass LLM job as the area-analysis route. Without an
+// explicit maxDuration, Vercel applies a short platform default and can kill
+// the function mid-run — a "builds green, request gets killed" failure on a
+// core product path. 300s is the Vercel Pro ceiling and matches the
+// area-analysis route this handler delegates to.
+export const maxDuration = 300;
 
 /** Top-level analysis fields the focus page renders. */
 const TRACKED_FIELDS = [
