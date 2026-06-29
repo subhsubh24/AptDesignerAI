@@ -82,6 +82,39 @@ jobs:
       - name: Lint
         run: npx eslint .
 
+  # SELF-VALIDATION gate: enforces validation/CAPABILITIES.yml — every external service the app
+  # uses must be declared with HOW CI validates it. Fails closed on a new undeclared credential
+  # (env drift) or when a PR touches a capability that needs an owner-only secret (scoped block).
+  validate-capabilities:
+    name: validate-capabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need history to diff against the base for the scoped check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Compute changed files (for the scoped unmet-capability check)
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=200 origin "${{ github.base_ref }}" || true
+            base="origin/${{ github.base_ref }}"
+          else
+            base="${{ github.event.before }}"
+            git cat-file -e "${base}^{commit}" 2>/dev/null || base="HEAD^"
+          fi
+          files=$(git diff --name-only "${base}...HEAD" 2>/dev/null || true)
+          { echo "files<<__EOF__"; echo "$files"; echo "__EOF__"; } >> "$GITHUB_OUTPUT"
+      - name: Validate capabilities
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: node scripts/validate-capabilities.mjs
+
   # NEW — functional JOURNEY gate (BUILDS != WORKS): replays real end-to-end user journeys
   # against a built app + an ephemeral Supabase-local DB and asserts intended outcomes.
   # Self-contained: `supabase start` provides the DB + keys (NO prod secrets needed).
