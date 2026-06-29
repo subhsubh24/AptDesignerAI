@@ -963,31 +963,36 @@ Use Google Search to verify current pricing and material availability when neede
       .map((img: { image_url: string }) => img.image_url)
       .filter(Boolean);
 
-    if (Array.isArray(analysis.what_should_go) && analysis.what_should_go.length > 0 && groundingImageUrls.length > 0) {
-      const grounding = await verifyWhatShouldGoAgainstPhotos(
-        analysis.what_should_go as string[],
-        groundingImageUrls,
-        room.room_type,
-      );
-      if (!grounding.fellBack) {
-        photoVerifiedEntries = grounding.what_should_go;
-        if (grounding.dropped.length > 0) {
-          analysis.what_should_go = grounding.what_should_go;
-          console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
-        }
+    // what_should_go and what_works are grounded against the room photos
+    // independently (distinct fields, no cross-dependency), so run the two
+    // image-LLM calls concurrently instead of serially — roughly halves this
+    // stage's latency on the core paid path. Results are still applied below in
+    // a fixed order (what_should_go then what_works), so determinism holds.
+    const shouldGoGroundable =
+      Array.isArray(analysis.what_should_go) && analysis.what_should_go.length > 0 && groundingImageUrls.length > 0;
+    const worksGroundable =
+      Array.isArray(analysis.what_works) && analysis.what_works.length > 0 && groundingImageUrls.length > 0;
+
+    const [grounding, worksGrounding] = await Promise.all([
+      shouldGoGroundable
+        ? verifyWhatShouldGoAgainstPhotos(analysis.what_should_go as string[], groundingImageUrls, room.room_type)
+        : Promise.resolve(null),
+      worksGroundable
+        ? verifyWhatWorksAgainstPhotos(analysis.what_works as string[], groundingImageUrls, room.room_type)
+        : Promise.resolve(null),
+    ]);
+
+    if (grounding && !grounding.fellBack) {
+      photoVerifiedEntries = grounding.what_should_go;
+      if (grounding.dropped.length > 0) {
+        analysis.what_should_go = grounding.what_should_go;
+        console.log(`[area-analysis] Photo-grounding dropped ${grounding.dropped.length} hallucinated what_should_go: ${grounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
       }
     }
 
-    if (Array.isArray(analysis.what_works) && analysis.what_works.length > 0 && groundingImageUrls.length > 0) {
-      const worksGrounding = await verifyWhatWorksAgainstPhotos(
-        analysis.what_works as string[],
-        groundingImageUrls,
-        room.room_type,
-      );
-      if (!worksGrounding.fellBack && worksGrounding.dropped.length > 0) {
-        analysis.what_works = worksGrounding.what_works;
-        console.log(`[area-analysis] Photo-grounding dropped ${worksGrounding.dropped.length} hallucinated/architectural what_works: ${worksGrounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
-      }
+    if (worksGrounding && !worksGrounding.fellBack && worksGrounding.dropped.length > 0) {
+      analysis.what_works = worksGrounding.what_works;
+      console.log(`[area-analysis] Photo-grounding dropped ${worksGrounding.dropped.length} hallucinated/architectural what_works: ${worksGrounding.dropped.map((d) => `"${d.entry}" (${d.reason})`).join("; ")}`);
     }
 
     // ── Reconciliation: cross-check Pass A's keep/replace lists against Pass B's shopping list ──
