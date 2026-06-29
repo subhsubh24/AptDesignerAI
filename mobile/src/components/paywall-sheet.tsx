@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
 import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
@@ -8,6 +9,15 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
+
+const TERMS_URL = 'https://aptdesignerai.com/terms';
+const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
+
+// Open in an in-app browser so the user stays inside the purchase flow
+// (matches the ExternalLink pattern used elsewhere in the app).
+function openLegal(url: string) {
+  void openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+}
 
 type DisplayOption = {
   pkg: PurchasesPackage | null;
@@ -134,7 +144,14 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
       onRequestClose={onDismiss}
     >
       <ThemedView style={[styles.sheet, { backgroundColor: colors.background }]}>
-        <Pressable style={styles.closeButton} onPress={onDismiss} hitSlop={12} disabled={purchasing}>
+        <Pressable
+          style={styles.closeButton}
+          onPress={onDismiss}
+          hitSlop={12}
+          disabled={purchasing}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <ThemedText style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '500' }}>
             Close
           </ThemedText>
@@ -204,13 +221,23 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             ]}
             onPress={handleStartTrial}
             disabled={purchasing}
+            accessibilityRole="button"
+            accessibilityLabel="Start free trial"
+            accessibilityState={{ disabled: purchasing, busy: purchasing }}
           >
             <ThemedText style={[styles.ctaText, { color: colors.accentForeground }]}>
               {purchasing ? 'Processing…' : 'Start Free Trial'}
             </ThemedText>
           </Pressable>
 
-          <Pressable style={styles.restoreButton} onPress={handleRestore} hitSlop={8} disabled={purchasing}>
+          <Pressable
+            style={styles.restoreButton}
+            onPress={handleRestore}
+            hitSlop={8}
+            disabled={purchasing}
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchases"
+          >
             <ThemedText type="small" style={{ color: colors.textSecondary }}>
               Restore Purchases
             </ThemedText>
@@ -220,7 +247,28 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             type="small"
             style={[styles.legal, { color: colors.mutedForeground }]}
           >
-            Payment charged at confirmation. Cancel anytime. By subscribing you agree to our Terms of Service and Privacy Policy.
+            Payment is charged when your free trial ends. Cancel anytime before then to avoid
+            charges. By subscribing you agree to our{' '}
+            <ThemedText
+              type="small"
+              style={[styles.legalLink, { color: colors.textSecondary }]}
+              onPress={() => openLegal(TERMS_URL)}
+              accessibilityRole="link"
+              accessibilityLabel="Terms of Service"
+            >
+              Terms of Service
+            </ThemedText>{' '}
+            and{' '}
+            <ThemedText
+              type="small"
+              style={[styles.legalLink, { color: colors.textSecondary }]}
+              onPress={() => openLegal(PRIVACY_URL)}
+              accessibilityRole="link"
+              accessibilityLabel="Privacy Policy"
+            >
+              Privacy Policy
+            </ThemedText>
+            .
           </ThemedText>
         </ScrollView>
       </ThemedView>
@@ -299,6 +347,10 @@ const styles = StyleSheet.create({
   legal: {
     textAlign: 'center',
     lineHeight: 18,
+    opacity: 0.7,
+  },
+  legalLink: {
+    textDecorationLine: 'underline',
     opacity: 0.7,
   },
 });
