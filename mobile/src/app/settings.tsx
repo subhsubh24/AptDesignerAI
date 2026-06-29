@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Linking, Pressable, StyleSheet } from 'react-native';
+import { Alert, Pressable, StyleSheet } from 'react-native';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -19,26 +20,30 @@ function Row({
   onPress,
   colors,
   destructive,
+  disabled,
   accessibilityHint,
 }: {
   label: string;
   onPress: () => void;
   colors: (typeof Colors)[keyof typeof Colors];
   destructive?: boolean;
+  disabled?: boolean;
   accessibilityHint?: string;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.row,
         { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
       ]}
     >
-      <ThemedText style={{ color: destructive ? '#c0392b' : colors.text, fontWeight: '500' }}>
+      <ThemedText style={{ color: destructive ? colors.destructive : colors.text, fontWeight: '500' }}>
         {label}
       </ThemedText>
     </Pressable>
@@ -53,7 +58,8 @@ export default function SettingsScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const openLink = useCallback((url: string) => {
-    void Linking.openURL(url);
+    // In-app browser keeps users inside the app (matches ExternalLink elsewhere).
+    void openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
   }, []);
 
   const performDelete = useCallback(async () => {
@@ -143,9 +149,10 @@ export default function SettingsScreen() {
           <Row label="Sign out" onPress={() => void supabase.auth.signOut()} colors={colors} />
           <Row
             label={deleting ? 'Deleting…' : 'Delete account'}
-            onPress={deleting ? () => {} : confirmDelete}
+            onPress={confirmDelete}
             colors={colors}
             destructive
+            disabled={deleting}
             accessibilityHint="Permanently deletes your account and saved designs"
           />
         </ThemedView>
