@@ -382,7 +382,7 @@ CRITICAL RULES:
     const changesMade = analysis.changes_made || [];
 
     // Save as new diagnosis (replaces the previous one in the timeline)
-    await supabase.from("room_diagnoses").insert({
+    const { error: saveError } = await supabase.from("room_diagnoses").insert({
       room_id,
       diagnosis_json: analysis,
       design_direction_json: {
@@ -397,10 +397,23 @@ CRITICAL RULES:
       model_used: selectModel("area_analysis"),
     });
 
+    // supabase-js returns the error in-band, so an unchecked insert would return
+    // a 200 while the refinement is lost — the user thinks their feedback saved
+    // but it vanishes on reload. Surface the failure instead of faking success.
+    if (saveError) {
+      console.error("[area-analysis/refine] Failed to save refinement:", saveError.message);
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: `Failed to save refinement: ${saveError.message}`,
+      });
+      return NextResponse.json({ error: "Unable to save the refinement. Please try again." }, { status: 500 });
+    }
+
     // Update room timestamp only — do NOT overwrite keep_items/replace_items
     // with AI output. The user's original selections are the source of truth;
     // overwriting them would cause cascading contradictions in future operations.
-    await supabase.from("rooms").update({ updated_at: new Date().toISOString() }).eq("id", room_id);
+    const { error: roomError } = await supabase.from("rooms").update({ updated_at: new Date().toISOString() }).eq("id", room_id);
+    if (roomError) console.error("[area-analysis/refine] Failed to update room timestamp:", roomError.message);
 
     const regenTokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
     await completeAgentRun(supabase, agentRun.id, {
