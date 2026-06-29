@@ -126,6 +126,13 @@ jobs:
         run: npm run build
       - name: Start app + run journeys
         run: |
-          npm run start -- -p 3100 &
-          for i in $(seq 1 60); do curl -sf http://localhost:3100 >/dev/null 2>&1 && break; sleep 2; done
+          npm run start -- -p 3100 > /tmp/app.log 2>&1 &
+          # wait for a REAL public page to 200 (root may redirect); fail fast + dump log if it never comes up
+          for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:3100/login && break; sleep 2; done
+          if ! curl -sf -o /dev/null http://localhost:3100/login; then
+            echo "::error::app did not become ready on :3100"; tail -150 /tmp/app.log; exit 1
+          fi
           bash scripts/run-journeys.sh
+      - name: App server log (on failure)
+        if: failure()
+        run: tail -200 /tmp/app.log || true
