@@ -18,12 +18,13 @@ OWNER_ACTIONS:
       how: "Confirm which domain is registered + served (likely aptdesignerai.com). Then either (a) if .com: change mobile/app.json to applinks:aptdesignerai.com and lib/email's from to an address on aptdesignerai.com, and serve /.well-known/apple-app-site-association there; or (b) if .ai: update the .com references in docs/store-listing.md + docs/app-privacy.md + the code fallbacks. The loop can make the code/doc edit in a normal PR once you state the canonical domain."
       blocks: store-submission
     - id: enforce-ci-required-checks
-      title: "Apply docs/ci/PROPOSED_CI.md — add lint + functional-journey CI jobs (needs workflow scope) + make them required checks"
+      title: "DONE — lint + public functional-journey CI jobs are now REQUIRED checks"
       priority: high
-      status: open
-      why: "Today only verify/build/mobile are required checks, so a BUILDS!=WORKS (broken-for-a-user) or lint-dirty change can still auto-merge. The headless loop cannot edit .github/, so it staged the exact workflow + steps. This closes the loop-health harness proposal 'gates not enforced in CI'."
-      how: "1) Merge the two jobs in docs/ci/PROPOSED_CI.md into .github/workflows/ci.yml (workflow scope). 2) Push on a throwaway branch and confirm the `journeys` job goes GREEN. 3) Settings -> Branches -> add `lint` + `journeys` to required status checks (keep verify/build/mobile). NEVER mark a flaky/red check required. Then close the linked 'loop: harness improvement proposal' issue."
-      blocks: gate-enforcement
+      status: done
+      why: "Previously only verify/build/mobile were required, so a BUILDS!=WORKS (broken-for-a-user) or lint-dirty change could still auto-merge. Now closed."
+      how: "DONE: ci.yml carries verify/mobile/build/lint/journeys; journeys runs the public/structural tier (--public-only) — boots the prod build with placeholder env + dummy LLM keys and asserts real public pages render. Proven GREEN on a real run, THEN added to required_status_checks ([verify, mobile, build, lint, journeys], strict=false, enforce_admins=false). The loop merges via `gh pr merge --squash --auto`, so a red required check BLOCKS the merge. Resolves issue #181."
+      followup: "AUTHED journey tier (signup->working dashboard, paywall unlock) needs a supabase-local seed that is not yet green under `next start` in CI (sign-in not reaching /dashboard). Add it as a separate required job once stabilized. enforce_admins stays false until Growth + Quality-Auditor routines also merge via --auto (today they don't, so admin-enforcement could strand their PRs)."
+      blocks: none
     - id: auto-migrate-on-deploy
       title: "(Optional) enable auto-migrate-on-deploy so migrations stop being a manual step (docs/ci/PROPOSED_CI.md)"
       priority: normal

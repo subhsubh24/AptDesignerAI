@@ -38,7 +38,7 @@ LOOP_HEALTH:
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
     recurring_failures: []       # failures seen across >=2 runs (the "stuck" signal) — name them
-    harness_proposals_open: 1    # issue #181 ("gates not enforced in CI") — partially resolved by sibling PR #182 (lint+journeys now REQUIRED); owner to confirm + close
+    harness_proposals_open: 0    # issue #181 ("gates not enforced in CI") RESOLVED: lint + the public journey tier (BUILDS!=WORKS) are now REQUIRED checks alongside verify/build/mobile; the loop merges via --auto so a red check BLOCKS auto-merge. Authed journey tier = tracked follow-up.
   signal: improving              # bootstrapping | improving | steady | churning | stuck
 ```
 
