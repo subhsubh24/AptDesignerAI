@@ -4,6 +4,41 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-29 (Run 42) — 6 disjoint changes (correctness + security G1 + store-compliance + design + reliability + F2 test)
+
+### State on entry
+- Cold container; local working branch had DIVERGED from origin (50/50) — `git reset --hard origin/<default>` to recover, then `npm install` (root). Baseline gate green: tsc clean, **1183 tests** pass / 8 skipped (RUN_EVALS-gated), eslint 0.
+- **DEEP AUDIT not due** (last Run 40; next ~Run 44).
+- **First real QUALITY_SCORECARD landed (#198, overall C, ship_gate_met:false).** Used its `top_gaps` as the independently-vetted candidate pool and verified each gap directly against the code, rather than re-running the 8 Haiku scouts to rediscover what the fresh independent audit already surfaced (spend discipline; the scorecard is dated today and is file-precise). All 8 top_gaps confirmed real.
+
+### What was done (6 file-disjoint changes, all merged #206–211)
+- **#206 correctness/reliability** — `export const maxDuration = 300` on the 9 heavy LLM routes (none had one → Vercel short-default kills the 3–5 min pipeline mid-run). Scorecard high-severity correctness gap.
+- **#207 security/G1** — rate-limit + daily-spend guards on `products/evaluate` + `evaluate-set` (the last two unguarded paid-LLM endpoints; evaluate-set fans out many LLM calls). Reviewer A confirmed all three scoreProduct/evaluateBundle routes now gated.
+- **#208 store-readiness** — privacy page falsely named Anthropic/OpenAI as photo processors; corrected to the real ones (Gemini + DeepSeek), matching the already-correct docs/app-privacy.md. (Did NOT touch the owner-gated domain decision.)
+- **#210 design** — `app/not-found.tsx` design-system 404 (was Next default template). Mirrors app/error.tsx tokens/components.
+- **#209 reliability** — search/stream double-close (`!result.success` branch close + `finally` close → throw in finally) fixed with the #191 `streamClosed`/`closeStream` latch; +maxDuration here (disjoint from #206).
+- **#211 F2 test** — refine-summarizer provider-mocked suite (token-sum, slim()/low-thinking prompt, empty-text + error fallbacks) for the ~21%-covered lib/agents core.
+- 12 Sonnet reviewers (2/change), all APPROVE first pass. No scout sweep this run (scorecard served as the vetted candidate pool). **No new migrations or secrets** → PENDING_OPS unchanged.
+
+### Lessons learned
+1. **A fresh independent QUALITY_SCORECARD IS the scouting feed.** When the scorecard is dated today, file-precise, and lists 8 verified `top_gaps`, re-running 8 Haiku discovery scouts is redundant spend — verify each gap directly and build. (Deep audit still runs on its own ~4-run cadence for the holistic lens.)
+2. **The disjoint rule split maxDuration cleanly across two PRs.** search/stream needed both the double-close fix (#209) and maxDuration; rather than collide with the 9-route maxDuration PR (#206), maxDuration for search/stream rode along in #209. Every heavy route still got covered, zero file overlap.
+3. **Local branch can silently diverge from origin on a cold start** (saw 50/50). Always `git reset --hard origin/<default>` before trusting `git log`/test counts — a stale tip wastes a cycle (Loop-4 hill-climb note, reaffirmed).
+4. **maxDuration was a latent "builds-green, killed-in-prod" ship blocker.** grep for maxDuration was 0 repo-wide while the core pipeline is documented at 3–5 min; no test catches it because it only manifests under the Vercel serverless budget. Classic BUILDS≠WORKS — the kind of gap the functional-reality lens exists for.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 44** (last Run 40).
+- **Remaining QUALITY_SCORECARD top_gaps NOT yet taken (file-disjoint, high-value):**
+  - **performance** — `lib/store/embedding-index.ts` topKSimilar does a full-table `select('*')` (N scans per identify, ivfflat pgvector index unused) → needs a pgvector RPC + migration; AND the two photo-grounding LLM calls in area-analysis/route.ts:961,976 run serially though independent (Promise.all → ~2× stage latency). NOTE: the grounding fix collides with area-analysis/route.ts — sequence after any change on that file.
+  - **business_case_strength (ship-critical)** — referral mechanic + an expansion/upsell in-app surface are listed-not-built; re-ground the 50%-organic-share input. Meaty feature work — give it a focused run.
+  - **tests_evals** — RUN_EVALS=1 CI job is human-gated; locally vendor gold images + a real refine eval; lib/agents still ~21% (more mockable-agent tests: room-diagnostician, product-extractor, shopping-researcher, post-search-coordinator, correction-planner).
+  - **design** — toast has NO aria-live BUT Radix Toast already announces via its Provider region (adjudicate before building — likely a false flag); a11y axe coverage on ≥1 authed route (needs E2E auth stack); commit baseline screenshots (F7, needs a served app).
+  - **correctness** — maxDuration not yet on the lighter `area-analysis/refine-chat` route or `rooms/[roomId]/diagnosis` (reviewer-noted, lower priority).
+- **G1 NOT ticked** — the scorecard's specific G1 gap (the two evaluate routes) is now closed, but the ROADMAP G1 box covers the WHOLE endpoint surface; leave it for the next independent re-grade to confirm.
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C, ship_gate_met:false, multiple DoD boxes unchecked. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-06-29 (Run 41) — 6 disjoint changes (correctness + reliability + 2× F2 tests + 2× a11y)
 
 ### State on entry
