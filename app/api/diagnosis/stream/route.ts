@@ -79,8 +79,26 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let streamClosed = false;
       function sendEvent(type: string, data: Record<string, unknown>) {
-        controller.enqueue(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
+        if (streamClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Client disconnected mid-stream — the controller is already closed.
+          // Stop emitting so a later sendEvent (e.g. in the catch/finally) can't
+          // throw a second, uncaught "Controller is already closed" error.
+          streamClosed = true;
+        }
+      }
+      function closeStream() {
+        if (streamClosed) return;
+        streamClosed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already closed by a client disconnect — nothing to do.
+        }
       }
 
       try {
@@ -197,7 +215,7 @@ export async function POST(request: Request) {
             error_message: result.error,
           });
           sendEvent("error", { error: result.error || "Diagnosis failed" });
-          controller.close();
+          closeStream();
           return;
         }
 
@@ -328,7 +346,7 @@ export async function POST(request: Request) {
         if (saveError) {
           logServerError("diagnosis/stream save", saveError);
           sendEvent("error", { error: "Unable to save the diagnosis. Please try again." });
-          controller.close();
+          closeStream();
           return;
         }
 
@@ -361,7 +379,7 @@ export async function POST(request: Request) {
         logServerError("diagnosis/stream", err);
         sendEvent("error", { error: "Diagnosis failed unexpectedly. Please try again." });
       } finally {
-        controller.close();
+        closeStream();
       }
     },
   });
