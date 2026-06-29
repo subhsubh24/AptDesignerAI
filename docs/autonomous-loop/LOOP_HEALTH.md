@@ -17,6 +17,10 @@ dashboard reads this block.
 - `signal` is your honest read; **churning or stuck is the trigger to open ONE
   `loop: harness improvement proposal` issue** (the META rule — the only channel by which the
   loop's own operating rules improve, since the loop cannot edit its routine/.claude itself).
+- Keep the `validation` block current from `validation/CAPABILITIES.yml`: `capabilities_total`
+  = number of declared capabilities; `unmet` = the ids with `ci_validatable: false` (run
+  `node scripts/validate-capabilities.mjs --readiness`). Every `unmet` id MUST also be an urgent
+  OWNER_ACTION in PENDING_OPS so it surfaces to the owner + the dashboard.
 - Keep the block valid, parseable YAML.
 
 ```yaml
@@ -39,6 +43,10 @@ LOOP_HEALTH:
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
     recurring_failures: []       # failures seen across >=2 runs (the "stuck" signal) — name them
     harness_proposals_open: 0    # issue #181 ("gates not enforced in CI") RESOLVED: lint + the public journey tier (BUILDS!=WORKS) are now REQUIRED checks alongside verify/build/mobile; the loop merges via --auto so a red check BLOCKS auto-merge. Authed journey tier = tracked follow-up.
+  validation:                    # self-validation capability gate (validation/CAPABILITIES.yml + the REQUIRED validate-capabilities check). Dashboard reads this block.
+    enforced_in_ci: true         # validate-capabilities is a required status check (fails closed on undeclared/unmet capabilities)
+    capabilities_total: 14       # external services declared in validation/CAPABILITIES.yml
+    unmet: []                    # capabilities needing an owner-only secret to validate (ci_validatable:false). EACH unmet entry MUST also be an urgent OWNER_ACTION in PENDING_OPS so it surfaces to the owner.
   signal: improving              # bootstrapping | improving | steady | churning | stuck
 ```
 
