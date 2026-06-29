@@ -30,11 +30,14 @@ describe("computeProportionScores — rug coverage", () => {
       analysis([
         { category: "area rug", specs: "120x96 inches" },
         { category: "sofa", specs: "84x36 inches" },
-        { category: "coffee table", specs: "40x20x18 inches" },
+        // Rule keys are underscored ("coffee_table"); the match is a substring
+        // include, so the category must use that exact token to be checked.
+        { category: "coffee_table", specs: "40x20x18 inches" },
       ]),
       { roomType: "living_room" },
     );
-    // width ext = (120-84)/2 = 18 ≥ 6; coffee ext = (96-20)/2 = 38 ≥ 12 → no penalty.
+    // sofa ext = min((120-84)/2, (96-36)/2) = 18 ≥ 6; coffee_table ext =
+    // min((120-40)/2, (96-20)/2) = 38 ≥ 12 → both pass, no penalty.
     expect(r.rug_coverage).toBe(1);
     expect(r.issues.find((i) => i.item.includes("rug"))).toBeUndefined();
   });
@@ -65,17 +68,20 @@ describe("computeProportionScores — rug coverage", () => {
     expect(r.issues).toHaveLength(0);
   });
 
-  it("never drops rug coverage below the 0.3 floor", () => {
+  it("applies one −0.2 penalty per undersized related item", () => {
     const r = computeProportionScores(
       analysis([
-        // Rug smaller than every related item → multiple −0.2 penalties.
+        // Rug smaller than all three living-room rule items (sofa/chair/coffee_table)
+        // → three −0.2 penalties: 1.0 − 0.6 = 0.4 (still above the 0.3 floor).
         { category: "rug", specs: "50x40 inches" },
         { category: "sofa", specs: "84x36 inches" },
         { category: "chair", specs: "60x36 inches" },
-        { category: "coffee table", specs: "48x30 inches" },
+        { category: "coffee_table", specs: "48x30 inches" },
       ]),
       { roomType: "living_room" },
     );
+    expect(r.rug_coverage).toBeCloseTo(0.4, 5);
+    expect(r.issues.length).toBe(3);
     expect(r.rug_coverage).toBeGreaterThanOrEqual(0.3);
   });
 });
