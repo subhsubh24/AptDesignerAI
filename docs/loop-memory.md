@@ -4,6 +4,105 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## DEEP AUDIT 2026-06-29 (Run 40) — holistic, 8 read-only Haiku lenses across the whole codebase
+
+Due this run (last ran Run 36). Findings distilled + prioritized (→ what became this run's work):
+- **Security/RLS: CLEAN.** Re-audited every migration (001–025): every public table has correct RLS
+  (tenant on `auth.uid()`; shared/internal RLS-on-no-policy). Secrets all env-read; admin client used only
+  on service-role tables behind auth gates; SECURITY DEFINER search_path pinned (024); error hygiene holds
+  (no raw DB errors to clients). No findings — a clean no-op, the right outcome.
+- **Mobile/store (Track D): real gaps → BUILT.** (a) No in-app account deletion — Apple 5.1.1(v) REQUIRES it;
+  the web `/api/user/delete` is cookie-based, unreachable from mobile → built Bearer endpoint + Settings screen
+  (PR #186). (b) Paywall Terms/Privacy were plain text (App Store/Play require accessible legal at purchase) →
+  tappable in-app-browser links + a11y (PR #187). Deferred (queued): quota-constant naming unification across
+  mobile/web/server; restore-purchases should refresh entitlements; paywall fallback-pricing guard.
+- **Correctness: one real bug → FIXED.** `POST /api/bundles` items-insert had no error check → silent empty
+  bundle (PR #185). The audit's `.single()`→`.maybeSingle()` finding on products/evaluate + bundles/evaluate
+  was OVERSTATED — supabase-js `.single()` returns the error in-band (no throw) and the code already uses
+  `diagnosis?.…` optional chaining, so it does NOT 500; dropped as churn. Stream backpressure guard + webhook
+  email-failure audit table = real-but-lower-priority, queued.
+- **Tests/F2: math-module gaps → 2 closed.** Added `proportion-math.test.ts` (#184) + `lookups.test.ts` (#183).
+  Still queued (pure, deterministic, headless): `harmony-math.ts`, `search-cache.ts`; mockable agents
+  (orchestrator, room-diagnostician, design-coordinator, shopping-researcher, product-extractor); route-level tests.
+- **AI pipeline / cost contract: one finding was a TRAP — correctly REJECTED.** Audit flagged "Gemini context
+  caches not bypassed under DETERMINISTIC." But `DETERMINISTIC = process.env.DETERMINISTIC_MODE !== "false"`
+  defaults to TRUE, so bypassing caches under it would DISABLE context caching in normal production = a real
+  COST-CONTRACT regression; and context caches return identical content (no output non-determinism — distinct
+  from the semantic/embedding caches the determinism rule targets). Did NOT change it. thinkingConfig/seed/HIGH
+  usage/timeouts/sort-tiebreakers all CLEAN.
+- **Artifact freshness: one real owner-decision drift.** Canonical domain is inconsistent: code defaults +
+  store-listing + privacy docs use `aptdesignerai.com` (dominant), but `mobile/app.json` associatedDomains use
+  `aptdesignerai.ai` and `lib/email` from-address uses `aptdesigner.ai`. Universal Links + email deliverability
+  silently break if the registered domain ≠ the configured one. Did NOT guess-edit (needs the owner to confirm
+  which domain is registered) → recorded as an OWNER_ACTION in PENDING_OPS. Pricing/privacy/ARCHITECTURE = CLEAN
+  (BUSINESS_CASE_SUMMARY parses, arr_year1.base 122900 matches body).
+- **Perf: borderline.** Completion-path DB-write parallelization (diagnosis/analyze-apartment/bundles-evaluate,
+  ~50ms each) + GET payload trims (analyze-apartment/area-analysis fetch `room_*(*)` but return a computed summary
+  — server-side-only trim, safe). All real but modest; deferred as not the highest-value disjoint work this run.
+- **A11y/design: minor.** Mobile `themed-text` `linkPrimary` hardcodes `#3c87f7` (off warm-editorial brand, used
+  only in +not-found); web `badge` amber-100/800 ~4.2:1 borderline AA. Both small; deferred (avoid churn).
+
+DUAL-AXIS VISION VERDICT (F7): not performed this run — F7 screenshot artifacts are not yet built (F7 still `[ ]`,
+depends on F4 wiring which is human-gated). No screenshots to judge yet; recorded so the next audit knows.
+
+---
+
+## Run 2026-06-29 (Run 40) — DEEP AUDIT + 5 disjoint changes (Track D store readiness + correctness + F2 tests)
+
+### State on entry
+- Cold container at default tip `3d07e03`; `npm install` (root + mobile). During the run the remote default
+  advanced (`e13d114` rate-limiter fail-closed bypass, then `#182`/`487483f` made **lint + journeys REQUIRED CI
+  checks**) — re-based the working base to the latest each time. Baseline gate green: tsc, **1131 tests**,
+  determinism, eslint 0.
+- DEEP AUDIT due (last Run 36) → ran it first (8 Haiku lenses). QUALITY_SCORECARD still all-null → readiness
+  gate cannot pass; did NOT attempt the ready issue.
+
+### What was done (5 file-disjoint changes, all merged #183–187)
+- **#186 Track D** — mobile in-app account deletion (Apple 5.1.1(v)) + Settings screen + Bearer `DELETE /api/mobile/account`.
+- **#187 Track D** — mobile paywall tappable Terms/Privacy (in-app browser) + a11y + honest trial copy.
+- **#185 correctness** — bundles items-insert silent-failure fix.
+- **#184 / #183 F2 tests** — proportion-math (13) + lookups (20).
+- 10 per-change Sonnet reviewers + 4 re-reviewers; 8 Haiku audit scouts. 4 of 5 needed a 2nd review cycle (all
+  resolved in-cap). Gate green on merged default.
+
+### Lessons learned
+1. **Verify audit findings against the source before building — three of the eight lenses produced plausible-but-wrong
+   findings.** (a) The "cache-bypass under DETERMINISTIC" was a cost-contract TRAP (DETERMINISTIC defaults true →
+   would kill prod context caching). (b) `.single()`→`.maybeSingle()` "500" was wrong (supabase-js returns the error
+   in-band, code already null-safe). (c) app.json `privacy` "URL" field doesn't exist (privacy URLs live in App Store
+   Connect / Play Console, not app.json). Haiku audit lenses are great at SURFACING; Opus must adjudicate before coding.
+2. **Mobile cannot call cookie-based web routes.** `/api/user/delete` uses `createClient()`+`getUser()` (cookies);
+   mobile sends a Bearer token. A mobile delete needs its own Bearer-authed endpoint (mirror `/api/mobile/saved-designs`:
+   parse `Authorization`, `anonClient.auth.getUser(token)`, resolve the id from the JWT — never client-supplied).
+3. **Reviewers reading the on-disk file can false-positive on branch state.** A reviewer claimed the `index.tsx` entry
+   point "wasn't applied" — but it was committed on the branch; the working tree just happened to be on a different
+   branch. The DIFF is authoritative; verify with `git show <branch>:<file>` before acting on such a claim.
+4. **Per-change reviewers are still worth it on tests.** Reviewer A caught a category-key mismatch
+   (`"coffee table"` vs `"coffee_table"`) that made two rug tests pass for the wrong reason (the extension branch never
+   fired). Fixed to the real key + honest expected values. Tests can be green and still not exercise the branch they claim.
+5. **`expo lint` flags duplicate same-module imports as warnings** (`import/no-duplicates`). When editing an import
+   block, consolidate split imports from the same path — clears warnings within the change's own scope (F1).
+6. **In-app browser, not `Linking.openURL`, for mobile external links** — the repo has `ExternalLink`/`openBrowserAsync`
+   (expo-web-browser) precisely so taps don't eject the user to Safari mid-flow. Reviewers enforce this.
+
+### Rotation guide for next run
+- **DEEP AUDIT done Run 40** → next due ~Run 44.
+- **Highest-value queued, file-disjoint (from this audit):**
+  - **Math/agent tests** — `harmony-math.test.ts`, `search-cache.test.ts` (pure, like this run); then mockable agents
+    (orchestrator, room-diagnostician, design-coordinator, shopping-researcher, product-extractor) + route-level tests.
+  - **Mobile polish (Track D/C)** — unify the free-save-limit constant naming across mobile/web/server; restore-purchases
+    → refresh entitlements; paywall fallback-pricing guard. (Each touches `paywall-sheet.tsx`/`results.tsx`/entitlements —
+    watch disjointness.)
+  - **Reliability** — diagnosis/stream `controller.enqueue` backpressure guard + ensure `completeAgentRun` on all paths;
+    webhook email-failure audit table.
+  - **Perf (borderline, standalone only)** — analyze-apartment/area-analysis GET payload trims (server-side-only, safe).
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys;
+  EAS init/projectId + Apple/Play accounts; all live secrets; set `SITE_GATE_PASSWORD`. **NEW: decide the canonical domain
+  (`aptdesignerai.com` vs `.ai`) and reconcile `mobile/app.json` associatedDomains + `lib/email` from-address — see PENDING_OPS.**
+- **Readiness:** still blocked — QUALITY_SCORECARD all-null + many DoD boxes unchecked. Do NOT attempt the ready issue.
+
+---
+
 ## SYNC 2026-06-28 — staged auto-migrate-on-deploy (kill recurring "apply migrations" toil)
 - **Why:** migrations were hand-applied every time the factory adds one (recurring owner step). Staged a `migrate` CI job (in docs/ci/PROPOSED_CI.md) that runs `supabase db push` post-merge, default-branch-only, after verify+build pass — forward-only, never reset.
 - **Safety rails baked in (auto-applying to prod is the risk the manual step avoided):** default-branch + post-gate only; migrations still go through the 2-reviewer + RLS gate pre-merge; recommended owner net = Supabase PITR/backups before enabling. Tradeoff (removes the human schema checkpoint) is stated in the doc + the OWNER_ACTION so the owner applies it consciously.
