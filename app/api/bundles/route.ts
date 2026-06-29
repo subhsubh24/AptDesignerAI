@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
 
@@ -69,7 +69,11 @@ export async function POST(request: Request) {
     }));
     const { error: itemsError } = await supabase.from("product_bundle_items").insert(items);
     if (itemsError) {
-      await supabase.from("product_bundles").delete().eq("id", bundle.id);
+      // A multi-row insert is atomic, so on error zero items were written —
+      // remove the now-orphaned bundle. If the cleanup itself fails, log it so
+      // the orphan is observable (the caller still gets the error response).
+      const { error: cleanupError } = await supabase.from("product_bundles").delete().eq("id", bundle.id);
+      if (cleanupError) logServerError("bundles.cleanup", cleanupError);
       return apiError("bundles", itemsError);
     }
   }
