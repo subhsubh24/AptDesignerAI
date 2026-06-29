@@ -22,24 +22,24 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-06-28
-  last_run: null                 # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: null
+  as_of: 2026-06-29
+  last_run: 40                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 40
   this_run:
-    changes_shipped: 0           # PRs merged this run
-    changes_abandoned: 0         # candidates started then dropped (clean tree)
-    abandoned_reasons: []        # [{change, reason}] — classify EVERY drop so it isn't re-tried
+    changes_shipped: 5           # PRs merged this run (#183 #184 #185 #186 #187)
+    changes_abandoned: 0         # all 5 implemented changes shipped; traps/churn were dropped at SELECTION (pre-implementation), not abandoned mid-build
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): cache-bypass-under-DETERMINISTIC=dead_end(cost-contract trap), maybeSingle=dead_end(overstated non-bug), app.json-privacy-url=dead_end(audit wrong), perf-payload-trims+a11y-token=review_value(borderline)
     verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 0         # LOOP-3 reviewer REQUEST_CHANGES
+    review_rejections: 4         # LOOP-3 REQUEST_CHANGES (proportion key-mismatch, bundles cleanup-log, account destructive-token, paywall in-app-browser) — all resolved within cap, re-reviewed APPROVE
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 0
+    merged_prs: 29               # Runs 37-40 product PRs (#160-179, #183-187) + sibling ci PRs
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
     recurring_failures: []       # failures seen across >=2 runs (the "stuck" signal) — name them
-    harness_proposals_open: 1    # open: "gates not enforced in CI" — journey+lint not required checks (staged docs/ci/PROPOSED_CI.md; owner applies)
-  signal: bootstrapping          # bootstrapping | improving | steady | churning | stuck
+    harness_proposals_open: 1    # issue #181 ("gates not enforced in CI") — partially resolved by sibling PR #182 (lint+journeys now REQUIRED); owner to confirm + close
+  signal: improving              # bootstrapping | improving | steady | churning | stuck
 ```
 
 ## How to read it (owner + loop)

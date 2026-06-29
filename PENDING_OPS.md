@@ -8,8 +8,15 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-06-28
+  as_of: 2026-06-29
   items:
+    - id: reconcile-canonical-domain
+      title: "Decide the canonical domain (aptdesignerai.com vs .ai) + reconcile app.json associatedDomains and the email from-address"
+      priority: high
+      status: open
+      why: "Deep audit (Run 40) found a domain split: the code fallbacks, store-listing, and privacy/terms docs use aptdesignerai.com (dominant), but mobile/app.json `ios.associatedDomains` use applinks:aptdesignerai.ai and lib/email's from-address uses hello@aptdesigner.ai. If the registered/served domain doesn't match these, iOS Universal Links silently fail (in-app share links open Safari instead) and transactional emails bounce. The loop did NOT guess-edit because the fix depends on which domain you actually registered."
+      how: "Confirm which domain is registered + served (likely aptdesignerai.com). Then either (a) if .com: change mobile/app.json to applinks:aptdesignerai.com and lib/email's from to an address on aptdesignerai.com, and serve /.well-known/apple-app-site-association there; or (b) if .ai: update the .com references in docs/store-listing.md + docs/app-privacy.md + the code fallbacks. The loop can make the code/doc edit in a normal PR once you state the canonical domain."
+      blocks: store-submission
     - id: enforce-ci-required-checks
       title: "Apply docs/ci/PROPOSED_CI.md — add lint + functional-journey CI jobs (needs workflow scope) + make them required checks"
       priority: high
