@@ -23,17 +23,17 @@ dashboard reads this block.
 LOOP_HEALTH:
   project: AptDesignerAI
   as_of: 2026-06-29
-  last_run: 41                   # the Run N this reflects (null until first bookkeeping update)
+  last_run: 43                   # the Run N this reflects (null until first bookkeeping update)
   last_deep_audit: 40
   this_run:
-    changes_shipped: 6           # PRs merged this run (#191 #192 #193 #194 #195 #196)
-    changes_abandoned: 0         # all 6 implemented changes shipped; perf candidates were deselected at SELECTION (collided on-file with higher-value correctness fixes), not abandoned mid-build
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): area-analysis-refine-parallelize + area-analysis-POST-select-trim = conflict(same file as a chosen correctness fix); theme-toggle-aria-label = review_value(title already provides an accessible name)
+    changes_shipped: 4           # #213 #214 #215 merged; #216 auto-merge queued (gate green, 2 approvals)
+    changes_abandoned: 0         # all 4 implemented changes passed gate+review; 3 candidates were deselected at SELECTION (not built), per below
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): embedding-index-pgvector-RPC = dead_end-for-now (cannot runtime-verify a pgvector RPC cold; latent value pre-seed; ship_critical:false → defer to a live-DB-verifiable run); toast-aria-live = review_value (Radix Toast already announces via its Provider region — false flag); rooms/[roomId]/diagnosis-maxDuration = review_value (plain DB GET, no LLM/long work)
     verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 1         # LOOP-3 REQUEST_CHANGES (search-cache test: fragile vi.doUnmock teardown could leak DETERMINISTIC=true on reorder) — fixed with an afterEach restore, re-reviewed APPROVE in-cap
+    review_rejections: 1         # LOOP-3 REQUEST_CHANGES (product-extractor test: vacuous `geminiProvider.chat not called` assertion on a path that uses getProvider/tavilyExtract) — fixed to assert vs tavilyExtract, re-reviewed APPROVE in-cap
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 28               # Runs 38-41 product PRs (#167-179, #183-187, #191-196) + sibling ci PRs
+    merged_prs: 24               # Runs 40-43 product PRs (#183-187, #191-196, #206-211, #213-215) + housekeeping (#188 #197 #212)
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
