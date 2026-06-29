@@ -5,12 +5,27 @@ import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { IdentifiedProduct } from "@/lib/types/database";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Scoring fans out an LLM call per product — gate it behind the same per-user
+  // rate limit + daily spend breaker as the other paid LLM endpoints so a single
+  // authed caller can't drive unbounded model spend.
+  const limit = checkRateLimit(`product-evaluate:${user.id}`, RATE_LIMITS.productEvaluate);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many evaluation requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
+    );
+  }
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;

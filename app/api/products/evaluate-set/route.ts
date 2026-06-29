@@ -5,6 +5,8 @@ import { scoreProduct, type ScoringContext } from "@/lib/agents/fit-scorer";
 import { evaluateBundle, type BundleContext } from "@/lib/agents/bundle-optimizer";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { logServerError } from "@/lib/utils/api-error";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { CandidateProduct } from "@/lib/types/database";
 
 /**
@@ -26,6 +28,20 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // This endpoint fans out many LLM calls per request — one extraction + one
+  // deep-score per URL, then a combinatorial sweep of bundle evaluations
+  // (Promise.all batches). Unguarded, a single authed user could drain the LLM
+  // budget. Gate it behind the per-user rate limit + daily spend breaker.
+  const limit = checkRateLimit(`evaluate-set:${user.id}`, RATE_LIMITS.bundleEvaluate);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many set-evaluation requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
+    );
+  }
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: unknown;
   try {
