@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-29 (Run 43) — 4 disjoint changes (perf + reliability + 2× F2 LLM-core tests)
+
+### State on entry
+- Cold container at default tip `637e18e` (post Run 42 #206–212). `npm install` (root); reset working branch to `origin/<default>`. Baseline gate green: tsc clean, **1187 tests** pass / 8 skipped (RUN_EVALS-gated), determinism clean, eslint 0.
+- **DEEP AUDIT not due** (last Run 40; next ~Run 44).
+- Used the independent **QUALITY_SCORECARD (#198, overall C, ship_gate_met:false, dated today)** as the vetted candidate pool again (Run 42 lesson). Run 42 had already taken 6 of its gaps (maxDuration #206, G1 #207, privacy #208, 404 #210, search-stream #209, a test #211); this run worked the REMAINING top_gaps. No 8-scout sweep (the dated, file-precise scorecard is the feed).
+
+### What was done (4 file-disjoint changes — #213/#214/#215 merged, #216 auto-merge queued gate-green)
+- **#213 performance** — `app/api/area-analysis/route.ts`: the two photo-grounding LLM calls (`verifyWhatShouldGoAgainstPhotos` for `what_should_go`, `verifyWhatWorksAgainstPhotos` for `what_works`) ran serially though they write distinct fields with no cross-dependency → `Promise.all`, results applied in fixed order. ~2× this stage's latency on the core paid path. Closes the scorecard `performance` top_gap (serial grounding calls).
+- **#214 reliability** — `area-analysis/refine-chat` POST re-runs the full 3–5 min `runAnalysis` pipeline but had no `maxDuration` (the one heavy route #206 missed) → `export const maxDuration = 300`. Closes the scorecard `correctness` gap on that route.
+- **#215 / #216 tests (F2 / scorecard tests_evals critical gap, lib/agents ~21%)** — `whatitneeds-enricher.test.ts` (12: pure `hasSpecificity` truth table + `enrichWhatItNeeds` branches) and `product-extractor.test.ts` (7: `extractFromImage` parse/validate/fail-soft + room-photo order/cap; `extractFromUrlBatch([])` short-circuit).
+- 8 per-change Sonnet reviewers + 1 re-reviewer. 7 of 8 APPROVE first pass; product-extractor Reviewer A REQUEST_CHANGES (1 vacuous assertion) → fixed + re-reviewed APPROVE in-cap. No new migrations or secrets → PENDING_OPS unchanged.
+
+### Deselected at SELECTION (not abandoned mid-build)
+- **embedding-index pgvector RPC + migration** (scorecard `performance`: `topKSimilar` full-table `select('*')`, ivfflat index unused) — DEFERRED: a pgvector RPC cannot be runtime-verified cold (no live DB), the value is latent pre-catalog-seed, and it is `ship_critical:false`. Shipping an unverifiable DB function violates BUILDS≠WORKS. Do it on a run where Supabase MCP can verify against the live DB.
+- **toast aria-live** (scorecard `design_taste`) — DROPPED as a false flag: the toast is built on Radix `ToastPrimitive`, which announces via its built-in Provider aria-live region; manual aria-live risks double-announcement. (Confirms Run 42's adjudication.)
+- **maxDuration on `rooms/[roomId]/diagnosis`** — DROPPED: that route is a plain DB GET (no LLM, no long work), so it needs no maxDuration. The rotation-guide mention conflated it with the diagnosis *pipeline*.
+
+### Lessons learned
+1. **When asserting "no external call on a short-circuit", mock the collaborator the function ACTUALLY calls.** Reviewer A correctly rejected `extractFromUrlBatch([])`'s `expect(geminiProvider.chat).not.toHaveBeenCalled()` — that path uses `getProvider("extraction").chat` + `tavilyExtract`, so the assertion passed regardless of the guard (vacuous). Fix: assert `results.size===0` + `tavilyExtract` not called. Grep which provider/dependency a function reaches before writing a "not called" assertion.
+2. **Per-change reviewer subagents run `vitest`/`tsc` in the SHARED working tree and can re-stage files mid-run.** While the 8 reviewers ran, the grounding branch's working tree kept showing staged copies of the two test files (committed safely on their own branches). Clean the working tree only AFTER all reviewers finish, or a hard-reset just races them. Tell re-reviewers explicitly "do NOT switch git branches / modify files — review only."
+3. **`AgentResult<T>` is NOT a discriminated union** (`success: boolean; data?: T`), so `if (!result.success) throw` does NOT narrow `result.data`. Guard `if (!result.success || !result.data) throw` to access data in tests. (tsc caught it; fixed before CI.)
+4. **The scorecard-as-feed split cleanly across two runs.** Run 42 took 6 gaps; Run 43 took the remaining performance/correctness/tests gaps. A dated, file-precise independent scorecard is a better candidate pool than re-discovering with scouts — but VERIFY each gap at the source first (the pgvector + toast gaps were correctly deferred/dropped after source inspection).
+
+### NEW code finding for next run (real, queue it)
+- **`extractFromImage` (lib/agents/product-extractor.ts ~L726) omits `seed: DETERMINISTIC_SEED`** while the sibling `extractFromUrlBatch` LLM calls pass it — a real determinism-contract gap the harness-ratchet does NOT catch (it only checks `thinkingConfig`). 1-line fix + add `expect(mockChat.mock.calls[0][0]).toHaveProperty("seed")` to the success test. (Surfaced by product-extractor Reviewer A.)
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 44** (last Run 40) — run the full read-only sweep before scouting.
+- **Highest-value queued, file-disjoint:**
+  - **correctness** — the `extractFromImage` missing-seed fix above (1 line + test assertion).
+  - **performance** — embedding-index pgvector RPC + migration: needs LIVE-DB verification (Supabase MCP) before shipping; also the two `area-analysis/route.ts` grounding calls are now parallel (done #213), so the remaining perf there is none — move on to `next/image` adoption + a perf budget (no Lighthouse/bundle gate exists).
+  - **business_case_strength (ship-critical, B)** — referral mechanic + an expansion/upsell in-app surface are listed-not-built; re-ground the 50%-organic-share input. Meaty feature work — give it a focused run.
+  - **tests_evals** — more mockable-agent tests (category-planner, requirement-validator, mockup-prompt-validator, correction-planner — all single-LLM-call + schema, like this run's two); RUN_EVALS=1 CI job still human-gated.
+  - **design** — a11y axe on ≥1 authed route (needs the E2E auth stack); commit baseline screenshots (F7, needs a served app).
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets; set `SITE_GATE_PASSWORD`; decide the canonical domain (`.com` vs `.ai`) + reconcile `mobile/app.json` associatedDomains + `lib/email` from-address.
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C, ship_gate_met:false, multiple DoD boxes unchecked. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-06-29 (Run 42) — 6 disjoint changes (correctness + security G1 + store-compliance + design + reliability + F2 test)
 
 ### State on entry
