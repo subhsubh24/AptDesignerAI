@@ -568,6 +568,7 @@ export default function DashboardPage() {
               {mapsApiKey && (
                 <div className="overflow-hidden rounded-2xl border shadow-sm">
                   <iframe
+                    title={`Map of ${locationLabel}`}
                     width="100%"
                     height="240"
                     style={{ border: 0, display: "block" }}
@@ -739,6 +740,7 @@ export default function DashboardPage() {
                     {mapsApiKey && (
                       <div className="overflow-hidden rounded-2xl border shadow-sm">
                         <iframe
+                          title="Building location map"
                           width="100%"
                           height="180"
                           style={{ border: 0, display: "block" }}
