@@ -145,6 +145,20 @@ without proof. Two hard rules from real outages: (a) every external/LLM call nee
 SHORTER than the serverless budget (a graceful try/catch is useless if the runtime kills the
 function first); (b) an `.optional()` env var a critical path requires is a latent outage — make
 it FAIL LOUD.
+**VALIDATION CAPABILITY — you must be ABLE to validate every flow (declare it, or fail closed).**
+The loop must never ship work it cannot actually validate. Maintain a capability manifest
+(`validation/CAPABILITIES.yml` or the repo's equivalent) as the single source of truth: every
+external service the app uses, the env credentials it needs (NAMES only, NEVER values), HOW CI
+validates the flow that uses it (a real LOCAL instance / the provider's SANDBOX-test mode / a code
+MOCK / a justified DUMMY for a genuinely-unexercised path), and the test/journey that exercises it.
+A required `validate-capabilities` gate enforces it FAIL-CLOSED: (1) a `process.env.*` credential
+the app reads that is NOT declared blocks merges until you declare HOW it is validated — so a NEW
+service can never slip in unvalidated; (2) a capability that needs an owner-only secret to validate
+with NO CI substitute (`ci_validatable: false`) SCOPED-blocks any PR that touches it, blocks the
+readiness gate, and is surfaced as an URGENT owner action in PENDING_OPS — never silently shipped
+around. So when you add a service: FIRST make its flow CI-validatable (local/sandbox/mock); only a
+genuinely un-substitutable secret becomes an owner key you surface and wait on. This is BUILDS≠WORKS
+made enforceable — "I can't test it" is never an excuse to ship it unproven.
 
 ## 6b. Design taste — ELIMINATE generic-AI frontend (every UI change)
 Before ANY layout / component / branding / color / motion / visual decision, adopt a higher
