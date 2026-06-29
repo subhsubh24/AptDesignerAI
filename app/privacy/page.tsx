@@ -51,10 +51,11 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">How we use your content</h2>
             <p className="text-muted-foreground">
-              We process your photos, floor plans, and preferences with AI models
-              (including Anthropic Claude, OpenAI, and Google Gemini) strictly to
-              produce your designs. The API providers we use operate under
-              enterprise data agreements that prohibit training on your content.
+              We process your photos and floor plans with Google&apos;s Gemini AI
+              to understand your space, and we use DeepSeek for some text-only
+              reasoning (design analysis, never your photos or identifying data),
+              strictly to produce your designs. These API providers operate under
+              data-processing terms that prohibit training on your content.
             </p>
           </section>
 
