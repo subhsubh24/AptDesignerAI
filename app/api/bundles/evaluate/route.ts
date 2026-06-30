@@ -5,6 +5,13 @@ import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+
+// Bundle evaluation runs an LLM call per request. Without an explicit
+// maxDuration, Vercel applies a short platform default and can kill the function
+// mid-run — a "builds green, request gets killed" failure on a paid path. 300s
+// is the Vercel Pro ceiling and covers the documented worst-case latency.
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -18,6 +25,11 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
+  // Bundle evaluation is a paid LLM call — gate it behind the daily spend
+  // breaker too so a single authed user can't drive unbounded model spend
+  // (matching the other paid LLM endpoints).
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;
