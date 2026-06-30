@@ -101,6 +101,20 @@ OWNER_ACTIONS:
       why: "The daily activation email cron (/api/cron/activation-emails) uses the user_email_stages table to ensure each lifecycle stage (activation_1/2/3) is sent exactly once per user. Without this table, the cron errors on every run and no activation emails fire."
       how: "Run `supabase db push` (or paste supabase/migrations/025_user_email_stages.sql into the Supabase SQL Editor)."
       blocks: activation-emails
+    - id: apply-migration-026
+      title: "Apply migration 026_waitlist_referral.sql to prod (waitlist referral loop)"
+      priority: normal
+      status: open
+      why: "Run 44 (PR #226): adds referral_code (unique partial index) + referred_by columns to waitlist_emails so the referral loop can issue/attribute codes. Until applied, the waitlist POST insert fails (column not found) and sign-ups 500. Idempotent; admin-only table, RLS boundary from 017 unchanged (no new policy)."
+      how: "Run `supabase db push` (or paste supabase/migrations/026_waitlist_referral.sql into the Supabase SQL Editor)."
+      blocks: growth-execution
+    - id: apply-migration-027
+      title: "Apply migration 027_user_email_preferences.sql to prod (CAN-SPAM opt-out)"
+      priority: normal
+      status: open
+      why: "Run 44 (PR #227): adds the user_email_preferences tenant table (RLS keyed on auth.uid()=user_id) backing the /account email opt-out. The marketing send paths (win-back webhook, activation cron) read it via the admin client and the /account toggle writes it. Until applied, the toggle's GET/PUT and the send-path checks error. Idempotent."
+      how: "Run `supabase db push` (or paste supabase/migrations/027_user_email_preferences.sql into the Supabase SQL Editor)."
+      blocks: marketing-email-compliance
     - id: set-cron-secret
       title: "Set CRON_SECRET to activate the activation email cron job"
       priority: normal

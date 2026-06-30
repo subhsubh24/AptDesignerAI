@@ -4,6 +4,53 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## DEEP AUDIT 2026-06-30 (Run 44) — holistic, 8 read-only Haiku lenses across the whole codebase
+
+Due this run (last ran Run 40). Findings distilled + prioritized (→ what became this run's work):
+- **Security/RLS: CLEAN.** Re-audited all migrations 001–025: every public table has correct RLS (tenant on `auth.uid()`; shared/internal RLS-on-no-policy), secrets env-only, admin client used only on service-role tables behind auth gates, SECURITY DEFINER search_path pinned (024), spend/rate guards on paid LLM endpoints. No findings — a clean no-op, the right outcome.
+- **Correctness: 2 real bugs → FIXED.** (a) `extractFromImage` LLM call missing `seed: DETERMINISTIC_SEED` (determinism gap the harness-ratchet misses) → PR #222. (b) `apartment-research` `projects.update()` ignored the in-band `{error}` → fake-200 + lost research → PR #223. The scout's `waitlist/confirm` "unchecked update" finding was a FALSE POSITIVE (the code already checks `error || !data || data.length === 0`); `diagnosis/stream` status-flip is a minor non-fatal log (deferred).
+- **Mobile: real gap → FIXED.** `results.tsx` upload+analyze fetches had no AbortController → indefinite-spinner dead-end → PR #224 (`fetchWithTimeout`). Also queued: `photo.tsx` `getPendingResultAsync` has no `.catch`; mobile back-button a11y labels (minor).
+- **Business-case lever: BUILT.** Scorecard `business_case_strength` (ship-critical B) names referral + expansion as listed-not-built. Built the **waitlist referral loop** (PR #226) as the most verifiable + pre-launch-appropriate slice. The web in-app upsell/paywall surface is DEFERRED to a run with served-app visual verification (touching the 1653-line focus page + 898-line dashboard cold is risky without F7).
+- **Store/compliance: real gap → FIXED.** CAN-SPAM opt-out: lifecycle emails linked to /account but no store/UI/gating → PR #227. Privacy-page processor list re-verified CORRECT (PR #208 holds). Domain drift (.com/.ai/aptdesigner.ai) remains owner-gated. README missing secondary processors = minor, deferred.
+- **Performance: mostly deferred.** embedding-index full-table-scan (needs a pgvector RPC + LIVE-DB verification → can't verify cold, deferred again); next/image + perf budget + serial-await micro-opts are real-but-modest; the area-analysis grounding pair was already parallelized (#213). No shippable-cold high-value perf this run.
+- **A11y/design: mostly over-flagged churn** (hardcoded landing-page swatch colors, icon-button aria-label-where-title-exists, framer reduced-motion) — consistent with prior-run adjudications; the one genuine small a11y win (share-button copy aria-live) was folded into the referral share card instead.
+- **Tests/eval: lib/agents ~21%.** Closed `area-analysis-validator` (722-line deterministic core patcher) → PR #225, 11 branch tests. NOTE: the test scout wrongly reported `material-math` + `ergonomics` as untested — BOTH already have test files; always verify "untested" claims with a file check before writing.
+
+DUAL-AXIS VISION VERDICT (F7): not performed — F7 screenshot artifacts still not built (depends on F4 served-app wiring, human-gated). No screenshots to judge yet.
+
+---
+
+## Run 2026-06-30 (Run 44) — 6 disjoint changes (referral lever + CAN-SPAM compliance + 2 correctness + mobile reliability + agent test)
+
+### State on entry
+- Cold container at default tip `77280ee` (post Run 43 #213–216 + owner/loop-health commits #217–221). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1208 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT due** (last Run 40) → ran it first (8 Haiku lenses; summary above). QUALITY_SCORECARD as_of 2026-06-29 overall C / ship_gate_met:false — but several of its top_gaps were ALREADY closed by Runs 42–43 (maxDuration, G1 spend guards, privacy page, 404, serial grounding); this run worked the remaining real, loop-buildable, file-disjoint gaps + audit findings.
+
+### What was done (6 file-disjoint changes, all merged #222–227)
+- **#226 referral loop** (business_case_strength lever) — migration 026 + `lib/waitlist/referral.ts` + `/api/waitlist` + waitlist form share card. 6 helper tests.
+- **#227 CAN-SPAM opt-out** (store_readiness) — migration 027 `user_email_preferences` + `isMarketingOptedOut()` (fail-closed) + `/api/user/email-preferences` + /account `role=switch` + gated win-back/activation sends. 5 helper tests.
+- **#222 determinism** — `extractFromImage` seed. **#223 correctness** — apartment-research write-error surfaced. **#224 mobile** — upload/analyze fetch timeouts. **#225 tests** — area-analysis-validator (11 branch tests).
+- 12 per-change Sonnet reviewers + 3 re-reviewers (3 changes hit REQUEST_CHANGES, all resolved in-cap). 8 Haiku audit scouts. Migrations 026+027 human-applied (PENDING_OPS).
+
+### Lessons learned
+1. **Re-reviewers reading a single isolated diff false-flag cross-branch facts.** Email-prefs Reviewer B called "migration 027 skips 026" a defect — but 026 is the sibling referral migration shipping the SAME run (consecutive per the disjoint-rule numbering convention). When two changes each add a migration, expect an isolated reviewer to flag the "gap"; keep the numbering, don't renumber into a collision.
+2. **The "blocking: add a PENDING_OPS entry for the migration" review ask is satisfied by PROCESS, not the code branch.** All shared-ledger edits (PENDING_OPS/ROADMAP/etc.) go in the ONE bookkeeping PR; adding them to a code branch violates the disjoint rule and collides the two migration PRs. Tell re-reviewers this explicitly.
+3. **Verify "untested module" scout claims before writing the test.** The test scout listed `material-math` + `ergonomics` as untested; both already had test files. A 2-second `ls __tests__/...` saved writing a duplicate. (Pivoted to `area-analysis-validator`, genuinely untested.)
+4. **`git add -A` after a cold `npm install` sweeps a `package-lock.json` "dev":true churn line into the first commit.** Two reviewers flagged it as noise. Restore the lockfile from base (`git checkout <base> -- package-lock.json`) before committing, or scope `git add` to the intended files.
+5. **A real correctness bug surfaced via adversarial review of an astronomically-improbable path:** the referral collision-retry could, after 3 collisions, fall through to the email-duplicate handler and tell a never-inserted user "already subscribed". Probability ~0, but a wrong code path — fixed with a post-loop 500 guard. Adversarial reviewers earn their keep on the tail.
+
+### Rotation guide for next run
+- **DEEP AUDIT done Run 44** → next due ~Run 48.
+- **Highest-value queued, file-disjoint:**
+  - **business_case_strength (ship-critical B)** — the **in-app web upsell / paywall surface** (web parity with the proven mobile paywall): graceful structured 402 on the saved-designs limit + a reusable `PaywallCard` + a dashboard upgrade CTA. DEFERRED this run because it touches the 1653-line focus page + 898-line dashboard cold; do it on a run with F7 served-app visual verification, or scope to the server-402 + card first.
+  - **tests_evals** — more mockable single-LLM-call agents: `category-planner`, `requirement-validator`, `correction-planner`, `mockup-prompt-validator` (provider-mocked, like product-extractor). lib/agents still ~21%.
+  - **performance** — embedding-index pgvector RPC + migration (needs Supabase MCP / live-DB verification before shipping — do it on a live-DB run); `next/image` adoption + a perf/bundle budget (no Lighthouse gate exists).
+  - **correctness (minor)** — mobile `photo.tsx` `getPendingResultAsync` `.catch`; `diagnosis/stream` non-fatal status-flip log.
+- **Human-gated (unchanged):** apply migrations (now incl. 026 + 027); A5/F3 eval CI job; F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets; set SITE_GATE_PASSWORD; canonical-domain decision (.com vs .ai).
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C, ship_gate_met:false, multiple DoD boxes unchecked. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-06-29 (Run 43) — 4 disjoint changes (perf + reliability + 2× F2 LLM-core tests)
 
 ### State on entry

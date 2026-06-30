@@ -26,18 +26,18 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-06-29
-  last_run: 43                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 40
+  as_of: 2026-06-30
+  last_run: 44                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 44
   this_run:
-    changes_shipped: 4           # #213 #214 #215 merged; #216 auto-merge queued (gate green, 2 approvals)
-    changes_abandoned: 0         # all 4 implemented changes passed gate+review; 3 candidates were deselected at SELECTION (not built), per below
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): embedding-index-pgvector-RPC = dead_end-for-now (cannot runtime-verify a pgvector RPC cold; latent value pre-seed; ship_critical:false → defer to a live-DB-verifiable run); toast-aria-live = review_value (Radix Toast already announces via its Provider region — false flag); rooms/[roomId]/diagnosis-maxDuration = review_value (plain DB GET, no LLM/long work)
+    changes_shipped: 6           # #222-227 all merged (gate green, 2 approvals each); DEEP AUDIT ran (8 Haiku lenses)
+    changes_abandoned: 0         # all 6 implemented changes passed gate+review; candidates deselected at SELECTION (not built), per below
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): web-in-app-upsell-paywall = deferred (touches 1653-line focus + 898-line dashboard cold; needs F7 served-app visual verification → next run); embedding-index-pgvector-RPC = dead_end-for-now (cannot runtime-verify a pgvector RPC cold → live-DB run); next/image + perf-budget = review_value (real-but-modest, not highest-value disjoint this run); most a11y color/aria findings = review_value (over-flagged churn per prior adjudications)
     verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 1         # LOOP-3 REQUEST_CHANGES (product-extractor test: vacuous `geminiProvider.chat not called` assertion on a path that uses getProvider/tavilyExtract) — fixed to assert vs tavilyExtract, re-reviewed APPROVE in-cap
+    review_rejections: 3         # LOOP-3 REQUEST_CHANGES: referral (3-collision fall-through → alreadySubscribed edge bug + 2 a11y/helper nits), validator-test (incomplete Check 2/3/4 coverage), email-prefs (paid-welcome comment + a false-flag migration-renumber) — all addressed + re-reviewed APPROVE in-cap
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 24               # Runs 40-43 product PRs (#183-187, #191-196, #206-211, #213-215) + housekeeping (#188 #197 #212)
+    merged_prs: 24               # Runs 41-44 product PRs (#191-196, #206-211, #213-216, #222-227) + housekeeping (#197 #212 #217)
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
