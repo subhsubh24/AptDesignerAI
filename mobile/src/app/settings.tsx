@@ -15,6 +15,10 @@ const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
 const TERMS_URL = 'https://aptdesignerai.com/terms';
 const SUPPORT_URL = 'https://aptdesignerai.com/support';
 
+// Account deletion must never leave the button stuck disabled on a hung
+// request — abort after this and surface a retry alert.
+const DELETE_TIMEOUT_MS = 15_000;
+
 function Row({
   label,
   onPress,
@@ -73,10 +77,16 @@ export default function SettingsScreen() {
       return;
     }
     setDeleting(true);
+    // Abort a hung delete so the user isn't left staring at a disabled "Delete
+    // account" button forever, unsure whether their account was removed. On
+    // timeout the fetch rejects → the catch below surfaces a retry alert.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DELETE_TIMEOUT_MS);
     try {
       const resp = await fetch(`${apiUrl}/api/mobile/account`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
       if (resp.ok) {
         // Account is gone — sign out clears the local session and returns to login.
@@ -94,6 +104,7 @@ export default function SettingsScreen() {
         'A network error occurred. Please try again or contact support.',
       );
     } finally {
+      clearTimeout(timer);
       setDeleting(false);
     }
   }, [session]);
