@@ -157,11 +157,15 @@ explicit **KILL CRITERIA** (the metric + threshold at which you stop). Run every
 through the maker≠checker reviewer (told to refute: are the numbers real, the assumptions sound,
 the CAC realistic, the kill criteria tight?) before surfacing it.
 
-**Surfacing + lifecycle.** Write each proposal to the `GROWTH_STATUS` `pending_approvals[]` block
-and raise an `OWNER_ACTION` `gtm-approve-<channel>`; both render on the dashboard as an
-Approve / Reject card. NEVER self-approve, NEVER treat your own RECOMMEND-tier finding (§3) as an
-approval, NEVER spend beyond the approved cap. On approval, record the channel, the cap, and the
-approval date in `GROWTH_STATUS`; once live, report real spend/CAC/results against the plan every
-run and honor the kill criteria autonomously. If results breach a kill criterion you STOP that
-spend yourself (that is Tier-A autonomy, not a Tier-B change); resuming or re-scoping it is a new
-Tier-B proposal.
+**Surfacing + approval record (how approval actually happens).** Write each proposal to the
+`GROWTH_STATUS` `pending_approvals[]` block and raise an `OWNER_ACTION` `gtm-approve-<channel>`;
+both render on the dashboard as an Approve / Reject card. The owner records the decision — the
+channel + the agreed **monthly budget cap** + the date — in `docs/growth/PENDING_OPS.md` under an
+`approved_channels:` list; **that owner-authored record is the SOLE source of approval.** You READ
+it and mirror it into `GROWTH_STATUS` for display — you NEVER author your own approval, NEVER treat
+a RECOMMEND-tier finding (§3) or the mere absence of objection as approval, and NEVER spend beyond
+the recorded cap. Absent a matching approval record, the proposal stays pending and you take ZERO
+paid / new-channel action. Once a channel is approved and live, report real spend/CAC/results
+against the plan every run and honor the kill criteria autonomously: breaching a kill criterion
+means you STOP that spend yourself (Tier-A autonomy, not a Tier-B change); resuming or re-scoping
+it is a new Tier-B proposal.
