@@ -429,11 +429,25 @@ export async function POST(request: Request) {
           }
 
           if (evalRows.length > 0) {
-            await supabase.from("product_evaluations").insert(evalRows);
-            await supabase
-              .from("candidate_products")
-              .update({ status: "evaluated" })
-              .in("id", evaluatedIds);
+            const { error: evalInsertError } = await supabase
+              .from("product_evaluations")
+              .insert(evalRows);
+
+            // Only flip the products to "evaluated" once their evaluation rows
+            // actually persisted. Marking them evaluated after a failed insert
+            // would orphan the status (products show "evaluated" with no
+            // evaluation behind them) and hide them from a re-evaluation pass.
+            if (evalInsertError) {
+              logServerError("search/stream product_evaluations insert", evalInsertError);
+            } else {
+              const { error: statusError } = await supabase
+                .from("candidate_products")
+                .update({ status: "evaluated" })
+                .in("id", evaluatedIds);
+              if (statusError) {
+                logServerError("search/stream candidate_products status update", statusError);
+              }
+            }
           }
         }
 
