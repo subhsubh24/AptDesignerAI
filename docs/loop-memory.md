@@ -4,6 +4,37 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-30 (Run 45) — 7 disjoint changes (web upsell lever + 3 LLM-core agent tests + 3 correctness)
+
+### State on entry
+- Cold container at default tip `aa63bc1` (post Run 44 #222–228 + GTM/auth commits #229–231). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1231 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT not due** (ran Run 44; next ~Run 48). QUALITY_SCORECARD as_of 2026-06-29 overall C / ship_gate_met:false — but its top_gaps were largely already closed by Runs 42–44 (maxDuration #206/#214, G1 spend guards #207, privacy page #208, 404 #210, referral #226). Used the Run-44 rotation guide + a focused 6-scout sweep for the remaining real, loop-buildable, file-disjoint gaps.
+
+### What was done (7 file-disjoint changes, all merged #232–238)
+- **#238 web upsell surface** (`business_case_strength` ship-critical lever) — reusable `UpgradeCtaCard` + `GET /api/billing/status` + `/saved` wiring. The server-side 402/403 limit already existed; this is the missing in-product expansion surface (web parity with the mobile paywall). No new secret/migration.
+- **#235 / #236 / #237 agent tests** (tests_evals; lib/agents ~21%) — requirement-validator (7), category-planner (5, incl. the structured→tools-only fallback), correction-planner (6, mocks `getProvider`). All provider-mocked, assert the determinism contract (seed + cheap thinking), fail-open + schema-fail branches.
+- **#232 / #233 correctness** — diagnosis-stream room-status write error surfaced; evaluate-set twin-write status-drift guard. **#234 mobile** — photo.tsx `getPendingResultAsync` `.catch`.
+- 14 per-change Sonnet reviewers (2× each) — ALL APPROVE first pass, zero re-review cycles. 6 Haiku scouts. No new migrations/secrets → PENDING_OPS unchanged.
+
+### Lessons learned
+1. **Launching N PRs at once can rate-limit the `journeys` CI job.** `supabase/setup-cli@v1` resolves the "latest" release via an unauthenticated GitHub API call; 7 concurrent CI runs collectively exhausted the shared 60/hr limit and 2 of 7 `journeys` jobs failed at the setup step (`Failed to resolve latest Supabase CLI release: rate limit exceeded`) in ~15s. The other 5 got through and passed. Fix this run: `rerun_failed_jobs` on the 2 failed runs (re-runs land on fresh runner budget and pass). Can't pin the CLI version (would edit `.github/`, forbidden). For next runs: expect occasional setup-step flakes on `journeys` when many PRs land together; re-run the failed job rather than assume a real failure.
+2. **`journeys` IS a required check** (PR sits `mergeable_state: blocked` until it's green) — distinct from `verify`/`build`/`mobile`. A transient setup-step failure there blocks auto-merge even though all other gates pass; must be re-run to clear.
+3. **The re-run `journeys` job is slower** (~7 min vs ~4): a re-run re-does ephemeral Supabase start + migrations (~2 min) before build + the playwright journeys. Budget the wait accordingly.
+4. **Restore both lockfiles after a cold `npm install`** (root + `mobile/package-lock.json`) before each commit — the mobile install churns its lockfile too (Run 44 lesson #4, re-confirmed; `git checkout <base> -- package-lock.json mobile/package-lock.json`).
+5. **Privacy-page processor list + brand/domain are NOT loop-fixable this run.** Scout re-confirmed the privacy page is now correct (Gemini + DeepSeek only; #208 holds). The .com/.ai/.app domain + AptDesigner/AptDesignerAI brand split is genuinely owner-gated (already in PENDING_OPS `reconcile-canonical-domain`); reconciling it would invent a canonical decision — left alone.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 48.**
+- **Highest-value queued, file-disjoint:**
+  - **business_case_strength (ship-critical B)** — extend the new `UpgradeCtaCard` to a second high-intent surface (e.g. a graceful 403→paywall modal when a free user hits the save limit from the focus/dashboard flow — needs touching the giant pages, so do it on an F7 served-app-visual run); re-ground the 50%→35-40% organic-share input in the business case.
+  - **tests_evals (lib/agents ~21%)** — more untested mockable single-call agents remain: `mockup-prompt-validator`, `floor-plan-extractor`, `product-identifier`, `furniture-cropper`, `mockup-verifier`, `room-architecture-extractor` (image+structured; mock the provider). The 4 named Run-44 candidates are now 3-done (req/cat/corr); `mockup-prompt-validator` is the remaining one.
+  - **performance** — embedding-index pgvector RPC + migration (needs Supabase MCP / live-DB verification — do on a live-DB run); `next/image` adoption + a perf/bundle budget (no Lighthouse gate exists).
+  - **correctness (minor)** — `search/stream` has the same insert-then-status twin-write pattern as evaluate-set (#233) — apply the same guard; `diagnosis/stream` minor non-fatal status logs.
+- **Human-gated (unchanged):** apply migrations (incl. 026 + 027); A5/F3 eval CI job (RUN_EVALS key); F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; all live secrets; SITE_GATE_PASSWORD; canonical-domain decision (.com vs .ai vs .app).
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C, ship_gate_met:false, multiple DoD boxes unchecked/human-gated. Did NOT attempt the ready issue.
+
+---
+
 ## DEEP AUDIT 2026-06-30 (Run 44) — holistic, 8 read-only Haiku lenses across the whole codebase
 
 Due this run (last ran Run 40). Findings distilled + prioritized (→ what became this run's work):
