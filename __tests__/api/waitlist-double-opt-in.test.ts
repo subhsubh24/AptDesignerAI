@@ -52,7 +52,7 @@ function postReq(email: unknown, ip = "5.5.5.5") {
 
 describe("buildWaitlistConfirmEmail", () => {
   it("includes the confirm URL and a non-empty subject/body", () => {
-    const url = "https://aptdesigner.ai/api/waitlist/confirm?token=abc123";
+    const url = "https://aptdesignerai.com/api/waitlist/confirm?token=abc123";
     const { subject, html, text } = buildWaitlistConfirmEmail(url);
     expect(subject.length).toBeGreaterThan(0);
     expect(html).toContain(url);

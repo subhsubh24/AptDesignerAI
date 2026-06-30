@@ -7,14 +7,14 @@ import { sendEmail } from "@/lib/email";
 // and that the `paid_welcome_1` stage is wired end-to-end through sendEmail.
 describe("buildPaidWelcomeEmail1", () => {
   it("interpolates the site URL into the dashboard CTA and renders all parts", () => {
-    const email = buildPaidWelcomeEmail1("https://aptdesignerai.ai");
+    const email = buildPaidWelcomeEmail1("https://aptdesignerai.com");
     expect(email.subject).toMatch(/Pro/i);
-    expect(email.html).toContain("https://aptdesignerai.ai/dashboard");
-    expect(email.html).toContain("https://aptdesignerai.ai/account"); // manage-prefs link
+    expect(email.html).toContain("https://aptdesignerai.com/dashboard");
+    expect(email.html).toContain("https://aptdesignerai.com/account"); // manage-prefs link
     expect(email.html.length).toBeGreaterThan(0);
-    expect(email.text).toContain("https://aptdesignerai.ai/dashboard");
+    expect(email.text).toContain("https://aptdesignerai.com/dashboard");
     // Caller passes a normalized (no trailing slash) URL — confirm no double slash.
-    expect(email.html).not.toContain("ai//");
+    expect(email.html).not.toContain("com//");
     // Conversion-moment copy should confirm the upgrade, not nag.
     expect(email.text.toLowerCase()).toContain("active");
   });
@@ -31,7 +31,7 @@ describe("paid_welcome_1 stage through sendEmail (dry-run)", () => {
   });
 
   it("accepts the new stage and dry-run-sends it", async () => {
-    const { subject, html, text } = buildPaidWelcomeEmail1("https://aptdesignerai.ai");
+    const { subject, html, text } = buildPaidWelcomeEmail1("https://aptdesignerai.com");
     const r = await sendEmail({ to: "new@example.com", subject, html, text, stage: "paid_welcome_1" });
     expect(r.dryRun).toBe(true);
     expect(r.delivered).toBe(false);
