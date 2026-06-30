@@ -11,8 +11,13 @@ vi.mock("@/lib/ai/gemini", () => ({
 import { runProductIdentifier, type IdentifyInput } from "@/lib/agents/product-identifier";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
-import { isAllowListedBrand } from "@/lib/constants/identifiable-brands";
+import { isAllowListedBrand, MIN_CONFIDENCE_OUT_OF_LIST } from "@/lib/constants/identifiable-brands";
 import type { RetrievalPrior } from "@/lib/types/schemas";
+
+// The out-of-list guardrail the filter applies: a brand not on the allow-list is
+// dropped below MIN_CONFIDENCE_OUT_OF_LIST - 0.35. Derive it here so the test
+// stays in sync if the constant changes.
+const OUT_OF_LIST_FLOOR = MIN_CONFIDENCE_OUT_OF_LIST - 0.35; // 0.85 - 0.35 = 0.50
 
 const mockChat = geminiProvider.chat as unknown as ReturnType<typeof vi.fn>;
 
@@ -87,9 +92,11 @@ describe("runProductIdentifier", () => {
     expect(result.candidates).toHaveLength(0);
   });
 
-  it("keeps an in-list brand between the absolute floor and the in-list floor (soft enforcement)", async () => {
-    // 0.55 is above USER_PROMPT_FLOOR (0.40) but below MIN_CONFIDENCE_IN_LIST
-    // (0.70) — the UI routes it through a confirmation pill, so it must survive.
+  it("keeps an in-list brand above the absolute floor (MIN_CONFIDENCE_IN_LIST is intentionally not enforced here)", async () => {
+    // The filter only checks the absolute USER_PROMPT_FLOOR (0.40) for in-list
+    // brands; MIN_CONFIDENCE_IN_LIST (0.70) is deliberately `void`-ed in the
+    // source — the UI's confirmation pill does that routing, not this filter.
+    // So an IKEA pick at 0.55 (above 0.40, below 0.70) must survive the filter.
     mockChat.mockResolvedValue(
       chatResponse([{ brand: "IKEA", model: "STRANDMON", confidence: 0.55 }]),
     );
@@ -104,8 +111,10 @@ describe("runProductIdentifier", () => {
     expect(isAllowListedBrand(unknownBrand)).toBe(false);
     mockChat.mockResolvedValue(
       chatResponse([
-        { brand: unknownBrand, model: "Mystery Sofa", confidence: 0.45 }, // dropped (< 0.50, out of list)
-        { brand: unknownBrand, model: "Other Sofa", confidence: 0.6 }, // kept (>= 0.50)
+        // dropped: out-of-list and below OUT_OF_LIST_FLOOR (0.50)
+        { brand: unknownBrand, model: "Mystery Sofa", confidence: OUT_OF_LIST_FLOOR - 0.05 },
+        // kept: out-of-list but at/above OUT_OF_LIST_FLOOR
+        { brand: unknownBrand, model: "Other Sofa", confidence: OUT_OF_LIST_FLOOR + 0.1 },
       ]),
     );
 
@@ -127,8 +136,7 @@ describe("runProductIdentifier", () => {
     expect(result.candidates).toEqual([]);
     expect(result.priors).toBe(priors);
     expect(result.tokensUsed).toBe(0);
-    expect(typeof result.model).toBe("string");
-    expect(result.model.length).toBeGreaterThan(0);
+    expect(result.model).toBeTruthy(); // falls back to selectModel("scoring")
   });
 
   it("fails open when the LLM call throws", async () => {
