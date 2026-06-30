@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email";
 import { buildWaitlistConfirmEmail } from "@/lib/email/templates/waitlist";
 import { verifyTurnstile } from "@/lib/security/turnstile";
 import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
+import { generateReferralCode, sanitizeReferralCode } from "@/lib/waitlist/referral";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
@@ -115,13 +116,58 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Referral attribution: only store a `referred_by` code that actually exists,
+  // so a hand-typed or junk `?ref=` never pollutes the funnel data.
+  const refInput = sanitizeReferralCode((body as Record<string, unknown>).ref);
+  let referredBy: string | null = null;
+  if (refInput) {
+    const { data: referrer } = await admin
+      .from("waitlist_emails")
+      .select("id")
+      .eq("referral_code", refInput)
+      .maybeSingle();
+    if (referrer) referredBy = refInput;
+  }
+
   const token = newConfirmationToken();
-  const { error } = await admin.from("waitlist_emails").insert({
-    email,
-    source: "waitlist",
-    confirmation_token: token,
-    token_sent_at: new Date().toISOString(),
-  });
+  // This subscriber's own shareable code. A unique collision is astronomically
+  // unlikely (~6.5e11 space) but handled: regenerate and retry rather than fail.
+  let referralCode = generateReferralCode();
+  let error: { code?: string; message?: string; details?: string } | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await admin.from("waitlist_emails").insert({
+      email,
+      source: "waitlist",
+      confirmation_token: token,
+      token_sent_at: new Date().toISOString(),
+      referral_code: referralCode,
+      referred_by: referredBy,
+    });
+    error = res.error;
+    if (!error) break;
+    // Retry ONLY a referral_code collision; an email duplicate falls through to
+    // the existing-subscriber handling below.
+    const isReferralCollision =
+      error.code === "23505" && /referral_code/i.test(`${error.message ?? ""} ${error.details ?? ""}`);
+    if (!isReferralCollision) break;
+    referralCode = generateReferralCode();
+  }
+
+  // Retries exhausted on a referral_code collision (astronomically unlikely):
+  // fail explicitly rather than fall through to the email-duplicate handler
+  // below, which would wrongly tell a never-inserted user they're already
+  // subscribed.
+  if (
+    error &&
+    error.code === "23505" &&
+    /referral_code/i.test(`${error.message ?? ""} ${error.details ?? ""}`)
+  ) {
+    console.error("[waitlist] referral_code collision retries exhausted");
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 },
+    );
+  }
 
   if (error) {
     if (error.code === "23505") {
@@ -130,9 +176,13 @@ export async function POST(req: NextRequest) {
       // lost first email isn't a dead end.
       const { data: existing } = await admin
         .from("waitlist_emails")
-        .select("id, confirmed_at, token_sent_at")
+        .select("id, confirmed_at, token_sent_at, referral_code")
         .eq("email", email)
         .maybeSingle();
+
+      // Return the subscriber's existing code so re-visiting can still grab their
+      // share link (NULL for rows that predate the referral migration).
+      const existingCode = (existing?.referral_code as string | null) ?? null;
 
       if (existing && existing.confirmed_at == null) {
         // Throttle resends so the public endpoint can't be used to flood a
@@ -142,7 +192,7 @@ export async function POST(req: NextRequest) {
         const lastSent = existing.token_sent_at ? Date.parse(existing.token_sent_at as string) : 0;
         const throttled = Number.isFinite(lastSent) && Date.now() - lastSent < RESEND_COOLDOWN_MS;
         if (throttled) {
-          return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
+          return NextResponse.json({ pendingConfirmation: true, referralCode: existingCode }, { status: 200 });
         }
 
         const resendToken = newConfirmationToken();
@@ -153,11 +203,11 @@ export async function POST(req: NextRequest) {
           .is("confirmed_at", null);
         if (!updateError) {
           await sendConfirmation(req, email, resendToken);
-          return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
+          return NextResponse.json({ pendingConfirmation: true, referralCode: existingCode }, { status: 200 });
         }
       }
 
-      return NextResponse.json({ alreadySubscribed: true }, { status: 200 });
+      return NextResponse.json({ alreadySubscribed: true, referralCode: existingCode }, { status: 200 });
     }
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },
@@ -166,5 +216,5 @@ export async function POST(req: NextRequest) {
   }
 
   await sendConfirmation(req, email, token);
-  return NextResponse.json({ pendingConfirmation: true }, { status: 200 });
+  return NextResponse.json({ pendingConfirmation: true, referralCode }, { status: 200 });
 }
