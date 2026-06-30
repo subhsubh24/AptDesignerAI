@@ -1016,7 +1016,7 @@ CONFIDENCE RULES:
         }
       }
 
-      await supabase
+      const { error: saveError } = await supabase
         .from("projects")
         .update({
           building_research: researchToSave,
@@ -1030,6 +1030,18 @@ CONFIDENCE RULES:
           ...(building_place_id ? { building_place_id } : {}),
         })
         .eq("id", project_id);
+
+      // supabase-js returns DB errors in-band (no throw). Persisting the research
+      // to the project is the point of passing project_id, so a swallowed failure
+      // would fake success: the client shows results that vanish on reload. Surface
+      // it so the user retries rather than silently losing the saved research.
+      if (saveError) {
+        console.error("[apartment-research] failed to save research to project:", saveError.message);
+        return NextResponse.json(
+          { error: "We researched your building but couldn't save it to your project. Please try again." },
+          { status: 500 },
+        );
+      }
     }
 
     return NextResponse.json({ research });
