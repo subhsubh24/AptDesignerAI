@@ -3,9 +3,17 @@ import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
 import { createLogger } from "@/lib/logging/logger";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
 
 const log = createLogger("floor-plan-route");
+
+// Extraction is a heavy vision/LLM call. Without an explicit maxDuration, Vercel
+// applies a short platform default and can kill the function mid-run — a "builds
+// green, request gets killed" failure on a paid path. 300s is the Vercel Pro
+// ceiling and covers the documented worst-case latency.
+export const maxDuration = 300;
 
 // ─── GET — Return current floor plan for a project ───────────────────────────
 
@@ -50,6 +58,19 @@ export async function POST(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Extraction is a paid vision/LLM call — gate it behind the per-user rate
+  // limit + daily spend breaker so a single authed user can't drive unbounded
+  // model spend (matching the other paid LLM endpoints).
+  const limit = checkRateLimit(`floor-plan:${user.id}`, RATE_LIMITS.floorPlanExtract);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many floor-plan requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;

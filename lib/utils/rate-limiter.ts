@@ -170,4 +170,8 @@ export const RATE_LIMITS = {
   areaAnalysisRefineChat: { maxRequests: 20, windowMs: 60_000 },
   /** Area analysis refine (full re-run) — 5 per 5 minutes */
   areaAnalysisRefineFull: { maxRequests: 5, windowMs: 5 * 60_000 },
+  /** Floor-plan extraction (heavy vision LLM) — 5 per 5 minutes per user */
+  floorPlanExtract: { maxRequests: 5, windowMs: 5 * 60_000 },
+  /** Product correction (grounded verifier + embedding) — 10 per minute per user */
+  productCorrect: { maxRequests: 10, windowMs: 60_000 },
 } as const;
