@@ -41,6 +41,7 @@ function mimeTypeForExt(ext: string): string {
 // leave the screen stuck on a spinner the user can't escape without force-quit.
 const UPLOAD_TIMEOUT_MS = 90_000;
 const ANALYZE_TIMEOUT_MS = 330_000;
+const SAVE_TIMEOUT_MS = 30_000;
 
 /** fetch() that aborts after `timeoutMs`, surfacing a friendly timeout error. */
 async function fetchWithTimeout(
@@ -185,11 +186,16 @@ export default function ResultsScreen() {
       const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
       if (!apiUrl) throw new Error('App configuration error: API URL not set.');
 
-      const resp = await fetch(`${apiUrl}/api/mobile/saved-designs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ room_type: roomType, analysis, thumbnail_url: publicUrl }),
-      });
+      const resp = await fetchWithTimeout(
+        `${apiUrl}/api/mobile/saved-designs`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ room_type: roomType, analysis, thumbnail_url: publicUrl }),
+        },
+        SAVE_TIMEOUT_MS,
+        'Saving timed out. Please check your connection and try again.',
+      );
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `Save failed (${resp.status})`);
