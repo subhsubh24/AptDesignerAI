@@ -33,10 +33,18 @@ import { runProductVerifier } from "@/lib/agents/product-verifier";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbedding } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 import type { IdentifiedProductCandidate } from "@/lib/types/schemas";
 
 const log = createLogger("identified-products-correct");
+
+// Correction runs the grounded product verifier (an LLM/vision call) plus an
+// image-embedding write-back. Without an explicit maxDuration, Vercel applies a
+// short platform default and can kill the function mid-run — a "builds green,
+// request gets killed" failure on a paid path. 300s is the Vercel Pro ceiling.
+export const maxDuration = 300;
 
 interface CorrectBody {
   original: { brand: string; model: string };
@@ -67,6 +75,20 @@ export async function POST(
   if (!(await userOwnsRoom(supabase, roomId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  // The correction flow runs a paid grounded verifier + embedding — gate it
+  // behind the per-user rate limit + daily spend breaker so a single authed
+  // user can't drive unbounded model spend (matching the other paid LLM
+  // endpoints).
+  const limit = checkRateLimit(`product-correct:${user.id}`, RATE_LIMITS.productCorrect);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many correction requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const body = await request.json().catch(() => null);
   if (!isCorrectBody(body)) {
