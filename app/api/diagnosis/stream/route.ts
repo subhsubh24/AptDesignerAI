@@ -356,10 +356,17 @@ export async function POST(request: Request) {
           return;
         }
 
-        await supabase
+        const { error: statusError } = await supabase
           .from("rooms")
           .update({ status: "diagnosed", updated_at: new Date().toISOString() })
           .eq("id", room_id);
+
+        // The diagnosis itself is already persisted (saveError handled above), so a
+        // failed status flip is non-fatal — but swallowing it silently leaves the row
+        // out of sync with reads that filter on status = "diagnosed". Surface it loudly.
+        if (statusError) {
+          logServerError("diagnosis/stream room status update", statusError);
+        }
 
         await completeAgentRun(supabase, agentRun.id, {
           status: "completed",
