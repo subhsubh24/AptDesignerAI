@@ -27,17 +27,17 @@ dashboard reads this block.
 LOOP_HEALTH:
   project: AptDesignerAI
   as_of: 2026-06-30
-  last_run: 44                   # the Run N this reflects (null until first bookkeeping update)
+  last_run: 47                   # the Run N this reflects (null until first bookkeeping update)
   last_deep_audit: 44
   this_run:
-    changes_shipped: 6           # #222-227 all merged (gate green, 2 approvals each); DEEP AUDIT ran (8 Haiku lenses)
-    changes_abandoned: 0         # all 6 implemented changes passed gate+review; candidates deselected at SELECTION (not built), per below
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): web-in-app-upsell-paywall = deferred (touches 1653-line focus + 898-line dashboard cold; needs F7 served-app visual verification → next run); embedding-index-pgvector-RPC = dead_end-for-now (cannot runtime-verify a pgvector RPC cold → live-DB run); next/image + perf-budget = review_value (real-but-modest, not highest-value disjoint this run); most a11y color/aria findings = review_value (over-flagged churn per prior adjudications)
+    changes_shipped: 9           # #250-258 all merged (gate green, 2 Sonnet approvals each); DEEP AUDIT not due (last 44, next ~48)
+    changes_abandoned: 0         # all 9 implemented changes passed gate + both reviewers; zero re-review cycles
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): diagnosis/evaluate status-flip twin-write guards = deferred (real but near-identical to ~8 already-shipped; avoid repetitive PRs); saved.tsx Share.share try/catch = review_value (borderline, Share rarely rejects); embedding-index pgvector RPC = dead_end-for-now (cannot runtime-verify cold → live-DB run); next/image + perf budget = review_value (real-but-modest)
     verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 3         # LOOP-3 REQUEST_CHANGES: referral (3-collision fall-through → alreadySubscribed edge bug + 2 a11y/helper nits), validator-test (incomplete Check 2/3/4 coverage), email-prefs (paid-welcome comment + a false-flag migration-renumber) — all addressed + re-reviewed APPROVE in-cap
+    review_rejections: 0         # LOOP-3: all 18 Sonnet reviewers APPROVED first pass — zero re-review cycles (cleanest review run to date); reviewers independently re-ran the 3 new test suites + recomputed the business-case arithmetic
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 24               # Runs 41-44 product PRs (#191-196, #206-211, #213-216, #222-227) + housekeeping (#197 #212 #217)
+    merged_prs: 33               # Runs 44-47 product PRs (#222-227, #232-238, #240-247, #250-258) + housekeeping (#228 #239 #248)
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
