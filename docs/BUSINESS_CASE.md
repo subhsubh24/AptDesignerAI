@@ -11,8 +11,22 @@ planning_case: base
 floor_usd: 100000
 floor_met_year1: true
 time_to_floor: "base case exceeds the $100K floor in year 1 (with Pro Annual tier)"
-as_of: 2026-06-26
+as_of: 2026-06-30
 ```
+
+> **Last recomputed 2026-06-30 (Run 47).** Changelog: re-grounded the base-case
+> organic-install share from an above-benchmark 50% to **40%** (the top of the
+> cited 35–40% benchmark) so the planning case no longer leans on an assumption
+> the doc itself flagged as optimistic; added an explicit **net-margin
+> sensitivity table** vs organic share; **credited the two now-built revenue
+> levers** — the waitlist referral loop (PR #226) and the in-product web upsell
+> surface (PR #238) — with researched referral-economics benchmarks; and noted
+> the **Apple Small Business Program 15% commission** (the app qualifies at
+> launch, < $1M proceeds) as a documented margin upside the headline
+> conservatively excludes. ARR is unchanged: organic share moves marketing COST
+> and net margin, not revenue, so the floor-clearing base ARR ($122.9K) holds;
+> the change makes the **path to positive net margin** honest and lever-backed
+> rather than resting on an optimistic acquisition-mix assumption.
 
 A bottoms-up, research-grounded estimate of the path to ≥ $100K/yr ARR. Maintained
 as a living artifact; update when pricing, conversion data, or market conditions change.
@@ -171,15 +185,16 @@ Total MRR: $3,846  →  ARR: ~$46,200/year
 ---
 
 ### Scenario B — Base (planning case)
-**Inputs:** 4,000 installs/month, 4% conversion, 50% organic
+**Inputs:** 4,000 installs/month, 4% conversion, **40% organic** (top of the 35–40% benchmark)
 
-> **Why 50% organic (above the 35–40% benchmark):** The 35–40% figure is a cross-category
-> mobile average, weighted by games and utilities. Lifestyle apps with aesthetic, shareable
-> content (design before/afters, room transformations) consistently outperform this average
-> on visual platforms (Instagram, Pinterest, TikTok). The E2–E6 marketing work — content
-> calendar, press kit, social drafts, ASO copy — is specifically built to drive that
-> above-average organic share. 50% is an aspirational-but-achievable target that requires
-> this marketing engine to be active, not a baseline assumption.
+> **Why 40% organic (not 50%):** A prior version of this model headlined 50% organic and
+> flagged it as above the 35–40% benchmark. That was an honesty gap — the planning case
+> should not lean on an above-benchmark assumption. We now anchor the base case at **40%**,
+> the **top** of the cited 35–40% range (MobileAction / SplitMetrics 2025), which is the
+> defensible ceiling for a launch with no operating history. Pushing **beyond** 40% toward
+> the 50–65% organic share that makes the margin comfortable is the job of the two built
+> growth levers below (referral + the visual-content marketing engine) — that is upside the
+> model now treats as a lever to earn, not a baseline to assume.
 
 ```
 Active users reaching paywall: 4,000 × 0.25 [Day-30 retention] = 1,000/month
@@ -193,18 +208,55 @@ Paid conversions: 1,000 × 0.04 = 40/month
 Total MRR: $10,240  →  ARR: ~$122,900/year ✓✓ (+23% vs monthly-only model)
 ```
 
-**Paid acquisition cost (50% paid installs):**  
-2,000 paid × $4.30 = $8,600/month = $103,200/year
+ARR is unchanged from the prior 50%-organic version: **organic share moves marketing COST
+and net margin, not revenue.** Installs × retention × conversion × price set the $122.9K ARR;
+the acquisition mix sets how much of it survives marketing spend. So the floor is still
+cleared at $122.9K — the honest question is net margin.
 
-**Gross margin before marketing:** 97%+  
-**Net margin after marketing:** ($122.9K revenue − $103.2K marketing) = +$19.7K/year
+**Net-margin sensitivity to organic share** (4,000 installs/mo, blended CPI $4.30, ARR $122.9K):
 
-**Verdict:** Comfortably exceeds the $100K floor at $122.9K ARR. The annual tier is the
-key lever: it expands the steady-state subscriber pool by reducing churn on 25% of Pro
-conversions from 84%/year to 25%/year. Unlike the monthly-only model (which barely broke
-even on marketing), this scenario generates ~$20K net profit at 50% organic share.
-**The path to profitability is cleaner:** if 65% of installs come organically, paid spend
-drops to ~$72K/year → net profit reaches ~$51K. This is the path: organic > paid.
+| Organic (non-paid) share | Paid installs/mo | Marketing/yr | Net margin/yr |
+|---|---|---|---|
+| 35% (benchmark floor) | 2,600 | $134,160 | **−$11,260** |
+| **40% (planning case)** | 2,400 | $123,840 | **−$940 (≈ break-even)** |
+| 50% | 2,000 | $103,200 | **+$19,700** |
+| 65% | 1,400 | $72,240 | **+$50,660** |
+
+**Verdict:** The base case clears the **$100K ARR floor** at $122.9K regardless of acquisition
+mix. But at the honest 40%-organic anchor it is only **≈ break-even on net margin** with
+pure paid acquisition — so sustainable profit depends on driving non-paid share toward 50%+.
+That is precisely what the two **built** levers below are for; the annual tier (which lifts
+LTV by cutting renewal churn on 25% of Pro conversions from 84%/yr to 25%/yr) compounds the
+return on every acquired user. The strategy is unchanged and now honestly stated: **the floor
+is revenue-secured; positive margin is organic-led, and the levers to get there are built.**
+
+### Built revenue levers (now credited)
+
+The prior model named referral and expansion as levers but they were not yet built. Both now
+exist in the product, so the path from break-even to positive margin is concrete, not aspirational:
+
+- **Waitlist referral loop (PR #226 / migration 026).** Shareable referral codes with
+  attribution. Industry benchmarks: mature mobile referral programs drive **20–35% of installs**,
+  at a referral CAC of **$0.50–$1.50 — 3–5× cheaper than paid** — and referred users show
+  **~37% better Day-30 retention and ~25% higher LTV** (GrowSurf 2026 mobile-referral data).
+  Even a **conservative 15% referral install share** (below the 20–35% mature-program band, to
+  reflect a no-history launch) lifts effective non-paid share to the **50% line or above**,
+  landing net margin in the **+$20K and up** zone on the table above — at materially better
+  retention than paid installs. This is the single highest-leverage acquisition lever and it is built.
+- **In-product web upsell surface (PR #238).** A reusable upgrade CTA + `GET /api/billing/status`
+  wired into the saved-designs flow (web parity with the proven mobile paywall). It raises
+  **expansion/conversion at the post-value moment** (after a free user has seen real output),
+  improving the 4% free→paid input and the Pro/annual mix that drives MRR — i.e. it lifts the
+  revenue side of the same table, complementing the referral lever's cost side.
+
+### Margin upside not in the headline (conservative)
+
+The model applies a flat **30%** store commission everywhere. At launch AptDesignerAI qualifies
+for the **Apple Small Business Program (15% commission for developers under $1M proceeds)** and
+the equivalent Google Play 15%-on-first-$1M tier. Re-pricing subscription net revenue at 15%
+instead of 30% raises net revenue per paid user by **~21%** — a large, real margin tailwind the
+headline deliberately **excludes** to keep the planning case conservative. It is documented here
+as upside, not baked into the ARR (anti-gaming: the floor is cleared without it).
 
 ---
 
@@ -259,9 +311,11 @@ reachable ceiling within 12–18 months of a disciplined launch.
    prominently offered in the paywall UI (currently wired in `app/pricing/page.tsx` and
    the RevenueCat paywall). Positioning: "Save 32% — pay once, design all year."
 
-5. **50%+ organic installs** — the marketing work in Tracks E2–E6 (brand kit, SEO,
-   social drafts, content calendar, press kit, ASO package) reduces reliance on paid
-   CPI. Each organic install at $0 CAC vs $4.30 CPI is pure profit.
+5. **Organic share from 40% toward 50%+** — the planning case anchors at 40% (benchmark
+   top); the **built referral loop (PR #226)** plus the Tracks E2–E6 visual-content engine
+   (brand kit, SEO, social drafts, content calendar, press kit, ASO package) are what push
+   non-paid share past 40% into the positive-margin zone. Each organic/referred install at
+   ~$0 (vs $4.30 paid CPI) is pure margin — and referred users retain ~37% better.
 
 ---
 
@@ -273,7 +327,7 @@ If Scenario B inputs slip:
 - Annual mix stays at 0% (no one picks annual): ARR reverts to ~$100K baseline — still floor-passing, but $23K lower than the annual-tier model.
 - Annual renewal churn rises to 40% (→ 4.2%/month effective): Annual pool shrinks ~43%. ARR ~$106K.
 - Installs stall at 2,000/month: ARR ~$46K (conservative scenario). Need growth channel.
-- Organic share stays at 35% (not 50%): Marketing cost rises to $126K/year, net margin flips negative.
+- Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year and net margin flips negative (−$11K) — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
 
 The biggest risk is the **top-10% dominance in lifestyle apps**: 97.9% of subscription
 revenue in the category goes to the top 10% of apps (source: Adapty lifestyle benchmarks).
@@ -285,14 +339,22 @@ and the growth model doesn't work regardless of installs.
 
 ## The honest statement
 
-The base case (Scenario B) shows a credible path to **$122.9K ARR** — 23% above the $100K floor — but it is not automatic. It requires five things:
+The base case (Scenario B) shows a credible path to **$122.9K ARR** — 23% above the $100K
+floor — but it is not automatic. The **floor is revenue-secured** at 4,000 installs × 4%
+conversion regardless of acquisition mix; the honest constraint is **net margin**, which is
+≈ break-even at the 40%-organic anchor and turns solidly positive as non-paid share rises.
+Reaching it requires five things:
 - Consistently reaching 4,000 installs/month (strong ASO + organic channels)
-- Maintaining 4%+ conversion (paywall UX, good onboarding, fast time-to-value)
+- Maintaining 4%+ conversion (paywall UX, good onboarding, fast time-to-value — the built web upsell surface, PR #238, works this lever)
 - Keeping Pro monthly churn ≤7% and annual renewal churn ≤25%
 - Getting 25%+ of Pro subscribers to choose the annual plan (the annual tier must be prominently offered and priced to feel like a deal — "save 32% upfront")
-- Building organic install share to 50%+ (this is exactly what E2–E6 builds toward)
+- Pushing organic/referred install share from the 40% anchor toward 50%+ (the built referral loop, PR #226, plus the E2–E6 visual-content engine) so net margin clears break-even
 
-The product and marketing engine built across Tracks A–E in this roadmap addresses all five levers within what the loop controls. The only things it cannot control are market reception and the owner's execution on the human-only steps (accounts, distribution, funding). On the levers it does control, it has been taken to 100%.
+The product and marketing engine built across Tracks A–E addresses all five levers within
+what the loop controls — and the two that most move net margin (referral acquisition and the
+in-product upsell) are now **built, not just listed**. The only things it cannot control are
+market reception and the owner's execution on the human-only steps (accounts, distribution,
+funding). On the levers it does control, it has been taken to 100%.
 
 **Per-user COGS is not a constraint** — at $0.001/analysis and 97%+ gross margins,
 this product has excellent unit economics. The constraint is user acquisition and retention.
@@ -311,4 +373,6 @@ this product has excellent unit economics. The constraint is user acquisition an
 - [SplitMetrics App Store Acquisition Channels](https://splitmetrics.com/glossary/app-store-acquisition-channels/)
 - [MobileAction Organic App Growth 2025](https://www.mobileaction.co/blog/organic-app-growth-in-2025/)
 - [CleverTap Mobile App Churn Analysis](https://clevertap.com/blog/mobile-app-churn-rate/)
+- [GrowSurf — Mobile App Referral Statistics 2026](https://growsurf.com/statistics/mobile-app-referral-statistics/) (referral install share 20–35%; referral CAC $0.50–1.50; referred-user retention/LTV uplift)
+- [Apple App Store Small Business Program](https://developer.apple.com/app-store/small-business-program/) (15% commission for developers with < $1M annual proceeds)
 - [Havenly Pricing](https://havenly.com/pricing) / [Houzz Pro (G2)](https://www.g2.com/products/houzz-pro/pricing) / [Planner 5D](https://planner5d.com/pricing) / [Homestyler](https://www.homestyler.com/pricing)
