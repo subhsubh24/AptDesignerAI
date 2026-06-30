@@ -145,22 +145,21 @@ export default function SavedDesignsScreen() {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), SHARE_TIMEOUT_MS);
-      let resp: Response;
       try {
-        resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
+        const resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
+        if (resp.ok) {
+          const json = await resp.json() as { share_url?: string };
+          const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
+          await Share.share({ message: `Check out "${title}" — my room design from AptDesignerAI!\n${shareUrl}` });
+        } else {
+          await Share.share({ message: fallbackMsg });
+        }
       } finally {
         clearTimeout(timeout);
-      }
-      if (resp.ok) {
-        const json = await resp.json() as { share_url?: string };
-        const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
-        await Share.share({ message: `Check out "${title}" — my room design from AptDesignerAI!\n${shareUrl}` });
-      } else {
-        await Share.share({ message: fallbackMsg });
       }
     } catch {
       // Network error — still open share sheet with app URL so the action never silently fails
