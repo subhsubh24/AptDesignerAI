@@ -258,13 +258,25 @@ export async function POST(request: Request) {
           model_used: result.model,
         };
 
-        await supabase.from("product_evaluations").insert(evalData);
+        const { error: insertError } = await supabase
+          .from("product_evaluations")
+          .insert(evalData);
 
-        // Update product status
-        await supabase
-          .from("candidate_products")
-          .update({ status: "evaluated", updated_at: new Date().toISOString() })
-          .eq("id", product.id);
+        // Only flip the product to "evaluated" once its evaluation row is actually
+        // persisted. Marking it evaluated after a failed insert would orphan the
+        // status (product shows "evaluated" with no evaluation behind it) and hide
+        // the product from a future re-evaluation pass.
+        if (insertError) {
+          logServerError("evaluate-set product_evaluations insert", insertError);
+        } else {
+          const { error: statusError } = await supabase
+            .from("candidate_products")
+            .update({ status: "evaluated", updated_at: new Date().toISOString() })
+            .eq("id", product.id);
+          if (statusError) {
+            logServerError("evaluate-set candidate_products status update", statusError);
+          }
+        }
 
         return {
           product,
