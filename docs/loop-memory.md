@@ -4,6 +4,37 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-06-30 (Run 46) — 8 disjoint changes (2 correctness twin-write guards + 2 mobile reliability/monetization + 4 LLM-core agent tests)
+
+### State on entry
+- Cold container at default tip `b03bbc1` (post Run 45 #232–239). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1249 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT not due** (ran Run 44; next ~Run 48). QUALITY_SCORECARD as_of 2026-06-29 overall C / ship_gate_met:false — its top_gaps mostly closed by Runs 42–45. Worked the Run-45 rotation guide + a 5-scout sweep (Haiku) for remaining real, loop-buildable, file-disjoint gaps. Security scout = CLEAN no-op (migrations 026/027 RLS verified, all paid LLM endpoints guarded, no secrets — confirmed Run-44 audit holds).
+
+### What was done (8 file-disjoint changes, all merged #240–247)
+- **#240 / #241 correctness (twin-write status drift)** — search/stream evalRows-insert + candidate_products status flip both unchecked (the #233 pattern, flagged in the Run-45 rotation guide) → guarded; analyze-apartment per-room Promise.all (diagnosis insert + room status flip) both unchecked → sequenced + checked + `continue` on insert failure (silently dropped a room's analysis before). Both via logServerError.
+- **#242 mobile/monetization** — paywall getOfferings failure was swallowed; the FALLBACK_OPTIONS carry null packages so "Start Free Trial" silently dismissed (dead CTA, lost conversion) on a configured build. Split the guard (dev-mode vs configured-no-pkg → "Pricing unavailable" alert, sheet stays open) + log the failure.
+- **#243 mobile reliability** — saved-designs share fetch had no timeout; a hung endpoint never rejects → frozen Share button. 15s AbortController → routes through existing fallback.
+- **#244 / #245 / #246 / #247 agent tests** (tests_evals; lib/agents ~21%) — furniture-cropper (9: clamp/tiny-box/per-photo resilience/room-hint/determinism), product-identifier (7: tiered confidence floors), floor-plan-extractor (7: enum/number coercion + fail-open), mockup-prompt-validator (6: prompt build + schema-fail + fail-open). All provider-mocked, assert the determinism contract.
+- 16 per-change Sonnet reviewers (2× each) + 4 re-reviewers. 2 REQUEST_CHANGES, both addressed: (a) share-timeout `let resp` use-before-assign → restructured response handling inside the inner try; (b) product-identifier test comment implied MIN_CONFIDENCE_IN_LIST is enforced (it's `void`-ed) → clarified + derived the out-of-list threshold. 5 Haiku scouts. No new migrations/secrets → PENDING_OPS unchanged.
+
+### Lessons learned
+1. **`git add -A` swept STRAY untracked test files into the wrong PR.** Two new test files written on their own branches (mockup-prompt-validator, product-identifier) were present as untracked files when I switched back to `fix/mobile-share-timeout` to apply a review fix; `git add -A && commit` swept BOTH into that commit. Net: #243 (share-timeout) merged with 3 files instead of 1; #246 then merged EMPTY (its file already upstream); #247 went `mergeable_state: dirty` (file already on base) and had to be rebased (dropping its now-upstream first commit) + force-pushed to land only the review-fix delta. Content was unaffected (every file was independently reviewed+approved before merge) but it broke the clean 1-PR-per-file mapping. **FIX next runs: stage explicit paths (`git add <file>`), never `git add -A`, when other branches' untracked files may be in the tree — or `git stash -u` / clean before switching branches.**
+2. **Re-derive the threshold constant in tests, don't hardcode the magic number.** Reviewer B (correctly) flagged a bare `0.50` for the out-of-list floor; importing `MIN_CONFIDENCE_OUT_OF_LIST` and computing `- 0.35` keeps the test in sync if the constant moves.
+3. **A test comment can be a review-blocking defect even when the assertion is correct.** The product-identifier "soft enforcement" comment implied a constant participated in the filter when the source explicitly `void`s it — misleading future readers. Comments are part of the diff reviewers judge.
+4. **Restore both lockfiles after a cold `npm install`** (root + mobile) before each commit (Run 44/45 lesson, re-confirmed).
+5. **Business-case re-grounding (50%→35% organic) is NOT a safe unilateral maker edit this run.** The scout confirmed it's a clean single-file edit, but re-grounding flips net margin negative (−$11K; ARR stays $122.9K, above the $100K floor). That's a high-stakes framing change (more honest, but exposes a sustainability gap) better handled with built-lever (referral #226 + upsell #238) modeling on a focused run, where maker≠checker independence matters. DEFERRED, noted below.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 48.**
+- **business_case_strength (ship-critical B)** — the queued, named, buildable work: re-model the case at the defensible 35–40% organic benchmark WITH the now-built referral (#226) + web upsell (#238) levers credited (conversion/CAC uplift), so the honest case clears the floor WITH margin rather than flipping negative. Substantive single-file rewrite of docs/BUSINESS_CASE.md + its machine-readable summary; ground every input (no inventing). Do on a focused run.
+- **tests_evals (lib/agents ~21%)** — remaining untested mockable single-call agents: `mockup-verifier` (thin LLM core + generateWithVerification orchestrator), `product-verifier`, `scene-assembler`, `post-search-coordinator`, `diagnosis-expansion-pipeline`, `shopping-researcher` (759 lines, 3 calls). Verify "untested" with a file check first.
+- **correctness (minor, deferred this run to avoid repetitive near-identical PRs)** — evaluate/route.ts unchecked status flip (#3 from scout), diagnosis/route.ts room-status flip (#4), mockups/route.ts insert returning `id: undefined` on failure (#6/#7, a fake-success/side-effect-integrity gap). All file-disjoint; pick the strongest 1–2 next run.
+- **performance** — embedding-index pgvector RPC + migration (LIVE-DB verification — do on a live-DB run); next/image + a perf/bundle budget (no Lighthouse gate exists).
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job (RUN_EVALS key); F4 Playwright CI wiring; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; live secrets; SITE_GATE_PASSWORD; canonical-domain decision.
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C, ship_gate_met:false, DoD boxes unchecked/human-gated. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-06-30 (Run 45) — 7 disjoint changes (web upsell lever + 3 LLM-core agent tests + 3 correctness)
 
 ### State on entry
