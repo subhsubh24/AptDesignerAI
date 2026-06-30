@@ -96,11 +96,28 @@ test.describe("authenticated journeys", () => {
   });
 
   async function signIn(page: Page): Promise<void> {
+    const consoleErrors: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "error") consoleErrors.push(m.text());
+    });
+    page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
     await page.goto("/login");
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(PASSWORD);
     await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    try {
+      await expect(page).toHaveURL(/\/dashboard/, { timeout: 8000 });
+    } catch {
+      // DIAGNOSTIC: surface WHY sign-in didn't navigate (the rendered auth error +
+      // any console/network errors), so failures are debuggable from the CI log.
+      const loginError = (
+        await page.locator(".text-destructive").allTextContents().catch(() => [])
+      ).join(" | ");
+      throw new Error(
+        `[DIAG] sign-in stayed at ${page.url()} | rendered-auth-error="${loginError}" | ` +
+          `console=${JSON.stringify(consoleErrors.slice(0, 8))}`,
+      );
+    }
   }
 
   test("sign-in lands on a WORKING, populated dashboard (not 'not available')", async ({ page }) => {

@@ -169,6 +169,8 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=$sb_url" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$sb_anon" >> "$GITHUB_ENV"
           echo "SUPABASE_SERVICE_ROLE_KEY=$sb_srk" >> "$GITHUB_ENV"
+          # DIAGNOSTIC: confirm the resolved values are sane (url present, keys non-empty).
+          echo "resolved NEXT_PUBLIC_SUPABASE_URL=[$sb_url] anon_len=${#sb_anon} srk_len=${#sb_srk}"
       - name: Install deps + browser
         run: |
           npm ci
