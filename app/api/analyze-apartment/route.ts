@@ -11,6 +11,7 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import { logServerError } from "@/lib/utils/api-error";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -360,30 +361,41 @@ ${synthInput}
         || analysisRooms[room.room_type];
       if (!roomAnalysis) continue;
 
-      // Insert the diagnosis and flip the room status concurrently —
-      // independent writes to different tables.
-      await Promise.all([
-        supabase.from("room_diagnoses").insert({
-          room_id: room.id,
-          diagnosis_json: roomAnalysis,
-          design_direction_json: { overall: analysis.overall },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-          missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-          action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
-          model_used: model,
-        }),
-        supabase
-          .from("rooms")
-          .update({ status: "diagnosed" })
-          .eq("id", room.id),
-      ]);
+      // Persist the diagnosis first, then only flip the room to "diagnosed"
+      // once it actually landed. The old Promise.all ran both writes
+      // concurrently and ignored their errors, so a failed insert still left
+      // the room marked "diagnosed" with no diagnosis behind it — orphaning the
+      // status and silently dropping that room's analysis from the apartment run.
+      const { error: diagInsertError } = await supabase.from("room_diagnoses").insert({
+        room_id: room.id,
+        diagnosis_json: roomAnalysis,
+        design_direction_json: { overall: analysis.overall },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
+        action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
+        model_used: model,
+      });
+      if (diagInsertError) {
+        logServerError("analyze-apartment room_diagnoses insert", diagInsertError);
+        continue;
+      }
+      const { error: roomStatusError } = await supabase
+        .from("rooms")
+        .update({ status: "diagnosed" })
+        .eq("id", room.id);
+      if (roomStatusError) {
+        logServerError("analyze-apartment room status update", roomStatusError);
+      }
     }
 
-    await supabase
+    const { error: projectUpdateError } = await supabase
       .from("projects")
       .update({ apartment_analysis: analysis })
       .eq("id", project_id);
+    if (projectUpdateError) {
+      logServerError("analyze-apartment projects update", projectUpdateError);
+    }
 
     const totalTokens = roomResults.reduce((s, r) => s + r.tokensUsed, 0) + synthTokens;
     await completeAgentRun(supabase, agentRun.id, {
