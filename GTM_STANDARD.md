@@ -130,3 +130,42 @@ honesty, roadmap-steer justification, self-validation honesty) is below A, the n
 your highest-priority value-bar-clearing work — fix it before new GTM work, the same way the
 product factory drives a sub-A quality dimension to A. The GTM scorecard surfaces on the
 dashboard alongside the product QUALITY_SCORECARD, so the two factories are held to the same bar.
+
+## 9. Channel activation — autonomous within an approved envelope, propose-and-approve beyond it
+§7's hard floor stands: never spend ad money without a funded, authorized budget; never act on an
+unconnected channel; never create accounts or automate a browser. This section governs HOW a
+channel is activated, in two tiers:
+
+- **Tier A — autonomous (no per-action approval).** On an already-connected, owner-authorized
+  channel you run organic content, the email lifecycle, landing A/B, referral loops, and
+  experiments freely (the app posts; you queue/schedule/monitor). For PAID you also run AND
+  optimize autonomously **as long as you stay inside an owner-approved Channel Plan and its budget
+  cap** — reallocating spend, pausing losers, scaling winners, and honoring the kill criteria needs
+  no new approval.
+- **Tier B — propose-and-approve (gated).** Anything NEW or money-expanding — a new
+  channel/platform, the FIRST paid campaign on a channel, a budget-cap increase, or any spend that
+  would exceed the approved cap — requires owner approval BEFORE any spend or external action. You
+  take ZERO paid/new-channel action until the owner approves. (A new channel still also requires
+  the owner to connect/fund the account per §7.)
+
+**The Channel Plan** (what you write for approval) is honest and real-data-grounded — no invented
+numbers, every projection flagged as an assumption with a confidence level: the thesis + why THIS
+channel for THIS ICP; target audience/segments; creative direction; proposed **monthly budget cap**
++ total test budget; expected CAC, payback period, and LTV:CAC with stated assumptions; the
+falsifiable test (hypothesis + minimum sample size + duration + significance threshold); and
+explicit **KILL CRITERIA** (the metric + threshold at which you stop). Run every Channel Plan
+through the maker≠checker reviewer (told to refute: are the numbers real, the assumptions sound,
+the CAC realistic, the kill criteria tight?) before surfacing it.
+
+**Surfacing + approval record (how approval actually happens).** Write each proposal to the
+`GROWTH_STATUS` `pending_approvals[]` block and raise an `OWNER_ACTION` `gtm-approve-<channel>`;
+both render on the dashboard as an Approve / Reject card. The owner records the decision — the
+channel + the agreed **monthly budget cap** + the date — in `docs/growth/PENDING_OPS.md` under an
+`approved_channels:` list; **that owner-authored record is the SOLE source of approval.** You READ
+it and mirror it into `GROWTH_STATUS` for display — you NEVER author your own approval, NEVER treat
+a RECOMMEND-tier finding (§3) or the mere absence of objection as approval, and NEVER spend beyond
+the recorded cap. Absent a matching approval record, the proposal stays pending and you take ZERO
+paid / new-channel action. Once a channel is approved and live, report real spend/CAC/results
+against the plan every run and honor the kill criteria autonomously: breaching a kill criterion
+means you STOP that spend yourself (Tier-A autonomy, not a Tier-B change); resuming or re-scoping
+it is a new Tier-B proposal.
