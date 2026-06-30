@@ -35,6 +35,34 @@ function mimeTypeForExt(ext: string): string {
   return 'image/jpeg';
 }
 
+// Upload should complete quickly even on a slow connection; the analysis
+// pipeline is server-capped at 300s (maxDuration), so we wait a little past
+// that for a real response. Either way the request must never hang forever and
+// leave the screen stuck on a spinner the user can't escape without force-quit.
+const UPLOAD_TIMEOUT_MS = 90_000;
+const ANALYZE_TIMEOUT_MS = 330_000;
+
+/** fetch() that aborts after `timeoutMs`, surfacing a friendly timeout error. */
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(timeoutMessage);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function uploadImage(imageUri: string, token: string, userId: string): Promise<string> {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -51,7 +79,7 @@ async function uploadImage(imageUri: string, token: string, userId: string): Pro
     type: mimeType,
   } as unknown as Blob);
 
-  const uploadResp = await fetch(
+  const uploadResp = await fetchWithTimeout(
     `${supabaseUrl}/storage/v1/object/room-photos/${filename}`,
     {
       method: 'POST',
@@ -61,6 +89,8 @@ async function uploadImage(imageUri: string, token: string, userId: string): Pro
       },
       body: formData,
     },
+    UPLOAD_TIMEOUT_MS,
+    'Upload timed out. Check your connection and try again.',
   );
 
   if (!uploadResp.ok) {
@@ -75,14 +105,19 @@ async function analyzeRoom(publicUrl: string, roomType: string, token: string): 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   if (!apiUrl) throw new Error('App configuration error: API URL not set.');
 
-  const analyzeResp = await fetch(`${apiUrl}/api/mobile/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+  const analyzeResp = await fetchWithTimeout(
+    `${apiUrl}/api/mobile/analyze`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ image_url: publicUrl, room_type: roomType }),
     },
-    body: JSON.stringify({ image_url: publicUrl, room_type: roomType }),
-  });
+    ANALYZE_TIMEOUT_MS,
+    'Analysis timed out. Please try again.',
+  );
 
   if (!analyzeResp.ok) {
     const body = await analyzeResp.json().catch(() => ({})) as { error?: string };
