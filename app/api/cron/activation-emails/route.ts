@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
+import { isMarketingOptedOut } from "@/lib/email/preferences";
 import {
   buildActivationEmail1,
   buildActivationEmail2,
@@ -137,6 +138,12 @@ export async function GET(request: NextRequest) {
         .limit(1)
         .maybeSingle();
       if (project) {
+        skipped++;
+        continue;
+      }
+
+      // Activation nudges are MARKETING — honour the user's opt-out (CAN-SPAM).
+      if (await isMarketingOptedOut(userId, admin)) {
         skipped++;
         continue;
       }

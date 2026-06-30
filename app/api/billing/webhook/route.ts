@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { constructWebhookEvent, extractBillingInfoFromEvent } from "@/lib/billing/stripe";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
+import { isMarketingOptedOut } from "@/lib/email/preferences";
 import { buildWinBackEmail1, buildPaidWelcomeEmail1 } from "@/lib/email/templates/lifecycle";
 
 // Subscription tiers (exclude one-time `apartment` purchase — not a recurring sub).
@@ -13,6 +14,8 @@ const SUBSCRIPTION_TIERS = new Set(["pro", "pro_annual"]);
 async function maybeSendWinBackEmail(userId: string, admin: ReturnType<typeof getAdminClient>): Promise<void> {
   if (!admin) return;
   try {
+    // Win-back is a MARKETING message — honour the user's opt-out (CAN-SPAM).
+    if (await isMarketingOptedOut(userId, admin)) return;
     const { data } = await admin.auth.admin.getUserById(userId);
     const email = data?.user?.email;
     if (!email) return;
@@ -31,6 +34,10 @@ async function maybeSendWinBackEmail(userId: string, admin: ReturnType<typeof ge
 // active (the free->paid conversion moment). Symmetric to maybeSendWinBackEmail.
 // Never throws — a failed lookup or send must not turn a successful DB write
 // into a non-200 that makes Stripe retry the event.
+//
+// Intentionally NOT gated on the marketing opt-out: this is a transactional
+// confirmation of a commercial transaction the user just made (CAN-SPAM §6
+// exempt), not a marketing message — unlike win-back and the activation cron.
 async function maybeSendPaidWelcomeEmail(userId: string, admin: ReturnType<typeof getAdminClient>): Promise<void> {
   if (!admin) return;
   try {
