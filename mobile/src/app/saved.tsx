@@ -12,6 +12,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
 import { useSavedDesigns, type SavedDesign } from '@/hooks/use-saved-designs';
 
+// Cap the share-link request so a hung endpoint can't freeze the Share button.
+// On timeout the AbortController rejects the fetch, which routes through the
+// existing catch and still opens the native share sheet with the app URL.
+const SHARE_TIMEOUT_MS = 15_000;
+
 const ROOM_LABELS: Record<string, string> = {
   living_room: 'Living Room',
   bedroom: 'Bedroom',
@@ -138,10 +143,18 @@ export default function SavedDesignsScreen() {
     }
 
     try {
-      const resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), SHARE_TIMEOUT_MS);
+      let resp: Response;
+      try {
+        resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (resp.ok) {
         const json = await resp.json() as { share_url?: string };
         const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
