@@ -15,6 +15,7 @@ vi.mock("@/lib/ai/tavily", () => ({
 import { extractFromImage, extractFromUrlBatch } from "@/lib/agents/product-extractor";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { tavilyExtract } from "@/lib/ai/tavily";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 
 const mockChat = geminiProvider.chat as unknown as ReturnType<typeof vi.fn>;
 const mockTavily = tavilyExtract as unknown as ReturnType<typeof vi.fn>;
@@ -58,6 +59,10 @@ describe("extractFromImage", () => {
     // Tokens are summed across input + output + thinking.
     expect(result.tokensUsed).toBe(35);
     expect(result.model).toBe("gemini-test");
+    // Determinism contract: the image-extraction call must pass the seed, like
+    // its sibling extractFromUrlBatch calls do (otherwise runs aren't reproducible).
+    expect(mockChat.mock.calls[0][0]).toHaveProperty("seed");
+    expect(mockChat.mock.calls[0][0].seed).toBe(DETERMINISTIC_SEED);
   });
 
   it("strips markdown fences before validating (extractJsonObject)", async () => {

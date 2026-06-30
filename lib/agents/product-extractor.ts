@@ -731,6 +731,7 @@ export async function extractFromImage(
       responseMimeType: "application/json",
       mediaResolution: "high",
       thinkingConfig: { thinkingLevel: "low" },
+      seed: DETERMINISTIC_SEED,
     });
 
     const validated = ExtractedProductSchema.parse(extractJsonObject(response.content)) as ExtractedProduct;
