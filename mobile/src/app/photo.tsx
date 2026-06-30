@@ -19,13 +19,20 @@ export default function PhotoCaptureScreen() {
 
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
 
-  // Android: recover the picker result if the OS killed the app mid-pick
+  // Android: recover the picker result if the OS killed the app mid-pick.
+  // A rejection here (permission revoked, file-system error) must not become an
+  // unhandled promise rejection — recovery is best-effort, so swallow it and let
+  // the user simply re-pick a photo from the normal UI.
   useEffect(() => {
-    ImagePicker.getPendingResultAsync().then((result) => {
-      if (result && 'canceled' in result && !result.canceled && result.assets.length > 0) {
-        setSelectedImageUri(result.assets[0].uri);
-      }
-    });
+    ImagePicker.getPendingResultAsync()
+      .then((result) => {
+        if (result && 'canceled' in result && !result.canceled && result.assets.length > 0) {
+          setSelectedImageUri(result.assets[0].uri);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to recover pending image-picker result', err);
+      });
   }, []);
 
   const pickFromGallery = useCallback(async () => {
