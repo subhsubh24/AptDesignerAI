@@ -195,6 +195,18 @@ else
   echo "$CAPOUT" | sed 's/^/    /'
 fi
 
+# ── GATE 1e: GTM honesty gate (no metric without a source; GTM scorecard well-formed) ─
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 1e — GTM honesty gate (validate-gtm)"
+echo "════════════════════════════════════════════════════════════════"
+if GTMOUT="$(node scripts/validate-gtm.mjs 2>&1)"; then
+  pass "validate-gtm — no GROWTH_STATUS metric reported without a connected source; GTM scorecard well-formed"
+else
+  fail "validate-gtm FAILED — a GTM metric is reported without a connected source, or the GTM scorecard is malformed:"
+  echo "$GTMOUT" | sed 's/^/    /'
+fi
+
 # ── GATE 2: Required artifacts exist ─────────────────────────────────────────
 
 echo ""
