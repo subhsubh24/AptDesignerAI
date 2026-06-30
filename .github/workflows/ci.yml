@@ -139,15 +139,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI: "1"
+      E2E_AUTH_STACK: "1"                       # run the AUTHENTICATED tier too (signup->dashboard, paywall)
       NEXT_PUBLIC_SITE_URL: "http://localhost:3100"
       PLAYWRIGHT_BASE_URL: "http://localhost:3100"
       E2E_RATE_LIMIT_BYPASS: "1"                # one CI IP would trip per-IP limits (code honors this; prod never sets it)
-      # The PUBLIC journey tier needs only a BOOTING app (no real backend). Placeholder Supabase
-      # + dummy LLM keys satisfy the prod-boot env check (lib/config/env.ts REQUIRED_PROD); public
-      # pages don't query the backend. (AUTHED tier + supabase-local seed = tracked follow-up.)
-      NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder"
-      SUPABASE_SERVICE_ROLE_KEY: "placeholder"
+      # journeys don't call the LLMs; dummy non-empty keys satisfy the prod-boot env check
+      # (lib/config/env.ts REQUIRED_PROD). Real Supabase URL/keys come from supabase-local below.
       GEMINI_API_KEY: "ci-dummy-not-used-by-journeys"
       DEEPSEEK_API_KEY: "ci-dummy-not-used-by-journeys"
     steps:
@@ -156,20 +153,39 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start ephemeral Supabase + apply migrations
+        run: |
+          supabase start
+          supabase db reset --no-seed
+      - name: Export local Supabase keys (strip the quotes `status -o env` emits)
+        run: |
+          supabase status -o env > /tmp/sb.env
+          sb_url=$(grep -E '^API_URL=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          sb_anon=$(grep -E '^ANON_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          sb_srk=$(grep -E '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')
+          echo "NEXT_PUBLIC_SUPABASE_URL=$sb_url" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$sb_anon" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$sb_srk" >> "$GITHUB_ENV"
       - name: Install deps + browser
         run: |
           npm ci
           npx playwright install --with-deps chromium
       - name: Build
         run: npm run build
-      - name: Start app + run PUBLIC journeys
+      - name: Start app + run journeys (public + authed)
         run: |
           npm run start -- -p 3100 > /tmp/app.log 2>&1 &
           for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:3100/login && break; sleep 2; done
           if ! curl -sf -o /dev/null http://localhost:3100/login; then
             echo "::error::app did not become ready on :3100"; tail -150 /tmp/app.log; exit 1
           fi
-          bash scripts/run-journeys.sh --public-only
+          bash scripts/run-journeys.sh
+      - name: App server log (on failure)
+        if: failure()
+        run: tail -200 /tmp/app.log || true
       - name: App server log (on failure)
         if: failure()
         run: tail -200 /tmp/app.log || true
