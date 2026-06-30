@@ -91,8 +91,12 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
           setOfferingLoaded(true);
         }
       })
-      .catch(() => {
-        // Fall back to hardcoded options — no-op
+      .catch((err: unknown) => {
+        // Offerings failed to load (network / SDK error). Keep the fallback
+        // display, but surface the failure instead of swallowing it so it's
+        // observable — and so the CTA can warn rather than silently dismiss
+        // (the fallback options carry no purchasable package).
+        console.warn('[paywall] getOfferings failed', err);
       });
   }, [visible, offeringLoaded]);
 
@@ -100,9 +104,20 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
 
   const handleStartTrial = useCallback(async () => {
     const pkg = selectedOption?.pkg;
-    if (!RC_KEY || !pkg) {
+    if (!RC_KEY) {
       // RC not configured (dev mode) — dismiss gracefully
       onDismiss();
+      return;
+    }
+    if (!pkg) {
+      // RC is configured but real offerings never loaded (network / SDK error),
+      // so the visible prices are placeholders with no purchasable package
+      // behind them. Don't silently dismiss the sheet (a dead CTA) — tell the
+      // user and leave the paywall open so they can retry.
+      Alert.alert(
+        'Pricing unavailable',
+        'We couldn’t load subscription options. Please check your connection and try again.',
+      );
       return;
     }
     setPurchasing(true);
