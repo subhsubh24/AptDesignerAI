@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { SkeletonCard } from "@/components/ui/skeleton";
+import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download } from "lucide-react";
 
 interface SavedDesignItem {
@@ -21,10 +22,18 @@ interface SavedDesignItem {
   updated_at: string;
 }
 
+interface BillingStatus {
+  hasPaid: boolean;
+  tier: string | null;
+  savedCount: number;
+  limit: number;
+}
+
 export default function SavedDesignsPage() {
   const [designs, setDesigns] = useState<SavedDesignItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
 
   useEffect(() => {
     fetch("/api/saved-designs")
@@ -32,6 +41,15 @@ export default function SavedDesignsPage() {
       .then((data: SavedDesignItem[]) => setDesigns(data))
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, []);
+
+  // Plan + free-tier usage drive the in-product upgrade surface below. Failure
+  // is non-blocking — the page works without it; the upsell just doesn't show.
+  useEffect(() => {
+    fetch("/api/billing/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BillingStatus | null) => setBilling(data))
+      .catch(() => {});
   }, []);
 
   const handleExportCsv = () => {
@@ -85,6 +103,10 @@ export default function SavedDesignsPage() {
           </Button>
         )}
       </div>
+
+      {billing && !billing.hasPaid && (
+        <UpgradeCtaCard usedSaves={billing.savedCount} limit={billing.limit} className="mb-8" />
+      )}
 
       {loading ? (
         <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
