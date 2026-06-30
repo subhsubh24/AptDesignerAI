@@ -9,6 +9,12 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { IdentifiedProduct } from "@/lib/types/database";
 
+// Scoring fans out an LLM call per product. Without an explicit maxDuration,
+// Vercel applies a short platform default and can kill the function mid-run — a
+// "builds green, request gets killed" failure on a paid path. 300s is the
+// Vercel Pro ceiling and covers the documented worst-case latency.
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
