@@ -12,6 +12,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
 import { useSavedDesigns, type SavedDesign } from '@/hooks/use-saved-designs';
 
+// Cap the share-link request so a hung endpoint can't freeze the Share button.
+// On timeout the AbortController rejects the fetch, which routes through the
+// existing catch and still opens the native share sheet with the app URL.
+const SHARE_TIMEOUT_MS = 15_000;
+
 const ROOM_LABELS: Record<string, string> = {
   living_room: 'Living Room',
   bedroom: 'Bedroom',
@@ -138,16 +143,23 @@ export default function SavedDesignsScreen() {
     }
 
     try {
-      const resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        const json = await resp.json() as { share_url?: string };
-        const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
-        await Share.share({ message: `Check out "${title}" — my room design from AptDesignerAI!\n${shareUrl}` });
-      } else {
-        await Share.share({ message: fallbackMsg });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), SHARE_TIMEOUT_MS);
+      try {
+        const resp = await fetch(`${apiUrl}/api/mobile/saved-designs/${id}/share`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (resp.ok) {
+          const json = await resp.json() as { share_url?: string };
+          const shareUrl = json.share_url ?? `https://aptdesignerai.com`;
+          await Share.share({ message: `Check out "${title}" — my room design from AptDesignerAI!\n${shareUrl}` });
+        } else {
+          await Share.share({ message: fallbackMsg });
+        }
+      } finally {
+        clearTimeout(timeout);
       }
     } catch {
       // Network error — still open share sheet with app URL so the action never silently fails
