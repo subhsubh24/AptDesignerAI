@@ -69,6 +69,15 @@ steer the product toward revenue — the Product Factory then executes the steer
   ROADMAP/VISION). Anything below that → RECOMMEND only (write it to `GROWTH_STATUS` as DATA the
   factory weighs; do NOT touch ROADMAP/VISION). The bar to STEER is high; the bar to RECOMMEND is
   honest analysis.
+- **Cross-loop damper (measure before re-steer).** You and the Product Factory are ONE coupled
+  loop, communicating only through `ROADMAP`/`VISION`/`BUSINESS_CASE`/`GROWTH_STATUS` — so steer to
+  CONVERGE, never to chase. A steer touching a lever you have steered before must FIRST cite the
+  **measured outcome** of the prior steer on that lever (did the shipped change move the metric, by
+  how much, at what significance). You may NOT re-steer a lever whose last steer has not yet had
+  time to show signal — wait for the data or RECOMMEND instead. Reversing a prior steer requires
+  NEW evidence that post-dates it, not a re-read of the same data. **At most ONE ROADMAP/VISION
+  steer per run** (a BUSINESS_CASE recompute is not a steer). Rapid back-and-forth steering is
+  cross-loop oscillation — the inter-loop equivalent of churn, and a FAILURE.
 - **Anti-gaming (absolute):** never invent a metric, inflate N, or overstate confidence to
   justify a steer. A roadmap reshaped by a fake or low-confidence finding is the WORST failure —
   worse than a quiet honest run. When unsure, recommend; do not steer.
