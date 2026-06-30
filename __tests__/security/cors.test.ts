@@ -10,7 +10,7 @@ import {
 describe("lib/security/cors", () => {
   const orig = process.env.NEXT_PUBLIC_SITE_URL;
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_SITE_URL = "https://aptdesigner.ai";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://aptdesignerai.com";
   });
   afterEach(() => {
     if (orig === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
@@ -19,13 +19,13 @@ describe("lib/security/cors", () => {
 
   it("includes the env site origin and localhost in the allowlist", () => {
     const allowed = getAllowedOrigins();
-    expect(allowed.has("https://aptdesigner.ai")).toBe(true);
+    expect(allowed.has("https://aptdesignerai.com")).toBe(true);
     expect(allowed.has("http://localhost:3000")).toBe(true);
   });
 
   it("normalizes a trailing slash when matching", () => {
-    expect(isAllowedOrigin("https://aptdesigner.ai/")).toBe(true);
-    expect(isAllowedOrigin("https://aptdesigner.ai")).toBe(true);
+    expect(isAllowedOrigin("https://aptdesignerai.com/")).toBe(true);
+    expect(isAllowedOrigin("https://aptdesignerai.com")).toBe(true);
   });
 
   it("rejects an unknown origin and a null origin", () => {
@@ -35,8 +35,8 @@ describe("lib/security/cors", () => {
   });
 
   it("reflects the exact origin for an allowlisted request and never uses a wildcard", () => {
-    const headers = corsHeadersFor("https://aptdesigner.ai");
-    expect(headers["Access-Control-Allow-Origin"]).toBe("https://aptdesigner.ai");
+    const headers = corsHeadersFor("https://aptdesignerai.com");
+    expect(headers["Access-Control-Allow-Origin"]).toBe("https://aptdesignerai.com");
     expect(headers["Access-Control-Allow-Origin"]).not.toBe("*");
     expect(headers["Access-Control-Allow-Credentials"]).toBe("true");
     expect(headers.Vary).toBe("Origin");
@@ -51,8 +51,8 @@ describe("lib/security/cors", () => {
 
   it("applyCorsHeaders mutates the response headers for an allowlisted origin", () => {
     const res = NextResponse.json({ ok: true });
-    applyCorsHeaders(res, "https://aptdesigner.ai");
-    expect(res.headers.get("access-control-allow-origin")).toBe("https://aptdesigner.ai");
+    applyCorsHeaders(res, "https://aptdesignerai.com");
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://aptdesignerai.com");
   });
 
   it("applyCorsHeaders sets no ACAO for a disallowed origin", () => {

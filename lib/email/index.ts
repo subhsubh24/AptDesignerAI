@@ -12,7 +12,7 @@ export type { EmailMessage, EmailProvider, EmailSendResult, EmailStage } from ".
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
-const DEFAULT_FROM = "AptDesignerAI <hello@aptdesigner.ai>";
+const DEFAULT_FROM = "AptDesignerAI <hello@aptdesignerai.com>";
 
 /**
  * Dry-run provider: the safe default. Never sends; records intent so the

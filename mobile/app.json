@@ -10,7 +10,7 @@
     "ios": {
       "bundleIdentifier": "ai.aptdesigner.app",
       "supportsTablet": true,
-      "associatedDomains": ["applinks:aptdesignerai.ai"]
+      "associatedDomains": ["applinks:aptdesignerai.com"]
     },
     "android": {
       "package": "ai.aptdesigner.app",

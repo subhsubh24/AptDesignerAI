@@ -11,12 +11,12 @@ OWNER_ACTIONS:
   as_of: 2026-06-29
   items:
     - id: reconcile-canonical-domain
-      title: "Decide the canonical domain (aptdesignerai.com vs .ai) + reconcile app.json associatedDomains and the email from-address"
+      title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
       priority: high
-      status: open
-      why: "Deep audit (Run 40) found a domain split: the code fallbacks, store-listing, and privacy/terms docs use aptdesignerai.com (dominant), but mobile/app.json `ios.associatedDomains` use applinks:aptdesignerai.ai and lib/email's from-address uses hello@aptdesigner.ai. If the registered/served domain doesn't match these, iOS Universal Links silently fail (in-app share links open Safari instead) and transactional emails bounce. The loop did NOT guess-edit because the fix depends on which domain you actually registered."
-      how: "Confirm which domain is registered + served (likely aptdesignerai.com). Then either (a) if .com: change mobile/app.json to applinks:aptdesignerai.com and lib/email's from to an address on aptdesignerai.com, and serve /.well-known/apple-app-site-association there; or (b) if .ai: update the .com references in docs/store-listing.md + docs/app-privacy.md + the code fallbacks. The loop can make the code/doc edit in a normal PR once you state the canonical domain."
-      blocks: store-submission
+      status: done
+      why: "Deep audit (Run 40) found a domain split: code fallbacks + store-listing + privacy/terms docs use aptdesignerai.com (dominant), but mobile/app.json `ios.associatedDomains` used applinks:aptdesignerai.com and lib/email's from-address used hello@aptdesigner.ai — risking silent iOS Universal Link failure (share links open Safari) and bounced transactional email. Owner chose .com (2026-06-30)."
+      how: "DONE in-repo: mobile/app.json -> applinks:aptdesignerai.com; lib/email DEFAULT_FROM -> hello@aptdesignerai.com; .ai test fixtures (paid-welcome, cors, waitlist-double-opt-in) updated to .com. REMAINING owner-core steps: (1) verify SPF/DKIM are configured for aptdesignerai.com so hello@aptdesignerai.com authenticates (else transactional email still bounces); (2) host the iOS AASA file at https://aptdesignerai.com/.well-known/apple-app-site-association with your Apple Team ID — see the 'iOS Universal Links' section below."
+      blocks: none
     - id: enforce-ci-required-checks
       title: "DONE — lint + public functional-journey CI jobs are now REQUIRED checks"
       priority: high
@@ -382,7 +382,7 @@ PR #73 adds three live eval test files (`evals/__tests__/diagnosis.eval.test.ts`
 
 ### iOS Universal Links — Apple App Site Association file (added 2026-06-24, PR #56 — apply before App Store submission)
 
-PR #56 adds `ios.associatedDomains: ["applinks:aptdesignerai.ai"]` to `app.json`. iOS Universal Links require a signed AASA file hosted at a specific path.
+PR #56 adds `ios.associatedDomains: ["applinks:aptdesignerai.com"]` to `app.json`. iOS Universal Links require a signed AASA file hosted at a specific path.
 
 **Steps:**
 1. Create the file `public/.well-known/apple-app-site-association` in your web deployment (or serve it directly) with:
@@ -400,8 +400,8 @@ PR #56 adds `ios.associatedDomains: ["applinks:aptdesignerai.ai"]` to `app.json`
    }
    ```
    Replace `<TEAM_ID>` with your 10-character Apple Developer Team ID (found in Xcode → Signing & Capabilities or developer.apple.com/account).
-2. The file must be served at `https://aptdesignerai.ai/.well-known/apple-app-site-association` with `Content-Type: application/json` (no `.json` extension in the URL).
-3. After EAS build: test by tapping an `https://aptdesignerai.ai/saved/...` link on a physical iPhone — it should open the app rather than Safari.
+2. The file must be served at `https://aptdesignerai.com/.well-known/apple-app-site-association` with `Content-Type: application/json` (no `.json` extension in the URL).
+3. After EAS build: test by tapping an `https://aptdesignerai.com/saved/...` link on a physical iPhone — it should open the app rather than Safari.
 
 Note: Only link paths listed in `paths` will open the app. The list above restricts to in-app routes; it does NOT hijack marketing/landing pages.
 
