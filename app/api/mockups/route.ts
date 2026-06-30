@@ -564,8 +564,11 @@ RULES:
   const cached = findCachedMockup(cacheKey);
   if (cached) {
     console.log(`[mockup] cache hit key=${cacheKey}`);
-    // Still record this as a mockup job so the UI can reference it
-    const { data: cachedJob } = await supabase
+    // Still record this as a mockup job so the UI can reference it. The image
+    // itself is already valid (cache hit), so a failed job-record insert is
+    // non-fatal — log it and still return the working image rather than failing
+    // a usable result over a missing audit row.
+    const { data: cachedJob, error: cachedJobError } = await supabase
       .from("mockup_jobs")
       .insert({
         room_id,
@@ -578,6 +581,9 @@ RULES:
       })
       .select()
       .single();
+    if (cachedJobError) {
+      console.error("[mockup] Failed to record cached mockup job:", cachedJobError.message);
+    }
     return NextResponse.json({
       id: cachedJob?.id,
       image_url: cached.url,
@@ -585,8 +591,12 @@ RULES:
     });
   }
 
-  // Create mockup job
-  const { data: mockupJob } = await supabase
+  // Create mockup job. This row is REQUIRED — every downstream status update
+  // (.update().eq("id", mockupJob.id)) keys off it, and the expensive image
+  // generation below is wasted if there's no job to record the result against.
+  // An unchecked insert would leave mockupJob undefined, silently no-op those
+  // updates, and return id:undefined to the client (fake success). Fail loud.
+  const { data: mockupJob, error: mockupJobError } = await supabase
     .from("mockup_jobs")
     .insert({
       room_id,
@@ -596,6 +606,11 @@ RULES:
     })
     .select()
     .single();
+
+  if (mockupJobError || !mockupJob) {
+    console.error("[mockup] Failed to create mockup job:", mockupJobError?.message);
+    return NextResponse.json({ error: "Failed to create mockup job" }, { status: 500 });
+  }
 
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
@@ -635,7 +650,7 @@ RULES:
     await supabase
       .from("mockup_jobs")
       .update({ status: "failed", error_message: promptResult.error })
-      .eq("id", mockupJob?.id);
+      .eq("id", mockupJob.id);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: promptResult.error,
@@ -731,7 +746,7 @@ RULES:
         prompt: finalPrompt,
         error_message: "Image generation failed after verification attempts",
       })
-      .eq("id", mockupJob?.id);
+      .eq("id", mockupJob.id);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: "Image generation failed after verification attempts",
@@ -757,7 +772,7 @@ RULES:
       },
       completed_at: new Date().toISOString(),
     })
-    .eq("id", mockupJob?.id);
+    .eq("id", mockupJob.id);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
@@ -770,7 +785,7 @@ RULES:
   });
 
   return NextResponse.json({
-    id: mockupJob?.id,
+    id: mockupJob.id,
     image_url: finalImageUrl,
     prompt: finalPrompt,
     verified: verificationResult.verified,
