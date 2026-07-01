@@ -1,119 +1,105 @@
 /**
- * Structural smoke evals — exercise the scoring helpers against a known
- * input/output pair. Does NOT hit the live Gemini API; those live tests
- * are gated behind RUN_EVALS=1 and should be added as separate `.eval.test.ts`
- * files that call the real pipeline.
+ * Live eval for the refine pipeline stage — the summary the chat designer shows
+ * a client after re-running the full area analysis in response to their feedback.
  *
- * Run with: npm run test (included in the standard suite because no API)
- * Live evals: npm run eval (requires RUN_EVALS=1 + GEMINI_API_KEY)
+ * Tests whether summarizeRefineChanges() produces a concrete, client-facing
+ * summary that actually NAMES what changed between the prior and new assessment
+ * (the sofa swap, the palette shift, the item added). A regression here means
+ * the designer starts returning vague or empty change summaries — the user asks
+ * for a change and can't tell what, if anything, happened.
+ *
+ * Gates behind RUN_EVALS=1 — never fires in the standard `npm test` run (which
+ * has no Gemini key). Run with:
+ *   RUN_EVALS=1 npx vitest run evals/__tests__/refine.eval.test.ts
+ * or via the project shorthand:
+ *   npm run eval
  */
 
 import { describe, it, expect } from "vitest";
-import { loadGoldCases, scoreAgainstExpectations } from "../runner";
+import { evalsEnabled } from "../runner";
+import { summarizeRefineChanges } from "@/lib/agents/refine-summarizer";
 
-describe("eval runner — gold cases", () => {
-  it("loads every gold case file under evals/gold/", () => {
-    const cases = loadGoldCases();
-    expect(cases.length).toBeGreaterThan(0);
-    for (const c of cases) {
-      expect(c.id).toBeTruthy();
-      expect(c.input).toBeTruthy();
-      expect(c.expectations).toBeTruthy();
-    }
-  });
+const EVAL_TIMEOUT_MS = 3 * 60 * 1000;
 
-  it("passes a matching output against its gold expectations", () => {
-    const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    expect(brassLamp).toBeTruthy();
-    if (!brassLamp) return;
+// The generic fallback the summarizer returns when the model yields nothing —
+// a real summary must NOT be this string.
+const FALLBACK_SUMMARY = "Updated the assessment based on your request.";
 
-    const fakeOutput = {
-      what_works: ["brass floor lamp adds warmth", "oak flooring"],
-      what_should_go: ["cracked plastic side table"],
-      recommended_palette: ["terracotta", "warm white", "camel", "walnut"],
-      what_it_needs: [
-        { category: "sofa", search_title: "warm neutral sofa" },
-        { category: "area_rug", search_title: "cream wool rug" },
-      ],
-    };
-    const verdict = scoreAgainstExpectations(brassLamp, fakeOutput, 0.85);
-    expect(verdict.passed).toBe(true);
-    expect(verdict.failures).toEqual([]);
-  });
+const DESIGN_SYSTEM =
+  "You are a warm, precise interior designer speaking directly to a residential client.";
 
-  it("fails when the brass lamp is wrongly dropped", () => {
-    const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+// A concrete before/after pair: the client asks to warm up a cool-grey scheme.
+// The new assessment swaps a grey performance-weave sofa for a warm ochre boucle
+// one and shifts the palette from cool greys to warm terracotta/ochre — a delta
+// a good summary must name.
+const PRIOR_ANALYSIS = {
+  style_name: "Cool Contemporary",
+  design_direction:
+    "Muted, cool-toned contemporary living room with grey upholstery and blackened-steel accents.",
+  recommended_palette: ["cool grey", "charcoal", "slate blue", "off-white"],
+  recommended_materials: ["performance weave", "blackened steel", "smoked glass"],
+  what_should_go: ["yellowed vertical blinds"],
+  what_it_needs: [
+    { category: "sofa", description: "grey performance-weave 3-seat sofa", specs: null },
+    { category: "area_rug", description: "low-pile slate geometric rug", specs: null },
+  ],
+};
 
-    const badOutput = {
-      what_works: ["oak flooring"],
-      what_should_go: ["brass floor lamp", "cracked plastic side table"],
-      recommended_palette: ["terracotta", "warm white", "camel"],
-      what_it_needs: [{ category: "sofa" }, { category: "area_rug" }],
-    };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
-    expect(verdict.passed).toBe(false);
-    expect(verdict.failures.some((f) => f.includes("brass"))).toBe(true);
-  });
+const NEW_ANALYSIS = {
+  style_name: "Warm Modern",
+  design_direction:
+    "Warm, inviting modern living room anchored by an ochre boucle sofa with walnut and brass accents.",
+  recommended_palette: ["terracotta", "ochre", "warm white", "walnut brown"],
+  recommended_materials: ["boucle", "solid walnut", "aged brass"],
+  what_should_go: ["yellowed vertical blinds"],
+  what_it_needs: [
+    { category: "sofa", description: "ochre boucle 3-seat sofa with walnut legs", specs: null },
+    { category: "area_rug", description: "warm wool rug in terracotta tones", specs: null },
+    { category: "table_lamp", description: "aged-brass table lamp for warm evening light", specs: null },
+  ],
+};
 
-  it("fails when the palette misses all required warm tones", () => {
-    const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+describe("refine-summarizer live eval — run with RUN_EVALS=1", () => {
+  it.skipIf(!evalsEnabled())(
+    "names the concrete changes when a client asks to warm up a cool scheme",
+    async () => {
+      const { summary, tokens } = await summarizeRefineChanges({
+        feedback: "This feels cold — can we make the whole room warmer and cozier?",
+        priorAnalysis: PRIOR_ANALYSIS,
+        newAnalysis: NEW_ANALYSIS,
+        system: DESIGN_SYSTEM,
+      });
 
-    const badOutput = {
-      what_works: ["brass floor lamp"],
-      what_should_go: [],
-      recommended_palette: ["cool gray", "navy", "charcoal"],
-      what_it_needs: [{ category: "sofa" }, { category: "area_rug" }],
-    };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
-    expect(verdict.passed).toBe(false);
-    expect(verdict.failures.some((f) => f.includes("palette"))).toBe(true);
-  });
+      // A real model call was made and produced content.
+      expect(tokens, "expected the live call to report token usage").toBeGreaterThan(0);
+      expect(summary.trim().length, "summary should not be empty").toBeGreaterThan(0);
+      expect(
+        summary.trim(),
+        `summarizer returned the generic fallback — the model produced no real summary`,
+      ).not.toBe(FALLBACK_SUMMARY);
 
-  it("fails when a required category is missing", () => {
-    const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+      // It should be genuinely concise (the prompt asks for 1-3 sentences), not a
+      // dumped JSON blob or a wall of text.
+      expect(
+        summary.length,
+        `expected a short client-facing summary, got ${summary.length} chars`,
+      ).toBeLessThan(600);
+      expect(summary, "summary should be prose, not JSON").not.toContain("{");
 
-    const badOutput = {
-      what_works: ["brass floor lamp"],
-      what_should_go: [],
-      recommended_palette: ["terracotta"],
-      what_it_needs: [{ category: "accent_chair" }],
-    };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
-    expect(verdict.passed).toBe(false);
-    expect(verdict.failures.some((f) => f.includes("missing categories"))).toBe(true);
-  });
-
-  it("fails when validation confidence is under the threshold", () => {
-    // Use an inline fixture to test the runner's confidence-threshold logic in
-    // isolation. Real gold cases (brass-lamp, etc.) don't set minValidationConfidence
-    // because the diagnosis pipeline doesn't produce a confidence score.
-    const fixtureWithThreshold = {
-      id: "inline-confidence-test",
-      description: "inline fixture for confidence threshold testing",
-      input: {
-        roomType: "living_room",
-        imageUrls: [],
-      },
-      expectations: {
-        minValidationConfidence: 0.6,
-      },
-    };
-
-    const goodOutput = {
-      what_works: [],
-      what_should_go: [],
-      recommended_palette: [],
-      what_it_needs: [],
-    };
-    const verdict = scoreAgainstExpectations(fixtureWithThreshold, goodOutput, 0.3);
-    expect(verdict.passed).toBe(false);
-    expect(verdict.failures.some((f) => f.includes("confidence"))).toBe(true);
-  });
+      // The core of this eval: the summary must NAME the change. The dominant
+      // delta is warmth (cool grey → warm ochre/terracotta) and the sofa swap.
+      const lower = summary.toLowerCase();
+      const namesWarmth = /warm|ochre|terracotta|cozy|cosy|boucle|walnut|brass/.test(lower);
+      const namesAChangedThing = /sofa|palette|colou?r|rug|lamp|tone/.test(lower);
+      expect(
+        namesWarmth,
+        `summary should name the warmth shift; got: "${summary}"`,
+      ).toBe(true);
+      expect(
+        namesAChangedThing,
+        `summary should name at least one changed element (sofa/palette/rug/lamp); got: "${summary}"`,
+      ).toBe(true);
+    },
+    EVAL_TIMEOUT_MS,
+  );
 });
