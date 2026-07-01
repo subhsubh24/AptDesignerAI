@@ -3,8 +3,8 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — AptDesigner",
-  description: "How AptDesigner handles your photos, designs, and personal data.",
+  title: "Privacy Policy — AptDesignerAI",
+  description: "How AptDesignerAI handles your photos, designs, and personal data.",
 };
 
 export default function PrivacyPage() {
@@ -60,6 +60,57 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-xl font-semibold mb-3">Third-party services we share data with</h2>
+            <p className="text-muted-foreground mb-4">
+              To run the product we rely on a small set of vetted processors. Each
+              receives only the data it needs, under data-processing terms that
+              prohibit using your content to train generic models. We never sell
+              your data or share it for advertising.
+            </p>
+            <ul className="space-y-3 text-muted-foreground list-disc pl-5">
+              <li>
+                <strong className="text-foreground">Google (Gemini AI)</strong> — your room
+                photos, room type, and design context, to understand your space and
+                generate designs.
+              </li>
+              <li>
+                <strong className="text-foreground">DeepSeek</strong> — text-only design
+                analysis (no photos, no personal data), as a secondary AI provider for
+                cost efficiency.
+              </li>
+              <li>
+                <strong className="text-foreground">Supabase</strong> — your email, photos,
+                and design data, for database and file storage (US-hosted).
+              </li>
+              <li>
+                <strong className="text-foreground">Stripe</strong> — your name, email, and
+                payment details (card data is collected directly by Stripe; we never see it),
+                to process subscription payments.
+              </li>
+              <li>
+                <strong className="text-foreground">Tavily</strong> — product search terms
+                derived from your design (e.g. &ldquo;mid-century oak bookshelf&rdquo;), with
+                no personal data, to source furniture and décor recommendations.
+              </li>
+              <li>
+                <strong className="text-foreground">Google Maps / Places</strong> — product
+                image search terms, with no personal data, to fetch photos of recommended
+                products.
+              </li>
+              <li>
+                <strong className="text-foreground">Browserbase</strong> — screenshots of
+                public product pages, with no personal data, so our verification agent can
+                confirm product images match their descriptions.
+              </li>
+              <li>
+                <strong className="text-foreground">Vercel Web Analytics</strong> — aggregate,
+                cookieless usage events (screen views, feature use) with no personal or
+                cross-app advertising identifiers.
+              </li>
+            </ul>
+          </section>
+
+          <section>
             <h2 className="text-xl font-semibold mb-3">What we never do</h2>
             <ul className="space-y-2 text-muted-foreground list-disc pl-5">
               <li>Sell your personal data or content to anyone.</li>
@@ -98,7 +149,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Children</h2>
             <p className="text-muted-foreground">
-              AptDesigner is intended for users 16 and older. If you believe a
+              AptDesignerAI is intended for users 16 and older. If you believe a
               child has created an account, contact us and we&apos;ll delete it.
             </p>
           </section>
