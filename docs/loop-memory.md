@@ -4,6 +4,45 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-01 (Run 48) — DEEP AUDIT + 7 disjoint changes (store readiness ×2 + perf + a11y ×2 + 2 LLM-core tests)
+
+### State on entry
+- Cold container at default tip `d47101c` (post Run 47 #250-258 + GTM commits #259-262). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1308 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT DUE** (last Run 44; the Run-47 rotation guide flagged Run 48 as the run to run it) → ran the 8-lens read-only Haiku sweep FIRST, then folded findings into selection (no separate scout sweep needed — the audit WAS the discovery).
+
+### DEEP AUDIT 2026-07-01 (Run 48) — 8 read-only Haiku lenses across the whole codebase
+- **Security/RLS: CLEAN** through migration 027. Every public table RLS-enabled with the right posture (tenant on auth.uid() + WITH CHECK; shared/internal RLS-on-no-policy); all ~26 paid LLM endpoints have checkRateLimit + checkDailySpend; secrets env-read; admin client scoped to auth/shared/read-only; SECURITY DEFINER search_path pinned (024). No findings — correct no-op.
+- **Correctness:** the twin-write status-flip class still has open members (search/stream, products/evaluate, analyze-apartment, search, evaluate-set — unchecked status updates orphan state). Real but REPETITIVE (Run 47 lesson #4 deferred it); took NONE this run to avoid padding (enough correctness-adjacent value elsewhere). No maxDuration gaps (all heavy routes =300). `getCurrentUserId()` prod mock-fallback (server.ts:80/82) noted but LEFT — tied to the current memory-store data-layer phase; no root middleware; changing auth semantics blindly is risky.
+- **Performance:** diagnosis/route.ts serial project+preference reads → BUILT (#265, Promise.all). embedding-index full-table scan needs a pgvector RPC + migration (LIVE-DB, deferred); next/image + a perf budget deferred.
+- **A11y/design:** toast close-button no accessible name + wrong announce urgency → BUILT (#266); compare-table <tr onClick> sort with no keyboard access → BUILT (#267). Mobile hardcoded colors (themed-text linkPrimary dead code, animated-icon splash bg) = borderline, deferred.
+- **Functional reality:** core pipeline + paywall→webhook→entitlement still have NO outcome-asserting runtime E2E (F4, gated on E2E_AUTH_STACK + deterministic provider fixtures + Stripe test-mode — big/human-gated). NOTE: the webhook route is ALREADY well unit-tested (__tests__/api/billing-webhook.test.ts, 8 cases incl. side-effect integrity + idempotency) and entitlements have server/web tests — so a synthetic vitest "integration" test would add little; dropped that candidate.
+- **Mobile:** signup Terms/Privacy not tappable = store-BLOCKER → BUILT (#263). Paywall offerings "stuck loop" = FALSE FLAG (already handled #242 — keeps fallback, warns, CTA alerts on no-package, retries on reopen). Entitlement-refresh swallows errors + quota-constant dup = borderline, deferred.
+- **Deps/artifact:** contact email `aptdesigner.app` in 7 UI files vs canonical `.com` → BUILT (#264). Product-name "AptDesigner" vs "AptDesignerAI" in page titles = borderline (deferred). TS root ^5 / mobile ~6.0.3 = low. BUSINESS_CASE optimistic-scenario/escalation-COGS notes = DEFERRED (just re-modeled #258 Run 47; GTM anti-oscillation damper — don't churn it two runs running).
+- **Tests/evals:** 12 untested lib/agents modules mapped (orchestrator, shopping-researcher, room-diagnostician, post-search-coordinator, design-coordinator, mockup-agent, scene-assembler, format-floor-plan, user-feedback, diagnosis-expansion-pipeline, pipeline-trace, identified-products-pipeline). Took the 2 cleanest/highest-reuse this run (format-floor-plan #268, user-feedback #269).
+
+### What was done (7 file-disjoint changes, all merged #263-269)
+- **#263 store readiness** — signup Terms/Privacy tappable (expo-web-browser, mirrors paywall/settings). **#264 store readiness** — contact email → canonical `.com` across 7 UI files. **#265 perf** — diagnosis project+preference reads parallelized. **#266 a11y** — toast dismiss accessible-name + urgency typing. **#267 a11y** — compare-table keyboard-accessible sort buttons. **#268/#269 tests** — format-floor-plan (13) + user-feedback (9), both provider/DB-mocked, mutation-verified.
+- 14 per-change Sonnet reviewers (2× each) + 1 re-review. 13 APPROVE first pass; the user-feedback test took 2 review cycles (Reviewer A + a re-review caught that the rooms-error case was masked by the `!rooms` guard AND then by the no-history branch). No new migrations/secrets → PENDING_OPS unchanged. No ROADMAP boxes fully completed (all 7 are incremental within already-partial tracks A/D/F) → none ticked.
+
+### Lessons learned
+1. **A masked branch assertion can be masked TWICE — mutation-test it, don't eyeball it.** The user-feedback rooms-error test first used `data:null` (caught by `!rooms`), then `data:[row]` with no accepted/rejected data (caught by the later "no history" `return ""`). Only `data:[row]` + real accepted/rejected history makes the `""` assertion depend on the `roomsError` guard alone. I proved it by MUTATING the source (drop `roomsError ||`) and confirming the test flips red — the deterministic way to terminate a review loop at the 2-cycle cap without a subjective 3rd round.
+2. **The deep audit IS the scouting feed on its due run.** Running the 8 Haiku lenses first and selecting directly from their findings (no separate scout sweep) was the right spend — same discipline as "a fresh QUALITY_SCORECARD is the scouting feed" (Run 42 lesson).
+3. **Adjudicate audit findings before building — Haiku over-flags.** Dropped 3 plausible-looking findings after reading the code: paywall "stuck loop" (already fixed #242), a synthetic webhook "integration" test (already unit-tested with side-effect integrity), and the twin-write status-flips (real but a repetitive class Run 47 deferred; taking more would read as padding).
+4. **Don't re-model the business case two runs in a row.** The deps/artifact scout flagged BUSINESS_CASE optimistic-scenario traceability + escalation-tier COGS. Real-ish, but #258 (Run 47) just re-modeled it and the GTM anti-oscillation damper exists to stop maker churn on the same doc — deferred to a future run with a fresh independent grade, not touched this run.
+
+### Rotation guide for next run
+- **DEEP AUDIT done Run 48 → next due ~Run 52.**
+- **Highest-value queued, file-disjoint (validated this run, not taken):**
+  - **tests_evals (lib/agents ~21%)** — remaining untested mockable/pure agents: room-diagnostician (3 chat, self-consistency), scene-assembler (3 chat, reconciliation), design-coordinator (agent loop), post-search-coordinator (agentic, re-search budget), diagnosis-expansion-pipeline (pure), pipeline-trace (pure), identified-products-pipeline (glue). Verify "untested" with a file check first.
+  - **correctness** — twin-write status-flip guards (search/stream, products/evaluate, analyze-apartment status updates unchecked → orphaned state). Repetitive class; take 1-2 max or fold into a deep-audit finding, don't batch as padding.
+  - **performance** — embedding-index pgvector RPC + migration (LIVE-DB verification only); next/image + a perf/bundle budget (none exists).
+  - **mobile** — entitlement-refresh error surfacing (use-entitlements.ts swallows errors; after purchase a failed refresh leaves stale isPro=false) + a shared quota constant (mobile/lib duplicate FREE_SAVE_LIMIT=3). Both borderline — standalone only.
+  - **business_case** — optimistic-scenario body traceability + escalation-tier COGS honesty (deps scout). Wait for a fresh independent grade / a run NOT adjacent to #258.
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job; F4 Playwright/journey CI wiring + E2E_AUTH_STACK; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; live secrets; SITE_GATE_PASSWORD.
+- **Readiness:** still blocked — QUALITY_SCORECARD as_of 2026-06-29 overall C / ship_gate_met:false (STALE; most top_gaps closed by Runs 42-48 — needs a fresh independent re-grade to reflect reality), F4 core-journey runtime E2E + eval CI job still open/human-gated. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-06-30 (Run 47) — 9 disjoint changes (business-case re-model + 2 security/reliability route-hardening + correctness + 2 mobile + 3 LLM-core agent tests)
 
 ### State on entry
