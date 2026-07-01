@@ -97,23 +97,22 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     input_json: { room_type: room.room_type, image_count: imageUrls.length },
   });
 
-  // Load project for design profile context
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", room.project_id)
-    .single();
+  // Load the project (design-profile context) and infer user preferences from
+  // sibling rooms concurrently — both depend only on project_id/room_id, not on
+  // each other, so serializing them wasted a round-trip on this hot path.
+  // inferUserPreferences is best-effort: if it fails, diagnosis runs without
+  // preference signals (closes the "nothing learns" gap when it succeeds).
+  const [{ data: project }, inferredPreferences] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("*")
+      .eq("id", room.project_id)
+      .single(),
+    inferUserPreferences(supabase, room.project_id, room_id),
+  ]);
 
   const profile = buildDesignProfile(project);
 
-  // Infer user preferences from sibling rooms — closes the "nothing learns"
-  // gap by turning existing keep/replace/action_list data into prompt context.
-  // Best-effort: if the lookup fails, diagnosis runs without preference signals.
-  const inferredPreferences = await inferUserPreferences(
-    supabase,
-    room.project_id,
-    room_id,
-  );
   if (profile && inferredPreferences) {
     profile.inferredPreferences = inferredPreferences;
   }
