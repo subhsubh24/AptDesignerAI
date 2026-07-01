@@ -491,6 +491,58 @@ PY
 then pass "QUALITY_SCORECARD: valid, parseable YAML block"
 else fail "QUALITY_SCORECARD: missing or UNPARSEABLE"; fi
 
+# ── GATE 6: Security invariants (RLS coverage + client-secret leak) ────────────
+# Supabase exposes the ENTIRE public schema via PostgREST to the anon key; RLS is
+# THE security boundary. Every public table a migration CREATEs must also ENABLE
+# ROW LEVEL SECURITY — directly (tenant tables) or via the dynamic format() loop
+# used for shared/internal admin-only tables. A created-but-RLS-less public table
+# is a wide-open tenant-data leak. This makes RLS coverage a MECHANICAL gate
+# rather than resting on migration review (QUALITY_SCORECARD security_rls raise).
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 6 — Security invariants (RLS coverage + client-secret leak)"
+echo "════════════════════════════════════════════════════════════════"
+
+if RLS_CHECK="$(python3 - <<'PYEOF' 2>&1
+import re, glob, os, sys
+created, rls = {}, set()
+for path in sorted(glob.glob("supabase/migrations/*.sql")):
+    sql = open(path).read().lower()
+    for m in re.finditer(r'create table (?:if not exists )?(?:public\.)?([a-z_][a-z0-9_]*)', sql):
+        created.setdefault(m.group(1), os.path.basename(path))
+    for m in re.finditer(r'alter table (?:public\.)?([a-z_][a-z0-9_]*)\s+enable row level security', sql):
+        rls.add(m.group(1))
+    # Shared/internal tables enable RLS via a dynamic loop:
+    #   execute format('alter table public.%I enable row level security', t)
+    # over a list of quoted table-name literals — count those as covered too.
+    if "enable row level security" in sql and "format(" in sql:
+        for m in re.finditer(r"'([a-z_][a-z0-9_]*)'", sql):
+            rls.add(m.group(1))
+missing = sorted(t for t in created if t not in rls)
+if missing:
+    print("RLS_MISSING: " + ", ".join(f"{t} ({created[t]})" for t in missing))
+    sys.exit(1)
+print(f"OK — {len(created)} public tables, all ENABLE ROW LEVEL SECURITY")
+PYEOF
+)"; then
+  pass "RLS coverage — ${RLS_CHECK#OK — }"
+else
+  fail "RLS coverage — $RLS_CHECK (every public table must ENABLE ROW LEVEL SECURITY in supabase/migrations)"
+fi
+
+# No repo secret may be exposed to the browser bundle via a NEXT_PUBLIC_* name.
+# Legitimate public values (NEXT_PUBLIC_SUPABASE_ANON_KEY, *_SITE_KEY, *_URL) are
+# fine — only SECRET / SERVICE_ROLE / PRIVATE names are ever meant to stay server-side.
+LEAK="$(grep -rniE 'NEXT_PUBLIC_[A-Z0-9_]*(SECRET|SERVICE_ROLE|PRIVATE)' \
+  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.env*' \
+  app lib components mobile scripts .env.example 2>/dev/null || true)"
+if [[ -z "$LEAK" ]]; then
+  pass "Client-secret leak — no secret exposed via a NEXT_PUBLIC_* env name"
+else
+  fail "Client-secret leak — a secret is exposed to the browser via a NEXT_PUBLIC_* name:"
+  echo "$LEAK" | sed 's/^/    /'
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
