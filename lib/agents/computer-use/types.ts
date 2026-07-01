@@ -175,6 +175,15 @@ export interface AgentLoopConfig {
   maxTurns?: number;
   /** Predefined actions to disable for this run (e.g. lock out drag_and_drop). */
   excludedPredefinedFunctions?: string[];
+  /**
+   * Overall wall-clock budget in ms for the entire loop (setup + all turns).
+   * Checked at the top of every turn: once exceeded the loop stops cleanly with
+   * status "max_turns" and disposes the driver, rather than running until the
+   * serverless platform kills it mid-turn (leaking the browser session). Set it
+   * SHORTER than the route's maxDuration so there is headroom to return a
+   * response. Undefined = no wall-clock cap (turn count is the only limit).
+   */
+  maxWallClockMs?: number;
   /** Called after every turn — useful for streaming progress to the client. */
   onStep?: (step: AgentStepLog) => void;
 }
