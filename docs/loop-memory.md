@@ -4,6 +4,36 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-01 (Run 50) — 4 disjoint changes (correctness ship-critical + security preflight guard + mobile monetization + eval completeness)
+
+### State on entry
+- Cold container at default tip `7e62a10` (post Run 49 #273-280 + housekeeping #281 + fresh quality grade #282). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1350 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT not due** (last Run 48; next ~Run 52). NEW independent QUALITY_SCORECARD landed #282 (as_of 2026-07-01, overall C, ship_gate_met:false): security_rls/store_readiness/artifact_integrity/business_case_strength now **A**; ship-critical dims still < A: functional_reality **C** (core money-path has no outcome-asserting runtime E2E — human-gated on E2E_AUTH_STACK), correctness **B**, design_taste **B**. Used the fresh scorecard as the vetted feed (Run 42/48 lesson) + 3 Haiku scouts (mobile / perf+correctness / untested-agents+eval).
+
+### What was done (4 file-disjoint changes, all merged #283-286)
+- **#283 correctness (ship-critical, closes scorecard HIGH-severity gap)** — `app/api/computer-use/product-verify` had no `maxDuration` while driving an agentic Browserbase loop → platform-killed mid-verification (leaked session) once Browserbase creds set. Added `maxDuration=300` (18th/18 pipeline routes now covered) + an optional `maxWallClockMs` budget in the shared agent-loop (checked at top of each turn → clean stop + driver dispose via existing `finally`), passed `270_000` from the computer-use product-verifier (30s headroom). Injectable `now` clock → 3 deterministic tests (normal completion / mid-run trip / no-cap fallback). No-op for existing callers.
+- **#286 security (security_rls A→A+ bounded item)** — preflight GATE 6: mechanical per-public-table RLS-coverage (parses BOTH `alter table … enable row level security` AND the dynamic `do $$ … array['t'] … execute format('… enable row level security', t)` loop) + a `NEXT_PUBLIC_*(SECRET|SERVICE_ROLE|PRIVATE)` client-secret-leak grep. Both no-ops on the current 26-table tree; turns a review-only invariant into a mechanical ratchet.
+- **#284 mobile monetization (Track C reliability)** — post-purchase entitlement `refresh()` retries 3× w/ backoff + returns `Promise<boolean>`; `results.tsx onPurchaseSuccess` awaits it and shows an honest "may take a moment to sync" alert instead of silently stranding a paying user at `isPro=false`. Server still source-of-truth.
+- **#285 tests_evals (A5/F3, scorecard "refine eval mislabeled" gap)** — `refine.eval.test.ts` → real gated live eval calling `summarizeRefineChanges` (5th core stage now live, parity with the other 4); the runner smoke tests moved verbatim to `runner.test.ts` (coverage preserved). Live run still needs the RUN_EVALS=1 job (owner key) — same posture as the existing 4.
+- 8 per-change Sonnet reviewers (2× each) + 1 re-review. Combined suite green: 1353 pass / 9 skip, tsc/determinism/eslint clean. No new migrations/secrets → PENDING_OPS unchanged. No ROADMAP box fully completes (all 4 incremental within partial Tracks A/C/F) → none ticked.
+
+### Lessons learned
+1. **A mechanical security parser can itself have a false-NEGATIVE — adversarial review earns its keep.** GATE 6's first cut harvested EVERY quoted literal in any file containing an RLS loop; Reviewer A built a reproduction (an unguarded table whose name appears as a stray `default 'x'` literal in a file that also has an unrelated dynamic-RLS loop) that the gate would silently pass. Fix: scope the harvest to `array[...]` literals INSIDE a `do $$…$$` block that actually enables RLS. When writing a *security* gate, adversarially test the FALSE-NEGATIVE direction (what it fails to catch), not just that it passes clean — and prefer a design that fails SAFE (over-block) over one that can mask a leak.
+2. **The `@google/genai` SDK mock needs a REGULAR function, not an arrow, to be `new`-able.** `vi.fn(() => ({...}))` threw "is not a constructor" when the agent loop does `new GoogleGenAI(...)`; a `function GoogleGenAI(){ return {...} }` inside the factory works (returning an object makes `new` yield it). Combined with the hoist rule (define the mock fn INSIDE the factory, retrieve after import) this is the idiom for mocking the direct-SDK computer-use loop.
+3. **The fresh independent scorecard IS the scouting feed (re-confirmed).** #282 (dated today, file-precise) named the exact HIGH-severity correctness gap (product-verify maxDuration), the security_rls A+ item (preflight RLS assertion), and the tests_evals gap (refine eval mislabeled) — 3 of the 4 shipped changes came straight from it; scouts only added the mobile one. Don't re-discover what a same-day scorecard already pinpoints.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 52** (last Run 48).
+- **Highest-value queued, file-disjoint:**
+  - **tests_evals (lib/agents ~35%)** — remaining untested but HEAVILY-ORCHESTRATED agents: room-diagnostician (3 chat + self-consistency), scene-assembler (2 chat + judge/reconcile), mockup-agent, shopping-researcher (759 lines), design-coordinator, post-search-coordinator. NOTE: these need schema-valid fixtures (RoomSceneGraphResponseSchema etc.) + heavy mocking — budget a focused run for ONE done properly, don't attempt cold under the 2-cycle cap. Cleaner-to-test: `verify-search-candidates.ts` (computer-use, 0 LLM, URL-normalize + cache logic).
+  - **performance (non-ship-crit B)** — embedding-index `topKSimilar` full-table `select('*')` N-scan-per-crop → needs a pgvector match_ RPC + migration (LIVE-DB verification only; defer to a live-DB run). next/image on the 11 raw `<img>` are all on the giant dynamic page files (focus 1653 lines / setup / saved) — risky cold; do on an F7 served-app run.
+  - **mobile (borderline, standalone only)** — `_layout.tsx` `Purchases.logIn/logOut .catch(()=>{})` identity desync: DO NOT naively retry/log — RC's `logOut()` throws on an already-anonymous user (the swallow is partly intentional); a real fix must distinguish the anonymous-logout error from a transient one via RC error codes. Left this run for that reason.
+  - **design_taste (ship-critical B)** — axe on ≥1 authed route + F7 screenshots both need the E2E auth stack / served app (human-gated).
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job (RUN_EVALS=1 key); F4 Playwright/journey CI wiring + E2E_AUTH_STACK; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; live secrets; SITE_GATE_PASSWORD.
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C / ship_gate_met:false (functional_reality C is the binding gate — needs core-journey + paywall runtime E2E, human-gated on E2E_AUTH_STACK). Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-07-01 (Run 49) — 8 disjoint changes (2 tests + correctness + security + compliance + mobile + perf+test + a11y)
 
 ### State on entry
