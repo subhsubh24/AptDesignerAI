@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -435,7 +435,20 @@ export default function ResultsScreen() {
       <PaywallSheet
         visible={showPaywall}
         onDismiss={() => setShowPaywall(false)}
-        onPurchaseSuccess={() => { void refreshEntitlements(); }}
+        onPurchaseSuccess={() => {
+          void (async () => {
+            const confirmed = await refreshEntitlements();
+            if (!confirmed) {
+              // Purchase succeeded on RevenueCat's side but we couldn't confirm
+              // the entitlement locally — tell the user instead of silently
+              // leaving Pro features looking locked.
+              Alert.alert(
+                'Purchase complete',
+                'Your subscription is active. It may take a moment to sync — reopen this screen if a Pro feature still looks locked.',
+              );
+            }
+          })();
+        }}
       />
     </ThemedView>
   );
