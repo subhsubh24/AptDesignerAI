@@ -7,6 +7,64 @@ history behind it.
 
 ---
 
+## 2026-07-01 — SECOND INDEPENDENT GRADE (broad ship-critical progress; overall still gated by functional_reality)
+
+**Overall: C · ship_gate_met: false.** Overall is UNCHANGED from the 2026-06-29 baseline, but the
+per-dimension picture improved substantially: **4 ship-critical dimensions are now A** (security_rls,
+store_readiness, artifact_integrity, business_case_strength) vs only 1 (artifact_integrity) last cycle.
+Overall stays C because the rubric caps the headline at the weakest ship-critical link, and
+**functional_reality is still C** — the core money path (photo→REAL mockup) and paywall→checkout→unlock
+have no outcome-asserting runtime E2E (BUILDS≠WORKS).
+
+**Per-dimension diff vs 2026-06-29:** functional_reality **C→C** · correctness **B→B** (much closer to A)
+· security_rls **B→A** ⬆ · design_taste **B→B** (2 of 4 gaps closed) · store_readiness **B→A** ⬆ ·
+artifact_integrity **A→A** · business_case_strength **B→A** ⬆ · tests_evals **C→B** ⬆ · performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **1350 passed / 8 skipped** (up from 1183; 8 skips are RUN_EVALS-gated by design).
+- `scripts/run-journeys.sh --public-only` → **7 passed**, 6 authenticated SKIPPED (still need
+  E2E_AUTH_STACK + seeded Supabase; cannot run cold).
+- `npx vitest run --coverage` (via grader) → **48.7% stmts / 37.7% branch overall, lib/agents 35%**
+  (up from ~21%). vitest floor 25/19/30/25 still far below actual and CI never runs --coverage.
+
+**What the factory fixed since last grade (verified this run):**
+- **security G1 CLOSED** (PR #274/#275 chain): products/evaluate + evaluate-set now call checkRateLimit +
+  checkDailySpend before any LLM call; swept — every authed LLM route now carries both guards. → A.
+- **store privacy defect FIXED** (PR #280): privacy page no longer lists phantom Anthropic/OpenAI; every
+  named processor cross-checked to a real dependency. Contact email canonicalized (#264). → A.
+- **business levers BUILT** (migration 026 + lib/waitlist/referral.ts + upgrade-cta-card): referral invite/
+  reward + upsell surface are now real code, not templates; organic share re-grounded 50%→40%. → A.
+- **correctness maxDuration**: now on all 17 mainline pipeline routes (was 0). ONE route still missing —
+  computer-use/product-verify (agentic browser loop). Still B until that + an overall cap land.
+- **design a11y**: toast now announces via Radix foreground/background; app/not-found.tsx added. Remaining:
+  no authed axe coverage, e2e/__screenshots__/ still absent (F7). Still B.
+- **perf**: grounding pair now Promise.all. Headline gap unchanged — embedding-index topKSimilar still does
+  N full-table select('*') scans, ivfflat index unused. Still B.
+- **tests_evals**: 4 real live evals now hit the real pipeline; coverage up. Still no RUN_EVALS CI job / no
+  --coverage gate / refine eval still mislabeled. C→B.
+
+**Headline reasoning (why overall stays C):** The single blocker is functional_reality. journeys.spec.ts
+asserts only the onboarding ENTRY (:149-153) and that /billing/upgrade renders a heading (:169-175) — the
+actual mockup image and the entitlement flip are never asserted, and ROUTE_INVENTORY.md admits both as
+tracked gaps. Until a CI-runnable test asserts a REAL mockup and a checkout→unlock, the core paid journey
+is runtime-unvalidated and the headline cannot exceed C, regardless of how strong the other dimensions are.
+
+**Issues reconciled:** closed/updated the per-dimension quality issues from the levers that reached A
+(security #202, store #203, business #205); updated the still-open ones (functional #199, correctness #201,
+design #204, tests #200) with the current, narrowed gap.
+
+**Lessons for next run:**
+1. Progress is real but the ship gate is binary on the weakest ship-critical link — 4→A is worth noting in
+   memory, but overall correctly stayed C. Do NOT let broad B→A progress tempt an inflated headline.
+2. functional_reality is now the ONLY thing between C and a B/A headline. The fix is well-scoped: recorded/
+   deterministic provider fixtures + Stripe test-mode so the core flow + checkout assert real outcomes in CI.
+3. Re-confirmed cold-start recipe works: npm install, then .env.local with DUMMY Supabase/Gemini/DeepSeek
+   keys before the public journey suite. Authed tier + live evals remain UNVERIFIABLE cold — grade on what
+   ran, never assume green.
+
+---
+
 ## 2026-06-29 — FIRST INDEPENDENT GRADE (baseline)
 
 **Overall: C · ship_gate_met: false.** First run of the independent auditor; prior scorecard was all
