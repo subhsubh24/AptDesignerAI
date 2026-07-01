@@ -103,6 +103,16 @@ export default function PrivacyPage() {
                 confirm product images match their descriptions.
               </li>
               <li>
+                <strong className="text-foreground">Resend</strong> — your email address, to
+                deliver transactional and account emails (e.g. waitlist confirmation, sign-in,
+                and billing notices).
+              </li>
+              <li>
+                <strong className="text-foreground">Cloudflare Turnstile</strong> — a bot-check
+                token and your IP address on the signup and waitlist forms, to block automated
+                abuse. No account content is shared.
+              </li>
+              <li>
                 <strong className="text-foreground">Vercel Web Analytics</strong> — aggregate,
                 cookieless usage events (screen views, feature use) with no personal or
                 cross-app advertising identifiers.
