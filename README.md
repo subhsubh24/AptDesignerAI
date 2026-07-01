@@ -16,7 +16,7 @@ AI-powered interior design for apartments. Upload a photo of your room, describe
 |---|---|
 | Web frontend | Next.js 16 App Router, Tailwind CSS |
 | Mobile | Expo (React Native) |
-| AI pipeline | Google Gemini (room understanding, product scoring) |
+| AI pipeline | Google Gemini (vision: room understanding, product scoring) + DeepSeek (text-only reasoning agents) |
 | Auth & database | Supabase (Postgres + Row Level Security) |
 | Storage | Supabase Storage (room photos) |
 | Billing (web) | Stripe |
@@ -50,7 +50,8 @@ Copy `.env.example` to `.env.local` and fill in:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (safe to expose) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only key for admin operations |
-| `GEMINI_API_KEY` | Google Gemini API key |
+| `GEMINI_API_KEY` | Google Gemini API key (vision + scoring) |
+| `DEEPSEEK_API_KEY` | DeepSeek API key for text-only agents — required in production unless `AI_PROVIDER=gemini` |
 | `STRIPE_SECRET_KEY` | Stripe secret key (web billing) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `REVENUECAT_SECRET_KEY` | RevenueCat server key (mobile entitlement check) |
