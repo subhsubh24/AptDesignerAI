@@ -4,6 +4,41 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-01 (Run 49) — 8 disjoint changes (2 tests + correctness + security + compliance + mobile + perf+test + a11y)
+
+### State on entry
+- Cold container at default tip `62fe48c` (post Run 48 #263-269 + housekeeping #270 + Vercel-deploy #271 + growth-dashboard #272). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1330 tests** pass / 8 skipped, determinism clean, eslint 0.
+- **DEEP AUDIT not due** (ran Run 48; next ~Run 52). Open quality issues #199-205 (as_of 2026-06-29, overall C) are STALE — their named gaps were closed by Runs 42-48 (maxDuration #206, G1 #207, privacy #208, not-found #210, toast aria-live #266, referral #226, upsell #238); scorecard needs an independent re-grade (owned by the Quality Auditor, not the factory). Ran a full 7-lens Haiku scout sweep for genuinely-remaining file-disjoint work.
+
+### What was done (8 file-disjoint changes, all merged #273-280)
+- **#274 correctness** — products/evaluate flipped candidate_products status "evaluated" with a fully-unchecked write (fake-201 + orphaned pending row + wasted re-score). Guarded via apiError, mirroring the saveError check above. (Distinct from the prior twin-write batch — a genuinely unchecked update, not a near-dup.)
+- **#275 security (Track G)** — places/photo (paid Google Places, ~$7/1k) had rate-limit but no checkDailySpend → single authed user could drain the daily budget. Added the breaker, mirroring diagnosis.
+- **#276 mobile (Track C)** — restore-purchases honesty: (1) any thrown error showed "No previous purchases found" (blocked retry on transient failures); (2) an empty-but-successful restore fired onPurchaseSuccess + dismissed (fake unlock). Now checks CustomerInfo for the active 'pro' entitlement, keeps the sheet open on empty restore, and distinguishes user-cancel from real error. Server still gates entitlements (no trust-the-client).
+- **#277 perf+test (Track A3/F2)** — diagnosis-expansion-pipeline (runs on every streamed diagnosis) awaited fetchSiblingRoomSummaries then buildExpansionBudgetContext sequentially though independent → Promise.all (fixed-position destructure = determinism preserved) + the module's first unit suite.
+- **#273 / #278 tests (F2)** — PipelineTracer (pure observability class, 11 tests) + identified-products-pipeline orchestration (5 tests: no-photos/no-crops short-circuits, dedup-by-(brand,model,variant), verify cap by confidence, dropUnverified, token sums).
+- **#279 a11y (A2/F4)** — manual-sourcing scorecard header was a `<div onClick>` with no keyboard path (WCAG 2.1.1). Made the chevron a real `<button>` (aria-expanded, aria-label, focus ring), sibling to the product-link `<a>` (no nested-interactive).
+- **#280 compliance (Track D)** — privacy page named only 3 processors; the app shares data with 11. Added a "Third-party services" section + completed docs/app-privacy.md (both Apple + Play tables) with all 11 (Gemini, DeepSeek, Supabase, Stripe, RevenueCat, Tavily, Maps/Places, Browserbase, Resend, Turnstile, Vercel Analytics), each with accurate data-scope; reconciled page brand to AptDesignerAI.
+- 16 per-change Sonnet reviewers (2× each) + 3 re-reviews. No new migrations/secrets → PENDING_OPS unchanged. No ROADMAP box FULLY completes (all 8 are incremental within already-partial tracks A/C/D/F/G) → none ticked.
+
+### Lessons learned
+1. **The privacy-completeness fix took 3 adversarial rounds because the "authoritative" doc (app-privacy.md) was itself stale.** Each reviewer found one more real active processor (Resend → Turnstile → RevenueCat). The terminating move was a MECHANICAL sweep — `grep -rhoE "https://[host]"` over app/lib/mobile/src — to enumerate EVERY external endpoint at once, then reconcile. Lesson: when a task is "disclose all X", don't iterate reviewer-by-reviewer; do the exhaustive mechanical enumeration up front and diff against it. Also keep BOTH the Apple and Play tables in app-privacy.md in sync (a reviewer caught them diverging within the same diff).
+2. **Concurrent reviewer subagents CAN switch the shared working-tree branch (Run 43 lesson, re-confirmed the hard way).** Mid-run my `git checkout` landed me on the wrong branch because a reviewer had `git checkout`'d despite instructions. All commits were safely pushed so nothing was lost, but I skipped an optional test-strengthening to avoid risky local git ops while reviewers ran. Lesson: do local git mutations (branch switches/commits) only when NO reviewers are in flight, or use `git worktree`; never trust `git branch --show-current` implicitly during a review fan-out.
+3. **The `journeys` CI job flakes on the supabase-cli setup step when many PRs land together** (Run 45 lesson, re-confirmed): #276's journeys failed in ~10s (setup-step rate-limit) while verify/build/mobile passed; `rerun_failed_jobs` cleared it. A ~10s journeys failure = flake, not a real break; a real run is ~3-4 min.
+4. **A "twin-write status-flip" candidate is only worth taking when it's a FULLY-unchecked write, not a logged-but-continue sibling.** The correctness scout flagged ~6; only products/evaluate (#274) had a truly discarded update result. The others already log-and-continue (a defensible non-fatal choice) — taking them would have padded the repetitive class Run 47/48 deferred.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 52** (last Run 48).
+- **Highest-value queued, file-disjoint:**
+  - **tests_evals (lib/agents ~21%)** — still-untested mockable agents: room-diagnostician (3 chat, self-consistency), scene-assembler (3 chat, reconciliation), design-coordinator (agent loop), post-search-coordinator (agentic, 623 lines), mockup-agent (dual-phase), shopping-researcher (759 lines), orchestrator (3300+ lines — split helpers first). pipeline-trace + identified-products + diagnosis-expansion now DONE. Verify "untested" with an ls first.
+  - **identified-products test** — add a variant-dedup case (same brand/model, different variant → 2 kept); the current suite doesn't exercise the variant segment of the dedup key (non-blocking gap a reviewer flagged).
+  - **perf** — the NON-stream diagnosis/route.ts:305-308 has the SAME sequential sibling+budget fetch as the pipeline module just parallelized (#277) — apply Promise.all there too. embedding-index pgvector RPC still LIVE-DB-only (defer). next/image: no raw <img> on marketing pages (scout confirmed none) — drop it.
+  - **mobile** — use-entitlements.ts refresh swallows errors (post-purchase failed refresh → stale isPro=false); _layout.tsx Purchases.logIn/logOut `.catch(()=>{})` swallow (identity desync). Both borderline — standalone only.
+  - **artifact-freshness (borderline)** — ~17 other page-metadata titles still say "AptDesigner" vs canonical "AptDesignerAI" (layout.tsx default title, faq/support/guides/etc.); README missing DeepSeek + secondary processors. Real but low-value; a focused scoped find-replace on metadata strings only.
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job; F4 Playwright/journey CI wiring + E2E_AUTH_STACK; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; live secrets; SITE_GATE_PASSWORD.
+- **Readiness:** still blocked — QUALITY_SCORECARD as_of 2026-06-29 overall C / ship_gate_met:false (STALE; needs a fresh independent re-grade to reflect Runs 42-49), F4 core-journey runtime E2E + eval CI job still open/human-gated. Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-07-01 (Run 48) — DEEP AUDIT + 7 disjoint changes (store readiness ×2 + perf + a11y ×2 + 2 LLM-core tests)
 
 ### State on entry
