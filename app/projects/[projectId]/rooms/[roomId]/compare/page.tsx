@@ -102,6 +102,12 @@ export default function ComparePage() {
     }
   };
 
+  // Announce the sort control's action + current state to assistive tech.
+  const sortLabel = (label: string, key: SortKey) => {
+    if (sortKey !== key) return `Sort by ${label}`;
+    return `Sorted by ${label}, ${sortDir === "desc" ? "highest first" : "lowest first"}. Activate to reverse.`;
+  };
+
   // Get min/max for each score dimension to highlight best/worst
   const scoreExtremes = useMemo(() => {
     const extremes: Record<string, { min: number; max: number }> = {};
@@ -194,14 +200,16 @@ export default function ComparePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    className="bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors"
-                    onClick={() => handleSort("final_item_score")}
-                  >
+                  <tr className="bg-muted/20 hover:bg-muted/30 transition-colors">
                     <td className="p-4 border-b font-semibold text-sm">
-                      <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("final_item_score")}
+                        aria-label={sortLabel("Overall Score", "final_item_score")}
+                        className="flex items-center gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                         Overall Score <SortIcon k="final_item_score" sortKey={sortKey} sortDir={sortDir} />
-                      </div>
+                      </button>
                     </td>
                     {sortedProducts.map((product) => {
                       const e = product.product_evaluations[0];
@@ -223,13 +231,17 @@ export default function ComparePage() {
                   {SCORE_LABELS.map(({ key, label }) => (
                     <tr
                       key={key}
-                      className="hover:bg-muted/10 transition-colors cursor-pointer"
-                      onClick={() => handleSort(key)}
+                      className="hover:bg-muted/10 transition-colors"
                     >
                       <td className="p-4 border-b text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSort(key)}
+                          aria-label={sortLabel(label, key)}
+                          className="flex items-center gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           {label} <SortIcon k={key} sortKey={sortKey} sortDir={sortDir} />
-                        </div>
+                        </button>
                       </td>
                       {sortedProducts.map((product) => {
                         const score = product.product_evaluations[0]?.[key] ?? 0;
