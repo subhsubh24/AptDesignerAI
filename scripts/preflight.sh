@@ -513,11 +513,18 @@ for path in sorted(glob.glob("supabase/migrations/*.sql")):
     for m in re.finditer(r'alter table (?:public\.)?([a-z_][a-z0-9_]*)\s+enable row level security', sql):
         rls.add(m.group(1))
     # Shared/internal tables enable RLS via a dynamic loop:
-    #   execute format('alter table public.%I enable row level security', t)
-    # over a list of quoted table-name literals — count those as covered too.
-    if "enable row level security" in sql and "format(" in sql:
-        for m in re.finditer(r"'([a-z_][a-z0-9_]*)'", sql):
-            rls.add(m.group(1))
+    #   do $$ ... array['tbl_a','tbl_b'] ... execute format('alter table
+    #   public.%I enable row level security', t) ... $$;
+    # Harvest those table names, but ONLY from an array[...] literal INSIDE a
+    # do-block that actually enables RLS — never from anywhere in the file. A
+    # stray quoted literal elsewhere (a default value, an enum comparison) must
+    # not be able to mask a genuinely unguarded table.
+    for block in re.findall(r'do\s+\$\$(.*?)\$\$', sql, re.S):
+        if "enable row level security" not in block:
+            continue
+        for arr in re.findall(r'array\s*\[(.*?)\]', block, re.S):
+            for m in re.finditer(r"'([a-z_][a-z0-9_]*)'", arr):
+                rls.add(m.group(1))
 missing = sorted(t for t in created if t not in rls)
 if missing:
     print("RLS_MISSING: " + ", ".join(f"{t} ({created[t]})" for t in missing))
