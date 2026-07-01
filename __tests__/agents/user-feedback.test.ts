@@ -59,8 +59,17 @@ function product(overrides: Record<string, unknown> = {}) {
 }
 
 describe("loadUserFeedbackContext", () => {
-  it("returns '' when the rooms lookup errors", async () => {
-    const { supabase } = makeSupabase({ rooms: { data: null, error: { message: "boom" } } });
+  it("returns '' when the rooms lookup errors (even with rows + real history)", async () => {
+    // Non-empty rooms AND non-empty accepted/rejected history alongside a truthy
+    // rooms error (a partial/stale read). This pins the `roomsError` branch
+    // INDEPENDENTLY: were the roomsError guard removed, the function would go on
+    // to build the (present) history block and return non-empty text — so the
+    // "" assertion only holds because roomsError short-circuits first.
+    const { supabase } = makeSupabase({
+      rooms: { data: [{ id: "room-1" }], error: { message: "boom" } },
+      accepted: { data: [product()], error: null },
+      rejected: { data: [product()], error: null },
+    });
     expect(await loadUserFeedbackContext(supabase, "room-1", "proj-1")).toBe("");
   });
 
