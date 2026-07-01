@@ -117,6 +117,9 @@ function ToastItem({ data, onDismiss }: { data: ToastData; onDismiss: () => void
       )}
       duration={data.duration}
       onOpenChange={(open) => { if (!open) onDismiss(); }}
+      // Errors interrupt (assertive); everything else announces politely so a
+      // success/info toast doesn't cut off whatever the screen reader is saying.
+      type={data.variant === "error" ? "foreground" : "background"}
     >
       <div className="mt-0.5 shrink-0">{variantIcons[data.variant]}</div>
       <div className="flex-1 min-w-0">
@@ -129,8 +132,11 @@ function ToastItem({ data, onDismiss }: { data: ToastData; onDismiss: () => void
           </ToastPrimitive.Description>
         )}
       </div>
-      <ToastPrimitive.Close className="shrink-0 rounded p-0.5 opacity-50 hover:opacity-100 transition-opacity">
-        <X className="h-3.5 w-3.5" />
+      <ToastPrimitive.Close
+        aria-label="Dismiss notification"
+        className="shrink-0 rounded p-0.5 opacity-50 hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
       </ToastPrimitive.Close>
     </ToastPrimitive.Root>
   );
