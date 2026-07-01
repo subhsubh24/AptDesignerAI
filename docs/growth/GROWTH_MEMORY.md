@@ -140,3 +140,81 @@ Research-backed candidate swap (if competition validates):
 
 ### Circuit breaker check
 - Same owner blockers as Runs 1 and 2? YES — circuit breaker FIRED (Run 3). Flagged prominently in report and GROWTH_STATUS.
+
+---
+
+## Run 4 — 2026-07-01
+
+### What we found
+- All Run 3 owner blockers remain unresolved: SITE_GATE_PASSWORD, RESEND_API_KEY/RESEND_FROM_EMAIL,
+  INTERNAL_METRICS_TOKEN, CRON_SECRET, and DB migrations 021/022/023/026/027 are still unset/unapplied
+  per PENDING_OPS.md (all `status: open`). No owner action landed in the ~2 days since Run 3.
+- Between Run 3 and Run 4 the Product Factory shipped Runs 44–48 (PRs up to #271): domain reconciliation
+  to aptdesignerai.com, a waitlist referral loop (migration 026) and web upsell surface credited into
+  BUSINESS_CASE.md (recomputed 2026-06-30, still floor-clearing at $122.9K base ARR), several
+  security/a11y/correctness fixes, and — notably — `git.deploymentEnabled: false` in vercel.json (PR #271,
+  a deliberate pre-launch cost control to stop per-PR Vercel builds; deploys are now on-demand). None of
+  this changes GTM state: still pre_launch, still no connected channels, still 0/null funnel.
+- `docs/quality/QUALITY_SCORECARD.md` (owned by the independent Quality Auditor) is stale — as_of
+  2026-06-29, `overall: C`, `ship_gate_met: false` — while several of its named gaps (e.g. the G1
+  unguarded-LLM-spend gap on products/evaluate*, two a11y items) were already fixed by Runs 47–48. Not
+  this loop's routine to re-grade; read as DATA. `ship_gate_met` stays false either way, so the marketing
+  maturity gate (ANALYSIS_PLAYBOOK.md) correctly keeps phase at `pre_launch`, waitlist-only.
+- **New finding this run:** attempted to independently verify source availability (rather than just
+  trusting PENDING_OPS status text, per GTM_STANDARD S4 fail-closed) by fetching `https://aptdesignerai.com/`
+  and the growth-metrics API directly. Both attempts were rejected by this session's network egress policy
+  (agent-proxy log: `403` "policy denial" on CONNECT to `aptdesignerai.com:443`). No `INTERNAL_METRICS_TOKEN`
+  or similar credential is present in this session's environment either. Conclusion: this agent's runtime
+  has no path to self-verify live sends/metrics by calling the production app directly, independent of
+  whether the owner sets the Vercel-side credentials. This has presumably been true for Runs 1–3 as well
+  (their "503" claims read as inferred from PENDING_OPS status, not an actual probe) but was not previously
+  stated explicitly.
+
+### What we built this run
+- **GROWTH_STATUS.md**: added a `validation:` block (GTM_STANDARD S4) explicitly declaring the status of
+  every external source this agent depends on (internal_metrics_api, resend_email, stripe_reporting,
+  site_gate, social_channels) — all `unavailable`, with the real reason for each, including the new
+  network-egress finding on the metrics-api entry. Added an empty `pending_approvals: []` scaffold
+  (GTM_STANDARD S9) for future Tier-B channel-plan proposals — empty because no channel plan is proposed
+  this run (no data supports one). Verified both parse and pass `node scripts/validate-gtm.mjs` (added
+  `js-yaml` etc. via `npm install` to run the check locally; no source changes to `package.json`).
+  Refreshed `as_of`, `learnings`, `next_actions`, `owner_blockers` (added migrations 026/027 to the
+  migration-backlog blocker, added the network-policy owner action, and recommended — but did not build,
+  since `.github/workflows/` is out of this loop's blast radius — a scheduled CI job that snapshots
+  `GET /api/internal/growth-metrics` into a committed file so a future agent run could read real numbers
+  without needing outbound network access itself).
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, as above. Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` — hard block per OUTREACH.md / ANALYSIS_PLAYBOOK.md.
+  Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md / VISION.md: no real data exists to support a steer; nothing to recommend
+  beyond what's already in `owner_blockers`.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search Ads
+  competition data from this agent; no new information since Run 3.
+- Did not edit PENDING_OPS.md: its existing items already cover every blocker found this run; adding a
+  network-policy item there (an environment-config action, not a Vercel/Supabase one) would mix two
+  different kinds of "owner action" into a shared ledger file multiple routines edit — kept it in
+  GROWTH_STATUS.md's owner_blockers/next_actions instead, which already renders on the dashboard.
+- Did not re-grade or edit QUALITY_SCORECARD.md / GTM_SCORECARD.md: owned by independent auditor routines
+  (maker != checker); consumed as data only.
+
+### Lessons learned
+- The circuit breaker is now in its 4th consecutive run with the same 3 core blockers. No further
+  loop-side code work will change that — the constraint is entirely owner-side credential/config setup.
+  Repeating the same "engine is built, waiting on credentials" framing every run without new information
+  would be padding; this run's value-add was narrowing down a previously-unstated SECOND blocker (network
+  egress) so the owner doesn't set the credentials and then wonder why the agent still reports 0/null.
+- Self-validation should be an explicit, structured artifact (`validation:` block), not just prose buried
+  in `learnings` — makes the fail-closed contract (GTM_STANDARD S4) mechanically checkable by
+  `scripts/validate-gtm.mjs` going forward (source: `gs.sources ?? gs.validation`).
+- Before assuming "the API returns 503," actually attempt the request (or explicitly say the attempt
+  itself is impossible from this runtime) rather than inferring from PENDING_OPS `status: open` alone —
+  the two failure modes (credential unset vs. no network path) have different fixes and both matter to
+  the owner.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1, 2, and 3? YES — circuit breaker remains FIRED (Run 4, 4th consecutive
+  run). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
+  (15 min). New secondary item: confirm this environment's network policy allows outbound HTTPS to
+  aptdesignerai.com, or the agent will keep reporting 0/null even after the credentials above are set.
