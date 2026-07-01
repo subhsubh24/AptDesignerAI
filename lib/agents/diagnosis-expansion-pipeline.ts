@@ -178,8 +178,14 @@ export async function runFullDiagnosisExpansion(args: {
   }
 
   try {
-    const siblingRooms = await fetchSiblingRoomSummaries(supabase, projectId, roomId);
-    const budget = await buildExpansionBudgetContext(supabase, roomId, budgetMode, baselineActionList);
+    // Sibling-room summaries and this room's budget context are independent DB
+    // reads (they share only supabase/roomId/projectId, already resolved), so
+    // fetch them together — serializing stacked two round-trips on the diagnosis
+    // hot path (this pipeline runs on every streamed room diagnosis).
+    const [siblingRooms, budget] = await Promise.all([
+      fetchSiblingRoomSummaries(supabase, projectId, roomId),
+      buildExpansionBudgetContext(supabase, roomId, budgetMode, baselineActionList),
+    ]);
     const adaptiveCaps = buildAdaptiveCapContext({ preferences, priorities, designDirection });
     const expansionRoom = getRoomFromFloorPlan(extractedFloorPlan, roomType);
 
