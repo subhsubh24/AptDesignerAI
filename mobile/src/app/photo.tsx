@@ -110,7 +110,12 @@ export default function PhotoCaptureScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
           <ThemedView style={styles.header}>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
               <ThemedText style={{ fontSize: 16, color: colors.textSecondary }}>← Back</ThemedText>
             </Pressable>
             <ThemedText type="title">Capture Your Room</ThemedText>

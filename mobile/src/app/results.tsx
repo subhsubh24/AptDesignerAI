@@ -225,7 +225,12 @@ export default function ResultsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <ThemedView style={styles.header}>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
               <ThemedText style={{ fontSize: 16, color: colors.textSecondary }}>← Back</ThemedText>
             </Pressable>
             <ThemedText type="title">Design Analysis</ThemedText>
