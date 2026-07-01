@@ -4,5 +4,8 @@
       "path": "/api/cron/activation-emails",
       "schedule": "0 10 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": false
+  }
 }
