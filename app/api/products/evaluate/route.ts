@@ -198,11 +198,18 @@ export async function POST(request: Request) {
     return apiError("products.evaluate", saveError);
   }
 
-  // Update product status
-  await supabase
+  // Update product status. supabase-js returns DB errors in-band (no throw), so
+  // an unchecked update would silently orphan the evaluation: the row is saved
+  // but the product stays "pending", so the UI shows no verdict and a re-run
+  // re-scores it. Surface the failure instead of returning a fake 201.
+  const { error: statusError } = await supabase
     .from("candidate_products")
     .update({ status: "evaluated", updated_at: new Date().toISOString() })
     .eq("id", product_id);
+
+  if (statusError) {
+    return apiError("products.evaluate", statusError);
+  }
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
