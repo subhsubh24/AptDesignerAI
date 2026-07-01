@@ -9,12 +9,22 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
+
+// Apple 5.1.1(v) / Google Play require Terms & Privacy to be reachable in-app
+// BEFORE account creation — mirror the paywall/settings link pattern.
+const TERMS_URL = 'https://aptdesignerai.com/terms';
+const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
+
+function openLegal(url: string) {
+  void openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+}
 
 interface SignupScreenProps {
   onLogin: () => void;
@@ -205,7 +215,25 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
               </Pressable>
 
               <ThemedText type="small" style={[styles.consent, { color: colors.mutedForeground }]}>
-                By creating an account, you agree to our Terms of Service and Privacy Policy.
+                By creating an account, you agree to our{' '}
+                <ThemedText
+                  type="small"
+                  onPress={() => openLegal(TERMS_URL)}
+                  accessibilityRole="link"
+                  style={[styles.consentLink, { color: colors.accent }]}
+                >
+                  Terms of Service
+                </ThemedText>{' '}
+                and{' '}
+                <ThemedText
+                  type="small"
+                  onPress={() => openLegal(PRIVACY_URL)}
+                  accessibilityRole="link"
+                  style={[styles.consentLink, { color: colors.accent }]}
+                >
+                  Privacy Policy
+                </ThemedText>
+                .
               </ThemedText>
             </View>
 
@@ -294,6 +322,10 @@ const styles = StyleSheet.create({
   consent: {
     textAlign: 'center',
     lineHeight: 18,
+  },
+  consentLink: {
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   successSection: {
     paddingHorizontal: Spacing.four,
