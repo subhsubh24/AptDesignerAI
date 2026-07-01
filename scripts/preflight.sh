@@ -27,6 +27,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# --- FACTORY_STANDARD §22: computation-integrity gate (fail-safe; vacuous until analysis/figures.json has entries) ---
+if [ -f scripts/validate-computation.mjs ] && ! node scripts/validate-computation.mjs; then
+  echo "PREFLIGHT FAIL: validate-computation (§22) — a committed figure is mis-computed or non-reproducible." >&2
+  exit 1
+fi
+
 PASS=0
 FAIL=0
 ERRORS=()
