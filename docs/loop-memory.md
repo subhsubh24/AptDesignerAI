@@ -4,6 +4,37 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-01 (Run 51) — 4 disjoint changes (LLM-core test + perf + mobile a11y + docs)
+
+### State on entry
+- Cold container at default tip `49c40f1` (post Run 50 #283-286 + housekeeping #287 + FACTORY_STANDARD sync #288). `npm install` (root + mobile); reset to `origin/<default>`. Baseline gate green: tsc clean, **1353 tests** pass / 9 skip, determinism clean, eslint 0.
+- **DEEP AUDIT not due** (last Run 48; next ~Run 52). Consumed the same-day QUALITY_SCORECARD (overall C / ship_gate_met:false — functional_reality C human-gated on E2E_AUTH_STACK; the correctness-B gap it names, product-verify maxDuration, was already closed #283 → scorecard slightly stale, needs an independent re-grade). Ran the full 6-lens Haiku scout sweep (tests / correctness / mobile / security-RLS / store+artifact / perf).
+
+### What was done (4 file-disjoint changes, all merged #289-292)
+- **#289 tests_evals (F2/A5-F3, rotation-guide top item)** — first unit suite for `lib/agents/computer-use/verify-search-candidates.ts` (`verifyTopSearchCandidates`), the post-search Computer-Use grounding step (0 LLM calls; mocks the verifier + Supabase admin + the optional `@browserbasehq/sdk` dynamic import). 14 tests pinning: tracking-param-stripping URL cache key + trailing-slash strip, top-1-per-category by `final_item_score`, cache-hit short-circuit (verifier not called, never re-cached), fill-only-empty field merge (never overwrites existing materials/colors; identical price = no change), all-null-dimensions skip, cache-write only on `agent_status==="completed"`, skipped(no url)/failed/verifier-reject paths, Browserbase-unavailable no-op. Reviewer A MUTATED the source (flipped the sort comparator, dropped the fill-empty + completed-cache guards) and confirmed each mutation flips a test red → load-bearing, not tautological.
+- **#290 perf (A3)** — evaluate-set fetched the `projects` row and the sibling-`rooms` context sequentially though both key only on `room.project_id` → one `Promise.all` (fixed-position destructure preserves determinism; error-swallow semantics unchanged). Third instance of the #265/#277 pattern.
+- **#291 mobile a11y (A2/F4, Track B polish)** — `accessibilityRole="button"` + `accessibilityLabel="Back"` on the "← Back" Pressable across the 3 core-journey screens (photo, room-type, results), matching settings.tsx. Screen-reader dead-end on the primary flow closed. Purely additive.
+- **#292 docs (F5 artifact freshness)** — README documents DeepSeek: env.ts requires `DEEPSEEK_API_KEY` in prod unless `AI_PROVIDER=gemini`, but the stack table + env list omitted it (a deployer would hit MissingEnvError at boot).
+- 8 per-change Sonnet reviewers (2× each), **ALL APPROVE first pass, zero re-reviews.** Combined suite 1367 pass/9 skip, tsc/determinism/eslint clean. No new migrations/secrets → PENDING_OPS unchanged. No ROADMAP box fully completes (all 4 incremental within partial Tracks A/F) → none ticked.
+
+### Lessons learned
+1. **Verify a security scout's "CRITICAL" against Postgres semantics before building — the RLS `WITH CHECK` fallback is the classic false positive.** The security scout flagged 13 tenant tables using `for all using (user_id = auth.uid())` WITHOUT an explicit `with check` as an "INSERT escalation" hole and wanted a migration 028. FALSE: Postgres uses the `USING` expression AS the `WITH CHECK` when the latter is omitted on a `FOR ALL` (or INSERT/UPDATE) policy — so inserting another user's `user_id` IS blocked. Migration 001's pattern is correct (Run 48 already confirmed security CLEAN). No migration written. When a Haiku security lens claims a CRITICAL, prove the exposure against the actual DB engine semantics, not the scout's prose — "Haiku over-flags" (Run 48 lesson) applies double to security.
+2. **"Brand-name inconsistency" was a false positive — check the brand system before mass find-replace.** The store scout (and several prior rotation guides) flagged ~40 uses of "AptDesigner" (vs "AptDesignerAI") as drift to reconcile. But `docs/brand-kit.md` explicitly defines **Full name: AptDesignerAI / Display name (preferred): AptDesigner** — the wordmark literally is "AptDesigner". Changing them would VIOLATE the documented brand and be a behavior-neutral rename (the exact churn the value bar forbids). Abandoned the branch cleanly. Reading the canonical source (brand kit) before a bulk rename saved a churn change — and this finding should stop recurring in rotation guides.
+3. **A clean, well-precedented batch reviews in one pass.** All 4 changes matched an established repo pattern (Promise.all #265/#277, a11y #266/#267/#279, provider-mocked agent test idiom, LIVING-ARTIFACTS doc fix) → 8/8 first-pass approvals, zero re-reviews (matches the Run 47 observation: mechanically-tight + pattern-matching diffs don't churn review).
+
+### Rotation guide for next run
+- **DEEP AUDIT DUE ~Run 52 (this is the run to run it)** — run the 8-lens read-only Haiku sweep FIRST before scouting.
+- **Highest-value queued, file-disjoint (validated, not taken):**
+  - **tests_evals (lib/agents)** — remaining heavy untested agents need schema-valid fixtures + provider mocking (budget a focused run for ONE): room-diagnostician (3 chat + self-consistency), scene-assembler (2 chat + judge/reconcile), mockup-agent, design-coordinator, post-search-coordinator, shopping-researcher. Cleaner next 0-LLM target: `lib/agents/computer-use/browserbase-driver.ts` (263 lines — constructor/defaults + `requirePage()` throw + dispose cleanup + dynamic-import error path; needs Playwright/Browserbase mocking, error-path value only).
+  - **correctness (marginal, standalone only)** — `rooms/[roomId]/identified-products/confirm` embedding write-back sets `embedding_written_back:false` durably on a transient embed failure with no retry (a re-run is guarded off) → silent ML-signal loss. Real but the fix is nuanced (defer flag-set / add a retry) — do it carefully, not under a tight cap.
+  - **perf** — search/route.ts `output_json` over-fetch (select whole JSON, use 3 fields) + `room_diagnoses select('*')` narrowing across ~6 routes (LOW-MED, verify all consumed fields first). embedding-index pgvector RPC still LIVE-DB-only. next/image on giant dynamic pages = F7 served-app run.
+  - **mobile (borderline)** — `_layout.tsx` `Purchases.logIn/logOut().catch(()=>{})` identity desync (RC `logOut()` throws on already-anonymous — must distinguish via RC error codes, NOT naive retry); results.tsx save-error not logged/surfaced (shares results.tsx with #291 — was disjoint-blocked this run).
+  - **NOT drift (settled this run — don't re-flag):** "AptDesigner vs AptDesignerAI" is the preferred display name per brand-kit; RLS `FOR ALL USING` without explicit `WITH CHECK` is SAFE.
+- **Human-gated (unchanged):** apply migrations; A5/F3 eval CI job (RUN_EVALS=1 key); F4 Playwright/journey CI wiring + E2E_AUTH_STACK; D3 screenshots; Turnstile keys; EAS init/projectId + Apple/Play accounts; live secrets; SITE_GATE_PASSWORD.
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C / ship_gate_met:false (functional_reality C is the binding gate — core-journey + paywall runtime E2E, human-gated on E2E_AUTH_STACK). Did NOT attempt the ready issue.
+
+---
+
 ## Run 2026-07-01 (Run 50) — 4 disjoint changes (correctness ship-critical + security preflight guard + mobile monetization + eval completeness)
 
 ### State on entry
