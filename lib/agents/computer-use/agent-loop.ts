@@ -183,12 +183,18 @@ export async function runComputerUseAgent<T = unknown>(
     model?: string;
     /** Optional parser to convert the model's final text into structured data. */
     parseFinal?: (finalText: string) => T | undefined;
+    /** Injectable clock (defaults to Date.now) so the wall-clock cap is testable. */
+    now?: () => number;
   } = {},
 ): Promise<AgentRunResult<T>> {
   const maxTurns = config.maxTurns ?? 15;
   const model = options.model ?? selectModel("computer_use");
   const policy = options.safetyPolicy ?? DEFAULT_SAFETY_POLICY;
+  const now = options.now ?? Date.now;
   const ai = getGenaiClient();
+  // Overall budget covers setup + every turn, so start the clock before the
+  // browser session opens (openBrowser/navigate can themselves be slow).
+  const loopStart = now();
 
   const steps: AgentStepLog[] = [];
   let finalText = "";
@@ -228,6 +234,21 @@ export async function runComputerUseAgent<T = unknown>(
 
     for (let turn = 1; turn <= maxTurns; turn++) {
       const turnStart = Date.now();
+
+      // ── Wall-clock budget guard ──────────────────────────────────
+      // Stop cleanly before the serverless platform kills the function
+      // mid-turn (which would leak the Browserbase session). The turn count
+      // alone can't bound this: a single navigation can burn many seconds.
+      if (config.maxWallClockMs !== undefined && now() - loopStart >= config.maxWallClockMs) {
+        log.warn("Computer Use agent hit wall-clock budget — stopping", {
+          elapsedMs: now() - loopStart,
+          budgetMs: config.maxWallClockMs,
+          turnsCompleted: steps.length,
+        });
+        status = "max_turns";
+        errorMsg = `wall-clock budget of ${config.maxWallClockMs}ms exceeded after ${steps.length} turn(s)`;
+        break;
+      }
 
       // ── Model call ───────────────────────────────────────────────
       const response = await ai.models.generateContent({

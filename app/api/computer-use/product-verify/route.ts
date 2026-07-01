@@ -16,6 +16,13 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 
 const log = createLogger("api-computer-use-product-verify");
 
+// The verifier drives an agentic Browserbase browser loop (up to 10 turns, each
+// with its own multi-second nav timeouts). Without this the route inherits
+// Vercel's short default budget and is killed mid-verification once Browserbase
+// creds are set. Mirrors the 300s cap on the other LLM pipeline routes; the
+// verifier itself carries a wall-clock cap shorter than this (see product-verifier.ts).
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   if (!process.env.BROWSERBASE_API_KEY || !process.env.BROWSERBASE_PROJECT_ID) {
     return NextResponse.json(

@@ -268,6 +268,10 @@ export async function runProductVerifier(
     maxTurns: input.maxTurns ?? 10,
     // Verifier is read-only — block anything that could modify state.
     excludedPredefinedFunctions: ["drag_and_drop"],
+    // Stop ~30s before the route's 300s maxDuration so we always have headroom
+    // to dispose the browser session and return a response instead of being
+    // killed mid-turn by the platform.
+    maxWallClockMs: 270_000,
     onStep: input.onStep,
   }, {
     parseFinal,
