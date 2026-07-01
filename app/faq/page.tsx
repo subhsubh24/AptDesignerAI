@@ -200,7 +200,7 @@ export default function FAQPage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button asChild size="lg" variant="warm">
-                  <a href="mailto:hello@aptdesigner.app">
+                  <a href="mailto:hello@aptdesignerai.com">
                     Email support
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </a>

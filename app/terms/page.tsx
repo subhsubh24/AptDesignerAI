@@ -103,8 +103,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold mb-3">9. Contact</h2>
             <p className="text-muted-foreground">
               Questions? Reach us at{" "}
-              <a href="mailto:hello@aptdesigner.app" className="text-accent-warm font-medium hover:underline">
-                hello@aptdesigner.app
+              <a href="mailto:hello@aptdesignerai.com" className="text-accent-warm font-medium hover:underline">
+                hello@aptdesignerai.com
               </a>
               .
             </p>

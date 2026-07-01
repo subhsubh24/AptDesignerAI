@@ -62,8 +62,8 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
           <p className="text-xs text-muted-foreground mt-8">
             A receipt is on its way to your email from Stripe. If you have any
             questions, contact us at{" "}
-            <a href="mailto:hello@aptdesigner.app" className="hover:text-foreground transition-colors">
-              hello@aptdesigner.app
+            <a href="mailto:hello@aptdesignerai.com" className="hover:text-foreground transition-colors">
+              hello@aptdesignerai.com
             </a>
             .
           </p>
