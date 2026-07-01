@@ -519,6 +519,11 @@ for path in sorted(glob.glob("supabase/migrations/*.sql")):
     # do-block that actually enables RLS — never from anywhere in the file. A
     # stray quoted literal elsewhere (a default value, an enum comparison) must
     # not be able to mask a genuinely unguarded table.
+    # Assumes the repo convention (migration 016): a plain `$$`-delimited do-block
+    # with an `array[...]` table list. A tagged `do $tag$ ... $tag$` block or a
+    # bare-literal `execute format(..., 'tbl')` would be missed here — but that
+    # fails SAFE (the table is flagged uncovered, blocking the gate), it never
+    # masks a real leak. Keep new RLS migrations on the array[...] convention.
     for block in re.findall(r'do\s+\$\$(.*?)\$\$', sql, re.S):
         if "enable row level security" not in block:
             continue
