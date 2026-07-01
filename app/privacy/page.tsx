@@ -88,6 +88,11 @@ export default function PrivacyPage() {
                 to process subscription payments.
               </li>
               <li>
+                <strong className="text-foreground">RevenueCat</strong> — your account ID and
+                subscription/purchase status, to manage in-app subscriptions and entitlements
+                on mobile.
+              </li>
+              <li>
                 <strong className="text-foreground">Tavily</strong> — product search terms
                 derived from your design (e.g. &ldquo;mid-century oak bookshelf&rdquo;), with
                 no personal data, to source furniture and décor recommendations.

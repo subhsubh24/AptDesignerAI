@@ -63,6 +63,7 @@ by other companies?" question.
 | Supabase | Email address, room photos, design data | Database + storage hosting |
 | Tavily Search API | Product search query strings derived from AI design output (e.g. "mid-century oak bookshelf") — no PII | Product sourcing — web search for furniture and décor recommendations |
 | Stripe | Name, email address, payment card data (collected directly by Stripe; we never see raw card data) | Payment processing for Apartment ($29) and Pro plans |
+| RevenueCat | Account/user ID + subscription/purchase status | Cross-platform in-app subscription + entitlement management (mobile). Inert until REVENUECAT keys are set. |
 | Google (Maps/Places API) | Product image search queries — no PII | Product imagery — fetching photos of identified furniture products |
 | Browserbase | Screenshots of product pages — no PII; no user data transmitted | Product verification — computer-vision agent confirms product images match descriptions |
 | Resend | Email address | Transactional + account email delivery (waitlist confirmation, sign-in, billing notices). Runs in dry-run mode until RESEND_API_KEY is set. |
@@ -100,6 +101,7 @@ no advertising identifiers.
 | Supabase | All user data | Infrastructure — data storage/hosting |
 | Tavily Search API | Product search query strings (no PII) | App functionality — product sourcing search |
 | Stripe | Email, payment data (Stripe-only; we do not store card numbers) | Financial info — payment processing |
+| RevenueCat | Account/user ID + subscription status | App functionality — mobile subscription/entitlement management |
 | Google (Maps/Places API) | Product search terms (no PII) | App functionality — product imagery |
 | Browserbase | Product page screenshots (no PII) | App functionality — product verification |
 | DeepSeek | Design text (no PII) | App functionality — AI analysis (optional provider) |
