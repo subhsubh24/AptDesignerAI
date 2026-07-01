@@ -75,15 +75,15 @@ export default function SupportPage() {
               </p>
               <p className="text-sm font-medium mt-3">
                 <a
-                  href="mailto:hello@aptdesigner.app"
+                  href="mailto:hello@aptdesignerai.com"
                   className="text-accent-warm hover:underline"
                 >
-                  hello@aptdesigner.app
+                  hello@aptdesignerai.com
                 </a>
               </p>
             </div>
             <Button asChild variant="outline" size="sm" className="shrink-0">
-              <a href="mailto:hello@aptdesigner.app">
+              <a href="mailto:hello@aptdesignerai.com">
                 Send email
                 <ArrowRight className="h-4 w-4 ml-1" />
               </a>

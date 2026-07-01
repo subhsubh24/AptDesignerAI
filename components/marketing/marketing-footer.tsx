@@ -35,7 +35,7 @@ export function MarketingFooter() {
             <h3 className="text-sm font-semibold mb-4">Support</h3>
             <ul className="space-y-2.5 text-sm text-muted-foreground">
               <li><Link href="/faq" className="hover:text-foreground transition-colors">FAQ</Link></li>
-              <li><a href="mailto:hello@aptdesigner.app" className="hover:text-foreground transition-colors">Contact us</a></li>
+              <li><a href="mailto:hello@aptdesignerai.com" className="hover:text-foreground transition-colors">Contact us</a></li>
             </ul>
           </div>
 

@@ -36,8 +36,8 @@ export default function CheckoutCancelPage() {
 
           <p className="text-xs text-muted-foreground mt-8">
             Questions? Email us at{" "}
-            <a href="mailto:hello@aptdesigner.app" className="hover:text-foreground transition-colors">
-              hello@aptdesigner.app
+            <a href="mailto:hello@aptdesignerai.com" className="hover:text-foreground transition-colors">
+              hello@aptdesignerai.com
             </a>
             .
           </p>
