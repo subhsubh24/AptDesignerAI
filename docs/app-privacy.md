@@ -104,6 +104,8 @@ no advertising identifiers.
 | RevenueCat | Account/user ID + subscription status | App functionality — mobile subscription/entitlement management |
 | Google (Maps/Places API) | Product search terms (no PII) | App functionality — product imagery |
 | Browserbase | Product page screenshots (no PII) | App functionality — product verification |
+| Resend | Email address | App functionality — transactional/account email (dry-run until RESEND_API_KEY set) |
+| Cloudflare (Turnstile) | Bot-challenge token + IP (signup/waitlist forms; no account content) | App functionality — bot/abuse protection (inert until TURNSTILE_SECRET_KEY set) |
 | DeepSeek | Design text (no PII) | App functionality — AI analysis (optional provider) |
 | Vercel (Web Analytics) | Aggregate usage events (no PII; cookieless) | Analytics — usage measurement |
 
