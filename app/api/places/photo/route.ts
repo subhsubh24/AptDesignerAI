@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 
 const CACHE = new Map<string, { url: string; attributions: string[]; ts: number }>();
 const TTL = 24 * 60 * 60 * 1000; // 24h
@@ -17,6 +18,13 @@ export async function GET(req: NextRequest) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
+
+  // Google Places is a paid API (~$7 / 1000 photo requests). Rate limiting caps
+  // burst rate but not daily volume, so gate it behind the same per-user daily
+  // spend breaker as the other paid endpoints — otherwise a single authed user
+  // enumerating place_ids can drain the daily API budget.
+  const spend = checkDailySpend(user.id);
+  if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const placeId = req.nextUrl.searchParams.get("place_id");
   if (!placeId || !/^[A-Za-z0-9_-]+$/.test(placeId)) {
