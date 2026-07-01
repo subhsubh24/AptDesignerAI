@@ -85,21 +85,25 @@ export async function POST(request: Request) {
   const diagnosis = diagRes.data?.diagnosis_json || undefined;
   const designDirection = diagRes.data?.design_direction_json || undefined;
 
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", room.project_id)
-    .single();
+  // The project row and the sibling-rooms context both key only on
+  // room.project_id and are independent — fetch them in parallel to shave a
+  // full DB round-trip off this per-request path. Fixed-position destructure
+  // keeps the read order deterministic.
+  const [projectRes, otherRoomsRes] = await Promise.all([
+    supabase.from("projects").select("*").eq("id", room.project_id).single(),
+    supabase
+      .from("rooms")
+      .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
+      .eq("project_id", room.project_id)
+      .neq("id", room_id),
+  ]);
 
+  const project = projectRes.data;
   const designProfile = buildDesignProfile(project);
 
   // Build cross-room context
   let otherRoomsContext: string | undefined;
-  const { data: otherRooms } = await supabase
-    .from("rooms")
-    .select("name, room_type, room_diagnoses(diagnosis_json, created_at)")
-    .eq("project_id", room.project_id)
-    .neq("id", room_id);
+  const otherRooms = otherRoomsRes.data;
 
   if (otherRooms?.length) {
     // 90-day freshness window — stale sibling diagnoses bias the set-level
