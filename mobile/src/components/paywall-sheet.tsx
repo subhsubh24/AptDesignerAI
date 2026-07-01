@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
+import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
 const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
@@ -141,11 +142,29 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     if (!RC_KEY) return;
     setPurchasing(true);
     try {
-      await Purchases.restorePurchases();
-      onPurchaseSuccess?.();
-      onDismiss();
-    } catch {
-      Alert.alert('Restore purchases', 'No previous purchases found for this account.');
+      const info = await Purchases.restorePurchases();
+      const restoredPro = info.entitlements.active[ENTITLEMENT_ID]?.isActive === true;
+      if (restoredPro) {
+        onPurchaseSuccess?.();
+        onDismiss();
+      } else {
+        // Restore succeeded but this account holds no active subscription. Tell
+        // the truth and keep the sheet open — dismissing + firing onPurchaseSuccess
+        // here would look like a successful unlock the user never actually got.
+        Alert.alert('Restore purchases', 'No active subscription was found for this account.');
+      }
+    } catch (err: unknown) {
+      // RC throws { userCancelled: true } when the user backs out of the OS dialog.
+      const userCancelled =
+        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
+      if (!userCancelled) {
+        // A genuine failure (network / store error) — don't claim "no purchases
+        // found", which would stop the user retrying a transient error.
+        Alert.alert(
+          'Restore failed',
+          'Something went wrong restoring your purchases. Please check your connection and try again.',
+        );
+      }
     } finally {
       setPurchasing(false);
     }
