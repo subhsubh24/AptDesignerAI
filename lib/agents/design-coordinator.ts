@@ -168,6 +168,67 @@ export type DesignToolHandler = (
   args: Record<string, unknown>,
 ) => Promise<Record<string, unknown>>;
 
+/** The objective convergence signals + the resulting auto-finalize verdict. */
+export interface AutoFinalizeDecision {
+  finalize: boolean;
+  /** Human-readable reason (populated only when `finalize` is true). */
+  reason: string | null;
+  allAboveTarget: boolean;
+  velocityExhausted: boolean;
+  allStabilized: boolean;
+  finalAssessmentSettled: boolean;
+  harmonyConverged: boolean;
+}
+
+/**
+ * Pure convergence check that decides whether the coordinator should
+ * auto-finalize (stop the agent loop early) instead of spending another
+ * ~50–100K-token harmony/finalize LLM turn. Extracted from the loop so the
+ * exact thresholds — every item ≥ 8.5 or stabilized, velocity < 0.2, all items
+ * stabilized, and the "final assessment settled" short-circuit — are unit
+ * testable in isolation. Behavior-neutral: identical boolean/reason output to
+ * the previous inline logic.
+ */
+export function evaluateAutoFinalize(st: DesignCoordinatorState): AutoFinalizeDecision {
+  const allAboveTarget = Boolean(
+    st.latestScores &&
+      st.latestScores.length > 0 &&
+      st.latestScores.every((s) => s.score >= 8.5 || s.stabilized),
+  );
+  const velocityExhausted =
+    st.convergenceVelocity !== undefined && st.convergenceVelocity < 0.2;
+  const allStabilized =
+    st.stabilizedCount !== undefined &&
+    st.totalItems !== undefined &&
+    st.stabilizedCount >= st.totalItems;
+  // Once the final assessment has run and reports no more rounds are warranted,
+  // the finalize decision is already made — skip the extra LLM turn that would
+  // just rubber-stamp it.
+  const finalAssessmentSettled = Boolean(
+    st.finalAssessmentComplete &&
+      st.finalAssessmentResult &&
+      !st.finalAssessmentResult.needsMoreRounds,
+  );
+  const harmonyConverged =
+    st.harmonyRoundsCompleted >= 1 &&
+    (allAboveTarget || velocityExhausted || allStabilized);
+  const finalize = finalAssessmentSettled || harmonyConverged;
+  const reason = !finalize
+    ? null
+    : finalAssessmentSettled
+      ? "Auto-finalize: final assessment complete, no more rounds warranted"
+      : `Auto-finalize: ${allAboveTarget ? "all items ≥ 8.5" : velocityExhausted ? "velocity < 0.2" : "all stabilized"} after ${st.harmonyRoundsCompleted} round(s)`;
+  return {
+    finalize,
+    reason,
+    allAboveTarget,
+    velocityExhausted,
+    allStabilized,
+    finalAssessmentSettled,
+    harmonyConverged,
+  };
+}
+
 function formatState(state: DesignCoordinatorState): string {
   const lines: string[] = [
     `## CURRENT STATE (objective signals — base your decisions on these)`,
@@ -412,28 +473,19 @@ Begin. Call your first tool.`;
 
     // Auto-finalize guard: if state shows convergence, stop early to save tokens
     const st = getState();
-    const allAboveTarget = st.latestScores && st.latestScores.length > 0 &&
-      st.latestScores.every(s => s.score >= 8.5 || s.stabilized);
-    const velocityExhausted = st.convergenceVelocity !== undefined && st.convergenceVelocity < 0.2;
-    const allStabilized = st.stabilizedCount !== undefined && st.totalItems !== undefined &&
-      st.stabilizedCount >= st.totalItems;
-    // Once the final assessment has run and reports no more rounds are
-    // warranted, the finalize decision is already made — skip the extra LLM
-    // turn that would just rubber-stamp it.
-    const finalAssessmentSettled = st.finalAssessmentComplete &&
-      !!st.finalAssessmentResult && !st.finalAssessmentResult.needsMoreRounds;
-    const harmonyConverged = st.harmonyRoundsCompleted >= 1 &&
-      (allAboveTarget || velocityExhausted || allStabilized);
-    if (finalAssessmentSettled || harmonyConverged) {
+    const decision = evaluateAutoFinalize(st);
+    if (decision.finalize) {
       log.info("Auto-finalize: convergence detected", {
-        turn, allAboveTarget, velocityExhausted, allStabilized,
-        finalAssessmentSettled, rounds: st.harmonyRoundsCompleted,
+        turn,
+        allAboveTarget: decision.allAboveTarget,
+        velocityExhausted: decision.velocityExhausted,
+        allStabilized: decision.allStabilized,
+        finalAssessmentSettled: decision.finalAssessmentSettled,
+        rounds: st.harmonyRoundsCompleted,
       });
       return {
         success: true,
-        data: { finalized: true, reason: finalAssessmentSettled
-          ? "Auto-finalize: final assessment complete, no more rounds warranted"
-          : `Auto-finalize: ${allAboveTarget ? "all items ≥ 8.5" : velocityExhausted ? "velocity < 0.2" : "all stabilized"} after ${st.harmonyRoundsCompleted} round(s)` },
+        data: { finalized: true, reason: decision.reason ?? undefined },
         tokensUsed: totalTokens,
         model,
       };
