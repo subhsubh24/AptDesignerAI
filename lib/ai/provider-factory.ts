@@ -44,8 +44,13 @@ function hasGeminiOnlyTool(tools?: GeminiTool[]): boolean {
 let _deepseek: AIProvider | null = null;
 function getDeepSeek(): AIProvider {
   if (!_deepseek) {
+    // Relative path (NOT the "@/" alias): this is a runtime require(), and Node's
+    // resolver does not understand the TS/bundler "@/" alias outside webpack — an
+    // aliased runtime require throws "Cannot find module" in vitest/Node (it silently
+    // broke the refine summarizer until the live eval caught it). Guarded by
+    // __tests__/ai/no-alias-require.test.ts.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _deepseek = require("@/lib/ai/deepseek").deepseekProvider;
+    _deepseek = require("./deepseek").deepseekProvider;
   }
   return _deepseek!;
 }
