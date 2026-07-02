@@ -209,6 +209,7 @@ export default function SavedDesignsScreen() {
                   styles.actionButton,
                   { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                 ]}
+                accessibilityRole="button"
                 onPress={handleRetry}
               >
                 <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>Try again</ThemedText>
@@ -229,6 +230,7 @@ export default function SavedDesignsScreen() {
                   styles.actionButton,
                   { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                 ]}
+                accessibilityRole="button"
                 onPress={() => router.push('/photo')}
               >
                 <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>Create Design</ThemedText>

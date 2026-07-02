@@ -304,6 +304,7 @@ export default function ResultsScreen() {
                     styles.retryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={() => run(imageUri, roomType)}
                 >
                   <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
@@ -316,6 +317,7 @@ export default function ResultsScreen() {
                     styles.retryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={() => router.push('/photo')}
                 >
                   <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
@@ -430,6 +432,8 @@ export default function ResultsScreen() {
                     opacity: pressed || saveState === 'saving' || saveState === 'saved' ? 0.8 : 1,
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: quotaLoading || saveState === 'saving' || saveState === 'saved' }}
                 onPress={saveState === 'idle' || saveState === 'save_error' ? saveDesign : undefined}
                 disabled={quotaLoading || saveState === 'saving' || saveState === 'saved'}
               >
@@ -445,6 +449,7 @@ export default function ResultsScreen() {
                 styles.backButton,
                 { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
               ]}
+              accessibilityRole="button"
               onPress={() => router.push('/')}
             >
               <ThemedText style={[styles.buttonText, { color: colors.text }]}>

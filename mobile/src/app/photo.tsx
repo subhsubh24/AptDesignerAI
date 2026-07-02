@@ -185,6 +185,7 @@ export default function PhotoCaptureScreen() {
                     styles.primaryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={handleAnalyze}
                 >
                   <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
@@ -197,6 +198,7 @@ export default function PhotoCaptureScreen() {
                     styles.secondaryButton,
                     { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={() => setSelectedImageUri(null)}
                 >
                   <ThemedText style={{ color: colors.text }}>Choose a different photo</ThemedText>
@@ -209,6 +211,7 @@ export default function PhotoCaptureScreen() {
                     styles.primaryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={pickFromGallery}
                 >
                   <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
@@ -221,6 +224,7 @@ export default function PhotoCaptureScreen() {
                     styles.secondaryButton,
                     { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
                   ]}
+                  accessibilityRole="button"
                   onPress={takePhoto}
                 >
                   <ThemedText style={{ color: colors.text }}>Take a Photo</ThemedText>
@@ -228,6 +232,7 @@ export default function PhotoCaptureScreen() {
 
                 <Pressable
                   style={({ pressed }) => [styles.skipButton, { opacity: pressed ? 0.6 : 1 }]}
+                  accessibilityRole="button"
                   onPress={() => router.push('/')}
                 >
                   <ThemedText style={{ color: colors.textSecondary, fontSize: 14 }}>
