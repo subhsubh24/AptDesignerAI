@@ -14,6 +14,7 @@
  */
 
 import { geminiProvider } from "@/lib/ai/gemini";
+import { deepseekProvider } from "@/lib/ai/deepseek";
 import { createLogger } from "@/lib/logging/logger";
 import type { AIProvider, GeminiTool } from "@/lib/ai/provider";
 import type { TaskType } from "@/lib/ai/models";
@@ -41,18 +42,13 @@ function hasGeminiOnlyTool(tools?: GeminiTool[]): boolean {
   });
 }
 
-let _deepseek: AIProvider | null = null;
+// Static import (NOT a runtime require): Node's require() cannot resolve a .ts module in
+// the vitest/Node runtime (it only handles .js/.json), so the old lazy require broke the
+// DeepSeek load and silently sent the refine summarizer to its fallback until the live eval
+// caught it. deepseek.ts does not import this file, so a static import (like geminiProvider
+// above) is safe — no cycle. Guarded by __tests__/ai/no-alias-require.test.ts.
 function getDeepSeek(): AIProvider {
-  if (!_deepseek) {
-    // Relative path (NOT the "@/" alias): this is a runtime require(), and Node's
-    // resolver does not understand the TS/bundler "@/" alias outside webpack — an
-    // aliased runtime require throws "Cannot find module" in vitest/Node (it silently
-    // broke the refine summarizer until the live eval caught it). Guarded by
-    // __tests__/ai/no-alias-require.test.ts.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _deepseek = require("./deepseek").deepseekProvider;
-  }
-  return _deepseek!;
+  return deepseekProvider;
 }
 
 /**
