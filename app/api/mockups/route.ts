@@ -3,7 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { generateMockupPrompt, generateMockupImage, buildMockupContext } from "@/lib/agents/mockup-agent";
 import type { MockupImageOptions } from "@/lib/agents/mockup-agent";
 import { validateMockupPrompt } from "@/lib/agents/mockup-prompt-validator";
@@ -146,7 +146,12 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { room_id, bundle_id, product_ids, vision_mode, recommendation_mockup, design_direction, items_description, iteration_notes } = body;
 
   // Rate limit — recommendation mockups (lightweight product shots) get a
@@ -647,10 +652,11 @@ RULES:
   );
 
   if (!promptResult.success || !promptResult.data) {
-    await supabase
+    const { error: failUpdateError } = await supabase
       .from("mockup_jobs")
       .update({ status: "failed", error_message: promptResult.error })
       .eq("id", mockupJob.id);
+    if (failUpdateError) logServerError("mockups mockup_jobs failed(prompt) update", failUpdateError);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: promptResult.error,
@@ -739,7 +745,7 @@ RULES:
   });
 
   if (!verificationResult.finalImageData) {
-    await supabase
+    const { error: failGenUpdateError } = await supabase
       .from("mockup_jobs")
       .update({
         status: "failed",
@@ -747,6 +753,7 @@ RULES:
         error_message: "Image generation failed after verification attempts",
       })
       .eq("id", mockupJob.id);
+    if (failGenUpdateError) logServerError("mockups mockup_jobs failed(generation) update", failGenUpdateError);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: "Image generation failed after verification attempts",
@@ -757,8 +764,11 @@ RULES:
   // Upload verified image under the content-addressed cache key.
   const finalImageUrl = await uploadMockupImage(supabase, verificationResult.finalImageData, verificationResult.finalImageMimeType, cacheKey);
 
-  // Update mockup job
-  await supabase
+  // Update mockup job. The generated image is already returned to the caller
+  // (and persisted on the agent run below), so a failed status write is not
+  // fatal to this request — but it must be logged, not silently swallowed, or
+  // the job row is left stuck in a non-completed state for any poller/list view.
+  const { error: completeUpdateError } = await supabase
     .from("mockup_jobs")
     .update({
       status: "completed",
@@ -773,6 +783,7 @@ RULES:
       completed_at: new Date().toISOString(),
     })
     .eq("id", mockupJob.id);
+  if (completeUpdateError) logServerError("mockups mockup_jobs completed update", completeUpdateError);
 
   await completeAgentRun(supabase, agentRun.id, {
     status: "completed",
