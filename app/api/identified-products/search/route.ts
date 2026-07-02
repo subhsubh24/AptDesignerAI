@@ -69,14 +69,17 @@ export async function GET(request: NextRequest) {
   const results: Suggestion[] = [];
 
   // ── Pass 1: seeded embedding index (brand + model pairs with images) ──
+  // Substring typeahead only reads these 5 fields; selecting "*" also pulls the
+  // 1408-dim image embedding vector (~5.6KB/row × 500 rows ≈ 2.8MB) on every
+  // keystroke for no reason. Narrow the projection to what's actually consumed.
   const { data: embedRows } = await supabase
     .from("product_image_embeddings")
-    .select("*")
+    .select("brand, model, variant, image_url, source, id")
     .order("brand", { ascending: true })
     .order("model", { ascending: true })
     .order("id", { ascending: true })
     .limit(500);
-  const rows = (embedRows as ProductImageEmbedding[] | null) ?? [];
+  const rows = (embedRows as Pick<ProductImageEmbedding, "brand" | "model" | "variant" | "image_url" | "source" | "id">[] | null) ?? [];
   for (const row of rows) {
     if (
       matchesQuery(row.brand, q) ||
