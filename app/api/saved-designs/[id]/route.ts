@@ -34,7 +34,12 @@ export async function PATCH(
   const supabase = await createClient();
   const userId = await getCurrentUserId();
 
-  const body = await req.json() as { is_public?: boolean };
+  let body: { is_public?: boolean };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const is_public = body.is_public ?? false;
 
   // Verify ownership and get existing share_token
