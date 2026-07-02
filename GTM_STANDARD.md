@@ -199,6 +199,11 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
   roadmap through §3's bar (a demand theme is RECOMMEND-tier unless backed by strong, quantified,
   cited evidence). **Flag counter-signal too** — if the pain is rare or already well-served, SAY so;
   honest disconfirmation is as valuable as confirmation.
+- **Recency-weight, but distinguish durable pain from fads.** Capture each cited post's DATE; weight
+  recent complaints (~last 6–12 months) higher as CURRENT, still-unsolved demand. But pain that
+  RECURS across years is durable unmet need (often the STRONGEST signal), while a lone recent SPIKE
+  may be a fad — label which is which. And treat the ABSENCE of recent pain as DISCONFIRMING: if the
+  complaints are all old, a newer competitor may already solve it — say so.
 - **Public data only, no PII harvesting** (§7): cite public posts as public; never scrape or store
   personal info, and never contact anyone from this (that is the separate, owner-sent outreach, §6).
 - Write the synthesis + citations to a `demand_signal` block in `GROWTH_STATUS` (themes, cited
