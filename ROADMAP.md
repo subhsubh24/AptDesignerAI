@@ -386,26 +386,17 @@ the READINESS AUDIT GATE (Functional reality must be an actual RUN).
   **(PRs #7 #8 — Promise.all parallelization; dead pre-fetch removed)**
 - [x] A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
   **(PRs #83 #84 — middleware public paths + RLS mismatch fixed; Run 27 deep audit resolved critical findings)**
-- [ ] A5. **Eval coverage — partially done.** Eval files exist for all 3 stages (diagnosis PR #68, sourcing + grounding PR #73). CI job for `RUN_EVALS=1` is human-applied (see PENDING_OPS.md). **Currently the biggest quality gap.** Today the eval
-  harness is *structural scaffolding only*: `evals/runner.ts` scoring + a single
-  gold case with a **placeholder image URL**, and **zero live `.eval.test.ts`
-  files that call the real pipeline** (the `RUN_EVALS=1` gate exists but nothing
-  uses it to hit the model). Evals are how we *know* the output is good, not just
-  that it compiles — so build them out, treating eval growth as first-class,
-  value-bar-clearing work:
-  1. **Runnable golden fixtures** using REAL test images (committed under
-     `evals/gold/` or a fetchable fixtures host), covering the core scenarios —
-     not `example.com` placeholders.
-  2. **A live `.eval.test.ts` per core pipeline stage** — room/apartment
-     understanding, diagnosis, product-sourcing relevance, and mockup grounding —
-     gated behind `RUN_EVALS=1`, calling the ACTUAL pipeline and scoring with
-     `scoreAgainstExpectations`.
-  3. **Run them in the loop's own environment** (where the Gemini key + prod-like
-     network exist); do NOT depend on a developer laptop. Wire a `RUN_EVALS=1`
-     job so eval regressions are visible. Live eval calls cost tokens — that
-     spend is expected and approved as a cost of knowing the product is good.
-  4. **Grow the gold set over time** so output-quality regressions are caught
-     before users (and Apple reviewers) see them.
+- [x] A5. **Eval coverage — live suite exists across the core stages.** **(Refreshed
+  Run 52 — the prior "structural scaffolding only / zero live evals / placeholder
+  URL" text was stale.)** Five gated live `.eval.test.ts` files call the ACTUAL
+  pipeline behind `RUN_EVALS=1` — diagnosis, sourcing, grounding (mockup),
+  area-analysis (room/apartment understanding), and refine (made a real live call
+  in #285) — scoring against REAL Unsplash gold fixtures under `evals/gold/` (no
+  `example.com` placeholders). The `RUN_EVALS=1` CI job is wired
+  (`.github/workflows/live-eval.yml`, weekly + on-demand, spend-capped keys). The
+  broader "a live eval for EVERY stage (incl. a mockup-generation eval) + a
+  continuously GROWING gold set" bar lives in **F3**, which stays open as ongoing
+  quality work — do not treat A5 as closing F3.
 - [x] A6. **Upgrade the Computer-Use product verifier to Gemini 3.5 Flash native
   computer use.** **(PRs #89 — ROADMAP annotation; #90 — critical-path safety tests for
   billing/entitlements/auth/computer-use; #91 — implementation: `MODELS.computerUse →
