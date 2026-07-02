@@ -72,7 +72,7 @@ Explore for free — analyze one room end-to-end at no cost, no credit card requ
 
 **Apartment ($29, one-time)** — every room in your apartment: unlimited room analyses, cross-room style coherence, AI mockups, and the full product catalog.
 
-**Pro ($49/month)** — unlimited apartments and projects, client-ready exports, and priority support. For designers and property managers.
+**Pro ($49/month)** — unlimited apartments and projects, client-ready share links, and priority support. For designers and property managers.
 
 **Pro Annual ($399/year)** — everything in Pro, billed yearly. Save 32% vs monthly ($33.25/month).
 

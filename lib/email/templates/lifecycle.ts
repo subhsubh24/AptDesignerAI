@@ -228,7 +228,7 @@ export function buildWinBackEmail1(siteUrl: string): LifecycleEmail {
     ${p("Your AptDesigner Pro subscription ended. Your saved designs and Apartment-plan analyses are still in your account — nothing is deleted.")}
     ${p("If you'd like to continue:")}
     <ul style="margin:0 0 16px 0;padding-left:20px;font-size:16px;line-height:1.8;color:#4a443c;">
-      <li><strong>Pro plan</strong>: $49/month — unlimited apartments, client exports, priority support</li>
+      <li><strong>Pro plan</strong>: $49/month — unlimited apartments, client-ready share links, priority support</li>
       <li><strong>Apartment plan</strong>: $29 one-time — your apartment, every room, forever</li>
     </ul>
     ${p("Or stay on the free tier. Your existing designs stay accessible.")}
@@ -241,7 +241,7 @@ export function buildWinBackEmail1(siteUrl: string): LifecycleEmail {
     "analyses are still in your account — nothing is deleted.",
     "",
     "If you'd like to continue:",
-    "- Pro plan: $49/month — unlimited apartments, client exports, priority support",
+    "- Pro plan: $49/month — unlimited apartments, client-ready share links, priority support",
     "- Apartment plan: $29 one-time — your apartment, every room, forever",
     "",
     "Or stay on the free tier. Your existing designs stay accessible.",
@@ -348,7 +348,7 @@ export function buildPaidWelcomeEmail1(siteUrl: string): LifecycleEmail {
     <ul style="margin:0 0 16px 0;padding-left:20px;font-size:16px;line-height:1.8;color:#4a443c;">
       <li>Unlimited apartments and projects — every room, every space</li>
       <li>Cross-room style coherence and AI mockups across the whole apartment</li>
-      <li>Client-ready exports and priority support</li>
+      <li>Client-ready share links and priority support</li>
     </ul>
     ${p("The best next step is to point the AI at a room you've been meaning to redesign.")}
     ${p("You can manage or cancel your subscription anytime from your account.")}
@@ -361,7 +361,7 @@ export function buildPaidWelcomeEmail1(siteUrl: string): LifecycleEmail {
     "Here's what's now unlocked:",
     "- Unlimited apartments and projects — every room, every space",
     "- Cross-room style coherence and AI mockups across the whole apartment",
-    "- Client-ready exports and priority support",
+    "- Client-ready share links and priority support",
     "",
     "The best next step is to point the AI at a room you've been meaning to redesign.",
     "",
