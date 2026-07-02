@@ -204,6 +204,14 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
   RECURS across years is durable unmet need (often the STRONGEST signal), while a lone recent SPIKE
   may be a fad — label which is which. And treat the ABSENCE of recent pain as DISCONFIRMING: if the
   complaints are all old, a newer competitor may already solve it — say so.
+- **Ground the pre-launch ESTIMATES in it — qualitatively, never as a fabricated number.** Reconcile
+  the business-case assumptions (§2) against the observed demand: raise or lower CONFIDENCE, and
+  adjust an assumption DIRECTIONALLY with cited rationale (e.g., strong recurring "I'd switch from
+  [competitor] if it did X" complaints → the switcher wedge is more reachable than a comparables-only
+  guess). If the estimate assumes demand the signal does NOT show, LOWER it and say so. **HARD BOUND:**
+  demand signal is qualitative — it NEVER becomes a precise figure (no "N complaints → N customers /
+  $X TAM"; that is the §4 anti-gaming line). The number stays a LABELED estimate with a confidence
+  level, now reconciled against real observed demand instead of floating free.
 - **Public data only, no PII harvesting** (§7): cite public posts as public; never scrape or store
   personal info, and never contact anyone from this (that is the separate, owner-sent outreach, §6).
 - Write the synthesis + citations to a `demand_signal` block in `GROWTH_STATUS` (themes, cited
