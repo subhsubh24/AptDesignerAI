@@ -443,7 +443,7 @@ const PROSE_PATTERNS = [
   /\b(sterile|monochromatic|monochro|aesthetic that|scheme to)\b/i,
 ];
 
-function sanitizeSearchQuery(query: string): string | null {
+export function sanitizeSearchQuery(query: string): string | null {
   if (!query || typeof query !== "string") return null;
   let clean = query.trim();
   if (clean.length > 120) clean = clean.slice(0, 120).trim();
