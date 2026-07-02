@@ -35,8 +35,10 @@ export function ThemeToggle({ className }: { className?: string }) {
               : "text-muted-foreground hover:text-foreground"
           )}
           title={`${value.charAt(0).toUpperCase() + value.slice(1)} mode`}
+          aria-label={`${value.charAt(0).toUpperCase() + value.slice(1)} mode`}
+          aria-pressed={mounted && theme === value}
         >
-          <Icon className="h-3.5 w-3.5" />
+          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       ))}
     </div>
