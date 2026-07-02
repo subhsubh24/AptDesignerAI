@@ -213,8 +213,15 @@ export default function ResultsScreen() {
       await markSaved();
       setSaveState('saved');
     } catch (err) {
-      console.error('[results/saveDesign]', err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[results/saveDesign]', message);
       setSaveState('save_error');
+      // Surface the failure so the user knows the save didn't land and the
+      // "Retry Save" button isn't a silent, unexplained state change.
+      Alert.alert(
+        "Couldn't save your design",
+        'Something went wrong while saving. Please check your connection and tap Retry Save.',
+      );
     }
   }, [analysis, canSave, markSaved, publicUrl, roomType]);
 
