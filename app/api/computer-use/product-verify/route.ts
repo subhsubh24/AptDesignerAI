@@ -46,13 +46,18 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const body = await request.json();
-  const { product_url, expected_title, expected_color, expected_size } = body as {
+  let body: {
     product_url?: string;
     expected_title?: string;
     expected_color?: string;
     expected_size?: string;
   };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { product_url, expected_title, expected_color, expected_size } = body;
 
   if (!product_url || typeof product_url !== "string") {
     return NextResponse.json({ error: "product_url required" }, { status: 400 });

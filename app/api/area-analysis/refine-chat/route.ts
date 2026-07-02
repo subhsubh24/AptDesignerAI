@@ -89,8 +89,13 @@ export async function POST(request: NextRequest) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  const body = await request.json();
-  const { room_id, content } = body as { room_id?: string; content?: string };
+  let body: { room_id?: string; content?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { room_id, content } = body;
   if (!room_id || !content || typeof content !== "string" || content.trim().length === 0) {
     return NextResponse.json({ error: "room_id and content required" }, { status: 400 });
   }
