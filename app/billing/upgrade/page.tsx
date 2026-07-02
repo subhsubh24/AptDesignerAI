@@ -35,7 +35,7 @@ const TIER_COPY = {
     features: [
       "Everything in Apartment",
       "Unlimited apartments & projects",
-      "Client-ready share links & exports",
+      "Client-ready share links",
       "Higher AI generation limits",
       "Early access to new features",
       "Dedicated support channel",
@@ -50,7 +50,7 @@ const TIER_COPY = {
     features: [
       "Everything in Pro",
       "Unlimited apartments & projects",
-      "Client-ready share links & exports",
+      "Client-ready share links",
       "Higher AI generation limits",
       "Early access to new features",
       "Dedicated support channel",

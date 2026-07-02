@@ -343,7 +343,7 @@ Your AptDesigner Pro subscription ended. Your saved designs and Apartment-plan a
 are still in your account — nothing is deleted.
 
 If you'd like to continue:
-- **Pro plan**: $49/month — unlimited apartments, client exports, priority support
+- **Pro plan**: $49/month — unlimited apartments, client-ready share links, priority support
 - **Apartment plan**: $29 one-time — your apartment, every room, forever
 
 Or stay on the free tier. Your existing designs stay accessible.

@@ -72,7 +72,7 @@ const TIERS: Tier[] = [
     features: [
       "Everything in Apartment",
       "Unlimited apartments & projects",
-      "Client-ready share links & exports",
+      "Client-ready share links",
       "Higher AI generation limits",
       "Early access to new features",
       "Dedicated support channel",
@@ -198,7 +198,7 @@ export default function PricingPage() {
               {[
                 { title: "30-day money-back", desc: "Don't love it? Get a full refund, no questions." },
                 { title: "Your data, always", desc: "We never sell or share your photos or designs." },
-                { title: "No lock-in", desc: "Export your picks and mockups anytime." },
+                { title: "No lock-in", desc: "Export your picks to CSV or share any design anytime." },
               ].map((item) => (
                 <div key={item.title}>
                   <h3 className="font-semibold mb-1.5">{item.title}</h3>

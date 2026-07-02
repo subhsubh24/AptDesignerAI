@@ -40,7 +40,7 @@ as a living artifact; update when pricing, conversion data, or market conditions
 |---|---|---|
 | Explore | Free | 1 full room analysis, no card required |
 | Apartment | $29 | One-time; unlimited rooms in one apartment |
-| Pro | $49/month | Unlimited apartments, client exports, priority support |
+| Pro | $49/month | Unlimited apartments, client-ready share links, priority support |
 | Pro Annual | $399/year | Same as Pro, billed annually (~$33/mo effective — save 32%) |
 
 Pro Annual was added in PR #98 / migration 021. The annual tier reduces effective price by 32% vs monthly, dramatically improves retention (annual subscribers renew once per year, not monthly), and improves upfront cash flow.

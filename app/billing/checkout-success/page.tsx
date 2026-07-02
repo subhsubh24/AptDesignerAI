@@ -17,7 +17,7 @@ const TIER_COPY: Record<string, { headline: string; sub: string }> = {
   },
   pro: {
     headline: "Welcome to Pro.",
-    sub: "All apartments, all rooms, client-ready exports — yours to use on any project.",
+    sub: "All apartments, all rooms, client-ready share links — yours to use on any project.",
   },
 };
 
