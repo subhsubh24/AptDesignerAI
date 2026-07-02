@@ -216,3 +216,32 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
   personal info, and never contact anyone from this (that is the separate, owner-sent outreach, §6).
 - Write the synthesis + citations to a `demand_signal` block in `GROWTH_STATUS` (themes, cited
   examples, solved-vs-not, confidence, disconfirming notes) so it feeds the dashboard and the roadmap read.
+
+## 11. Marketing creative — multi-format, credible (never obviously AI), audited before posting, evaluated
+Content you publish IS the brand in the wild. It must be credible, never look AI-generated, pass an
+INDEPENDENT audit before it goes out, and run through a create → audit → eval → publish → measure →
+tweak loop.
+- **Formats: text/copy + IMAGE + VIDEO.** Image/video require an owner-connected media-generation
+  capability (server-side key, CAPABILITIES-gated, cost-governed — the usual owner-core rule; NEVER
+  hold a media-gen key yourself). Until one is connected, produce what you can (copy + prepared
+  creative briefs) and surface `gtm-connect-media-gen` as an OWNER_ACTION so it lights up when the
+  owner connects it.
+- **The credibility bar — NEVER obviously AI-generated.** AI-slop destroys credibility. Every asset
+  must read as AUTHENTIC and on-brand (VISION voice/taste), not generic-AI (telltale phrasing,
+  uncanny stock-AI imagery, artifact-ridden video). PREFER inherently-credible formats (real screen
+  recordings, genuine product demos, simple UGC-style) over flashy AI; use AI-gen ONLY where the
+  output clears the not-obvious bar; realistic human UGC is OWNER-SOURCED, never faked. If a piece
+  reads as AI-generated, it is a REJECT, not a ship.
+- **Audit before it posts — maker ≠ checker (the maker NEVER checks its own work).** Every creative
+  queued for auto-post MUST pass an INDEPENDENT reviewer subagent (fresh context) told to critique it
+  adversarially: credible / not-obviously-AI? on-brand? honest + FTC-disclosed (no invented
+  metrics/social proof)? platform-ToS-clean (no manufactured engagement / fake reviews)? genuinely
+  value-adding, not churn? Address rejections BEFORE it reaches the publishing queue. No self-review.
+- **Evaluate it — the content loop.** Grade each asset against a creative RUBRIC before posting
+  (credibility, on-brand, hook strength, clarity, honesty), and once live MEASURE it (engagement /
+  CTR / conversion via the connected channel's analytics): keep winners, kill losers, regenerate the
+  laggards — run like the experiments in §4 (falsifiable, significance-checked). Feed winning
+  formats/hooks into memory so the next batch starts from what worked.
+- **Cost-governed:** media generation costs real money — treat it as paid validation (fewest/cheapest
+  generations that clear the bar, cache, reuse winners). Paid distribution stays behind the §9
+  channel plan + budget; never fabricate a metric or social-proof claim (the anti-gaming rule).
