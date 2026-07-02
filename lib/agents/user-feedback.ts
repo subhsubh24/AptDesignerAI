@@ -31,23 +31,31 @@ export async function loadUserFeedbackContext(
 
   const roomIds = rooms.map((r: { id: string }) => r.id);
 
-  // Query accepted products with their evaluations
-  const { data: accepted, error: acceptedError } = await supabase
-    .from("candidate_products")
-    .select("*, product_evaluations(*)")
-    .in("room_id", roomIds)
-    .eq("status", "accepted")
-    .order("updated_at", { ascending: false })
-    .limit(MAX_ITEMS_PER_STATUS);
-
-  // Query rejected products with their evaluations
-  const { data: rejected, error: rejectedError } = await supabase
-    .from("candidate_products")
-    .select("*, product_evaluations(*)")
-    .in("room_id", roomIds)
-    .eq("status", "rejected")
-    .order("updated_at", { ascending: false })
-    .limit(MAX_ITEMS_PER_STATUS);
+  // Accepted and rejected both key only on roomIds and are independent of each
+  // other — fetch them in parallel to save a round trip on this hot path (runs
+  // on every search). Destructured by position, not completion order, so the
+  // result is deterministic.
+  const [
+    { data: accepted, error: acceptedError },
+    { data: rejected, error: rejectedError },
+  ] = await Promise.all([
+    // Query accepted products with their evaluations
+    supabase
+      .from("candidate_products")
+      .select("*, product_evaluations(*)")
+      .in("room_id", roomIds)
+      .eq("status", "accepted")
+      .order("updated_at", { ascending: false })
+      .limit(MAX_ITEMS_PER_STATUS),
+    // Query rejected products with their evaluations
+    supabase
+      .from("candidate_products")
+      .select("*, product_evaluations(*)")
+      .in("room_id", roomIds)
+      .eq("status", "rejected")
+      .order("updated_at", { ascending: false })
+      .limit(MAX_ITEMS_PER_STATUS),
+  ]);
 
   if (acceptedError || rejectedError) {
     return "";
