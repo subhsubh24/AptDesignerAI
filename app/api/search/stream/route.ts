@@ -33,7 +33,12 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+  }
   const { room_id, categories, fillAllTiers } = body;
 
   if (!room_id) {
@@ -456,7 +461,7 @@ export async function POST(request: Request) {
         // run on this room seeds from it instead of cold-starting. (stats_json,
         // not metadata — search_sessions has no metadata column; the old write
         // silently failed.)
-        await supabase
+        const { error: sessionUpdateError } = await supabase
           .from("search_sessions")
           .update({
             status: "completed",
@@ -471,12 +476,16 @@ export async function POST(request: Request) {
             audit_history_json: result.data.loopMemory?.auditHistory ?? null,
           })
           .eq("id", session?.id);
+        // A dropped session write orphans the row as "in-progress" and starves
+        // the NEXT run on this room of its loop-memory seed — log, don't swallow.
+        if (sessionUpdateError) logServerError("search/stream search_sessions completed update", sessionUpdateError);
 
         // Update room status
-        await supabase
+        const { error: roomStatusError } = await supabase
           .from("rooms")
           .update({ status: "sourcing", updated_at: new Date().toISOString() })
           .eq("id", room_id);
+        if (roomStatusError) logServerError("search/stream rooms sourcing update", roomStatusError);
 
         const productCount = savedProducts?.length || 0;
 
