@@ -21,7 +21,7 @@ const QUICK_LINKS = [
   {
     heading: "Pricing & billing",
     href: "/pricing",
-    desc: "Plans, one-time purchases, trial period, and refund policy.",
+    desc: "Plans, the free tier, one-time purchases, and refund policy.",
   },
   {
     heading: "Design guides",
