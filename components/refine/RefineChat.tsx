@@ -115,13 +115,23 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       }
       const data = await res.json();
 
-      // Replace optimistic placeholders with persisted user msg + assistant msg
+      // Replace optimistic placeholders with persisted user msg + assistant msg.
+      // assistant_message is null when the analysis applied but the summary reply
+      // failed to persist — filter falsy so a null is never pushed into the list.
       setMessages((prev) => {
         const cleaned = prev.filter(
           (m) => m.id !== optimisticUser.id && m.id !== optimisticAssistant.id,
         );
-        return [...cleaned, data.user_message, data.assistant_message];
+        return [...cleaned, data.user_message, data.assistant_message].filter(
+          (m): m is RefineMessage => Boolean(m),
+        );
       });
+
+      // Surface a partial-success warning (e.g. changes applied but the summary
+      // reply couldn't be saved) so the user isn't left with a silently missing
+      // assistant message.
+      const warnings: string[] = data.warnings || [];
+      if (warnings.length > 0) setError(warnings.join(" "));
 
       // Update parent analysis only if a patch actually applied
       const changedFields: string[] = data.changed_fields || [];
