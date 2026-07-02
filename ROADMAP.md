@@ -596,7 +596,7 @@ required gate or a recurring audit, not a nicety.
   relevance, mockup grounding — each calling the real pipeline (`RUN_EVALS=1`) and
   scoring against a GROWING gold set of real fixtures. Wire a scheduled eval run so
   AI-output-quality regressions are caught before users/reviewers see them.
-  **[Eval files complete (PR #105): all 5 stages — diagnosis, sourcing, grounding, refine, area-analysis. CI wiring (RUN_EVALS=1 job) still pending — human-applied per PENDING_OPS.md.]**
+  **[Eval files complete (PR #105): all 5 stages — diagnosis, sourcing, grounding, refine, area-analysis. CI wiring DONE (2026-07-01): `.github/workflows/live-eval.yml` runs the real `RUN_EVALS=1` suite weekly + on-demand, with `GEMINI_API_KEY`/`DEEPSEEK_API_KEY` set as spend-capped Actions secrets — eval self-validation is now mock→REAL. ONGOING factory work (do NOT tick this closed — it is a standing quality task): each cycle, GROW the gold set — add ≥1 new diverse room-type fixture under `evals/gold/` (vary room type / style / lighting / edge cases; real licensed or public image URLs) with a REVIEWED-correct expected diagnosis/output (NEVER just captured pipeline output — that is circular and passes by definition), until coverage spans the real input space. Every added fixture must run GREEN in the live-eval job before merge; growth is bounded by the value bar (broaden real coverage, never gold-plate).]**
 - [ ] F4. **Functional end-to-end validation — every page & flow WORKS as intended, at
   runtime (UX is the product; enforces "BUILDS ≠ WORKS").** Today's E2E only checks that
   PUBLIC pages render — the authed, billing, and core-product journeys are never RUN. Close
