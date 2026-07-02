@@ -197,12 +197,23 @@ export default function ResultsScreen() {
         'Saving timed out. Please check your connection and try again.',
       );
       if (!resp.ok) {
-        const body = await resp.json().catch(() => ({})) as { error?: string };
+        const body = await resp.json().catch(() => ({})) as { error?: string; subscription_required?: boolean };
+        // The server enforces the free-save limit independently of the on-device
+        // quota, so the two can diverge (e.g. after a reinstall or saving on
+        // another device). When the server rejects for that reason, open the
+        // paywall — a "Retry Save" would just fail again and buries the upgrade
+        // moment.
+        if (resp.status === 403 && body.subscription_required) {
+          setSaveState('idle');
+          setShowPaywall(true);
+          return;
+        }
         throw new Error(body.error ?? `Save failed (${resp.status})`);
       }
       await markSaved();
       setSaveState('saved');
-    } catch {
+    } catch (err) {
+      console.error('[results/saveDesign]', err instanceof Error ? err.message : String(err));
       setSaveState('save_error');
     }
   }, [analysis, canSave, markSaved, publicUrl, roomType]);
