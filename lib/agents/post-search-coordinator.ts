@@ -257,7 +257,11 @@ export interface CoordinatorRunResult {
   history: Array<{ turn: number; tool: string; status: string }>;
 }
 
-function formatStateForAgent(state: CoordinatorState): string {
+// Exported for unit testing — this pure formatter produces the objective
+// decision signals (audit trend, saturation, diminishing-returns, tried
+// queries) the coordinator agent reasons over, so its thresholds are worth
+// pinning against regression.
+export function formatStateForAgent(state: CoordinatorState): string {
   const lines: string[] = [];
   lines.push(`Token budget: ${state.budgetUsed.toLocaleString()}/${state.budgetCap.toLocaleString()} used (${state.budgetRemainingPct.toFixed(0)}% remaining)`);
   lines.push("");
