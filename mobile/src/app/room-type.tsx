@@ -61,6 +61,8 @@ export default function RoomTypeScreen() {
                   { borderColor: colors.border, backgroundColor: pressed ? colors.backgroundSelected : colors.card },
                 ]}
                 onPress={() => handleSelect(value)}
+                accessibilityRole="button"
+                accessibilityLabel={`${label}. ${hint}`}
               >
                 <ThemedView style={[styles.optionText, { backgroundColor: 'transparent' }]}>
                   <ThemedText type="defaultSemiBold">{label}</ThemedText>
