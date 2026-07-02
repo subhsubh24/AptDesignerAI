@@ -584,6 +584,51 @@ export function deduplicateCandidates(candidates: SearchCandidate[]): SearchCand
   return result;
 }
 
+// Deterministic junk filter — drops obvious non-furniture before LLM screening.
+// Each title is cheap to check, and kills off the classic offenders from prior
+// runs (books titled "The Punishment of Gaza", Beatles T-shirt amazon listings,
+// paperback novel entries) before they eat screening tokens or — worse — slip
+// through to extraction. Non-global regexes → `.test()` is stateless, so these
+// are safe to hoist to module scope and reuse across calls.
+const JUNK_TITLE_PATTERNS = [
+  /\bpaperback\b/i, /\bhardcover\b/i, /\bebook\b/i, /\bkindle\b/i, /\bISBN\b/i,
+  /\bnovel\b/i, /\bmemoir\b/i, /\bbiography\b/i, /\bpenguin books\b/i,
+  /\bt-?shirt\b/i, /\bhoodie\b/i, /\bsweatshirt\b/i, /\bsneakers?\b/i, /\bjacket\b/i,
+  /\bDVD\b/i, /\bBlu-?ray\b/i, /\bCD album\b/i, /\bvinyl record\b/i,
+  /\bBeatles\b/i, /\bpunishment of\b/i,
+];
+const JUNK_URL_PATTERNS = [
+  /goodreads\.com/i, /barnesandnoble\.com\/w\//i,
+  /penguinrandomhouse\.com/i, /bookshop\.org/i,
+  /amazon\.com\/[^/]*\/dp\/[^/]+\/?.*[?&]ref=[^&]*books/i,
+];
+
+/**
+ * Pure, deterministic prefilter that drops obvious non-furniture candidates
+ * (books / apparel / media) by title or URL before the paid quick-screen LLM
+ * pass. Every dropped candidate is screening tokens (and a possible extraction)
+ * saved, so the pattern set is a real cost lever — extracted + exported here so
+ * it can be unit-tested in isolation.
+ */
+export function prefilterJunkCandidates(
+  candidates: SearchCandidate[],
+): { prefiltered: SearchCandidate[]; junkDropped: number } {
+  const prefiltered: SearchCandidate[] = [];
+  let junkDropped = 0;
+  for (const c of candidates) {
+    const t = c.title || "";
+    const u = c.url || "";
+    const isJunk = JUNK_TITLE_PATTERNS.some((re) => re.test(t)) ||
+                   JUNK_URL_PATTERNS.some((re) => re.test(u));
+    if (isJunk) {
+      junkDropped++;
+      continue;
+    }
+    prefiltered.push(c);
+  }
+  return { prefiltered, junkDropped };
+}
+
 /**
  * Quick screen candidates using Flash model (text-only, no tools).
  * Rates each candidate 1-5 on relevance and filters to ≥3.
@@ -602,36 +647,7 @@ export async function quickScreenCandidates(
     return { success: true, data: [] };
   }
 
-  // Deterministic junk filter — drops obvious non-furniture before LLM screening.
-  // Each title is cheap to check, and kills off the classic offenders from prior
-  // runs (books titled "The Punishment of Gaza", Beatles T-shirt amazon listings,
-  // paperback novel entries) before they eat screening tokens or — worse — slip
-  // through to extraction.
-  const JUNK_TITLE_PATTERNS = [
-    /\bpaperback\b/i, /\bhardcover\b/i, /\bebook\b/i, /\bkindle\b/i, /\bISBN\b/i,
-    /\bnovel\b/i, /\bmemoir\b/i, /\bbiography\b/i, /\bpenguin books\b/i,
-    /\bt-?shirt\b/i, /\bhoodie\b/i, /\bsweatshirt\b/i, /\bsneakers?\b/i, /\bjacket\b/i,
-    /\bDVD\b/i, /\bBlu-?ray\b/i, /\bCD album\b/i, /\bvinyl record\b/i,
-    /\bBeatles\b/i, /\bpunishment of\b/i,
-  ];
-  const JUNK_URL_PATTERNS = [
-    /goodreads\.com/i, /barnesandnoble\.com\/w\//i,
-    /penguinrandomhouse\.com/i, /bookshop\.org/i,
-    /amazon\.com\/[^/]*\/dp\/[^/]+\/?.*[?&]ref=[^&]*books/i,
-  ];
-  const prefiltered: SearchCandidate[] = [];
-  let junkDropped = 0;
-  for (const c of candidates) {
-    const t = c.title || "";
-    const u = c.url || "";
-    const isJunk = JUNK_TITLE_PATTERNS.some((re) => re.test(t)) ||
-                   JUNK_URL_PATTERNS.some((re) => re.test(u));
-    if (isJunk) {
-      junkDropped++;
-      continue;
-    }
-    prefiltered.push(c);
-  }
+  const { prefiltered, junkDropped } = prefilterJunkCandidates(candidates);
   if (junkDropped > 0) {
     log.info("Quick-screen junk prefilter dropped candidates", {
       phase: "quick_screen", category, tier, dropped: junkDropped,
