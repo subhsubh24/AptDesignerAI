@@ -141,8 +141,9 @@ export function FloorPlanUploadZone({
             className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
             onClick={handleRemove}
             title="Remove floor plan"
+            aria-label="Remove floor plan"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
 
