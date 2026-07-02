@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       system: getSystemPrompt(profile),
     });
 
-    const { data: assistantMsg } = await supabase
+    const { data: assistantMsg, error: assistantMsgError } = await supabase
       .from("refine_messages")
       .insert({
         room_id,
@@ -199,6 +199,23 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+    // The re-analysis above already persisted a new room_diagnoses row, so the
+    // refinement itself SUCCEEDED. If only the summary message failed to persist,
+    // be honest without lying either way: don't return the reply as saved (it
+    // would vanish on reload — a fake success), and don't throw a 500 (that would
+    // hide the already-applied analysis AND trigger an expensive retry that
+    // re-runs the full pipeline and duplicates the user message). Return the
+    // applied analysis with a null assistant message + a warning instead.
+    const warnings: string[] = [];
+    if (assistantMsgError || !assistantMsg) {
+      console.error(
+        "[refine-chat] Failed to persist assistant summary message:",
+        assistantMsgError?.message ?? "no row returned",
+      );
+      warnings.push(
+        "Your changes were applied, but the summary reply could not be saved.",
+      );
+    }
 
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
@@ -208,10 +225,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       user_message: userMsg,
-      assistant_message: assistantMsg,
+      assistant_message: assistantMsg ?? null,
       analysis: newAnalysis,
       changed_fields: changedFields,
-      warnings: [],
+      warnings,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
