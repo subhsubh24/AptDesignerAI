@@ -54,28 +54,30 @@ export async function POST(request: Request) {
     (item: { candidate_products: unknown }) => item.candidate_products
   );
 
-  // Fetch room with images
-  const { data: room } = await supabase
-    .from("rooms")
-    .select("*, room_images(*)")
-    .eq("id", bundle.room_id)
-    .single();
+  // Room (with images) and the latest diagnosis both key only on bundle.room_id
+  // and are independent of each other — fetch them together. Fixed-position
+  // destructure keeps the result mapping deterministic.
+  const [{ data: room }, { data: diagnosis }] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select("*, room_images(*)")
+      .eq("id", bundle.room_id)
+      .single(),
+    supabase
+      .from("room_diagnoses")
+      .select("*")
+      .eq("room_id", bundle.room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
 
   const roomImageUrls = (room?.room_images || []).map((img: { image_url: string }) => img.image_url);
 
-  // Fetch project for full building/apartment context
+  // Fetch project for full building/apartment context (depends on room.project_id).
   const { data: project } = room?.project_id
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
     : { data: null };
-
-  // Fetch room diagnosis for design direction
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("*")
-    .eq("room_id", bundle.room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
 
   const designProfile = buildDesignProfile(project);
 
