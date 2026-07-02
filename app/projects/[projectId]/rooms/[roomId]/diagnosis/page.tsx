@@ -230,18 +230,27 @@ export default function DiagnosisPage() {
           <Progress value={progressPercent} className="h-2" />
           <Card variant="elevated">
             <CardContent className="py-6">
-              <div className="space-y-3 animate-stagger-children">
+              <div className="space-y-3 animate-stagger-children" aria-live="polite" aria-atomic="false">
                 {steps.map((step, i) => (
                   <div key={i} className="flex items-center gap-3 animate-slide-up">
                     {step.status === "running" ? (
-                      <Loader2 className="h-4 w-4 text-accent-warm animate-spin shrink-0" />
+                      <Loader2 className="h-4 w-4 text-accent-warm animate-spin shrink-0" aria-hidden="true" />
                     ) : step.status === "done" ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" aria-hidden="true" />
                     ) : (
-                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{step.step}</p>
+                      <p className="text-sm font-medium">
+                        {step.step}
+                        <span className="sr-only">
+                          {step.status === "running"
+                            ? " — in progress"
+                            : step.status === "done"
+                              ? " — done"
+                              : " — failed"}
+                        </span>
+                      </p>
                       {step.detail && (
                         <p className="text-xs text-muted-foreground">{step.detail}</p>
                       )}
