@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   ]);
 
   // Create search session
-  const { data: session } = await supabase
+  const { data: session, error: sessionError } = await supabase
     .from("search_sessions")
     .insert({
       room_id,
@@ -85,6 +85,14 @@ export async function POST(request: Request) {
     })
     .select()
     .single();
+  // Surface (don't swallow) a failed session insert: a null `session` makes every
+  // downstream `session?.id` undefined, so the end-of-run `.eq("id", undefined)`
+  // update matches nothing and the session is never marked completed — an orphaned,
+  // silently-inconsistent audit trail. Log loudly so it's diagnosable; the search
+  // still degrades gracefully via the optional chaining below.
+  if (sessionError) {
+    console.error("[search] Failed to create search session:", sessionError.message);
+  }
 
   // Create agent run
   const agentRun = await createAgentRun(supabase, {
