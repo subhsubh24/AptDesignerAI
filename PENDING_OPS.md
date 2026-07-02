@@ -140,6 +140,21 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Wire `npm run test:coverage` into the CI verify job (added 2026-07-02, Run 52 — PR #314, Track F2)
+
+The vitest coverage floors were raised toward reality (25/19/30/25 → 40/30/42/40, ~10pt under the measured ≈50/39/54/51) so a genuine coverage regression now fails `npm run test:coverage`. **But nothing runs that command in CI** — the `verify` job (and `scripts/preflight.sh`) run bare `vitest run` (no `--coverage`), so a coverage drop is not yet gated on merge. The loop cannot edit `.github/`, so this is an owner step.
+
+**Owner step:** add a coverage step to `.github/workflows/ci.yml` (either extend the `verify` job or add a small job):
+```yaml
+      - name: Coverage floors
+        run: npm run test:coverage   # vitest run --coverage; fails if below vitest.config.ts thresholds
+```
+Keep it non-`RUN_EVALS` (the live-eval job already covers that path) so it stays deterministic and free.
+
+**Verify:** open a throwaway PR that deletes a well-covered test file → the coverage step should go red on the lowered numbers; revert.
+
+---
+
 ### Activation email cron + migration 025 (added 2026-06-28, Growth Agent Run 2)
 
 The daily activation email cron fires A1 (T+1d), A2 (T+3d), and A3 (T+7d) to new users who have not yet started an analysis. Two owner steps are required to activate it:

@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-02 (Run 52) — DEEP AUDIT + 6 disjoint changes (2 correctness + perf + a11y + test + quality-gate)
+
+### State on entry
+- Cold container. Baseline gate green on the default tip: tsc clean, 1367 tests pass / 9 skip, determinism clean, eslint 0. Default branch advanced under me during the run (concurrent routines merged #304-308) — my 6 disjoint branches auto-merged cleanly on top.
+- **DEEP AUDIT was due** (last Run 48, ~4 runs ago) → ran the 8-lens read-only Haiku sweep FIRST, before selecting work.
+- Consumed QUALITY_SCORECARD (overall C, ship_gate_met:false): the sole ship-critical blocker is **functional_reality C** (core money-path has no outcome-asserting runtime E2E).
+
+### DEEP AUDIT summary (8 Haiku lenses; findings → this run's work)
+- **SECURITY & RLS: CLEAN** (no-op). All 27 migrations reviewed — RLS complete + intentional on every public table; no committed secrets; the "missing WITH CHECK" and "AptDesigner brand" flags were re-confirmed false positives (see Run 51 lessons). A clean security audit is a successful no-op.
+- **CORRECTNESS:** two real unchecked-write findings shipped (search_sessions insert #309; refine-chat assistant message #313). The "search route has no outer try-catch" finding was noted but deferred (bigger change, lower value than the targeted guards).
+- **PERF:** several independent-read Promise.all opportunities; shipped ONE hot-path one (#310) to avoid batch-padding micro-opts. embedding-index full-table-scan / pgvector-RPC remains LIVE-DB-only (can't verify in-container) — still deferred.
+- **A11Y/DESIGN:** icon-only buttons unlabeled (#311). Most other flags were opacity/contrast nitpicks — not shipped.
+- **TEST/EVAL:** browserbase-driver.ts (0 tests) was the cleanest 0-LLM target → #312. floor-plan-extractor was ALREADY comprehensively tested (dropped as redundant — CHECK before building). Remaining untested heavy agents: scene-assembler, post-search-coordinator, shopping-researcher, design-coordinator, mockup-agent.
+- **DEP/CONFIG:** decorative coverage floors → #314. npm-audit vulns (Next.js/ws/protobufjs) NOT auto-bumped (risky under unattended auto-merge; a broken build is worse) — recorded for owner. skipLibCheck removal + TS 5/6 root/mobile mismatch deferred (nuanced).
+- **ARTIFACT FRESHNESS:** A5 ROADMAP annotation was stale ("zero live evals / placeholder URL") — refreshed + ticked this run. F3 was already refreshed by #304.
+- **FUNCTIONAL REALITY:** the core photo→mockup + paywall→checkout E2E gap is real but OWNER-BLOCKED (needs Supabase-local + Stripe test-mode wired into CI, `.github/` human-applied) — the loop cannot close it.
+
+### What was done (6 file-disjoint changes, all merged #309-314)
+- **#309 correctness** — surface the unchecked `search_sessions` insert error in `search` + `search/stream` (null session → every downstream `session?.id` undefined → `.eq("id",undefined)` orphans the session, never marked completed). Log-only, graceful degradation preserved.
+- **#313 correctness / side-effect integrity** — refine-chat: the assistant `refine_messages` insert was unchecked → 200 with `assistant_message: undefined` (vanishes on reload + client null-deref). Fix returns applied analysis + `assistant_message: null` + a warning, run stays completed; client filters the null. (See lesson 1.)
+- **#310 perf** — parallelize the independent accepted/rejected reads in `loadUserFeedbackContext` (runs on every search).
+- **#311 a11y** — aria-label + aria-pressed on the 3 theme-toggle buttons, aria-label on the floor-plan remove button, aria-hidden on the decorative icons.
+- **#312 test** — browserbase-driver.ts 0→23 mock-only tests (env/peer-dep gating, session/CDP wiring, requirePage guard, full action→Playwright mapping incl. scroll sign math + clear-before-type key order, dispose). Reviewer A mutation-verified all 7 mutations flip a test red.
+- **#314 quality gate (F2)** — coverage floors 25/19/30/25 → 40/30/42/40 (~10pt under real ≈50/39/54/51).
+
+### Lessons learned
+1. **A write-failure guard is not automatically an improvement — check what already committed.** For refine-chat, throwing a 500 on the failed assistant-message insert was WORSE than the fake-success it replaced: the re-analysis had already persisted a new room_diagnoses row, so a 500 hid the applied analysis AND forced an expensive retry that re-ran the full 3-5min pipeline and duplicated the pre-persisted user message. A reviewer (Sonnet) caught this. Right fix: return the applied result + `assistant_message: null` + a warning, keep the run completed. When a maker fixes "swallowed error," verify the surrounding side-effects before choosing throw-vs-degrade.
+2. **A config-comment claim is reviewable too — don't assert enforcement you didn't wire.** Both coverage-floor reviewers rejected the comment claiming a regression "fails CI" / is "tracked in PENDING_OPS.md": CI's `verify` job runs bare `vitest run` (NO --coverage), and the PENDING_OPS entry wasn't added yet (and can't be, in a code branch — shared-ledger rule). Reworded to state honestly that the floors gate `npm run test:coverage` only; added the CI-wiring item in THIS bookkeeping PR.
+3. **CHECK for an existing test before building one.** floor-plan-extractor looked like a prime 0-LLM target but already had a comprehensive suite — dropped it, moved to browserbase-driver (genuinely untested).
+4. **A 17-second "journeys" failure = infra, not the change.** #311's journeys job failed via `supabase/setup-cli` "rate limit exceeded" (GitHub API) at setup, before any test — a transient flake from concurrent jobs sharing the rate window (309's journeys passed at the same time). One empty-commit re-trigger went green. Real journey runs take ~3.5 min; a sub-30s red is a setup/infra failure to re-kick, not diagnose as a code bug.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 56.**
+- **functional_reality (ship-critical, still C) is the convergence blocker and is OWNER-BLOCKED** — the core photo→mockup + paywall→checkout→unlock runtime E2E needs Supabase-local + Stripe test-mode in CI (`.github/` human-applied; see PENDING_OPS). The loop cannot close this; do NOT fabricate a change that can't run green in-container.
+- **Queued, file-disjoint, validated:**
+  - **a11y polish (cheap)** — refine-chat surfaces the partial-success warning via `setError` (red destructive banner); both reviewers noted an amber "warning" style (DesignerWarningCard) would read more honestly. Small client-only change.
+  - **test/eval** — untested heavy agents needing provider mocks: scene-assembler (2 chat + judge), post-search-coordinator (loop/turn-limit logic, 0-LLM-mockable), shopping-researcher (4 exports), design-coordinator, mockup-agent. Also a **mockup live eval** would move F3 toward complete.
+  - **perf** — embedding-index pgvector match_ RPC (LIVE-DB-only; needs the owner to apply the migration + verify). search/route.ts `output_json` over-fetch.
+  - **dep health (owner-review, not auto-bump)** — Next.js/ws/protobufjs npm-audit vulns; TS 5/6 root↔mobile mismatch; skipLibCheck.
+
 ## Run 2026-07-01 (Run 51) — 4 disjoint changes (LLM-core test + perf + mobile a11y + docs)
 
 ### State on entry
