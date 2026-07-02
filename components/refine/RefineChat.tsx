@@ -33,6 +33,10 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Distinct from `error`: a partial-success warning (e.g. the edit applied
+  // but the summary reply couldn't be saved). Rendered amber, not red, so the
+  // user doesn't read a mostly-successful action as a failure.
+  const [warning, setWarning] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -72,6 +76,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
 
     setSending(true);
     setError(null);
+    setWarning(null);
 
     const now = new Date().toISOString();
     // Optimistic user message
@@ -131,7 +136,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       // reply couldn't be saved) so the user isn't left with a silently missing
       // assistant message.
       const warnings: string[] = data.warnings || [];
-      if (warnings.length > 0) setError(warnings.join(" "));
+      if (warnings.length > 0) setWarning(warnings.join(" "));
 
       // Update parent analysis only if a patch actually applied
       const changedFields: string[] = data.changed_fields || [];
@@ -180,10 +185,12 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "Expand designer chat" : "Collapse designer chat"}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          <MessageSquare aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">Chat with the designer</span>
           {messages.length > 0 && headerHasUnread && (
             <span className="text-xs text-muted-foreground">
@@ -191,7 +198,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
             </span>
           )}
         </div>
-        {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        {collapsed ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronUp aria-hidden="true" className="h-4 w-4" />}
       </button>
 
       {!collapsed && (
@@ -214,8 +221,21 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
           )}
 
           {error && (
-            <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20 text-xs text-destructive">
+            <div
+              role="alert"
+              className="px-4 py-2 bg-destructive/10 border-t border-destructive/20 text-xs text-destructive"
+            >
               {error}
+            </div>
+          )}
+
+          {warning && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="px-4 py-2 border-t text-xs bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200"
+            >
+              {warning}
             </div>
           )}
 
