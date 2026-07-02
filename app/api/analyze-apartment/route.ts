@@ -65,19 +65,19 @@ export async function POST(request: Request) {
   const { project_id } = body;
   if (!project_id) return NextResponse.json({ error: "project_id required" }, { status: 400 });
 
-  // Load project with building research
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", project_id)
-    .single();
-
-  // Load all rooms with their images
-  const { data: rooms } = await supabase
-    .from("rooms")
-    .select("*, room_images(*)")
-    .eq("project_id", project_id)
-    .order("created_at", { ascending: true });
+  // Load the project (building research) and its rooms in parallel — both key
+  // only on project_id, so there's no ordering dependency. Fixed-position
+  // destructure keeps the result binding deterministic.
+  const [projectRes, roomsRes] = await Promise.all([
+    supabase.from("projects").select("*").eq("id", project_id).single(),
+    supabase
+      .from("rooms")
+      .select("*, room_images(*)")
+      .eq("project_id", project_id)
+      .order("created_at", { ascending: true }),
+  ]);
+  const project = projectRes.data;
+  const rooms = roomsRes.data;
 
   if (!rooms || rooms.length === 0) {
     return NextResponse.json({ error: "No rooms found" }, { status: 400 });
