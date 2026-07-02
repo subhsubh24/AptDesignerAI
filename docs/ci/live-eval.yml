@@ -1,0 +1,32 @@
+# READY-TO-APPLY — copy to .github/workflows/live-eval.yml (workflow scope; the loop can't edit .github).
+# Runs the REAL eval suite (npm run eval -> RUN_EVALS=1 vitest run evals/__tests__) against the actual
+# Gemini/DeepSeek providers, weekly + on-demand. NOT per-PR (evals call paid APIs). Skips + warns when
+# the keys are unset, so it is safe to add BEFORE the secrets exist (upgrades mock -> real once set).
+#
+# REQUIRES (GitHub Actions repository secrets — owner-set, each scoped to a HARD provider spend cap):
+#   GEMINI_API_KEY, DEEPSEEK_API_KEY
+name: live-eval
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 8 * * 1"   # weekly, Mondays 08:00 UTC
+jobs:
+  live-eval:
+    name: live-eval
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Real eval suite (Gemini/DeepSeek round-trip vs fixtures)
+        if: ${{ env.GEMINI_API_KEY != '' && env.DEEPSEEK_API_KEY != '' }}
+        run: npm run eval
+      - name: Eval SKIPPED (keys not set)
+        if: ${{ env.GEMINI_API_KEY == '' || env.DEEPSEEK_API_KEY == '' }}
+        run: echo "::warning::GEMINI_API_KEY/DEEPSEEK_API_KEY not set — real eval round-trip NOT validated (still mock-only)."
