@@ -26,18 +26,18 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-06-30
-  last_run: 47                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 44
+  as_of: 2026-07-02
+  last_run: 55                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 52
   this_run:
-    changes_shipped: 9           # #250-258 all merged (gate green, 2 Sonnet approvals each); DEEP AUDIT not due (last 44, next ~48)
-    changes_abandoned: 0         # all 9 implemented changes passed gate + both reviewers; zero re-review cycles
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): diagnosis/evaluate status-flip twin-write guards = deferred (real but near-identical to ~8 already-shipped; avoid repetitive PRs); saved.tsx Share.share try/catch = review_value (borderline, Share rarely rejects); embedding-index pgvector RPC = dead_end-for-now (cannot runtime-verify cold → live-DB run); next/image + perf budget = review_value (real-but-modest)
-    verify_cycle_failures: 0     # LOOP-2 gate failures
-    review_rejections: 0         # LOOP-3: all 18 Sonnet reviewers APPROVED first pass — zero re-review cycles (cleanest review run to date); reviewers independently re-ran the 3 new test suites + recomputed the business-case arithmetic
+    changes_shipped: 6           # #337-342: #337-341 merged (gate green, 2 Sonnet approvals each), #342 approved by both + auto-merge queued on CI. correctness + G2 security + Track-B a11y + 3× F2 agent tests
+    changes_abandoned: 0         # all 6 implemented changes passed gate + both reviewers
+    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): free-tier "1 room" copy vs FREE_SAVE_LIMIT_WEB=3 = deferred (ambiguous — save-limit≠room-limit + business-case conversion model references "1 room"; risks overselling/recompute); paywall-sheet offering-cache-once-per-session = review_value (offerings rarely change mid-session; Run 54 also deferred); embedding-index retry try/catch for a *thrown* connection error = review_value (supabase returns errors in-band; marginal)
+    verify_cycle_failures: 0     # LOOP-2 gate failures. NOTE: a review subagent ran `git stash/checkout` in the SHARED working tree and clobbered my UNCOMMITTED design-coordinator edits mid-run (recovered by re-applying + committing-before-review). Lesson: commit before spawning reviewers; instruct reviewers to use read-only git only.
+    review_rejections: 1         # LOOP-3: Reviewer B REQUEST_CHANGES on #338 — the "last two unguarded request.json()" completeness claim was FALSE (a 3rd, saved-designs/[id] PATCH, existed). Added the 3rd guard + corrected the claim + re-audited → re-review APPROVE. The value bar catching an overclaim, working as intended.
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 33               # Runs 44-47 product PRs (#222-227, #232-238, #240-247, #250-258) + housekeeping (#228 #239 #248)
+    merged_prs: 54               # all routines' merged PRs over the last 7d (product + housekeeping + GTM/FACTORY_STANDARD syncs), from `git log --since=7d | grep -c '(#N)'`
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
