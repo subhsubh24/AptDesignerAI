@@ -103,3 +103,37 @@ export async function insertEmbedding(
   }
   return { ok: true };
 }
+
+/**
+ * `insertEmbedding` with a bounded, deterministic retry.
+ *
+ * The self-learning write-back (user-confirmed / corrected product embeddings)
+ * is a one-shot side effect: the caller durably persists
+ * `embedding_written_back: false` if the insert fails, and NOTHING retries it
+ * later — there is no backfill job. A single transient DB blip (a dropped
+ * connection, a momentary pool exhaustion) therefore permanently drops a
+ * retrieval-prior signal we can never recover for that confirmation. A small
+ * in-request retry closes that gap cheaply.
+ *
+ * The retry is deterministic (fixed attempt count, fixed delay, no jitter/
+ * randomness) so it does not affect reproducibility. `delayMs` is injectable so
+ * tests can run it with no wall-clock cost.
+ */
+export async function insertEmbeddingWithRetry(
+  supabase: MemoryClient,
+  input: InsertEmbeddingInput,
+  opts: { attempts?: number; delayMs?: number } = {},
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const attempts = Math.max(1, opts.attempts ?? 3);
+  const delayMs = opts.delayMs ?? 250;
+  let last: { ok: false; error: string } = { ok: false, error: "not attempted" };
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await insertEmbedding(supabase, input);
+    if (result.ok) return result;
+    last = result;
+    if (attempt < attempts - 1 && delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return last;
+}
