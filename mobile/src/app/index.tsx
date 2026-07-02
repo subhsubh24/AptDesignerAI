@@ -46,6 +46,8 @@ export default function DashboardScreen() {
               },
             ]}
             onPress={() => router.push('/photo')}
+            accessibilityRole="button"
+            accessibilityLabel="Start new design"
           >
             <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
               Start New Design
@@ -62,6 +64,8 @@ export default function DashboardScreen() {
               },
             ]}
             onPress={() => router.push('/saved')}
+            accessibilityRole="button"
+            accessibilityLabel="View saved designs"
           >
             <ThemedText style={[styles.buttonText, { color: colors.text }]}>
               View Saved Designs
