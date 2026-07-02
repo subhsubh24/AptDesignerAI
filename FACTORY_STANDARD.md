@@ -609,3 +609,45 @@ paid deep-research API (e.g. Gemini Deep Research) for this; the agent does it n
   — Claude can't generate media), gated to when creative is actually produced. Everything TEXT — research,
   reasoning, planning, synthesis — stays on the Claude agent already running. Computer-use (§29) needs a
   vision model to drive the browser; prefer the factory's Claude agent there too where the harness allows.
+
+
+## 31. Design taste — eliminate generic AI frontend (the real-designer bar)
+Function is table stakes (§28 makes it REAL); TASTE is the north star (VISION: "must not look
+vibe-coded"). Every layout / component / color / motion / copy decision must read as INTENTIONAL,
+premium, and clearly made by someone with taste — not assembled from the average of the internet. This
+is the concrete rubric for the graded `design_taste` dimension.
+- **The designer question — the gate before shipping ANY UI:** "Would an experienced product designer
+  INTENTIONALLY make this decision?" If no, improve it BEFORE proceeding. The maker asks it; the
+  INDEPENDENT design reviewer (maker≠checker) asks it again.
+- **Audit on every UI change:** visual hierarchy, typography system, spacing/rhythm, information
+  architecture, component quality, intentional color, navigation, interaction + motion, landing-page &
+  dashboard quality, responsiveness, accessibility, information density, conversion elements.
+- **Avoid by default (the AI-slop tells):** cookie-cutter SaaS dashboards, cards-everywhere, default
+  Tailwind look, weak typography, random spacing, visual noise, overengineered interfaces,
+  design-by-template, uninspired landing pages, generic startup-site patterns, random gradients /
+  decorative noise. If a choice exists only because the model has seen it a thousand times, cut it.
+- **Find the slop, fix by impact:** name what feels GENERATED — weak/inconsistent decisions, thin
+  hierarchy, generic shapes, overused trends, missed chances for stronger product design — and fix the
+  highest-leverage first (rank by gains to hierarchy / comprehension / trust / polish), like any §4
+  improvement.
+- **Final standard:** simplicity without blandness, functionality without clutter — interfaces that feel
+  built, edited, and judged by taste. Product-specific brand / voice / visual language lives in VISION
+  (§19), not here; this is the universal bar every factory holds. Same anti-slop rule as §11's "never
+  obviously AI" — now applied to the PRODUCT UI, not just the marketing.
+
+
+## 32. A non-essential side-effect must NEVER hard-block a core user action
+Traces to a real outage: a signup trigger's insert into `public.profiles` threw in prod and rolled back
+the whole `auth.users` insert — so NEITHER the app signup NOR the Supabase dashboard could create ANY
+account. The product couldn't onboard a single user, and it surfaced only as a generic "something went
+wrong." A non-essential side effect (the profile row) was allowed to abort the core action (the account).
+- **The core action succeeds even if the side-effect fails.** Creating the account is core; the profile
+  row / welcome email / analytics write is a side-effect. Wrap side-effects so a failure is LOGGED and
+  swallowed (or queued for backfill) — never allowed to abort the core write. DB triggers:
+  `begin ... exception when others then raise warning ...; end;`. App code: try/catch that degrades.
+- **Applies to EVERY critical-write path,** not just signup — any trigger / webhook / post-write hook
+  that can throw is a latent full outage of the thing it hangs off of.
+- **Swallow the BLOCK, not the SIGNAL (§28):** still log/alert the side-effect failure so the broken
+  profile-insert / email / analytics gets fixed — a silently-degraded side-effect no one notices is its
+  own §28 violation.
+- Reviewer check: "can any non-essential side-effect on this path abort the core action?" If yes, harden it.
