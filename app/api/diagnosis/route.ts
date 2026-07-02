@@ -393,11 +393,18 @@ async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unkn
     return NextResponse.json({ error: "Failed to save diagnosis" }, { status: 500 });
   }
 
-  // Update room status
-  await supabase
+  // Update room status. The diagnosis itself is already persisted above; this
+  // only advances the room's lifecycle flag. supabase-js returns the error
+  // in-band, so log a failure rather than dropping it silently — otherwise the
+  // room stays stuck at its prior status (e.g. "analyzing") while a diagnosis
+  // exists, desyncing the UI's step indicator from reality.
+  const { error: statusError } = await supabase
     .from("rooms")
     .update({ status: "diagnosed", updated_at: new Date().toISOString() })
     .eq("id", room_id);
+  if (statusError) {
+    console.error("[diagnosis] Failed to update room status:", statusError.message);
+  }
 
   // Complete agent run
   await completeAgentRun(supabase, agentRun.id, {
