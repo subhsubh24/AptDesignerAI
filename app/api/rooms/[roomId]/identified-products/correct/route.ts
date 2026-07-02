@@ -31,7 +31,7 @@ import { apiError } from "@/lib/utils/api-error";
 import { createLogger } from "@/lib/logging/logger";
 import { runProductVerifier } from "@/lib/agents/product-verifier";
 import { embedImage } from "@/lib/ai/embeddings";
-import { insertEmbedding } from "@/lib/store/embedding-index";
+import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
@@ -213,7 +213,7 @@ export async function POST(
         image: sourceImageUrl,
         text: `${enrichedEntry.brand} ${enrichedEntry.model}${enrichedEntry.variant ? " " + enrichedEntry.variant : ""}`,
       });
-      const result = await insertEmbedding(supabase, {
+      const result = await insertEmbeddingWithRetry(supabase, {
         brand: enrichedEntry.brand,
         model: enrichedEntry.model,
         variant: enrichedEntry.variant ?? null,

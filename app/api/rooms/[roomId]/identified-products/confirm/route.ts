@@ -25,7 +25,7 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createLogger } from "@/lib/logging/logger";
 import { embedImage } from "@/lib/ai/embeddings";
-import { insertEmbedding } from "@/lib/store/embedding-index";
+import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 
@@ -151,7 +151,7 @@ export async function PATCH(
         image: updated.source_image_url,
         text: `${updated.brand} ${updated.model}${updated.variant ? " " + updated.variant : ""}`,
       });
-      const result = await insertEmbedding(supabase, {
+      const result = await insertEmbeddingWithRetry(supabase, {
         brand: updated.brand,
         model: updated.model,
         variant: updated.variant ?? null,
