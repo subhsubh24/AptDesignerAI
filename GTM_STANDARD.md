@@ -221,17 +221,23 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
 Content you publish IS the brand in the wild. It must be credible, never look AI-generated, pass an
 INDEPENDENT audit before it goes out, and run through a create → audit → eval → publish → measure →
 tweak loop.
-- **Formats: text/copy + IMAGE + VIDEO — all on Gemini, already wired.** Use the Gemini provider the
-  pipeline already runs on (SAME key — there is no separate media-gen key to hold or connect):
-  IMAGE via Nano Banana (`gemini-3.1-flash-image`; `gemini-3.1-flash-lite-image` for cheap/high-volume,
-  `gemini-3-pro-image` for hero assets), VIDEO via Gemini Omni Flash (`gemini-omni-flash-preview` —
-  PREVIEW: pin the id, treat as unstable, API/pricing may change). Route through `getProvider` /
-  `geminiProvider` (never the SDK directly, per the cost contract); video uses the Interactions API
-  surface (`interactions.create`), so add a thin media-gen adapter rather than hand-rolling calls.
-  This RETIRES the old `gtm-connect-media-gen` owner step — generation works now on the existing key;
-  the only remaining owner step to go live is connecting the posting CHANNEL. Every Gemini asset
-  carries an invisible SynthID watermark (provenance-positive) — still disclose AI-assisted per FTC and
-  still clear the not-obvious-AI bar below.
+- **Formats: text/copy + IMAGE + VIDEO + AUDIO — all on Gemini, already wired.** Use the Gemini
+  provider the pipeline already runs on (SAME key — there is no separate media-gen key to hold or
+  connect): IMAGE via Nano Banana (`gemini-3.1-flash-image`; `gemini-3.1-flash-lite-image` for
+  cheap/high-volume, `gemini-3-pro-image` for hero assets), VIDEO via Gemini Omni Flash
+  (`gemini-omni-flash-preview`), AUDIO via Lyria 3 for MUSIC/soundtrack (`lyria-3-clip-preview` 30s
+  clips / `lyria-3-pro-preview` full tracks) and Gemini TTS for VOICEOVER/narration
+  (`gemini-3.1-flash-tts-preview`, controllable style/tone). All the generation models are PREVIEW:
+  pin the ids, treat as unstable (API/pricing may change). Give a video a soundtrack and/or voiceover
+  from the SAME key — no ElevenLabs/third-party audio dependency required (a factory already on its
+  own audio stack, e.g. HighlightMagic on ElevenLabs, may keep it; the standard just names Gemini as
+  the sanctioned default). Route through `getProvider` / `geminiProvider` (never the SDK directly, per
+  the cost contract); video/audio use the Interactions API surface (`interactions.create`), so add a
+  thin media-gen adapter rather than hand-rolling calls. This RETIRES the old `gtm-connect-media-gen`
+  owner step — generation works now on the existing key; the only remaining owner step to go live is
+  connecting the posting CHANNEL. Every Gemini image/video/audio asset carries an invisible SynthID
+  watermark (provenance-positive) — still disclose AI-assisted per FTC and still clear the
+  not-obvious-AI bar below.
 - **The credibility bar — NEVER obviously AI-generated.** AI-slop destroys credibility. Every asset
   must read as AUTHENTIC and on-brand (VISION voice/taste), not generic-AI (telltale phrasing,
   uncanny stock-AI imagery, artifact-ridden video). PREFER inherently-credible formats (real screen
