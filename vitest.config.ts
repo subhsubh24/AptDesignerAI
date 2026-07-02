@@ -10,11 +10,20 @@ export default defineConfig({
       provider: "v8",
       include: ["lib/**/*.ts"],
       exclude: ["lib/types/**", "lib/design-context/**"],
+      // Floors sit ~10pts below the real numbers (≈50/39/54/51 stmts/branch/
+      // funcs/lines, measured with `npm run test:coverage`, evals skipped) so a
+      // genuine coverage regression fails that command while normal variance does
+      // not. Raise these as coverage climbs; never lower them below reality — a
+      // floor far under actual is decorative and trains everyone to ignore it.
+      // NOTE: these gate `npm run test:coverage` only; the CI `verify` job runs
+      // bare `vitest run` (no --coverage), so a coverage regression is NOT yet
+      // caught in CI. Wiring test:coverage into the CI verify job is a separate,
+      // human-applied step (the loop cannot edit .github/).
       thresholds: {
-        statements: 25,
-        branches: 19,
-        functions: 30,
-        lines: 25,
+        statements: 40,
+        branches: 30,
+        functions: 42,
+        lines: 40,
       },
     },
   },
