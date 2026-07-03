@@ -4,6 +4,41 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-03 (Run 56) — DEEP AUDIT + 3 disjoint changes (security SSRF + a11y + F2 test); 1 abandoned on value/architecture
+
+### State on entry
+- Cold container at default tip `9de8422` (post Run 55 #337-342 + GTM/FACTORY commits #343-361). `npm install` root+mobile. Baseline gate green: tsc clean (root+mobile), **1483 tests** pass / 11 skip, determinism clean, eslint 0.
+- **DEEP AUDIT due** (last Run 52, 4 runs ago). Ran the full 8-lens read-only Haiku sweep FIRST (correctness/dead-code, security-RLS, performance, a11y-design, test-eval, dependency-config, artifact-freshness, functional-wiring-mobile) — findings in the DEEP AUDIT block below.
+- Consumed QUALITY_SCORECARD (as_of 2026-07-01, overall C / ship_gate_met:false): sole ship-critical blocker stays **functional_reality C** (core money-path outcome-asserting E2E) — OWNER-BLOCKED (needs Supabase-local + Stripe test-mode in CI, `.github/` human-applied). Did NOT attempt the ready issue.
+
+### DEEP AUDIT (Run 56) — prioritized findings
+TAKEN this run: floor-plan SSRF (#C2), sourcing icon-button a11y (#C3), cosineSimilarity F2 tests (#C5).
+Scout FALSE POSITIVES verified & rejected (Haiku over-report, Run 55 lesson 3): product-verify maxDuration ALREADY=300 (#283, scorecard stale); search route insert "silent loss" ALREADY logs every in-band write (#309 pattern); diagnosis/rooms GET "no try/catch" — Next catches → 500 (standard); gemini undefined-key — assertProductionEnv fails loud in prod.
+Verified-but-DEFERRED (reasons): free-tier "1 room" copy vs FREE_SAVE_LIMIT_WEB=3 — scout RESOLVED the fact: diagnosis is UNGATED, only SAVES gated at 3, so copy UNDER-sells; but the business-case conversion model references "1 free room" as the paywall trigger → needs a coordinated recompute, owner/business-case-routine territory, do NOT unilaterally edit. BUSINESS_CASE cost tier (2.5 base vs diagnosis→mid 3.1) — business-case doc is auditor-graded A; changing COGS is the business-case routine's job. next/image (loop deliberately uses <img>+eslint-disable for external/blob URLs, Run 26). Decorative-only aria-hidden micro-changes (anchor: standalone-only, never batch padding). Provider response Zod validation (casts throw→caught→500, not silent; churn risk). Next DEEP AUDIT ~Run 60.
+
+### What was done (3 file-disjoint changes)
+- **#C3 a11y (Track F/A2, PR #362 MERGED)** — ManualSourcingForm remove-URL icon-only Button (size=icon, only a Trash2 icon) had NO accessible name → WCAG 4.1.2 failure. aria-label (humanized category label reused from the visible heading, not the raw snake_case key) + aria-hidden on the Trash2 + the adjacent decorative Plus. Reviewer A REQUEST_CHANGES on the raw-slug label (fixed: hoisted `categoryLabel`); Reviewer B APPROVE.
+- **#C5 test (Track F2, PR #363 MERGED)** — cosineSimilarity (the retrieval-gating vector math; topKSimilar drops priors below minSimilarity with it) had NO dedicated test. New __tests__/ai/embeddings.test.ts, 12 mutation-resistant cases (identical=1, scale-invariance, orthogonal=0, opposite=-1, known non-trivial cosine, symmetry, [-1,1] bound; zero-norm→0-not-NaN split into 3 cases to catch a `||`→`&&` mutation; dim-mismatch exact-message throw). Both reviewers APPROVE (A re-derived all values in Node; B mutation-tested the source).
+- **#C2 security (Track G, PR #364, both reviewers APPROVE + auto-merge queued)** — floor-plan POST passed image_url to runFloorPlanExtraction → fetchAsBlob, which does a raw fetch() on absolute URLs → SSRF (169.254.169.254/localhost/private IPs). Guard: allow relative "/uploads/..." (no "..", local-disk read, no fetch) OR https on our own Supabase host; reject else 400. FIRST draft (https-host-only, copied from mobile/analyze) was a would-be REGRESSION — see lesson 2/3.
+
+### Abandoned this run (value/architecture — the value bar + review working)
+- **perf/embedding-pgvector-rpc (ABANDONED, never pushed)** — proposed a pgvector `match_product_embeddings` RPC (migration 029) to replace topKSimilar's full-table scan (the scorecard's named perf gap). BOTH C1 reviewers REQUEST_CHANGES after discovering the KEY ARCHITECTURAL FACT: `lib/supabase/server.ts createClient()` returns the IN-MEMORY memory-store for ALL data ops (only `.auth` swapped for real Supabase) — the app is NOT on real Postgres yet ("memory store as the data layer until a full DB migration is done"). So `.rpc` always returns the mock `{data:null}`, the RPC path is INERT, and the "N full-table scans" are over an in-process JS array (fast), not Postgres. The perf gap doesn't BIND until a separate, unscheduled data-layer→Postgres migration. Shipping inert code + a must-apply migration for ZERO current benefit = premature/speculative → abandoned. Revisit ONLY after the memory-store→Postgres data-layer cutover.
+
+### Lessons learned
+1. **THE APP RUNS ON AN IN-MEMORY DATA LAYER (memory-store), not Postgres — `lib/supabase/server.ts` proxies only `.auth` to real Supabase; `.from`/`.storage`/`.rpc` all hit createMemoryClient().** This invalidates any change premised on "real Postgres" TODAY: (a) a pgvector/RPC/index perf fix is INERT (memory-store.rpc returns {data:null}); (b) image_urls are RELATIVE "/uploads/..." disk paths (memory-store getPublicUrl), NOT https://supabase.co URLs — so a Supabase-host-only URL guard 400s every legit upload (this bit the first #C2 draft). ALWAYS trace a change's runtime client through server.ts before assuming Supabase semantics. Migrations 021-027 ship "apply-later" safely because they back FEATURES that work via the memory store in dev and activate on apply; a pure PERF/index migration is different — it only pays off at Postgres scale that doesn't exist yet.
+2. **fetchAsBlob (lib/ai/files-cache.ts) has two branches: relative "/uploads/..." → local-disk read (no network, no SSRF); absolute URL → raw fetch() (the SSRF surface).** The correct SSRF guard for any image_url→extraction route ALLOWS the relative disk path and only host-restricts absolute URLs — mirroring both fetchAsBlob shapes, not just the mobile /api/analyze one (mobile uploads go direct to real Storage, so its https-only guard is safe THERE but wrong for the web /api/upload flow).
+3. **Adversarial 2-reviewer review caught a would-be REGRESSION, not just a nit.** The first #C2 draft (copied verbatim from the mobile guard) would have 400'd every legitimate floor-plan upload. Reviewer A traced the real upload URL shape and caught it. Copying a "proven" guard across routes is unsafe when the routes have different upload paths — verify the actual data shape each route receives.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 60.**
+- **functional_reality (ship-critical, still C) is the convergence blocker and is OWNER-BLOCKED** — do NOT fabricate a change that can't run green in-container.
+- **Queued/validated, file-disjoint, NOT taken (revisit):**
+  - **perf embedding RPC** — REVISIT ONLY after the memory-store→Postgres data-layer migration lands (inert until then; see lesson 1). If revisited, ALSO add topKSimilar branch tests (RPC-success/fallback/error mapping) — it has none.
+  - **artifact/business-case** — free-tier "1 room" copy + BUSINESS_CASE cost-tier (2.5 vs 3.1): both need the business-case routine / a coordinated recompute, not a unilateral maker edit. Flag to owner rather than churn.
+  - **a11y** — decorative aria-hidden on pricing Check / homepage stars / SharedDesignView sparkles: real but micro; only ship if bundled into a genuinely valuable a11y pass, never as batch padding.
+  - **dependency** — provider response Zod validation (deepseek/tavily/gemini casts): defensible only if you can show a real uncaught crash (today casts throw → route try/catch → 500, not silent).
+- **Readiness:** still blocked — QUALITY_SCORECARD overall C / ship_gate_met:false (functional_reality C binding, human-gated).
+
 ## Run 2026-07-02 (Run 55) — 6 disjoint changes (correctness + G2 security + Track-B a11y + 3× F2 agent tests)
 
 ### State on entry
