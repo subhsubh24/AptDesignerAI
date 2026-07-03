@@ -13,6 +13,12 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
  * Requires: STRIPE_SECRET_KEY, STRIPE_PRICE_ID_APARTMENT or
  *           STRIPE_PRICE_ID_PRO_MONTHLY (see PENDING_OPS.md).
  */
+
+// Give the Stripe checkout-session create room to surface its own 15s SDK
+// timeout as a clean, catchable error instead of the platform's short default
+// killing the function first (which would 504 a paying user mid-checkout).
+export const maxDuration = 20;
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
