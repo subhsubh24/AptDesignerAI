@@ -67,3 +67,34 @@ export async function deleteUser(id: string): Promise<void> {
     /* best-effort */
   }
 }
+
+// A fixed far-future period end so the entitlement never expires mid-suite AND
+// no wall-clock (Date.now/new Date) enters the test — keeping the seed
+// deterministic-checker clean, like the rest of this file.
+const FAR_FUTURE = "2099-12-31T00:00:00.000Z";
+
+/**
+ * Seed an ACTIVE Pro entitlement for a user by inserting the `stripe_customers`
+ * row the Stripe webhook would normally write. This lets the paywall-UNLOCK
+ * journey assert that the UI reflects Pro entitlement WITHOUT a live Stripe
+ * checkout — the same way `createConfirmedUser` seeds a confirmed account
+ * without the email link. Service-role bypasses RLS, so the insert succeeds even
+ * though authenticated users have no INSERT policy on the table (migration 018).
+ *
+ * `hasProEntitlementWeb`/`getWebBillingStatus` read exactly these columns, so a
+ * tier='pro' + status='active' + future period-end row makes `hasPaid` true and
+ * the free-tier upgrade surface disappears — the intended unlock outcome.
+ */
+export async function seedProEntitlement(userId: string): Promise<void> {
+  const { error } = await admin().from("stripe_customers").insert({
+    user_id: userId,
+    stripe_customer_id: `cus_e2e_${userId}`,
+    stripe_subscription_id: `sub_e2e_${userId}`,
+    tier: "pro",
+    status: "active",
+    current_period_end: FAR_FUTURE,
+  });
+  if (error) {
+    throw new Error(`seed: seedProEntitlement failed: ${error.message}`);
+  }
+}
