@@ -6,7 +6,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { WaitlistForm } from "./waitlist-form";
 
 export const metadata: Metadata = {
-  title: "Coming to iOS & Android — AptDesigner",
+  title: "Coming to iOS & Android — AptDesignerAI",
   description:
     "AptDesigner is coming to mobile. Join the waitlist to be first to know when the iOS and Android apps launch.",
 };

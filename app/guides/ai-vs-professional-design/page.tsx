@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "AI Interior Design: When It Works and When You Still Need a Pro — AptDesigner",
+  title: "AI Interior Design: When It Works and When You Still Need a Pro — AptDesignerAI",
   description:
     "An honest take on what AI design tools do well — and where human designers still have the edge. Use this to decide what's right for your project.",
   openGraph: {

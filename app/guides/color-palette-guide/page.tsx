@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "How to Choose a Colour Palette for Your Room — AptDesigner",
+  title: "How to Choose a Colour Palette for Your Room — AptDesignerAI",
   description:
     "Learn how light direction, existing finishes, and room scale interact to determine which colours will actually work in your space.",
   openGraph: {

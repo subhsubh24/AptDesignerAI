@@ -8,7 +8,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
-  title: "Pricing — AptDesigner",
+  title: "Pricing — AptDesignerAI",
   description:
     "Simple, honest pricing for AI-powered apartment design. Start free, upgrade when you're ready.",
 };

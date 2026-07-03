@@ -7,7 +7,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "FAQ — AptDesigner",
+  title: "FAQ — AptDesignerAI",
   description:
     "Everything you want to know about AptDesigner: how the AI works, what you get, pricing, privacy, and more.",
 };

@@ -81,10 +81,10 @@ export async function generateMetadata({
   const design = await getSharedDesign(token);
 
   if (!design) {
-    return { title: "Design not found | AptDesigner" };
+    return { title: "Design not found | AptDesignerAI" };
   }
 
-  const appTitle = `${design.title} | AptDesigner`;
+  const appTitle = `${design.title} | AptDesignerAI`;
   const raw =
     design.snapshot.assessment?.design_direction ||
     design.snapshot.assessment?.room_description ||
@@ -101,7 +101,7 @@ export async function generateMetadata({
       title: appTitle,
       description,
       type: "website",
-      siteName: "AptDesigner",
+      siteName: "AptDesignerAI",
       ...(image ? { images: [{ url: image, alt: appTitle }] } : {}),
     },
     twitter: {

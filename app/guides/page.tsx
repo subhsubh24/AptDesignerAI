@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "Interior Design Guides — AptDesigner",
+  title: "Interior Design Guides — AptDesignerAI",
   description:
     "Practical interior design guides from AptDesigner. Learn how to choose a colour palette, mix materials, and use AI to design your apartment.",
 };

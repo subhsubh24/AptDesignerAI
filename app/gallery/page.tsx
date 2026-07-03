@@ -8,8 +8,8 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
-  title: "Gallery — AptDesigner",
-  description: "Real apartments, AI-designed. See what AptDesigner creates across styles, budgets, and layouts.",
+  title: "Gallery — AptDesignerAI",
+  description: "Real apartments, AI-designed. See what AptDesignerAI creates across styles, budgets, and layouts.",
 };
 
 type Example = {

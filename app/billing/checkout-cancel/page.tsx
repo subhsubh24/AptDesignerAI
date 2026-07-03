@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "Checkout cancelled — AptDesigner",
+  title: "Checkout cancelled — AptDesignerAI",
 };
 
 export default function CheckoutCancelPage() {

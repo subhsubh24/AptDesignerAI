@@ -6,7 +6,7 @@ import { UpgradeCheckoutButton } from "./upgrade-checkout-button";
 import { UpgradeViewTracker } from "./upgrade-tracker";
 
 export const metadata: Metadata = {
-  title: "Upgrade — AptDesigner",
+  title: "Upgrade — AptDesignerAI",
   description: "Unlock the full apartment design experience.",
 };
 

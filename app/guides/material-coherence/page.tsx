@@ -6,7 +6,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "Material Coherence: Why Oak and Brass Work (and Chrome and Pine Don't) — AptDesigner",
+  title: "Material Coherence: Why Oak and Brass Work (and Chrome and Pine Don't) — AptDesignerAI",
   description:
     "The finish compatibility rules that professional designers follow — and how to apply them when choosing furniture and hardware for your home.",
   openGraph: {

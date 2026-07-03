@@ -7,7 +7,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { ConversionTracker } from "./conversion-tracker";
 
 export const metadata: Metadata = {
-  title: "Payment confirmed — AptDesigner",
+  title: "Payment confirmed — AptDesignerAI",
 };
 
 const TIER_COPY: Record<string, { headline: string; sub: string }> = {

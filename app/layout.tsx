@@ -6,7 +6,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AptDesigner - AI Interior Design Copilot",
+  title: "AptDesignerAI - AI Interior Design Copilot",
   description:
     "A deeply personalized AI-powered interior design assistant for your apartment.",
 };

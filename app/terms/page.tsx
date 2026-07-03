@@ -3,8 +3,8 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — AptDesigner",
-  description: "The terms under which you use AptDesigner.",
+  title: "Terms of Service — AptDesignerAI",
+  description: "The terms under which you use AptDesignerAI.",
 };
 
 export default function TermsPage() {

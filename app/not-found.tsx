@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Compass, Home, LayoutDashboard } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Page not found — AptDesigner",
+  title: "Page not found — AptDesignerAI",
   description: "The page you're looking for doesn't exist or has moved.",
 };
 
