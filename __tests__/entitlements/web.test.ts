@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getWebBillingStatus, hasProEntitlementWeb } from "@/lib/entitlements/web";
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -21,6 +21,10 @@ function makeSupabaseChain(data: unknown, error: { message: string } | null = nu
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 // ── getWebBillingStatus ───────────────────────────────────────────────────────
@@ -129,11 +133,22 @@ describe("getWebBillingStatus — pro tier (subscription)", () => {
 // ── hasProEntitlementWeb ──────────────────────────────────────────────────────
 
 describe("hasProEntitlementWeb", () => {
-  it("returns true (fail-open) when admin client is absent", async () => {
+  it("fails OPEN (returns true) in development when admin client is absent", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     mockGetAdminClient.mockReturnValue(null as never);
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await hasProEntitlementWeb("user-1");
     expect(result).toBe(true);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("development"));
+  });
+
+  it("fails CLOSED (returns false) in production when admin client is absent", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    mockGetAdminClient.mockReturnValue(null as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await hasProEntitlementWeb("user-1");
+    expect(result).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("production"));
   });
 
   it("returns true for active apartment subscriber", async () => {

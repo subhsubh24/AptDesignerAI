@@ -18,10 +18,11 @@ async function importModule() {
   return import("@/lib/entitlements/server");
 }
 
-// ── Missing key (fail-open) ───────────────────────────────────────────────────
+// ── Missing key: fail-OPEN in dev, fail-CLOSED in prod ────────────────────────
 
 describe("hasProEntitlement — missing REVENUECAT_SECRET_KEY", () => {
-  it("returns true and logs error when key is unset", async () => {
+  it("fails OPEN (returns true) and logs in development when key is unset", async () => {
+    vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("REVENUECAT_SECRET_KEY", "");
     const { hasProEntitlement } = await importModule();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -30,6 +31,21 @@ describe("hasProEntitlement — missing REVENUECAT_SECRET_KEY", () => {
 
     expect(result).toBe(true);
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("REVENUECAT_SECRET_KEY"));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("development"));
+    consoleSpy.mockRestore();
+  });
+
+  it("fails CLOSED (returns false) and logs in production when key is unset", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REVENUECAT_SECRET_KEY", "");
+    const { hasProEntitlement } = await importModule();
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await hasProEntitlement("user-1");
+
+    expect(result).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("REVENUECAT_SECRET_KEY"));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("production"));
     consoleSpy.mockRestore();
   });
 });
