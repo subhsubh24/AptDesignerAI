@@ -74,9 +74,6 @@ export default async function RoomPage({
       status: hasImages
         ? `${room.room_images.length} photo${room.room_images.length === 1 ? "" : "s"} uploaded`
         : "Not started",
-      color: "text-blue-600 dark:text-blue-400",
-      bg: "bg-blue-100 dark:bg-blue-950",
-      completedBg: "bg-blue-500",
     },
     {
       title: "Room Diagnosis",
@@ -86,9 +83,6 @@ export default async function RoomPage({
       available: hasImages,
       completed: currentStatusIndex >= 1,
       status: currentStatusIndex >= 1 ? "Analysis complete" : "Ready to analyze",
-      color: "text-emerald-600 dark:text-emerald-400",
-      bg: "bg-emerald-100 dark:bg-emerald-950",
-      completedBg: "bg-emerald-500",
     },
     {
       title: "Products",
@@ -101,9 +95,6 @@ export default async function RoomPage({
         (productCount || 0) > 0
           ? `${productCount} product${productCount === 1 ? "" : "s"}, ${shortlistedCount || 0} shortlisted`
           : "No products yet",
-      color: "text-amber-600 dark:text-amber-400",
-      bg: "bg-amber-100 dark:bg-amber-950",
-      completedBg: "bg-amber-500",
     },
     {
       title: "Compare",
@@ -116,9 +107,6 @@ export default async function RoomPage({
         (shortlistedCount || 0) >= 2
           ? `${shortlistedCount} products to compare`
           : "Need 2+ scored products",
-      color: "text-purple-600 dark:text-purple-400",
-      bg: "bg-purple-100 dark:bg-purple-950",
-      completedBg: "bg-purple-500",
     },
     {
       title: "Bundles",
@@ -131,9 +119,6 @@ export default async function RoomPage({
         (bundleCount || 0) > 0
           ? `${bundleCount} bundle${bundleCount === 1 ? "" : "s"} created`
           : "No bundles yet",
-      color: "text-rose-600 dark:text-rose-400",
-      bg: "bg-rose-100 dark:bg-rose-950",
-      completedBg: "bg-rose-500",
     },
     {
       title: "Mockups",
@@ -146,9 +131,6 @@ export default async function RoomPage({
         (mockupCount || 0) > 0
           ? `${mockupCount} mockup${mockupCount === 1 ? "" : "s"} generated`
           : "No mockups yet",
-      color: "text-cyan-600 dark:text-cyan-400",
-      bg: "bg-cyan-100 dark:bg-cyan-950",
-      completedBg: "bg-cyan-500",
     },
   ];
 
@@ -234,7 +216,7 @@ export default async function RoomPage({
                   className={cn(
                     "relative z-10 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 shrink-0",
                     step.completed
-                      ? `${step.completedBg} text-white shadow-sm`
+                      ? "bg-accent-warm text-white shadow-sm"
                       : isNext
                       ? "bg-accent-warm text-white shadow-warm-md animate-gentle-glow"
                       : step.available
@@ -245,7 +227,7 @@ export default async function RoomPage({
                   {step.completed ? (
                     <CheckCircle2 className="h-5 w-5" />
                   ) : (
-                    <step.icon className={cn("h-5 w-5", step.available ? step.color : "text-muted-foreground/40")} />
+                    <step.icon className={cn("h-5 w-5", step.available ? "text-accent-warm" : "text-muted-foreground/40")} />
                   )}
                 </div>
                 {/* Line */}
@@ -253,7 +235,7 @@ export default async function RoomPage({
                   <div
                     className={cn(
                       "w-0.5 flex-1 min-h-[24px] transition-colors",
-                      step.completed ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border"
+                      step.completed ? "bg-accent-warm/40" : "bg-border"
                     )}
                   />
                 )}
@@ -291,7 +273,7 @@ export default async function RoomPage({
                           <p className="text-sm text-muted-foreground">{step.description}</p>
                           <p className={cn(
                             "text-xs mt-1.5",
-                            step.completed ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground/60"
+                            step.completed ? "text-accent-warm font-medium" : "text-muted-foreground/60"
                           )}>
                             {step.status}
                           </p>
