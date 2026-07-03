@@ -561,6 +561,21 @@ else
   echo "$LEAK" | sed 's/^/    /'
 fi
 
+# Mobile equivalent: EXPO_PUBLIC_* vars are inlined into the shipped app BINARY
+# at build time, so a secret leaked through one is UNREVOCABLE once released —
+# strictly worse than a NEXT_PUBLIC_* leak (which at least reships on deploy).
+# Same allowlist rationale — only SECRET / SERVICE_ROLE / PRIVATE names are ever
+# meant to stay server-side (EXPO_PUBLIC_SUPABASE_ANON_KEY / *_URL are fine).
+EXPO_LEAK="$(grep -rniE 'EXPO_PUBLIC_[A-Z0-9_]*(SECRET|SERVICE_ROLE|PRIVATE)' \
+  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.json' --include='*.env*' \
+  mobile .env.example 2>/dev/null || true)"
+if [[ -z "$EXPO_LEAK" ]]; then
+  pass "Client-secret leak (mobile) — no secret exposed via an EXPO_PUBLIC_* env name"
+else
+  fail "Client-secret leak (mobile) — a secret is baked into the app binary via an EXPO_PUBLIC_* name:"
+  echo "$EXPO_LEAK" | sed 's/^/    /'
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""
