@@ -26,23 +26,27 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-02
-  last_run: 55                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 52
+  as_of: 2026-07-03
+  last_run: 60                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 60
   this_run:
-    changes_shipped: 6           # #337-342: #337-341 merged (gate green, 2 Sonnet approvals each), #342 approved by both + auto-merge queued on CI. correctness + G2 security + Track-B a11y + 3× F2 agent tests
-    changes_abandoned: 0         # all 6 implemented changes passed gate + both reviewers
-    abandoned_reasons: []        # deselected-pre-build (not counted as abandoned): free-tier "1 room" copy vs FREE_SAVE_LIMIT_WEB=3 = deferred (ambiguous — save-limit≠room-limit + business-case conversion model references "1 room"; risks overselling/recompute); paywall-sheet offering-cache-once-per-session = review_value (offerings rarely change mid-session; Run 54 also deferred); embedding-index retry try/catch for a *thrown* connection error = review_value (supabase returns errors in-band; marginal)
-    verify_cycle_failures: 0     # LOOP-2 gate failures. NOTE: a review subagent ran `git stash/checkout` in the SHARED working tree and clobbered my UNCOMMITTED design-coordinator edits mid-run (recovered by re-applying + committing-before-review). Lesson: commit before spawning reviewers; instruct reviewers to use read-only git only.
-    review_rejections: 1         # LOOP-3: Reviewer B REQUEST_CHANGES on #338 — the "last two unguarded request.json()" completeness claim was FALSE (a 3rd, saved-designs/[id] PATCH, existed). Added the 3rd guard + corrected the claim + re-audited → re-review APPROVE. The value bar catching an overclaim, working as intended.
+    changes_shipped: 4           # #394-397 merged (gate green, 2 Sonnet approvals each, no re-review cycles): 3× F2 test (pagination, image-mime, build-profile) + mobile results-loading a11y liveRegion
+    changes_abandoned: 2         # #393 (authed-axe) + #398 (brand titles) — BOTH via the gates working, not churn
+    abandoned_reasons:           # classify every dropped change so the next run doesn't re-attempt the dead-end
+      - id: "#393 authed-axe dashboard"
+        reason: gate_test        # both-APPROVED but the CI journeys job FAILED on REAL serious WCAG AA color-contrast violations on the signed-in dashboard welcome step (the gate working). Landing the gate needs the contrast FIXED first — unsafe to nail blind (no local auth-stack render, dark-mode parity, axe measured mid-StaggerItem animation opacity). Exact targets on issue #204; re-add WITH the fix + reducedMotion:'reduce' + drop the networkidle wait.
+      - id: "#398 brand-metadata titles"
+        reason: review_value     # both reviewers REQUEST_CHANGES: fixing <title> while leaving footer/body/watermark/email stale creates NEW inconsistency (metric-chasing). Needs a wholesale brand sweep behind a single BRAND_NAME constant, or not at all.
+    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all changes root+mobile. #393's failure was a CI-only axe gate on a surface that cannot be rendered locally (no auth stack), not a local verify-cycle failure.
+    review_rejections: 1         # LOOP-3: #398 both reviewers REQUEST_CHANGES on value (partial brand fix creates new inconsistency) → abandoned (not reworked; the right fix is a larger wholesale sweep). The value bar working as intended.
     circuit_breaker_trips: 0
   rolling_7d:
-    merged_prs: 54               # all routines' merged PRs over the last 7d (product + housekeeping + GTM/FACTORY_STANDARD syncs), from `git log --since=7d | grep -c '(#N)'`
+    merged_prs: 54               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
-    recurring_failures: []       # failures seen across >=2 runs (the "stuck" signal) — name them
-    harness_proposals_open: 0    # issue #181 ("gates not enforced in CI") RESOLVED: lint + the public journey tier (BUILDS!=WORKS) are now REQUIRED checks alongside verify/build/mobile; the loop merges via --auto so a red check BLOCKS auto-merge. Authed journey tier = tracked follow-up.
+    recurring_failures: []       # no stuck pattern: the two abandonments were the gates catching real issues (an a11y bug + a metric-chasing edit), not repeated dead-ends
+    harness_proposals_open: 0    # note (not stuck): authed-surface changes (E2E/a11y) are only CI-verifiable here — no local auth stack (no supabase CLI/docker). The gates catch real issues, so this is friction not failure; fixes needing a live render (e.g. dashboard contrast) should be done in a way that can render the surface.
   validation:                    # self-validation capability gate (validation/CAPABILITIES.yml + the REQUIRED validate-capabilities check). Dashboard reads this block.
     enforced_in_ci: true         # validate-capabilities is a required status check (fails closed on undeclared/unmet capabilities)
     capabilities_total: 14       # external services declared in validation/CAPABILITIES.yml
