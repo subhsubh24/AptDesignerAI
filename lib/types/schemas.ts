@@ -18,6 +18,23 @@ const nonEmptyStringArray = z.array(z.string().min(1)).min(1);
 /** String array that defaults to empty. */
 const stringArray = z.array(z.string()).default([]);
 
+/**
+ * Boolean that also tolerates the string "true"/"false" the model sometimes
+ * emits in place of a JSON boolean (a real diagnosis-eval failure: issue #306).
+ * Uses an EXPLICIT string map, NOT `z.coerce.boolean()` — the latter is
+ * `Boolean(v)`, so `Boolean("false") === true` would silently flip a genuine
+ * false. Any non-boolean, non-"true"/"false" value falls through to
+ * `z.boolean()` and still fails validation loudly. Deterministic (pure).
+ */
+const looseBoolean = z.preprocess((v) => {
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true") return true;
+    if (s === "false") return false;
+  }
+  return v;
+}, z.boolean());
+
 // ─── Product Evaluation ───────────────────────────────────────
 
 export const ProductScoresSchema = z.object({
@@ -339,7 +356,7 @@ export const DiagnosisDataSchema = z.object({
   room_type_confirmation: z
     .object({
       inferred_room_type: z.string().default(""),
-      matches_declared: z.boolean().default(true),
+      matches_declared: looseBoolean.default(true),
       confidence: z.enum(["high", "medium", "low"]).default("high"),
       note: z.string().default(""),
     })
