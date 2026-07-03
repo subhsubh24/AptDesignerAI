@@ -81,6 +81,7 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
               We sent a confirmation link to {email.trim()}. Open it to activate your account, then sign in.
             </ThemedText>
             <Pressable
+              accessibilityRole="button"
               style={({ pressed }) => [
                 styles.primaryButton,
                 { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
@@ -123,7 +124,11 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
               </ThemedText>
 
               {error ? (
-                <View style={[styles.errorBox, { backgroundColor: colors.destructive + '18', borderColor: colors.destructive + '40' }]}>
+                <View
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                  style={[styles.errorBox, { backgroundColor: colors.destructive + '18', borderColor: colors.destructive + '40' }]}
+                >
                   <ThemedText type="small" style={{ color: colors.destructive }}>
                     {error}
                   </ThemedText>
@@ -202,6 +207,8 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
               </View>
 
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: loading, busy: loading }}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   { backgroundColor: colors.accent, opacity: pressed || loading ? 0.8 : 1 },
@@ -241,7 +248,7 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
               <ThemedText type="small" style={{ color: colors.textSecondary }}>
                 Already have an account?{' '}
               </ThemedText>
-              <Pressable onPress={onLogin} hitSlop={8}>
+              <Pressable accessibilityRole="button" onPress={onLogin} hitSlop={8}>
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>
                   Sign in
                 </ThemedText>
