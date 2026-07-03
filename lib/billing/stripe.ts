@@ -27,12 +27,16 @@ function getStripe(): Stripe {
       // CATCHABLY (StripeConnectionError) instead of hanging until the serverless
       // platform kills the function with an opaque 504. The SDK default is 80s —
       // longer than any Vercel budget. 15s is ample for a single checkout-session
-      // create (normally sub-second) and stays under the route's maxDuration so
-      // the caller gets a clean "please try again" rather than a hung request.
-      // Mirrors the explicit timeouts on the other external calls (email 10s,
-      // Turnstile 5s). maxNetworkRetries kept at its default: a user-initiated
-      // checkout should surface a failure immediately, not silently double the wait.
+      // create (normally sub-second). Mirrors the explicit timeouts on the other
+      // external calls (email 10s, Turnstile 5s).
       timeout: 15_000,
+      // CRITICAL to the ordering above: the SDK RETRIES a timed-out request (its
+      // default maxNetworkRetries is 2), so leaving the default would burn
+      // ~3×15s + backoff ≈ 45–50s — past the route's maxDuration=20, letting the
+      // platform 504 first and reproducing the very hang this fixes. A user-
+      // initiated checkout should surface the failure on the first attempt, so
+      // disable retries: one 15s attempt stays safely under maxDuration.
+      maxNetworkRetries: 0,
     });
   }
   return _stripe;
