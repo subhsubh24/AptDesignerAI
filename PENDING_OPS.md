@@ -115,6 +115,13 @@ OWNER_ACTIONS:
       why: "Run 44 (PR #227): adds the user_email_preferences tenant table (RLS keyed on auth.uid()=user_id) backing the /account email opt-out. The marketing send paths (win-back webhook, activation cron) read it via the admin client and the /account toggle writes it. Until applied, the toggle's GET/PUT and the send-path checks error. Idempotent."
       how: "Run `supabase db push` (or paste supabase/migrations/027_user_email_preferences.sql into the Supabase SQL Editor)."
       blocks: marketing-email-compliance
+    - id: apply-migration-029
+      title: "Apply migration 029_grant_stripe_customers_access.sql to prod (explicit stripe_customers GRANTs)"
+      priority: normal
+      status: open
+      why: "Run 59 (PR #386): migration 018 created stripe_customers with RLS but NO explicit table-level GRANTs, relying on Supabase default-privilege auto-grants. The paywall→entitlement-unlock journey surfaced `permission denied for table stripe_customers` for BOTH the service-role entitlement read (getWebBillingStatus/hasProEntitlementWeb via getAdminClient) AND the seed — i.e. `supabase db reset` (CI journeys backend) does not reliably apply those default grants to migration-created tables. 029 makes them explicit: service_role full DML (webhook + entitlement reads), authenticated SELECT (so the existing own-row RLS SELECT policy is reachable); anon stays ungranted. Idempotent + a harmless no-op on hosted Supabase where the default privileges already cover these roles — apply defensively so the table's access model is explicit and portable. RLS boundary unchanged (GRANT and RLS are independent gates)."
+      how: "Run `supabase db push` (or paste supabase/migrations/029_grant_stripe_customers_access.sql into the Supabase SQL Editor). Verify: SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_name='stripe_customers' — expect authenticated=SELECT, service_role=SELECT/INSERT/UPDATE/DELETE, no anon."
+      blocks: none
     - id: set-cron-secret
       title: "Set CRON_SECRET to activate the activation email cron job"
       priority: normal
