@@ -78,7 +78,9 @@ export function ManualSourcingForm({ categories, onSubmit, loading, onCancel }: 
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {categories.map((cat) => (
+          {categories.map((cat) => {
+            const categoryLabel = cat.search_title || cat.category.replace(/_/g, " ");
+            return (
             <div key={cat.category} className="space-y-2">
               <div className="flex items-center gap-2">
                 <Badge
@@ -88,7 +90,7 @@ export function ManualSourcingForm({ categories, onSubmit, loading, onCancel }: 
                   {cat.priority}
                 </Badge>
                 <h3 className="font-medium text-sm">
-                  {cat.search_title || cat.category.replace(/_/g, " ")}
+                  {categoryLabel}
                 </h3>
               </div>
               <p className="text-xs text-muted-foreground">{cat.description}</p>
@@ -113,8 +115,9 @@ export function ManualSourcingForm({ categories, onSubmit, loading, onCancel }: 
                         onClick={() => removeUrl(cat.category, idx)}
                         disabled={loading}
                         className="shrink-0 h-9 w-9"
+                        aria-label={`Remove product URL for ${categoryLabel}`}
                       >
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       </Button>
                     )}
                   </div>
@@ -126,12 +129,13 @@ export function ManualSourcingForm({ categories, onSubmit, loading, onCancel }: 
                   disabled={loading}
                   className="text-xs text-muted-foreground"
                 >
-                  <Plus className="h-3 w-3 mr-1" />
+                  <Plus className="h-3 w-3 mr-1" aria-hidden="true" />
                   Add another option
                 </Button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
