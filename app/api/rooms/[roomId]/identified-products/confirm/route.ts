@@ -29,6 +29,13 @@ import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 
+// This route makes a remote Gemini embedding call (embedImage) on the confirm/
+// correct write-back path. Without an explicit maxDuration, Vercel applies a
+// short platform default and can kill the function mid-embedding — a "builds
+// green, request gets killed" failure that also aborts the confirmation write.
+// 300s matches every other embedding/LLM pipeline route.
+export const maxDuration = 300;
+
 const log = createLogger("identified-products-confirm");
 
 interface ConfirmBody {
