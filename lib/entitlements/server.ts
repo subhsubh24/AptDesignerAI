@@ -3,9 +3,15 @@
  *
  * Uses the RC REST API to verify subscription status without trusting the
  * client. Requires REVENUECAT_SECRET_KEY (server-only env var, never exposed
- * to the client). When the key is unset, fails open (returns true) with a
- * console.error so paying subscribers are never denied service due to a
- * missing key — production must set the key via PENDING_OPS.md.
+ * to the client).
+ *
+ * Two distinct failure modes are handled differently:
+ *   - MISCONFIGURATION (key unset): a deploy-time mistake. In production this
+ *     fails CLOSED (returns false) with a loud console.error so it can't
+ *     silently grant Pro to every user; in development it fails OPEN so local
+ *     work isn't blocked. Production must set the key via PENDING_OPS.md.
+ *   - RUNTIME OUTAGE (key set, RC API errors/times out): fails OPEN (returns
+ *     true) so paying subscribers are never denied service during an RC outage.
  */
 
 const RC_API_BASE = "https://api.revenuecat.com/v1";
@@ -28,16 +34,21 @@ interface RCSubscriberResponse {
 
 /**
  * Returns true if the given RC app user ID has an active 'pro' entitlement.
- * Fails open (returns true) when RC_SECRET_KEY is unset so paying subscribers
- * are not blocked by a missing key; logs an error to surface the misconfiguration.
+ * On a missing key (misconfiguration) fails CLOSED in production and OPEN in
+ * development; on a runtime RC outage fails OPEN so paying subscribers are not
+ * blocked. Logs an error to surface the misconfiguration either way.
  */
 export async function hasProEntitlement(rcAppUserId: string): Promise<boolean> {
   if (!RC_SECRET_KEY) {
+    const isProduction = process.env.NODE_ENV === "production";
     console.error(
-      "[entitlements] REVENUECAT_SECRET_KEY is not configured — skipping entitlement check. " +
-      "Set the key in Vercel env vars (see PENDING_OPS.md).",
+      "[entitlements] REVENUECAT_SECRET_KEY is not configured — " +
+      (isProduction
+        ? "denying Pro entitlement (fail-closed in production)"
+        : "granting access (fail-open in development)") +
+      ". Set the key in Vercel env vars (see PENDING_OPS.md).",
     );
-    return true;
+    return !isProduction;
   }
 
   let resp: Response;
