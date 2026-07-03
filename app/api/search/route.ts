@@ -382,11 +382,12 @@ export async function POST(request: Request) {
   // empty result. (Secondary writes below — evaluations, status flips — stay
   // log-only: the products they annotate are already committed.)
   if (insertError) {
-    console.error("[search] Failed to insert products:", insertError.message);
     await completeAgentRun(supabase, agentRun.id, {
       status: "failed",
       error_message: insertError.message,
     });
+    // apiError() logs the full error server-side (via logServerError) and returns
+    // a generic client message — no separate console.error needed.
     return apiError("search", insertError);
   }
 
