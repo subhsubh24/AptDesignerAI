@@ -88,6 +88,34 @@ export async function POST(
     return NextResponse.json({ error: "image_url required" }, { status: 400 });
   }
 
+  // SSRF guard: extraction fetches image_url server-side (runFloorPlanExtraction
+  // → fetchAsBlob). fetchAsBlob reads our own uploads from local disk when the
+  // URL is a relative "/uploads/..." path, but does a raw fetch() on any
+  // absolute URL — so an unvalidated absolute image_url lets an authed caller
+  // make the server fetch internal endpoints (169.254.169.254 IMDS, localhost,
+  // private IPs). Allow only the two shapes our own POST /api/upload produces:
+  //   1. a relative "/uploads/..." path (local-disk read, no external fetch), or
+  //   2. an https URL on our own Supabase Storage host (the real-Storage shape).
+  // Reject everything else before extraction runs. (".." blocks path traversal
+  // out of public/uploads on the local-disk branch.)
+  const isLocalUpload = image_url.startsWith("/uploads/") && !image_url.includes("..");
+  if (!isLocalUpload) {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(image_url);
+    } catch {
+      return NextResponse.json({ error: "image_url is not a valid URL" }, { status: 400 });
+    }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseHost = supabaseUrl ? new URL(supabaseUrl).hostname : null;
+    if (parsedUrl.protocol !== "https:" || !supabaseHost || parsedUrl.hostname !== supabaseHost) {
+      return NextResponse.json(
+        { error: "image_url must be an uploaded image URL" },
+        { status: 400 },
+      );
+    }
+  }
+
   // Verify project ownership
   const { data: project, error: fetchErr } = await supabase
     .from("projects")
