@@ -198,17 +198,21 @@ export async function POST(request: Request) {
     return apiError("products.evaluate", saveError);
   }
 
-  // Update product status. supabase-js returns DB errors in-band (no throw), so
-  // an unchecked update would silently orphan the evaluation: the row is saved
-  // but the product stays "pending", so the UI shows no verdict and a re-run
-  // re-scores it. Surface the failure instead of returning a fake 201.
+  // The evaluation is already persisted above (product_evaluations, the
+  // expensive primary write); this only advances the product's lifecycle flag.
+  // supabase-js returns the error in-band, so log a failure rather than dropping
+  // it silently — but do NOT 500 the request. Returning an error here would make
+  // the client treat a SUCCEEDED, already-persisted evaluation as failed and
+  // retry, inserting a DUPLICATE product_evaluations row (there is no unique
+  // constraint on product_id+room_id) and re-burning LLM credits. A stale
+  // "pending" status is the lesser evil and self-heals on the next status write.
+  // Mirrors diagnosis/route.ts + bundles/evaluate/route.ts (settled §32 pattern).
   const { error: statusError } = await supabase
     .from("candidate_products")
     .update({ status: "evaluated", updated_at: new Date().toISOString() })
     .eq("id", product_id);
-
   if (statusError) {
-    return apiError("products.evaluate", statusError);
+    console.error("[products.evaluate] Failed to update product status:", statusError.message);
   }
 
   await completeAgentRun(supabase, agentRun.id, {
