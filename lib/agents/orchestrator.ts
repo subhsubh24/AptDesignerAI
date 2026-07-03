@@ -69,7 +69,7 @@ function tiebreakBundle(a: CandidateProduct[], b: CandidateProduct[]): number {
 // ─── Backfill query helpers ────────────────────────────────────
 // Build clean search keywords from structured DesignDirection fields instead
 // of parsing style_notes prose (which leaks sentences into queries).
-function extractBackfillKeywords(dd?: { recommended_materials?: string[]; recommended_palette?: string[] }): string {
+export function extractBackfillKeywords(dd?: { recommended_materials?: string[]; recommended_palette?: string[] }): string {
   if (!dd) return "modern";
   const material = dd.recommended_materials?.[0]
     ?.split(/[,(]/)[0]
@@ -231,7 +231,7 @@ const PROACTIVE_DOMAIN_BLOCKLIST = new Set([
   "slickdeals.net", "dealnews.com", "brad's deals.com",
 ]);
 
-function isProactivelyBlockedDomain(url: string): boolean {
+export function isProactivelyBlockedDomain(url: string): boolean {
   try {
     const domain = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
     if (PROACTIVE_DOMAIN_BLOCKLIST.has(domain)) return true;
@@ -267,7 +267,7 @@ const ARTICLE_DATE_PATTERN = /\/(19|20)\d{2}\/\d{1,2}\//;
 // Common listicle title fragments in the URL slug.
 const LISTICLE_SLUG_PATTERN = /\b(?:best-|top-\d+|\d+-best|ultimate-guide|complete-guide|review-of|our-favorite|editor-?s-picks?|we-tested|we-tried)/i;
 
-function isLikelyProductUrl(url: string): boolean {
+export function isLikelyProductUrl(url: string): boolean {
   try {
     const lower = url.toLowerCase();
     if (lower.endsWith(".pdf")) return false;
