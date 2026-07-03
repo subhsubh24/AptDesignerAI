@@ -218,3 +218,115 @@ Research-backed candidate swap (if competition validates):
   run). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
   (15 min). New secondary item: confirm this environment's network policy allows outbound HTTPS to
   aptdesignerai.com, or the agent will keep reporting 0/null even after the credentials above are set.
+
+---
+
+## Run 5 — 2026-07-03
+
+### What we found
+- All Run 1-4 owner blockers remain unresolved: SITE_GATE_PASSWORD, RESEND_API_KEY/RESEND_FROM_EMAIL,
+  INTERNAL_METRICS_TOKEN, CRON_SECRET, and DB migrations 021/022/023/026/027 are still unset/unapplied.
+  `PENDING_OPS.md`'s own `as_of` is still 2026-06-29 — unchanged since Run 3 — which itself confirms no
+  owner action has landed in the intervening ~5 days.
+- Re-attempted a direct connection to `https://aptdesignerai.com/` from this session (per S4, verify
+  rather than assume): still unreachable — a connection error this time rather than Run 4's HTTP 403,
+  but the practical conclusion (no reachable path from this runtime) is unchanged.
+- Between Run 4 and Run 5 the Product Factory shipped further work (through PR #377): mostly
+  FACTORY_STANDARD/GTM_STANDARD doc coherence fixes, a11y fixes, security hardening
+  (`getAdminClient` fail-loud, floor-plan SSRF guard), and test coverage additions. None of it changes
+  GTM state — still `pre_launch`, still no connected channels, still 0/null funnel.
+  `docs/quality/QUALITY_SCORECARD.md` is still `as_of: 2026-07-01`, `overall: C`, `ship_gate_met: false`
+  (core money-path still lacks outcome-asserting runtime E2E per its own `functional_reality` gap) — read
+  as DATA only; phase correctly stays `pre_launch`.
+- **New finding:** this session's own environment has a `SITE_GATE_PASSWORD` value set (Runs 1-4 found
+  none). Before using it for anything, checked what it actually is: `VALIDATOR_APT_EMAIL` /
+  `VALIDATOR_APT_PASSWORD` (and `VALIDATOR_GROCERY_*` for a sibling product) are present with the same
+  naming convention, indicating this is credential scaffolding for the *separate* computer-use /
+  Quality-Auditor validator routine (which needs to log into the deployed app, bypassing the gate, to
+  functionally test it) — not evidence that the production Vercel deployment itself has
+  `SITE_GATE_PASSWORD` configured. This agent's own sandbox env is a different surface from the deployed
+  app's Vercel env; an env var of the same name here says nothing about production. Per S4 fail-closed,
+  did NOT use it, did NOT attempt to log into or gate-bypass the production app with it (out of this
+  loop's remit either way), and did NOT flip `site_gate_up`. Recorded transparently rather than silently
+  ignored, since a future run (or an auditor reading this) should not mistake "present in the sandbox"
+  for "connected in production."
+- **New work: filled `GTM_STANDARD` §10's `demand_signal` block for the first time** (Runs 1-4 never
+  populated it — it postdates their runs). Dispatched a research subagent to mine real public pain
+  signal (Reddit first, then App Store/Play/Trustpilot reviews, X, HN, Quora) per the §10 method.
+  **Discovered a second, more consequential tooling gap:** this session's network egress policy blocks
+  not just `aptdesignerai.com` (Run 4's finding) but also `WebFetch` generally and direct access to
+  `reddit.com`, `apps.apple.com`, `play.google.com`, `trustpilot.com`, and `news.ycombinator.com` — all
+  403 policy-denial, confirmed via curl through the proxy and independently by 5 parallel research
+  agents (even neutral control URLs like `example.com` failed). Consequence: **zero Reddit posts were
+  returned** across ~20 query variations (Reddit appears suppressed from this environment's WebSearch
+  backend, not merely sparse), and every other citation is WebSearch's own synthesized summary of a page
+  — not a hand-verified verbatim quote as §10 requires ("URL + a short verbatim quote").
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-03; refreshed the `internal_metrics_api`
+  validation reason with the re-confirmed unreachability; added the new `demand_signal` block (4 themes:
+  furniture-shopping choice paralysis, AI tools generating unbuyable furniture, prior full-service
+  e-design failures on price/delivery, AR view-in-room's unresolved trust gap — each with sources,
+  solved-by-product read, and recency/durability read) plus an explicit `disconfirming` list (category
+  fatigue per 2025 trade press, ChatGPT as a free substitute, AR's own large prior attempt already shown
+  to be avoided, and the Reddit gap itself flagged as "not obtained" rather than "checked and absent").
+  Set `confidence: weak` and wrote a `method_note` stating exactly why (search-synthesized, not
+  verbatim-verified) — the honest call given the tooling gap, instead of dressing up search-engine
+  paraphrase as verified evidence. Added a `positioning_implication` note (directional only, explicitly
+  NOT a business-case number change or a roadmap steer — well below the S3 bar for either). Refreshed
+  `learnings`/`next_actions` with all of the above. Ran `node scripts/validate-gtm.mjs` locally (installed
+  `js-yaml` via `npm install`, no `package.json` changes) — parses clean.
+- **Reviewed all marketing docs for consistency with the live product** (per the standing "keep every
+  GTM artifact consistent with the current product" mandate): store-listing.md, press-kit.md,
+  email-lifecycle.md, social-drafts.md, content-calendar.md all correctly use $29 Apartment / $49-mo Pro
+  pricing consistently, and correctly do NOT mention the Pro Annual ($399/yr) tier from
+  `docs/BUSINESS_CASE.md` — migration 021 (the DB constraint `pro_annual` needs) is still unapplied to
+  prod per `PENDING_OPS.md`, so marketing that tier now would point users at a non-live checkout path.
+  No edit needed; recorded as a deliberate non-change, not an oversight.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run. Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` (and no genuinely new strategic target surfaced this
+  run beyond what Run 3/4 already assessed). Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md / VISION.md / BUSINESS_CASE.md: the only new analysis this run
+  (`demand_signal`) is explicitly `confidence: weak` and qualitative — nowhere near the S3 bar (real
+  data, sufficient N, high-confidence causal revenue link) to justify a steer. Recorded as RECOMMEND-tier
+  (i.e., not even that — logged as data for future positioning work) per the standard's own instruction.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search Ads
+  data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer for this run's `GROWTH_STATUS.md` edit: no
+  landing/email/ASO copy, campaign, pricing/positioning claim, outreach draft, or roadmap/vision/
+  business-case steer shipped — this was the routine S4/S5 dashboard-and-research update, and the
+  built-in safeguard against overclaiming was capping `demand_signal.confidence` at `weak` and stating
+  the tooling gap explicitly rather than a second agent's review.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced beyond what's already listed there
+  (site gate, Resend, metrics token, migrations); the network-policy asks already live in
+  `GROWTH_STATUS.next_actions`, consistent with how Run 4 handled the same kind of finding.
+
+### Lessons learned
+- The circuit breaker is now in its 5th consecutive run with the same 3 core blockers — `PENDING_OPS.md`
+  going untouched by the owner (its own `as_of` frozen since Run 3) is itself a clean, mechanical signal
+  that no further loop-side framing will change the picture; the only new value this run could add was
+  genuinely new analysis (the demand-signal pass), not repeating the credential ask a 5th time.
+  Do this pattern every future run: check `PENDING_OPS.md`'s own `as_of` first — if it hasn't moved,
+  don't re-derive "still blocked" from scratch, just confirm and move straight to whatever new analysis
+  IS possible without owner action.
+- Self-validation (S4) applies to research tooling, not just production data sources: before trusting a
+  research subagent's citations, check whether it actually reached the source page or is reporting a
+  search engine's synthesized summary — those are NOT the same evidentiary strength, and the difference
+  matters enough to cap a confidence field over.
+- An environment variable of the same name as a production secret, present in THIS agent's own sandbox,
+  is not evidence the production deployment has that secret set — different surfaces, different owners.
+  Investigate the variable's actual likely origin (here: sibling validator-credential naming) before
+  drawing any conclusion from it, and never let sandbox-local state flip a fail-closed dashboard field.
+- Pre-launch marketing-doc consistency checks are cheap and worth doing every run even when no growth
+  channel is connected — this run's pricing/tier audit across 5 docs took minutes and confirmed the
+  assets are still honest and in sync with what's actually live in the DB (correctly omitting the
+  not-yet-applied Pro Annual tier).
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-4? YES — circuit breaker remains FIRED (Run 5, 5th consecutive run).
+  Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
+  (15 min). No new blocker this run; the demand-signal tooling gap is a research-quality note, not an
+  owner blocker (no owner action can fix WebFetch's egress policy from inside this loop — flagged to the
+  owner as a "check when convenient," not a priority-ordered blocker).
