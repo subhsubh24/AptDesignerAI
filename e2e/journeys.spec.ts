@@ -20,6 +20,7 @@ import {
   adminAvailable,
   createConfirmedUser,
   deleteUser,
+  seedProEntitlement,
   uniqueEmail,
 } from "./helpers/seed";
 
@@ -166,11 +167,55 @@ test.describe("authenticated journeys", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("paywall: pricing → upgrade renders a real checkout entry (Stripe test mode)", async ({ page }) => {
+  test("paywall: /billing/upgrade renders a REAL Stripe checkout entry", async ({ page }) => {
     await signIn(page);
     await page.goto("/billing/upgrade?tier=pro");
     await expect(page).toHaveURL(/\/billing\/upgrade/);
     await expectNoErrorBoundary(page);
-    await expect(page.getByRole("heading").first()).toBeVisible();
+    // The real checkout entry — not just "a heading exists". Clicking this button
+    // POSTs to /api/billing/checkout to create a Stripe Checkout Session.
+    await expect(
+      page.getByRole("button", { name: /continue to checkout/i }),
+    ).toBeVisible();
+  });
+
+  test("paywall GATE: a free-tier user sees the upgrade CTA on /saved", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/saved");
+    await expectNoErrorBoundary(page);
+    // The free-tier upgrade surface (UpgradeCtaCard) renders ONLY when the server
+    // reports hasPaid === false — i.e. the paywall gate is actually live, not a
+    // client-trusted flag. A brand-new user (0 saves) is on the free tier.
+    await expect(
+      page.getByRole("heading", {
+        name: /unlock unlimited designs|reached your free save limit/i,
+      }),
+    ).toBeVisible();
+  });
+
+  test("paywall UNLOCK: a seeded Pro entitlement removes the free-tier upgrade CTA", async ({
+    page,
+  }) => {
+    // Seed the stripe_customers row the Stripe webhook writes on a real purchase,
+    // then prove the ENTITLEMENT UNLOCK is reflected end to end — WITHOUT a live
+    // Stripe checkout. This is the paywall→unlock money-path outcome, asserted at
+    // both the entitlement API and the rendered UI.
+    await seedProEntitlement(userId!);
+    await signIn(page);
+    const statusPromise = page.waitForResponse(
+      (r) => r.url().includes("/api/billing/status"),
+      { timeout: 15_000 },
+    );
+    await page.goto("/saved");
+    const status = await statusPromise;
+    // The entitlement gate must report the seeded user as paid (real unlock).
+    expect((await status.json()).hasPaid).toBe(true);
+    await expectNoErrorBoundary(page);
+    // …and the free-tier upgrade surface must NOT render for an entitled user.
+    await expect(
+      page.getByRole("heading", {
+        name: /unlock unlimited designs|reached your free save limit/i,
+      }),
+    ).toHaveCount(0);
   });
 });
