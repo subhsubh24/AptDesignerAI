@@ -71,7 +71,11 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
               </ThemedText>
 
               {error ? (
-                <View style={[styles.errorBox, { backgroundColor: colors.destructive + '18', borderColor: colors.destructive + '40' }]}>
+                <View
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                  style={[styles.errorBox, { backgroundColor: colors.destructive + '18', borderColor: colors.destructive + '40' }]}
+                >
                   <ThemedText type="small" style={{ color: colors.destructive }}>
                     {error}
                   </ThemedText>
@@ -127,6 +131,8 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
               </View>
 
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: loading, busy: loading }}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   { backgroundColor: colors.accent, opacity: pressed || loading ? 0.8 : 1 },
@@ -144,7 +150,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
               <ThemedText type="small" style={{ color: colors.textSecondary }}>
                 Don&apos;t have an account?{' '}
               </ThemedText>
-              <Pressable onPress={onSignup} hitSlop={8}>
+              <Pressable accessibilityRole="button" onPress={onSignup} hitSlop={8}>
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>
                   Create one
                 </ThemedText>
