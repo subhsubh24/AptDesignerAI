@@ -120,6 +120,22 @@ export default function SettingsScreen() {
     );
   }, [performDelete]);
 
+  const handleSignOut = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch {
+      // supabase-js returns the error in-band (and can also throw on a network
+      // failure). A silently-failed sign-out leaves the session live — the user
+      // believes they are signed out but isn't, which can expose their account
+      // on a shared device. Surface it so they can retry instead of walking away.
+      Alert.alert(
+        'Unable to sign out',
+        "We couldn't sign you out. Please check your connection and try again.",
+      );
+    }
+  }, []);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -157,7 +173,7 @@ export default function SettingsScreen() {
           <ThemedText type="small" style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
             Account
           </ThemedText>
-          <Row label="Sign out" onPress={() => void supabase.auth.signOut()} colors={colors} />
+          <Row label="Sign out" onPress={() => void handleSignOut()} colors={colors} />
           <Row
             label={deleting ? 'Deleting…' : 'Delete account'}
             onPress={confirmDelete}
