@@ -63,7 +63,8 @@ steer the product toward revenue — the Product Factory then executes the steer
   touches it; never churn it for a tactical finding. ROADMAP/BUSINESS_CASE move more freely.
   A **VISION** steer additionally requires an **adversarial review panel** — ≥2 fresh independent
   reviewer subagents, each told to REFUTE the pivot — to clear before it merges, mirroring the
-  Product Factory's readiness gate. A single reviewer suffices for a ROADMAP/BUSINESS_CASE steer;
+  Product Factory's readiness gate. (A VISION pivot ALSO runs FACTORY_STANDARD §21's branch-and-explore
+  + ensemble-judge, which SUBSUMES this panel — run that stronger protocol.) A single reviewer suffices for a ROADMAP/BUSINESS_CASE steer;
   a VISION pivot needs the panel.
 - **Confidence sets the channel:** HIGH-confidence + real-data + significant → STEER (edit
   ROADMAP/VISION). Anything below that → RECOMMEND only (write it to `GROWTH_STATUS` as DATA the
