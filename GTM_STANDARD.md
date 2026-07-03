@@ -245,6 +245,15 @@ tweak loop.
   recordings, genuine product demos, simple UGC-style) over flashy AI; use AI-gen ONLY where the
   output clears the not-obvious bar; realistic human UGC is OWNER-SOURCED, never faked. If a piece
   reads as AI-generated, it is a REJECT, not a ship.
+- **The AI-prose tells — cut these on sight (COPY, not just visuals).** "Telltale phrasing" made
+  concrete — the written giveaways that scream a model wrote it: filler openers ("In today's
+  fast-paced world…", "In this post we'll…"), throat-clearing ("It's important to note…", "It's
+  worth mentioning…"), corporate verbs (leverage/utilize/synergize → "use"; delve, embark, "navigate
+  the landscape"), hype adjectives (game-changer, revolutionary, seamless, cutting-edge, robust,
+  unprecedented, supercharge, unlock, elevate), the tricolon whose third item is always a metaphor,
+  "whether you're a beginner or an expert", em-dash overuse, and every-sentence-same-length rhythm.
+  Say the specific TRUE thing in a human voice instead. The maker strips these BEFORE the independent
+  audit; the reviewer REJECTS any that slip through. (Written-copy counterpart to §6b's visual bar.)
 - **Audit before it posts — maker ≠ checker (the maker NEVER checks its own work).** Every creative
   queued for auto-post MUST pass an INDEPENDENT reviewer subagent (fresh context) told to critique it
   adversarially: credible / not-obviously-AI? on-brand? honest + FTC-disclosed (no invented
