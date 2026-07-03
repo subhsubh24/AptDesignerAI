@@ -11,6 +11,7 @@ import type { IdentifiedProduct } from "@/lib/types/database";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
@@ -372,8 +373,21 @@ export async function POST(request: Request) {
     .insert(productRows)
     .select() as unknown as Promise<{ data: { id: string }[] | null; error: { message: string } | null }>);
 
+  // This is the PRIMARY persistence of the search result. supabase-js returns
+  // DB errors in-band (no throw), so an unchecked failure here drops every
+  // product on the floor while the response below still reports HTTP 200 with
+  // products_found: 0 — indistinguishable to the client from a genuine
+  // "found nothing" after the full (expensive) search already ran. Surface it
+  // as a real failure so the user can retry knowingly instead of seeing an
+  // empty result. (Secondary writes below — evaluations, status flips — stay
+  // log-only: the products they annotate are already committed.)
   if (insertError) {
     console.error("[search] Failed to insert products:", insertError.message);
+    await completeAgentRun(supabase, agentRun.id, {
+      status: "failed",
+      error_message: insertError.message,
+    });
+    return apiError("search", insertError);
   }
 
   // Batch insert evaluations
