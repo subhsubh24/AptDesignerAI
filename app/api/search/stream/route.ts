@@ -415,8 +415,22 @@ export async function POST(request: Request) {
           .insert(productRows)
           .select() as unknown as Promise<{ data: { id: string }[] | null; error: { message: string } | null }>);
 
+        // PRIMARY persistence of the search result. supabase-js returns DB
+        // errors in-band, so an unchecked failure here silently drops every
+        // product while the stream below still emits a "done" event with
+        // products_found: 0 — a fake success after the full search ran. Fail
+        // the run and tell the client (mirrors the orchestrator-error handler
+        // above) instead of masking the loss. (Secondary writes below stay
+        // log-only: the products they annotate are already committed.)
         if (insertError) {
-          console.error("[search/stream] Failed to insert products:", insertError.message);
+          logServerError("search/stream candidate_products insert", insertError);
+          await completeAgentRun(supabase, agentRun.id, {
+            status: "failed",
+            error_message: insertError.message,
+          });
+          send("error", { error: "We found products but couldn't save them. Please try again." });
+          closeStream();
+          return;
         }
 
         // Batch insert evaluations
