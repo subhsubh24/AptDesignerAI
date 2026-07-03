@@ -18,7 +18,7 @@ up — it never grades itself.
 ```yaml
 QUALITY_SCORECARD:
   project: AptDesignerAI
-  as_of: 2026-07-01
+  as_of: 2026-07-03
   graded_by: quality-auditor          # independent routine; never the factory/maker
   overall: C                          # gated by functional_reality: core money-path still has no outcome-asserting runtime E2E
   ship_gate_met: false                # true only when every ship_critical dim is A or A+
@@ -27,157 +27,183 @@ QUALITY_SCORECARD:
       grade: C
       ship_critical: true
       gap: >-
-        Public/structural journeys ran GREEN this run (scripts/run-journeys.sh --public-only: 7 passed —
-        signup/login forms render, protected /dashboard /account /saved bounce to /login, root + pricing
-        resolve to real screens). tsc/eslint/determinism clean, npm test 1350 pass/8 skip. BUT the core
-        product journey (photo→understand→diagnose→source→mockup returning a REAL mockup) has ZERO runtime
-        assertion — journeys.spec.ts:149-153 asserts only onboarding ENTRY (no upload, no mockup image);
-        paywall→checkout→entitlement-unlock has ZERO runtime assertion — journeys.spec.ts:169-175 asserts
-        only that /billing/upgrade renders a heading. Both are admitted tracked gaps in
-        e2e/ROUTE_INVENTORY.md. The 6 AUTHENTICATED journeys are outcome-asserting but SKIP without
-        E2E_AUTH_STACK + a seeded Supabase backend that cannot be stood up cold. Per BUILDS≠WORKS, a
-        critical journey with no runtime test = not validated. RAISE: deterministic/recorded provider
-        fixtures + Stripe test-mode so the core flow + checkout run green in CI, and make the authed tier
-        CI-runnable (ephemeral Supabase-local).
+        UNCHANGED since 2026-07-01 — no delta landed this cycle. The core product journey
+        (photo→understand→diagnose→source→mockup returning a REAL mockup) still has ZERO runtime
+        assertion — e2e/journeys.spec.ts:149-153 ("core product flow entry") clicks "Start designing"
+        then asserts only expectNoErrorBoundary (no setInputFiles/photo upload, no mockup <img>);
+        paywall→checkout→entitlement-unlock still has ZERO runtime assertion — journeys.spec.ts:169-175
+        asserts only that /billing/upgrade renders a heading (no Stripe checkout entry, no
+        entitlement flip in the UI). A grep of e2e/ for mockup|entitlement|upload|setInputFiles|
+        toHaveScreenshot hits ONLY inside ROUTE_INVENTORY.md's tracked-gap list (:34-40) — zero in any
+        .spec.ts. git log --since=2026-07-01 -- e2e/ shows only a docs/honesty edit (beb4277); no test
+        added an outcome assertion. The 6 authenticated money-path journeys still SKIP without
+        E2E_AUTH_STACK + a seeded Supabase backend that cannot be stood up cold (cold run this cycle:
+        1 pass / 6 skip / 6 fail, the 6 fails being dummy-key /waitlist-redirect env artifacts, not
+        product defects). Per BUILDS≠WORKS, both critical money-path journeys have no outcome-asserting
+        runtime test = not validated; this is the SOLE reason overall is below the ship bar. RAISE:
+        add a real authed core-flow test (upload an image fixture → run the pipeline against
+        recorded/deterministic provider responses → assert a REAL mockup <img> with non-empty src),
+        plus a Stripe test-mode checkout→webhook→entitlement-unlock assertion, and make the authed
+        tier CI-runnable (ephemeral Supabase-local). Until at least one actually RUNS green (not skips),
+        functional_reality cannot exceed C.
     correctness:
-      grade: B
-      ship_critical: true
-      gap: >-
-        Strongly improved. tsc clean, eslint clean, determinism green, npm test 1350 pass/8 skip (skips
-        RUN_EVALS-gated by design); no TODO/stub/dead path on any app/api route; provider timeouts all
-        shorter than the 300s budget (Gemini 180s, DeepSeek 120s); side-effect integrity honest (signup/
-        checkout/webhook surface real provider errors, no fake-success). The prior maxDuration=0 gap is
-        now largely closed: maxDuration=300 is present on all 17 mainline LLM pipeline routes
-        (area-analysis, refine, refine-chat, search, search/stream, mockups, analyze-apartment,
-        bundles/evaluate, floor-plan, identified-products/correct, …). One real gap remains:
-        app/api/computer-use/product-verify/route.ts runs an agentic Browserbase browser loop (per-step
-        15-30s nav timeouts, no overall cap) with NO maxDuration and no global vercel.json default → it
-        hits Vercel's short default cap and is killed mid-verification when Browserbase creds are set.
-        RAISE: add `export const maxDuration = 300` to product-verify (and an overall wall-clock cap
-        inside runProductVerifier).
-    security_rls:
       grade: A
       ship_critical: true
       gap: >-
-        G1 CLOSED. Both fan-out paid routes now gate on rate-limit + spend-breaker BEFORE any LLM call
-        (evaluate/route.ts:26,33-34; evaluate-set/route.ts:43,50-51), auth-gated first. Swept every authed
-        route calling scoreProduct/evaluateBundle/extractFromUrl/.chat/runComputerUse — all carry
-        checkRateLimit + checkDailySpend (mockups, computer-use/product-verify, analyze, diagnosis,
-        area-analysis, search, bundles). RLS complete + intentional on every public table (001 tenant
-        tables + fix chains 015→019→020, 016, 023, 025); no committed secrets (only .env.example tracked);
-        service-role server-only; Turnstile CAPTCHA, HMAC-timing-safe internal tokens, full security
-        headers (HSTS/CSP/X-Frame DENY). Bounded remaining item (not a live defect): scripts/preflight.sh
-        still lacks a MECHANICAL gate asserting RLS-coverage per public table + a NEXT_PUBLIC-secret grep,
-        so correctness rests on migration review. RAISE toward A+: add those two preflight assertions.
+        RAISED B→A. The sole prior gap is CLOSED: app/api/computer-use/product-verify/route.ts:24 now
+        carries `export const maxDuration = 300`, AND the verifier enforces an overall wall-clock cap —
+        lib/agents/computer-use/product-verifier.ts:274 passes maxWallClockMs: 270_000 to
+        runComputerUseAgent, stopping ~30s before the route budget so the browser session is disposed
+        and a response returned instead of a mid-turn platform kill. maxDuration sweep is clean: of the
+        31 routes without the export, an independent scan for getProvider/geminiProvider/deepseek/.chat/
+        runComputerUse/generateContent/embedText returned zero hits — all are CRUD/auth/webhook/proxy
+        routes (identified-products/search explicitly documents "we DO NOT hit Gemini here"). No
+        stub/TODO/dead path on a critical route (the two `stub`/`TODO` matches are intentional
+        data-shaping comments). Fake-success fixes this cycle are real not regressions (#366 surfaces a
+        product-insert failure instead of a fake empty result; #370 surfaces a failed sign-out; #382
+        aborts in-flight analyze on unmount; #359/#360 fixed a signup outage). Provider timeouts under
+        budget: Gemini 180s (gemini.ts:42), DeepSeek 120s (deepseek.ts:27) < 300s. Signals green: tsc
+        clean, eslint clean, determinism green, npm test 1544 pass / 11 skip.
+    security_rls:
+      grade: A+
+      ship_critical: true
+      gap: >-
+        RAISED A→A+. The sole bounded A→A+ item is CLOSED: scripts/preflight.sh:500-577 now has
+        "GATE 6 — Security invariants (RLS coverage + client-secret leak)", a REAL build-failing
+        mechanical assertion (no longer resting on migration review). Its Python parse over
+        supabase/migrations/*.sql collects every `create table [public.]X` and harvests RLS from both
+        direct `alter table ... enable row level security` and the dynamic do-block convention —
+        harvesting array[...] literals ONLY from inside a do $$...$$ block that itself contains
+        `enable row level security` (fails safe, can't be masked by a stray literal); on mismatch it
+        sys.exit(1) → fail() → exit 1. Replicated the parse independently: 26 public tables, ALL
+        enable RLS, zero missing. Client-secret leak grep covers NEXT_PUBLIC_* and (per #371)
+        EXPO_PUBLIC_*(SECRET|SERVICE_ROLE|PRIVATE). No committed secrets (git ls-files shows only
+        .env.example; no hardcoded service_role/sk_live). Fan-out paid routes not regressed — both
+        products/evaluate and evaluate-set gate on auth→checkRateLimit→checkDailySpend before any LLM
+        call. Zero security findings. No gap.
     design_taste:
       grade: B
       ship_critical: true
       gap: >-
-        Real warm-editorial system, consistently applied: terracotta single-accent tokens + full dark
-        parity (globals.css:38-113), coherent CVA button family with focus-visible rings across
-        button/card/input/textarea/toast, framer-motion + reduced-motion kill-switch, real empty/loading/
-        error states, slop hunt clean (no emoji-icons, no purple-gradient slop, no competing accents).
-        Two prior gaps CLOSED: components/ui/toast.tsx now uses Radix ToastPrimitive with
-        type=foreground(assertive)/background(polite) so screen readers ARE announced; app/not-found.tsx
-        now exists and uses the design system fully. Two gaps remain and cap below A: (1) e2e/a11y.spec.ts
-        still axe-covers ONLY the 7 public static pages — ZERO authed design-dense routes (dashboard,
-        diagnosis, mockups, compare, the surfaces with dynamic score colors/confetti); (2)
-        e2e/__screenshots__/ does not exist, so rendered pixels / dark-mode parity / empty-error states
-        are asserted in code but never visually captured (F7). RAISE: extend axe to ≥1 authed route,
-        audit dynamic status (diagnosis running/done/error) announces via aria-live, commit baseline
-        journey screenshots.
+        UNCHANGED at B — the two capping gaps persist. (1) e2e/a11y.spec.ts:6-14 still axe-covers ONLY
+        the 7 public static pages (PUBLIC_PAGES = /waitlist,/pricing,/faq,/privacy,/terms,/guides,
+        /support) — ZERO authed design-dense routes (dashboard, diagnosis, mockups, compare, the
+        surfaces with dynamic score colors/confetti). (2) e2e/__screenshots__/ still does not exist
+        (verified), so rendered pixels / dark-mode parity / empty-error states are asserted in code but
+        never visually captured (F7 correctly stays UNCHECKED). Real progress DID land but doesn't lift
+        the grade: diagnosis progress now announces via aria-live (page.tsx:233 wraps steps in
+        aria-live="polite" with per-step sr-only status + aria-hidden on decorative icons, #330) and
+        auth errors announce via role="alert" (login/signup :87/:159, #368; mobile #369). Slop hunt
+        clean on consumer surfaces (zero emoji-as-icons, zero purple/violet gradients, no ad-hoc hex;
+        globals.css:44-92 single-accent terracotta tokens + full .dark parity; real skeletons + error
+        boundaries). Minor non-capping blemish: internal ops scorecard views mix bg-blue/bg-purple
+        (ManualScorecardView.tsx:261,267; rooms/[roomId]/page.tsx:78) — competing accents confined to
+        internal views, not the consumer flow. RAISE: run AxeBuilder over ≥1 authed route behind a
+        logged-in fixture, and add Playwright screenshot capture to e2e/__screenshots__/ (light+dark,
+        empty/error) so F7 is visually enforced rather than code-only.
     store_readiness:
       grade: A
       ship_critical: true
       gap: >-
-        Prior privacy-accuracy defect FIXED (PR #280) and independently verified: every processor named in
-        app/privacy/page.tsx (Gemini, DeepSeek, Supabase, Stripe, RevenueCat, Tavily, Google Places,
-        Browserbase, Resend, Turnstile, Vercel Analytics) is a real dependency in code — no phantom
-        Anthropic/OpenAI. In-app account deletion is real with cascade (app/api/user/delete/route.ts:31,
-        app/api/mobile/account/route.ts:56, wired to mobile settings UI). Real 1024² RGBA icon
-        (mobile/assets/images/icon.png); real eas.json build+submit config; canonical contact email
-        (hello@aptdesignerai.com) across all UI surfaces. Bounded A+ items (cosmetic, non-blocking):
-        residual page-title brand naming ("AptDesigner" vs "AptDesignerAI") and stale .ai domain
-        references in loop-memory/PENDING_OPS notes; store screenshots remain human-blocked (need a
-        device) and are correctly tracked as the D3 owner step.
+        Holds at A, no regression. Every processor in app/privacy/page.tsx:70-124 maps to a live
+        dependency (Gemini @google/genai, DeepSeek, Supabase, Stripe, RevenueCat react-native-purchases,
+        Tavily, Google Places, Browserbase, Resend, Turnstile, Vercel Analytics) — no phantom
+        Anthropic/OpenAI. In-app account deletion is real with a real cascade (app/api/user/delete +
+        app/api/mobile/account both call admin.auth.admin.deleteUser; FK on delete cascade through
+        profiles→projects→rooms in migration 001 + saved_designs in 025), UI-wired on web + mobile.
+        Real icon (mobile/assets/images/icon.png = PNG 1024×1024 RGBA, 799 KB); real eas.json
+        build+submit profiles; canonical hello@aptdesignerai.com across 13 UI refs, zero stale
+        @aptdesigner.ai. Bounded A+ items (cosmetic, non-blocking, unchanged): ~10 page <title> tags
+        still read "— AptDesigner" vs "AptDesignerAI"; store screenshots (D3) correctly [ ] (human/
+        device-blocked).
     artifact_integrity:
       grade: A
       ship_critical: true
       gap: >-
-        Spot-checked 8 ticked boxes — all map to real substantive artifacts: A6 computerUse→gemini-3.5-flash
-        (lib/ai/models.ts:74), C1 Stripe checkout, C2 RevenueCat entitlements (lib/entitlements/server.ts),
-        E5 analytics, E8 site-gate (lib/security/site-gate.ts, wired into middleware), G5 CAPTCHA, G6 CORS,
-        G7 spend-breaker. All four dashboard YAML blocks (BUSINESS_CASE_SUMMARY, GROWTH_STATUS,
-        OWNER_ACTIONS, QUALITY_SCORECARD) parse; arr_year1.base=122900 matches the body; pricing
-        $49/mo+$399/yr consistent across body / stripe.ts / env-based price IDs. F7 correctly UNCHECKED —
-        e2e/__screenshots__/ does not exist and the DoD honestly gates it. No contradicting doc claims
-        found. No gap.
+        Holds at A. Spot-checked 6 ticked boxes — all map to real artifacts: A6 computerUse→
+        "gemini-3.5-flash" (lib/ai/models.ts:74), C1 Stripe checkout (app/api/billing/checkout +
+        lib/billing/stripe.ts), E5 analytics (lib/analytics.ts + Vercel Analytics in layout), E8
+        site-gate (lib/security/site-gate.ts, 117 lines), D1/D2/D4 all back real files. All 4 dashboard
+        YAML blocks parse via yaml.safe_load (BUSINESS_CASE_SUMMARY, GROWTH_STATUS, OWNER_ACTIONS,
+        QUALITY_SCORECARD). Pricing consistent — $49/mo + $399/yr identical across lib/billing/stripe.ts,
+        app/pricing/page.tsx, docs/BUSINESS_CASE.md; the "Apartment $29" one-time tier is real and
+        consistent everywhere (not a contradiction). F7 correctly UNCHECKED (e2e/__screenshots__/
+        absent); D3 correctly [ ]. No ticked box points at a missing/placeholder artifact. Residual: a
+        stale aptdesigner.ai note lingers in docs/loop-memory.md:487 (historical memo, not live code).
     business_case_strength:
       grade: A
       ship_critical: true
       gap: >-
-        Both prior listed-not-built levers are now BUILT and verified: (1) referral — migration
-        026_waitlist_referral.sql + lib/waitlist/referral.ts (code gen/sanitize) + real attribution in
-        app/api/waitlist/route.ts:121-153 + a share/"jump the line" reward card in waitlist-form.tsx;
-        (2) upsell — components/billing/upgrade-cta-card.tsx + app/api/billing/status/route.ts, rendered
-        at app/saved/page.tsx:108. Organic-install share re-grounded from an above-benchmark 50% to 40%
-        (top of the cited 35-40% band); the ARR floor is now explicitly organic-independent, so
-        floor_met_year1=true is honest. Recomputed base ARR $122,880 ≈ stated $122,900 (not padded);
-        pricing consistent across stripe.ts / app/pricing / mobile paywall. Bounded, post-launch-only
-        residual (cannot be built pre-launch): net margin is only ~break-even at the 40% anchor and
-        negative at the 35% benchmark, so positive margin leans on a PROJECTED 15% referral share with no
-        operating history — resolvable only with real attributed-referral cohort data after launch.
+        Holds at A. Recomputed base (Scenario B) from the body: 4,000 installs × 0.25 retention × 0.04
+        conv = 40 paid/mo; tier mix → MRR $10,240 × 12 = $122,880 vs stated $122,900 (~$20 rounding,
+        not padding). Floor met honestly: no single input is above-benchmark (retention 25% = 20-30%
+        midpoint; conversion 4% within 2-5%; organic share anchored at 40% = TOP of the cited 35-40%
+        band, and organic moves marketing cost not revenue). Pricing consistent across doc /
+        lib/billing/stripe.ts / app/pricing / mobile paywall. Both revenue levers still real code
+        (referral: lib/waitlist/referral.ts + migration 026 + attribution in api/waitlist/route.ts;
+        upsell: components/billing/upgrade-cta-card.tsx at app/saved/page.tsx:108). No recompute since
+        last grade (git log --since=2026-07-01 -- docs/BUSINESS_CASE.md empty; as_of correctly stays
+        2026-06-30 as numbers are unchanged — honest, not stale). Bounded post-launch-only residual
+        (cannot be built pre-launch): net margin is only ~break-even (−$940) at the 40% organic anchor;
+        positive margin leans on a PROJECTED 15% referral install share with no operating data yet —
+        resolvable only with real attributed-referral cohort data after launch.
     tests_evals:
       grade: B
       ship_critical: false
       gap: >-
-        Improved from C. 4 of 5 eval files are REAL live evals calling the actual pipeline behind
-        RUN_EVALS=1 (diagnosis.eval.test.ts:26,64 runRoomDiagnosis; grounding:23,39; area-analysis:23,94
-        geminiProvider.chat; sourcing:20,106 scoreProduct), each it.skipIf(!evalsEnabled()); gold fixtures
-        are real Unsplash URLs, not placeholders. Measured coverage (npx vitest run --coverage this run):
-        48.7% stmts / 37.7% branch overall, lib/agents 35% (up from ~21%). Gaps keep it below A: no
-        RUN_EVALS=1 CI job (ci.yml runs only tsc/test/determinism, dummy key) so eval regressions are
-        invisible and cannot run green here; CI never runs --coverage and the vitest floor (25/19/30/25)
-        sits far below the real ~48%, so it's decorative; refine.eval.test.ts is STILL a mislabeled runner
-        unit test (no live call, no gate) and there is no refine/mockup gold case. RAISE: wire a
-        RUN_EVALS=1 CI job (real key or recorded cassettes), add a real refine eval + gold case, enforce
-        --coverage with floors near reality.
+        Holds at B but two of three prior gaps are genuinely CLOSED. (a) CLOSED — .github/workflows/
+        live-eval.yml exists: runs `npm run eval` (RUN_EVALS=1) against real Gemini/DeepSeek on
+        workflow_dispatch + weekly cron, gated on the keys with an explicit ::warning:: skip when
+        unset. (c) CLOSED — refine.eval.test.ts is now a REAL live eval (imports summarizeRefineChanges,
+        asserts tokens>0, rejects the fallback, requires the summary to name the warmth/sofa delta), and
+        a mockup eval landed (#334: mockup.eval.test.ts asserts a real image payload + vision
+        round-trip). All 6 evals/__tests__/*.eval.test.ts make real pipeline calls behind
+        it.skipIf(!evalsEnabled()); gold fixtures are real Unsplash URLs. Coverage floor raised to
+        40/30/42/40 (from 25/19/30/25); measured this run 52.95% stmts / 41.73% branch / 54.06% lines
+        (1544 pass/11 skip) — floor now near reality. Remaining gap keeping it below A: (b) CI's verify
+        job still runs bare `vitest run` (no --coverage) — vitest.config.ts's own comment admits the
+        floor gates only `npm run test:coverage`, never CI — AND the live-eval job cannot be shown green
+        against the real pipeline here (owner-set keys, weekly-only). RAISE: add --coverage to the CI
+        verify job; land one owner-keyed green live-eval run (or a recorded-cassette tier that runs
+        per-PR).
     performance:
       grade: B
       ship_critical: false
       gap: >-
-        Strong LLM cost discipline (41 files with explicit thinkingConfig, cacheScope amortizes vision
-        tokens, withCostLedger/recordUsage, DETERMINISTIC_SEED, rate+spend guards, in-flight coalescing).
-        Prior serial-grounding gap FIXED — the grounding pair is now Promise.all (area-analysis/route.ts:976).
-        Headline hot-path gap persists unchanged: lib/store/embedding-index.ts:46 topKSimilar still does a
-        full-table select('*') with an in-memory cosine loop (lines 54-70), called once per crop inside
-        Promise.all (identified-products-pipeline.ts:107,117) = N full-table scans per identify request,
-        and the ivfflat cosine index (migration 008:42) is NEVER used. Secondary: 0 next/image imports
-        (raw <img> in 6 files); no Lighthouse/bundle-size/perf budget in CI/preflight. RAISE: add a
-        pgvector match_ RPC (embedding <=> query ORDER BY + LIMIT k) called via supabase.rpc; adopt
-        next/image; add a perf budget.
+        UNCHANGED at B — the headline N+1 persists. lib/store/embedding-index.ts:46 topKSimilar still
+        does a full-table select('*') with an in-memory cosine loop (lines 55-70) — no supabase.rpc /
+        match_ pgvector query anywhere. Still called per-crop: identified-products-pipeline.ts:117
+        invokes topKSimilar inside cropperOut.crops.map(...) wrapped in Promise.all (:107-108), so one
+        identify request with C crops does C full-table scans; the ivfflat cosine index (migration
+        008:42-44 product_image_embeddings_vec_idx) is NEVER used (grep ivfflat lib/ = 0). No new commit
+        touched lib/store/ or migrations since 2026-07-01. Secondary: 0 next/image imports vs 13 raw
+        <img> (up from 6); no Lighthouse/bundle-size/perf budget in CI or preflight. Cost discipline
+        remains the strong pillar (42 files with explicit thinkingConfig/thinkingFor, 33 DETERMINISTIC_
+        SEED, withCostLedger/recordUsage). RAISE: add a pgvector match_ RPC (embedding <=> query
+        ORDER BY + LIMIT k) via supabase.rpc so the ivfflat index is used; adopt next/image; add a
+        perf budget.
   top_gaps:
     - dimension: functional_reality
       severity: critical
-      gap: Core journey (photo→REAL mockup) + paywall→checkout→unlock have no outcome-asserting runtime E2E; authed tier not CI-independently runnable. Sole reason overall is below the ship bar.
-    - dimension: tests_evals
-      severity: high
-      gap: Live eval suite never runs in CI (no RUN_EVALS=1 job, dummy key); --coverage unenforced & floor decorative vs real ~48%; refine eval still mislabeled.
-    - dimension: correctness
-      severity: high
-      gap: computer-use/product-verify agentic browser route has no maxDuration/overall cap → platform-killed mid-verification when Browserbase is enabled (17/18 pipeline routes now fixed).
+      gap: Core journey (photo→REAL mockup) + paywall→checkout→unlock still have no outcome-asserting runtime E2E (no delta this cycle); authed tier not CI-independently runnable. SOLE reason overall is below the ship bar — the ONLY remaining ship-critical dimension below A.
     - dimension: design_taste
+      severity: high
+      gap: Second (and last) ship-critical dimension below A. Authed design-dense routes still have no axe coverage; e2e/__screenshots__/ still absent so pixels/dark-parity unverified (F7). aria-live/role=alert wins (#330/#368) landed but don't lift past B.
+    - dimension: tests_evals
       severity: medium
-      gap: Authed design-dense routes have no axe coverage; e2e/__screenshots__/ still absent so pixels/dark-parity unverified (F7). Toast a11y + not-found now fixed.
+      gap: Not ship-critical. 2 of 3 prior gaps closed (CI eval job exists; refine+mockup evals real; floor raised to ~reality). Remaining — CI verify still doesn't run --coverage; live-eval can't be shown green here (owner keys, weekly-only).
     - dimension: performance
       severity: medium
-      gap: Full-table-scan N+1 in embedding-index (ivfflat index unused); no next/image; no perf budget. Grounding pair now parallelized.
-    - dimension: security_rls
-      severity: low
-      gap: G1 wallet-drain CLOSED (now A). Only bounded A+ item left — preflight lacks a mechanical RLS-coverage + NEXT_PUBLIC-secret assertion.
+      gap: Not ship-critical. Full-table-scan N+1 in embedding-index persists (ivfflat index unused, N scans/identify); 0 next/image (13 raw <img>); no perf budget.
     - dimension: business_case_strength
       severity: low
-      gap: Referral + upsell levers now BUILT, organic re-grounded to 40% (now A). Residual is post-launch-only — positive margin leans on a projected referral share with no operating data yet.
+      gap: A. Bounded post-launch-only residual — positive net margin (~break-even at the honest 40% anchor) leans on a projected 15% referral share with no operating data yet.
+    - dimension: correctness
+      severity: resolved
+      gap: RAISED B→A this cycle — product-verify maxDuration + 270s wall-clock cap landed; sweep clean; all signals green.
+    - dimension: security_rls
+      severity: resolved
+      gap: RAISED A→A+ this cycle — preflight GATE 6 now mechanically asserts RLS-coverage (26/26 tables) + client-secret leak (incl. EXPO_PUBLIC_*); zero findings.
 ```
 
 ## How to read it (owner)

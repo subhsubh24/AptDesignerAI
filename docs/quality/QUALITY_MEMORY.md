@@ -7,6 +7,73 @@ history behind it.
 
 ---
 
+## 2026-07-03 — THIRD INDEPENDENT GRADE (two ship-critical dims raised; overall STILL gated by functional_reality)
+
+**Overall: C · ship_gate_met: false.** Overall is UNCHANGED from the 2026-06-29/07-01 baseline, but the
+per-dimension picture improved again: **correctness B→A** and **security_rls A→A+**, closing two of the
+three remaining ship-critical gaps below A. After this cycle only **TWO ship-critical dimensions remain
+below A: functional_reality (C) and design_taste (B)** — down from four last cycle. Overall stays C
+because the rubric caps the headline at the weakest ship-critical link, and **functional_reality is still
+C** with NO delta this cycle — the core money path (photo→REAL mockup) and paywall→checkout→unlock still
+have no outcome-asserting runtime E2E (BUILDS≠WORKS).
+
+**Per-dimension diff vs 2026-07-01:** functional_reality **C→C** (no delta) · correctness **B→A** ⬆ ·
+security_rls **A→A+** ⬆ · design_taste **B→B** (aria-live wins landed, 2 capping gaps remain) ·
+store_readiness **A→A** · artifact_integrity **A→A** · business_case_strength **A→A** · tests_evals
+**B→B** (2 of 3 prior gaps closed) · performance **B→B** (headline N+1 unchanged).
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **1544 passed / 11 skipped** (up from 1350/8; the 11 skips are RUN_EVALS-gated by design).
+- `npx vitest run --coverage` (via grader) → **52.95% stmts / 41.73% branch / 54.06% lines** (up from
+  ~48%), comfortably above the raised 40/30/42/40 floor; lib/agents ~39%.
+- Public journey suite did NOT demonstrably pass cold this cycle (`run-journeys.sh --public-only` → 1
+  pass / 6 skip / 6 fail; the 6 fails are dummy-key /waitlist-redirect env artifacts, NOT product
+  defects — graded on what ran, never assumed green). Authed tier + live evals remain UNVERIFIABLE cold.
+
+**What the factory fixed since last grade (verified this run):**
+- **correctness → A:** app/api/computer-use/product-verify/route.ts:24 now has `maxDuration = 300`, AND
+  product-verifier.ts:274 enforces `maxWallClockMs: 270_000` (stops ~30s before the route budget). The
+  full maxDuration sweep is clean — every long-external-call route is now capped. Prior sole gap CLOSED.
+- **security_rls → A+:** scripts/preflight.sh:500-577 GATE 6 now MECHANICALLY asserts RLS coverage
+  (Python parse: 26/26 public tables enable RLS, fails safe on the do-block convention) + a client-secret
+  leak grep (NEXT_PUBLIC_* and, per #371, EXPO_PUBLIC_*). The sole A→A+ item (a mechanical gate replacing
+  migration review) is CLOSED; zero findings.
+- **design a11y (partial):** diagnosis progress announces via aria-live (#330); auth errors via
+  role="alert" (#368, mobile #369). But e2e/a11y.spec.ts still covers ONLY 7 public pages and
+  e2e/__screenshots__/ still absent (F7) → stays B.
+- **tests_evals (partial):** live-eval.yml CI job exists (RUN_EVALS weekly/on-demand); refine.eval is now
+  a REAL live call; mockup.eval added (#334); coverage floor raised near reality. Remaining: CI verify
+  still runs bare `vitest run` (no --coverage); live-eval can't be shown green here → stays B.
+- **performance:** headline N+1 (embedding-index full-table select('*') per crop; ivfflat index unused)
+  UNCHANGED; no perf budget → stays B.
+
+**Headline reasoning (why overall stays C):** functional_reality is now the SOLE ship-critical dimension
+that gates the headline (design_taste at B is the only other ship-critical below A, but functional_reality
+at C is the binding constraint). journeys.spec.ts:149-153 asserts only onboarding ENTRY and :169-175 only
+that /billing/upgrade renders a heading — the actual mockup image and the entitlement flip are never
+asserted, and ROUTE_INVENTORY.md still admits both as tracked gaps. Until a CI-runnable test asserts a
+REAL mockup and a checkout→unlock, the core paid journey is runtime-unvalidated and the headline cannot
+exceed C.
+
+**Issues reconciled:** CLOSED correctness #201 (now A). Updated functional #199 (still C, now the SOLE
+binding blocker), design #204 (still B; aria-live wins noted, remaining = authed axe + F7 screenshots),
+tests #200 (retitled C→B; 2 of 3 gaps closed). Filed a new performance issue (N+1 embedding-index + no
+perf budget — previously untracked).
+
+**Lessons for next run:**
+1. The ship gate is now one dimension from moving: fix functional_reality and design_taste both to A and
+   overall jumps to A/A+ (every other ship-critical dim is already A/A+). Both fixes are well-scoped and
+   already named in open issues.
+2. functional_reality had ZERO delta this cycle despite broad activity elsewhere — the factory keeps
+   picking lower-effort wins (a11y, maxDuration, preflight gates) over the hard, highest-leverage E2E work.
+   The single most valuable next change is a recorded-provider + Stripe-test-mode core-flow assertion.
+3. Cold-start recipe re-confirmed: npm install first, dummy .env.local. Note the public journey suite is
+   now sensitive to the dummy-key /waitlist redirect — its cold "green" is environment-fragile, so grade
+   functional_reality on the ASSERTIONS present in the specs, not on a cold suite run.
+
+---
+
 ## 2026-07-01 — SECOND INDEPENDENT GRADE (broad ship-critical progress; overall still gated by functional_reality)
 
 **Overall: C · ship_gate_met: false.** Overall is UNCHANGED from the 2026-06-29 baseline, but the
