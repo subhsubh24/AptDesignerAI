@@ -21,7 +21,19 @@ function getStripe(): Stripe {
     );
   }
   if (!_stripe) {
-    _stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2026-05-27.dahlia" });
+    _stripe = new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2026-05-27.dahlia",
+      // Bound the money-path network call so a stalled Stripe API fails fast and
+      // CATCHABLY (StripeConnectionError) instead of hanging until the serverless
+      // platform kills the function with an opaque 504. The SDK default is 80s —
+      // longer than any Vercel budget. 15s is ample for a single checkout-session
+      // create (normally sub-second) and stays under the route's maxDuration so
+      // the caller gets a clean "please try again" rather than a hung request.
+      // Mirrors the explicit timeouts on the other external calls (email 10s,
+      // Turnstile 5s). maxNetworkRetries kept at its default: a user-initiated
+      // checkout should surface a failure immediately, not silently double the wait.
+      timeout: 15_000,
+    });
   }
   return _stripe;
 }
