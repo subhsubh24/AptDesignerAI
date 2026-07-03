@@ -323,7 +323,11 @@ export default function ResultsScreen() {
 
           {/* Loading */}
           {(stage === 'uploading' || stage === 'analyzing') && (
-            <ThemedView style={[styles.loadingCard, { borderColor: colors.border }]}>
+            <ThemedView
+              style={[styles.loadingCard, { borderColor: colors.border }]}
+              accessibilityRole="progressbar"
+              accessibilityLiveRegion="polite"
+            >
               <ActivityIndicator color={colors.accent} />
               <ThemedText type="default" style={{ color: colors.mutedForeground }}>
                 {stage === 'uploading' ? 'Uploading your photo…' : 'Analysing your room with AI…'}
