@@ -16,6 +16,7 @@
  * See e2e/ROUTE_INVENTORY.md for full coverage + the tracked gaps.
  */
 import { test, expect, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import {
   adminAvailable,
   createConfirmedUser,
@@ -217,5 +218,43 @@ test.describe("authenticated journeys", () => {
         name: /unlock unlimited designs|reached your free save limit/i,
       }),
     ).toHaveCount(0);
+  });
+
+  test("the signed-in dashboard has no critical/serious accessibility violations", async ({
+    page,
+  }) => {
+    // design_taste ship gate: axe coverage on public pages (e2e/a11y.spec.ts) has
+    // never reached an AUTHENTICATED, design-dense surface. The dashboard is THE
+    // core signed-in screen (the onboarding wizard the whole product hangs off),
+    // so it must clear the same WCAG A/AA bar the public pages already do.
+    await signIn(page);
+    await expectNoErrorBoundary(page);
+    // Settle fonts / motion / interactive components before scanning.
+    await page.waitForLoadState("networkidle");
+
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+
+    const criticalOrSerious = results.violations.filter(
+      (v) => v.impact === "critical" || v.impact === "serious",
+    );
+
+    if (criticalOrSerious.length > 0) {
+      // Surface the specifics in the CI log so a real violation is actionable.
+      const summary = criticalOrSerious
+        .map(
+          (v) =>
+            `[${v.impact}] ${v.id}: ${v.description}\n  ` +
+            v.nodes
+              .slice(0, 3)
+              .map((n) => n.html)
+              .join("\n  "),
+        )
+        .join("\n\n");
+      console.error(`Accessibility violations on /dashboard:\n${summary}`);
+    }
+
+    expect(criticalOrSerious).toHaveLength(0);
   });
 });
