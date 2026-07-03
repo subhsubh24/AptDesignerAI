@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,28 +43,50 @@ const UPLOAD_TIMEOUT_MS = 90_000;
 const ANALYZE_TIMEOUT_MS = 330_000;
 const SAVE_TIMEOUT_MS = 30_000;
 
-/** fetch() that aborts after `timeoutMs`, surfacing a friendly timeout error. */
+/**
+ * fetch() that aborts after `timeoutMs`, surfacing a friendly timeout error.
+ * Also honours an optional external `signal` (the screen's unmount abort) so a
+ * navigate-away mid-request cancels the in-flight call instead of orphaning it
+ * — a real cost concern on the paid analyze endpoint, where a back→forward
+ * otherwise leaves two concurrent analyses running server-side. An external
+ * abort is re-thrown as an AbortError (distinct from the timeout message) so
+ * the caller can tell "user left" from "request timed out".
+ */
 async function fetchWithTimeout(
   input: string,
   init: RequestInit,
   timeoutMs: number,
   timeoutMessage: string,
+  externalSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort);
+  }
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
+      // External (unmount) abort: propagate as-is so the caller can stay silent.
+      if (externalSignal?.aborted) throw err;
       throw new Error(timeoutMessage);
     }
     throw err;
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 
-async function uploadImage(imageUri: string, token: string, userId: string): Promise<string> {
+async function uploadImage(
+  imageUri: string,
+  token: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
   if (!supabaseUrl) throw new Error('App configuration error: Supabase URL not set.');
@@ -92,6 +114,7 @@ async function uploadImage(imageUri: string, token: string, userId: string): Pro
     },
     UPLOAD_TIMEOUT_MS,
     'Upload timed out. Check your connection and try again.',
+    signal,
   );
 
   if (!uploadResp.ok) {
@@ -102,7 +125,12 @@ async function uploadImage(imageUri: string, token: string, userId: string): Pro
   return `${supabaseUrl}/storage/v1/object/public/room-photos/${filename}`;
 }
 
-async function analyzeRoom(publicUrl: string, roomType: string, token: string): Promise<AnalysisResult> {
+async function analyzeRoom(
+  publicUrl: string,
+  roomType: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<AnalysisResult> {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   if (!apiUrl) throw new Error('App configuration error: API URL not set.');
 
@@ -118,6 +146,7 @@ async function analyzeRoom(publicUrl: string, roomType: string, token: string): 
     },
     ANALYZE_TIMEOUT_MS,
     'Analysis timed out. Please try again.',
+    signal,
   );
 
   if (!analyzeResp.ok) {
@@ -149,23 +178,39 @@ export default function ResultsScreen() {
   // Pro users have unlimited saves; free users are limited by the AsyncStorage quota.
   const canSave = isPro || freeQuotaOk;
 
+  // Tracks the in-flight upload/analyze so we can abort it if the user leaves
+  // the screen (or fires a fresh retry) — otherwise the paid analyze call keeps
+  // running server-side and a stale result could land on an unmounted screen.
+  const abortRef = useRef<AbortController | null>(null);
+
   const run = useCallback(async (uri: string, rt: string) => {
+    // Cancel any previous run (rapid retry) and start a fresh, abortable one.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
+
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (signal.aborted) return;
       if (sessionError || !sessionData.session) throw new Error('Not authenticated');
       const token = sessionData.session.access_token;
       const userId = sessionData.session.user.id;
 
       setStage('uploading');
-      const uploadedUrl = await uploadImage(uri, token, userId);
+      const uploadedUrl = await uploadImage(uri, token, userId, signal);
+      if (signal.aborted) return;
       setPublicUrl(uploadedUrl);
 
       setStage('analyzing');
-      const result = await analyzeRoom(uploadedUrl, rt, token);
+      const result = await analyzeRoom(uploadedUrl, rt, token, signal);
+      if (signal.aborted) return;
 
       setAnalysis(result);
       setStage('done');
     } catch (err) {
+      // Silent on an intentional abort (unmount / superseding retry).
+      if (signal.aborted) return;
       const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       setErrorMsg(msg);
       setStage('error');
@@ -232,6 +277,8 @@ export default function ResultsScreen() {
       setErrorMsg('No image found — please go back and select a photo.');
       setStage('error');
     }
+    // Abort the in-flight upload/analyze if the screen unmounts mid-request.
+    return () => abortRef.current?.abort();
     // imageUri and roomType are stable (set once from module store on mount)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
