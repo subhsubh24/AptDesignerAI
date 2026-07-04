@@ -424,7 +424,7 @@ export default function DashboardPage() {
                   key={opt.value}
                   onClick={() => setBedrooms(opt.value)}
                   className={cn(
-                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95",
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bedrooms === opt.value
                       ? "border-accent-warm bg-accent-warm text-white shadow-md"
                       : "border-border hover:border-accent-warm/50 hover:bg-secondary"
@@ -444,7 +444,7 @@ export default function DashboardPage() {
                   key={n}
                   onClick={() => setBathrooms(n)}
                   className={cn(
-                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95",
+                    "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bathrooms === n
                       ? "border-accent-warm bg-accent-warm text-white shadow-md"
                       : "border-border hover:border-accent-warm/50 hover:bg-secondary"
@@ -469,7 +469,7 @@ export default function DashboardPage() {
               placeholder="e.g. 725"
               value={apartmentSqft}
               onChange={(e) => setApartmentSqft(e.target.value.replace(/[^\d]/g, ""))}
-              className="h-12 w-full rounded-full border-2 border-border bg-background px-5 text-sm font-medium outline-none transition-all focus:border-accent-warm"
+              className="h-12 w-full rounded-full border-2 border-border bg-background px-5 text-sm font-medium outline-none transition-all focus:border-accent-warm focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
