@@ -11,9 +11,18 @@ planning_case: base
 floor_usd: 100000
 floor_met_year1: true
 time_to_floor: "base case exceeds the $100K floor in year 1 (with Pro Annual tier)"
-as_of: 2026-06-30
+as_of: 2026-07-04
 ```
 
+> **COGS recompute 2026-07-04 (Run 61).** Corrected the per-analysis unit-economics
+> to the model the code actually uses: the reasoning-heavy stages (apartment/area
+> understanding + diagnosis) run at HIGH thinking and route to `TEXT_TIERS.mid` =
+> **Gemini 3.1 Flash Lite** (`lib/ai/models.ts`), not the base-tier Gemini 2.5 Flash
+> Lite the doc previously cited. At the 3.1 Flash Lite price ($0.25/$1.50 per 1M in/out,
+> per the official Gemini pricing page) per-analysis text inference is ~$0.002 (was
+> $0.0006) — still negligible, so
+> gross margin stays ~97–99% and **ARR is unchanged** (COGS moves margin, not revenue).
+>
 > **Last recomputed 2026-06-30 (Run 47).** Changelog: re-grounded the base-case
 > organic-install share from an above-benchmark 50% to **40%** (the top of the
 > cited 35–40% benchmark) so the planning case no longer leans on an assumption
@@ -66,28 +75,38 @@ Source: 25% annual renewal churn (Recurly Research B2C subscription benchmarks; 
 
 ## Unit economics — per-user COGS
 
-The dominant cost driver is AI inference via Gemini 2.5 Flash Lite, the cheapest
-available Gemini model.
+The dominant text-inference cost is the room/apartment understanding + diagnosis
+pipeline. These are the reasoning-heavy stages, so they run at HIGH thinking and route
+to `TEXT_TIERS.mid` = **Gemini 3.1 Flash Lite** (`lib/ai/models.ts`), not the cheaper
+base tier. The cheaper stages (validation, scoring, extraction, search) run on the base
+tier (Gemini 2.5 Flash Lite) and cost less than the figures below.
 
 | Component | Cost per room analysis |
 |---|---|
-| Input tokens (~2,000: image + prompt) | $0.0002 |
-| Output tokens (~1,000: analysis JSON) | $0.0004 |
-| **Total per analysis (Gemini 2.5 Flash Lite)** | **$0.0006** |
+| Input tokens (~2,000: image + prompt) @ $0.25/M | $0.0005 |
+| Output tokens (~1,000: analysis JSON + reasoning) @ $1.50/M | $0.0015 |
+| **Total per analysis (Gemini 3.1 Flash Lite)** | **~$0.0020** |
 
 Source: [Google Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)
-and [Pricepertoken.com](https://pricepertoken.com/pricing-page/model/google-gemini-2.5-flash-lite)
+and [Pricepertoken.com](https://pricepertoken.com/pricing-page/model/google-gemini-3.1-flash-lite-preview)
+— $0.25 / $1.50 per 1M input/output tokens.
+
+Image-render (mockup) COGS is separate and larger per call, but bounded: renders go
+through a content-addressed cache (`computeMockupCacheKey` in `app/api/mockups/route.ts`)
+so identical inputs don't re-bill, and the free tier caps renders per user. It does not
+change the conclusion below.
 
 Hosting (Vercel + Supabase) is estimated at ~$200/month flat, amortized across users.
 
-| Scenario | Monthly active users | Hosting per user | API per user | Total COGS/user |
+| Scenario | Monthly active users | Hosting per user | API per user (~10 analyses) | Total COGS/user |
 |---|---|---|---|---|
-| Early stage (500 MAU) | 500 | $0.40 | $0.006 | ~$0.41 |
-| Growth stage (5,000 MAU) | 5,000 | $0.04 | $0.006 | ~$0.05 |
+| Early stage (500 MAU) | 500 | $0.40 | $0.02 | ~$0.42 |
+| Growth stage (5,000 MAU) | 5,000 | $0.04 | $0.02 | ~$0.06 |
 
 **Gross margin: effectively 97–99%.** The cost structure is dominated by fixed hosting,
-not per-user compute. At scale, per-user COGS is negligible. This is a healthy software
-unit economics profile, not an infra-heavy AI product.
+not per-user compute — even at the corrected 3.1 Flash Lite pricing, per-analysis text
+inference is only ~$0.002. At scale, per-user COGS is negligible. This is a healthy
+software unit economics profile, not an infra-heavy AI product.
 
 ---
 
@@ -356,7 +375,7 @@ in-product upsell) are now **built, not just listed**. The only things it cannot
 market reception and the owner's execution on the human-only steps (accounts, distribution,
 funding). On the levers it does control, it has been taken to 100%.
 
-**Per-user COGS is not a constraint** — at $0.001/analysis and 97%+ gross margins,
+**Per-user COGS is not a constraint** — at ~$0.002/analysis and 97%+ gross margins,
 this product has excellent unit economics. The constraint is user acquisition and retention.
 
 ---
