@@ -97,6 +97,20 @@ normal experiment discipline (falsifiable, min sample, significance) once post-l
 - A LONGER onboarding that hammers the pain point can LIFT paywall conversion more than it costs in
   drop-off. Test flow length as a variable; keep the winner.
 
+### Pulling REAL funnel/analytics data — do this EVERY run (env changes are invisible to git; FACTORY_STANDARD §28)
+The authenticated read path is **`GET /api/internal/growth-metrics`** on your deployed production app, returning real
+privacy-safe aggregate metrics. Authenticate with the **`INTERNAL_METRICS_TOKEN`** provided in your routine
+environment (PROD_URL = your deployed production domain):
+
+    curl -s -H "Authorization: Bearer $INTERNAL_METRICS_TOKEN" "$PROD_URL/api/internal/growth-metrics"
+
+- **Always CALL it — never infer "no owner movement" from `git fetch`.** Owner source-connections
+  are ENV VARS (Vercel + this routine), invisible to `git` and connector-lists — re-probe EVERY run.
+- **Self-diagnose in `GROWTH_STATUS.validation`:** report whether `INTERNAL_METRICS_TOKEN` was present in your env
+  (presence only, NEVER the value) + the HTTP status. `200` → populate metrics from the REAL payload
+  and flip sources to `connected`. `401` → `INTERNAL_METRICS_TOKEN` missing/mismatched vs the deployed app
+  (surface the exact owner_action). This makes the break point visible on the dashboard.
+
 ## Strategic outreach (curated, human-reviewed email drafts)
 A high-leverage channel you MAY run: a FEW deeply-personalized 1:1 outreach emails to genuinely
 strategic targets (press/partners/community), drafted as Gmail DRAFTS for the OWNER to review and
