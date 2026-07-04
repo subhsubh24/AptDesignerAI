@@ -311,9 +311,11 @@ function CorrectionModal({ roomId, product, onClose, onSaved }: CorrectionModalP
               {suggestions.map((s, i) => (
                 <button
                   key={`${s.brand}-${s.model}-${i}`}
+                  type="button"
                   className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-60"
                   onClick={() => submit({ brand: s.brand, model: s.model, variant: s.variant })}
                   disabled={submitting}
+                  aria-label={`Use ${s.brand}${s.model ? ` ${s.model}` : ""}${s.variant ? ` (${s.variant})` : ""}`}
                 >
                   <div className="flex-1">
                     <span className="font-medium">{s.brand}</span>
@@ -346,12 +348,14 @@ function CorrectionModal({ roomId, product, onClose, onSaved }: CorrectionModalP
             <div className="grid grid-cols-2 gap-2">
               <Input
                 placeholder="Brand"
+                aria-label="Brand"
                 value={manual.brand}
                 onChange={(e) => setManual((m) => ({ ...m, brand: e.target.value }))}
                 disabled={submitting}
               />
               <Input
                 placeholder="Model"
+                aria-label="Model"
                 value={manual.model}
                 onChange={(e) => setManual((m) => ({ ...m, model: e.target.value }))}
                 disabled={submitting}
@@ -359,6 +363,7 @@ function CorrectionModal({ roomId, product, onClose, onSaved }: CorrectionModalP
             </div>
             <Input
               placeholder="Variant (optional)"
+              aria-label="Variant (optional)"
               value={manual.variant}
               onChange={(e) => setManual((m) => ({ ...m, variant: e.target.value }))}
               disabled={submitting}
