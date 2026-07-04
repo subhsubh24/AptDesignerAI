@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Camera, ShoppingBag, Palette, Shield, ArrowRight, Star, CheckCircle2, Zap } from "lucide-react";
+import { Camera, ShoppingBag, Palette, Shield, ArrowRight, CheckCircle2, Zap } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { HeroAnimations } from "@/components/marketing/hero-animations";
@@ -48,22 +48,20 @@ export default function LandingPage() {
                   </Button>
                 </div>
 
-                {/* Social proof strip */}
-                <div className="flex items-center gap-4 mt-10 pt-8 border-t border-border/60">
-                  <div className="flex -space-x-2">
-                    {["bg-amber-400", "bg-rose-400", "bg-emerald-400", "bg-blue-400", "bg-purple-400"].map((bg, i) => (
-                      <div key={i} className={`h-8 w-8 rounded-full ${bg} border-2 border-background`} />
-                    ))}
+                {/* Trust strip — honest, verifiable product claims only.
+                    No adoption metrics or ratings until we have real ones. */}
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-10 pt-8 border-t border-border/60 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-accent-warm" />
+                    <span>AI-powered room analysis</span>
                   </div>
-                  <div className="text-sm">
-                    <span className="font-semibold text-foreground">500+</span>{" "}
-                    <span className="text-muted-foreground">rooms designed</span>
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-accent-warm" />
+                    <span>Never used to train AI models</span>
                   </div>
-                  <div className="flex items-center gap-1 text-sm ml-auto">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                    ))}
-                    <span className="text-muted-foreground ml-1">4.9</span>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-accent-warm" />
+                    <span>Free to start</span>
                   </div>
                 </div>
               </div>
@@ -292,7 +290,7 @@ export default function LandingPage() {
               <div className="relative z-10">
                 <h2 className="text-headline text-balance mb-4">Ready to transform your space?</h2>
                 <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                  Join hundreds of apartment dwellers who&apos;ve found furniture that actually belongs.
+                  Snap a few photos and see what your space could become &mdash; your first room analysis is free.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button asChild size="2xl" variant="warm">

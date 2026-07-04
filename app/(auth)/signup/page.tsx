@@ -205,18 +205,20 @@ export default function SignupPage() {
           <div className="space-y-6 max-w-sm">
             <Home className="h-12 w-12 text-accent-warm/60 mx-auto" />
             <h2 className="text-headline text-foreground">
-              Join hundreds of{" "}
-              <span className="text-gradient-warm">happy renters</span>
+              A room that finally{" "}
+              <span className="text-gradient-warm">fits your space</span>
             </h2>
+            {/* Honest capability highlights — no invented adoption metrics or
+                ratings until we have real, sourced numbers to show. */}
             <div className="grid grid-cols-2 gap-4">
               {[
-                { stat: "500+", label: "Rooms designed" },
-                { stat: "4.9★", label: "Average rating" },
-                { stat: "2 min", label: "To first analysis" },
-                { stat: "8.2", label: "Avg fit score" },
+                { title: "From your photos", label: "Analyzes your real room" },
+                { title: "Fit-aware", label: "Scale, light & layout" },
+                { title: "Every budget", label: "Budget to investment picks" },
+                { title: "Private", label: "Never used to train AI models" },
               ].map((item) => (
-                <div key={item.label} className="glass rounded-xl p-4 border border-border/40">
-                  <div className="text-xl font-bold text-foreground">{item.stat}</div>
+                <div key={item.title} className="glass rounded-xl p-4 border border-border/40 text-left">
+                  <div className="text-sm font-semibold text-foreground">{item.title}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{item.label}</div>
                 </div>
               ))}
