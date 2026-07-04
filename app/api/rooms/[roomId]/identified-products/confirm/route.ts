@@ -27,7 +27,13 @@ import { createLogger } from "@/lib/logging/logger";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { checkDailySpend } from "@/lib/utils/spend-limiter";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
+
+// Product identifiers are short strings; cap them so a malicious body can't
+// bloat the persisted diagnosis_json or the embedding label text.
+const MAX_FIELD_LEN = 200;
 
 // This route makes a remote Gemini embedding call (embedImage) on the confirm/
 // correct write-back path. Without an explicit maxDuration, Vercel applies a
@@ -50,14 +56,30 @@ interface ConfirmBody {
   };
 }
 
+function isBoundedString(v: unknown): v is string {
+  return typeof v === "string" && v.length <= MAX_FIELD_LEN;
+}
+
 function isConfirmBody(x: unknown): x is ConfirmBody {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
-  return (
-    typeof o.brand === "string" &&
-    typeof o.model === "string" &&
-    typeof o.user_confirmed === "boolean"
-  );
+  if (
+    !isBoundedString(o.brand) ||
+    !isBoundedString(o.model) ||
+    typeof o.user_confirmed !== "boolean"
+  ) {
+    return false;
+  }
+  // Optional correction: when present it must be a well-formed, length-bounded object.
+  if (o.correction !== undefined && o.correction !== null) {
+    if (typeof o.correction !== "object") return false;
+    const c = o.correction as Record<string, unknown>;
+    if (!isBoundedString(c.brand) || !isBoundedString(c.model)) return false;
+    if (c.variant !== undefined && c.variant !== null && !isBoundedString(c.variant)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function PATCH(
@@ -70,6 +92,20 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await userOwnsRoom(supabase, roomId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Throttle the endpoint: the confirm path can trigger a paid Gemini embedding
+  // (embedImage) on the self-learning write-back, so an un-throttled caller is a
+  // budget-drain + brute-force surface. Matches the sibling correct/ route.
+  const limit = checkRateLimit(`product-confirm:${user.id}`, RATE_LIMITS.productConfirm);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many confirmation requests. Please wait a moment." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) },
+      },
+    );
   }
 
   const body = await request.json().catch(() => null);
@@ -148,7 +184,11 @@ export async function PATCH(
     updated.user_confirmed === true &&
     !updated.embedding_written_back &&
     updated.source_image_url &&
-    updated.bounding_box
+    updated.bounding_box &&
+    // Meter only the actual paid call: a non-embedding confirm costs nothing and
+    // must not consume the daily ceiling. When the ceiling is hit we skip the
+    // best-effort write-back (confirming must still succeed — never 500).
+    checkDailySpend(user.id).allowed
   ) {
     try {
       // Embedding the full source image + the label is the simplest workable

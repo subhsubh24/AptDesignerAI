@@ -176,4 +176,6 @@ export const RATE_LIMITS = {
   floorPlanExtract: { maxRequests: 5, windowMs: 5 * 60_000 },
   /** Product correction (grounded verifier + embedding) — 10 per minute per user */
   productCorrect: { maxRequests: 10, windowMs: 60_000 },
+  /** Product confirmation (self-learning embedding write-back) — 10 per minute per user */
+  productConfirm: { maxRequests: 10, windowMs: 60_000 },
 } as const;
