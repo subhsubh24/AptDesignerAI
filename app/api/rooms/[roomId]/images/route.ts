@@ -2,6 +2,22 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { checkRateLimit } from "@/lib/utils/rate-limiter";
+
+// Room-image writes are cheap DB rows, but an authenticated client can still
+// spam create/delete to bloat storage-adjacent tables or thrash the row. A
+// generous per-user cap (60/min) stops abuse without rejecting any real
+// upload/delete burst (mirrors the mobile-save inline-config pattern).
+const ROOM_IMAGE_WRITE_LIMIT = { maxRequests: 60, windowMs: 60_000 } as const;
+
+function rateLimited(userId: string): NextResponse | null {
+  const limit = checkRateLimit(`room-images:${userId}`, ROOM_IMAGE_WRITE_LIMIT);
+  if (limit.allowed) return null;
+  return NextResponse.json(
+    { error: "Too many image requests. Please wait a moment." },
+    { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs ?? 60000) / 1000)) } },
+  );
+}
 
 export async function GET(
   _request: Request,
@@ -33,6 +49,8 @@ export async function POST(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = rateLimited(user.id);
+  if (limited) return limited;
   if (!(await userOwnsRoom(supabase, roomId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -74,6 +92,8 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = rateLimited(user.id);
+  if (limited) return limited;
   if (!(await userOwnsRoom(supabase, roomId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
