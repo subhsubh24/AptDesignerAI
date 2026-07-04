@@ -28,15 +28,42 @@ interface PickProduct {
 export default function PicksPage() {
   const [picks, setPicks] = useState<PickProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [roomFilter, setRoomFilter] = useState("all");
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/picks")
-      .then((r) => r.json())
-      .then((data: PickProduct[]) => setPicks(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`picks fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((data: PickProduct[]) => {
+        if (cancelled) return;
+        // Guard against a non-array payload (e.g. an error object) reaching the
+        // downstream .forEach/.filter — surface it as an error, not an empty state.
+        if (!Array.isArray(data)) throw new Error("picks response was not a list");
+        setPicks(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // Reset load state in the handler (not synchronously in the effect) before
+  // re-triggering the fetch, so the effect stays side-effect-free on entry.
+  const handleRetry = () => {
+    setLoading(true);
+    setLoadError(false);
+    setReloadKey((k) => k + 1);
+  };
 
   const rooms = useMemo(() => {
     const seen = new Map<string, string>();
@@ -130,6 +157,19 @@ export default function PicksPage() {
             <SkeletonCard key={i} />
           ))}
         </div>
+      ) : loadError ? (
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <Star className="h-10 w-10 text-muted-foreground/30 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-1">Couldn&apos;t load your picks</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Something went wrong fetching your shortlisted products. Please try again.
+            </p>
+            <Button variant="outline" onClick={handleRetry}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
