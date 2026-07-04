@@ -360,7 +360,7 @@ export default function DashboardPage() {
             </div>
           </StaggerItem>
           <StaggerItem className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-2">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm-strong mb-2">
               Let&apos;s design your apartment
             </div>
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-balance">Welcome to Apt<span className="text-accent-warm">Designer</span></h1>
