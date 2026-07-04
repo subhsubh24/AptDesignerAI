@@ -51,6 +51,33 @@ async function updateProject(
   for (const key of ALLOWED_KEYS) {
     if (key in body) allowedFields[key] = body[key];
   }
+
+  // Size caps before the DB write. `building_research` / `apartment_analysis`
+  // are JSONB accumulators fed by LLM research routes; a weaponized client could
+  // PUT multi-MB objects to bloat the row and slow every subsequent read. Bound
+  // both the serialized JSON size and the free-text string fields to generous,
+  // abuse-only limits (no legitimate value approaches these).
+  const MAX_JSON_BYTES = 256 * 1024; // 256 KB per JSONB accumulator field
+  const MAX_STRING_LEN = 2000;
+  for (const jsonKey of ["building_research", "apartment_analysis"] as const) {
+    const val = allowedFields[jsonKey];
+    if (val != null && JSON.stringify(val).length > MAX_JSON_BYTES) {
+      return NextResponse.json(
+        { error: `${jsonKey} exceeds the maximum allowed size` },
+        { status: 400 },
+      );
+    }
+  }
+  for (const strKey of ["name", "description", "unit_plan_name", "city", "state", "neighborhood", "building_name", "building_url"] as const) {
+    const val = allowedFields[strKey];
+    if (typeof val === "string" && val.length > MAX_STRING_LEN) {
+      return NextResponse.json(
+        { error: `${strKey} exceeds the maximum allowed length` },
+        { status: 400 },
+      );
+    }
+  }
+
   allowedFields.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
