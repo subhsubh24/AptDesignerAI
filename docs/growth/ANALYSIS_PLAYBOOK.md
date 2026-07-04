@@ -66,6 +66,37 @@ the KIND of recommendation:
 Record the read in the machine-tracked `pmf` block of `docs/growth/GROWTH_STATUS.md`
 (activation_rate, retention_d1/d7/d30, organic_share_rate, signal).
 
+## Conversion diagnostics — the three-metric spine (post-launch, where a paywall/upgrade exists)
+Once traffic is REAL, diagnose acquisition with three ratios before anything else — they localize
+whether the binding constraint is DEMAND/MESSAGE, PRODUCT, or the PAYWALL:
+1. **View → install/signup** — of those who see the app (store listing, landing, ad), how many start.
+2. **Install/signup → paywall/upgrade view** — how many reach the point of being asked to pay.
+3. **Paywall/upgrade view → pay** — how many convert.
+
+Read them as a DIAGNOSTIC, not a scorecard:
+- Weak (1) → the DEMAND or the MESSAGE is off (value not communicated, or nobody wants it) — fix
+  positioning/targeting before touching the product.
+- Healthy (1) but weak (3) → the idea lands; the PRODUCT or the PAYWALL doesn't — fix onboarding→
+  paywall, not acquisition.
+- Weak (2) → users start but never reach the ask — onboarding leaks before value is felt.
+
+**Reference targets (consumer mobile/freemium — orientation ONLY, never truth for THIS product
+until its own data exists):** ~5 installs / 1,000 views; ~75% of installs reach the paywall; ~10%+
+of paywall views pay. Below a band → that stage is the binding constraint. Compute CI; say
+"insufficient data" until N is real. These benchmarks orient a cold start — they NEVER override this
+product's own measured numbers.
+
+**Willingness-to-pay > downloads (guardrail).** A large free/waitlist number is NOT PMF. Downloads
+and signups are cheap signals; the signal that proves a business is *paid conversion* + *retention of
+payers*. Never report a download/waitlist count as evidence of PMF — weight paid conversion and
+repeat use.
+
+**Paywall-first + onboarding-as-conversion (experiment hypotheses, not mandates).** Run through the
+normal experiment discipline (falsifiable, min sample, significance) once post-launch:
+- Optimize the paywall/upgrade surface BEFORE deep in-app polish — it's what takes the money.
+- A LONGER onboarding that hammers the pain point can LIFT paywall conversion more than it costs in
+  drop-off. Test flow length as a variable; keep the winner.
+
 ## Strategic outreach (curated, human-reviewed email drafts)
 A high-leverage channel you MAY run: a FEW deeply-personalized 1:1 outreach emails to genuinely
 strategic targets (press/partners/community), drafted as Gmail DRAFTS for the OWNER to review and
