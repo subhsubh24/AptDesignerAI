@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -177,6 +177,21 @@ export default function ResultsScreen() {
   const { isLoading: quotaLoading, canSave: freeQuotaOk, markSaved } = useFreeSaveQuota();
   // Pro users have unlimited saves; free users are limited by the AsyncStorage quota.
   const canSave = isPro || freeQuotaOk;
+
+  // iOS/VoiceOver: the loading card's `accessibilityLiveRegion` (below) is
+  // Android/TalkBack-only, so the 15–30s upload→analyze wait is SILENT for
+  // VoiceOver users. Announce each stage explicitly so iOS screen-reader users
+  // get the same progress feedback Android already gets (#397 closed Android).
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    if (stage === 'uploading') {
+      AccessibilityInfo.announceForAccessibility('Uploading your photo.');
+    } else if (stage === 'analyzing') {
+      AccessibilityInfo.announceForAccessibility(
+        'Analysing your room with AI. This usually takes 15 to 30 seconds.',
+      );
+    }
+  }, [stage]);
 
   // Tracks the in-flight upload/analyze so we can abort it if the user leaves
   // the screen (or fires a fresh retry) — otherwise the paid analyze call keeps
