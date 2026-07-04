@@ -42,6 +42,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "project_id, name, and room_type are required" }, { status: 400 });
   }
 
+  // Server-side input validation (client Zod is UX, not security): reject
+  // oversized/malformed writes before they reach the DB (Track G2). Bounds are
+  // generous — they only stop abuse (unbounded strings/arrays), not real use.
+  if (typeof name !== "string" || name.trim().length > 200) {
+    return NextResponse.json({ error: "name must be a string of at most 200 characters" }, { status: 400 });
+  }
+  if (typeof room_type !== "string" || room_type.length > 60) {
+    return NextResponse.json({ error: "room_type must be a string of at most 60 characters" }, { status: 400 });
+  }
+  for (const [field, value] of [
+    ["priorities", priorities],
+    ["keep_items", keep_items],
+    ["replace_items", replace_items],
+  ] as const) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      (!Array.isArray(value) || value.length > 100 || value.some((x) => typeof x !== "string" || x.length > 500))
+    ) {
+      return NextResponse.json(
+        { error: `${field} must be an array of at most 100 strings (each at most 500 characters)` },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("rooms")
     .insert({
