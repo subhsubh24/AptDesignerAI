@@ -297,3 +297,24 @@ tweak loop.
 - **Cost-governed:** media generation costs real money — treat it as paid validation (fewest/cheapest
   generations that clear the bar, cache, reuse winners). Paid distribution stays behind the §9
   channel plan + budget; never fabricate a metric or social-proof claim (the anti-gaming rule).
+
+## 12. Platform posture — web-first by DEFAULT (native app = halo + a real ASO channel)
+For a product that HAS a usable web app (responsive / PWA), the DEFAULT is: market the WEB URL as the
+PRIMARY call-to-action everywhere. A link is the lowest-friction path (click -> using it, no
+install / app-review wall), works on desktop AND mobile browsers, is shareable + indexable, and keeps
+~97% of revenue via Stripe vs. surrendering the App/Play 15-30%. The web app is the thing you push.
+
+The native iOS/Android app is SECONDARY in acquisition but NOT throwaway — it earns its keep three
+ways: (a) a credibility / trust signal ("we have an app too"); (b) a RETENTION driver — actively
+nudge returning users to install / add-to-home-screen, since mobile-web retention is weaker and iOS
+restricts PWAs; (c) a REAL ASO discovery channel — invest in store copy, keywords, and ratings, not
+just a badge.
+
+EXCEPTION — native-first products: if the product's VISION declares the NATIVE app the CORE
+experience (on-device media / camera / offline / sensor-bound — e.g. a video editor or a camera-first
+capture app), INVERT the default: lead with the App Store (ASO-first) and treat the web as the
+waitlist / marketing FUNNEL to the app, not the product. Read VISION each run to know which posture
+applies — NEVER market a web URL as "the product" when there is no usable web app.
+
+Every landing / store asset carries ONE primary CTA matching the product's posture — never a
+click-shedding "use web OR download" split.
