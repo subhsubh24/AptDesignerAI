@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
-import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download } from "lucide-react";
+import { toast } from "@/components/ui/toast";
+import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download, AlertCircle } from "lucide-react";
 
 interface SavedDesignItem {
   id: string;
@@ -32,16 +33,39 @@ interface BillingStatus {
 export default function SavedDesignsPage() {
   const [designs, setDesigns] = useState<SavedDesignItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
 
+  // Bumping this re-triggers the fetch effect for a retry after a load failure.
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
     fetch("/api/saved-designs")
-      .then((r) => r.json())
-      .then((data: SavedDesignItem[]) => setDesigns(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: unknown) => {
+        if (cancelled) return;
+        // Guard against an error body (non-array) so the empty state never
+        // masks a failed load.
+        if (!Array.isArray(data)) throw new Error("Unexpected response");
+        setDesigns(data as SavedDesignItem[]);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   // Plan + free-tier usage drive the in-product upgrade surface below. Failure
   // is non-blocking — the page works without it; the upsell just doesn't show.
@@ -76,11 +100,17 @@ export default function SavedDesignsPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this saved design? This can't be undone.")) return;
     setDeleting(id);
-    const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDesigns((prev) => prev.filter((d) => d.id !== id));
+    } catch {
+      // Surface the failure — never leave the user believing a delete that
+      // failed actually succeeded.
+      toast.error("Couldn't delete design", "Something went wrong. Please try again.");
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   };
 
   return (
@@ -114,6 +144,19 @@ export default function SavedDesignsPage() {
             <SkeletonCard key={i} />
           ))}
         </div>
+      ) : loadError ? (
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <AlertCircle className="h-10 w-10 text-destructive/40 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-1">Couldn&apos;t load your designs</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Something went wrong reaching your saved designs. This is usually temporary.
+            </p>
+            <Button variant="outline" onClick={() => setReloadKey((k) => k + 1)}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       ) : designs.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
