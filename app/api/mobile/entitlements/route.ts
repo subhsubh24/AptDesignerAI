@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { hasProEntitlement } from "@/lib/entitlements/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 /**
  * GET /api/mobile/entitlements
@@ -32,6 +33,18 @@ export async function GET(request: NextRequest) {
   const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // hasProEntitlement() proxies a paid RevenueCat REST call. Cap per-user so a
+  // looping/abusive client can't burn the RC quota / our spend (Track G1).
+  // 30/min is ample headroom for an entitlement check tied to app-foreground /
+  // session events, while still bounding a runaway caller.
+  const limit = checkRateLimit(`mobile-entitlements:${user.id}`, RATE_LIMITS.mobileEntitlements);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
   }
 
   // The RC app user ID mirrors the Supabase user ID (set on logIn in _layout.tsx)
