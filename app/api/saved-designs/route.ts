@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
+import { checkRateLimit } from "@/lib/utils/rate-limiter";
 import { hasProEntitlementWeb, FREE_SAVE_LIMIT_WEB } from "@/lib/entitlements/web";
 
 export async function GET(request: NextRequest) {
@@ -25,6 +26,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+
+  // Rate limit — matches the mobile save endpoint (10/min per user). A save is
+  // a cheap write, but each one fans out into several DB reads (room, diagnosis,
+  // products, bundles) to build the snapshot, so an unbounded loop is real load.
+  const limit = checkRateLimit(`saved-designs:${userId ?? "anon"}`, { maxRequests: 10, windowMs: 60_000 });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many save requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs ?? 60000) / 1000)) } },
+    );
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;
