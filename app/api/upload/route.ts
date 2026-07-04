@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Storage abuse guard: uploads accept files up to 20MB and write to object
+  // storage. Without a per-user cap a compromised session can burn storage
+  // quota / rack up egress. 20 uploads/min is generous for real use (Track G1).
+  const limit = checkRateLimit(`upload:${user.id}`, RATE_LIMITS.upload);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many uploads. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
+    );
+  }
 
   const formData = await request.formData();
   const file = formData.get("file") as File;

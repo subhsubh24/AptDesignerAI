@@ -144,6 +144,8 @@ export const RATE_LIMITS = {
   recommendationMockup: { maxRequests: 15, windowMs: 60_000 },
   /** Upload: 20 per minute per user */
   upload: { maxRequests: 20, windowMs: 60_000 },
+  /** Mobile entitlements — proxies a paid RevenueCat REST call; 30 per minute per user */
+  mobileEntitlements: { maxRequests: 30, windowMs: 60_000 },
   /** Area analysis — slow, heavy. 3 per 5 minutes per user */
   areaAnalysis: { maxRequests: 3, windowMs: 5 * 60_000 },
   /** Area analysis refine — cheap follow-up. 10 per minute */
