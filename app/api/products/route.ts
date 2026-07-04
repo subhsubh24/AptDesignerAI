@@ -43,6 +43,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Server-side input validation (client Zod is UX, not security): reject
+  // oversized/wrong-typed writes before they reach the DB (Track G2). Types
+  // mirror CandidateProduct: strings, string[] (materials/colors), and JSON
+  // objects (dimensions/metadata). Bounds are generous — abuse-only.
+  const STRING_FIELDS = [
+    "title", "category", "retailer", "product_url", "image_url",
+    "description", "source_type", "search_session_id",
+  ] as const;
+  for (const f of STRING_FIELDS) {
+    const v = body[f];
+    if (v !== undefined && v !== null && (typeof v !== "string" || v.length > 2000)) {
+      return NextResponse.json({ error: `${f} must be a string of at most 2000 characters` }, { status: 400 });
+    }
+  }
+  if (body.price !== undefined && body.price !== null && (typeof body.price !== "number" || !Number.isFinite(body.price))) {
+    return NextResponse.json({ error: "price must be a finite number" }, { status: 400 });
+  }
+  for (const f of ["materials", "colors"] as const) {
+    const v = body[f];
+    if (v !== undefined && v !== null && (!Array.isArray(v) || v.length > 100 || v.some((x) => typeof x !== "string" || x.length > 500))) {
+      return NextResponse.json({ error: `${f} must be an array of at most 100 strings (each at most 500 characters)` }, { status: 400 });
+    }
+  }
+  for (const f of ["dimensions", "metadata"] as const) {
+    const v = body[f];
+    if (v !== undefined && v !== null && (typeof v !== "object" || Array.isArray(v) || JSON.stringify(v).length > 50_000)) {
+      return NextResponse.json({ error: `${f} must be an object of at most 50KB` }, { status: 400 });
+    }
+  }
+
   const row = {
     room_id: body.room_id,
     title: body.title,

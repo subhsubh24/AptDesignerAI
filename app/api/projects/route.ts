@@ -40,6 +40,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  // Server-side input validation (client Zod is UX, not security): cap the
+  // free-text fields so a malformed/oversized write can't bloat the DB (G2).
+  if (typeof name !== "string" || name.trim().length > 200) {
+    return NextResponse.json({ error: "name must be a string of at most 200 characters" }, { status: 400 });
+  }
+  if (description !== undefined && description !== null && (typeof description !== "string" || description.length > 5000)) {
+    return NextResponse.json({ error: "description must be a string of at most 5000 characters" }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .insert({ name: name.trim(), description: description?.trim(), user_id: user.id })
