@@ -16,6 +16,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-warm: var(--accent-warm);
+  --color-accent-warm-strong: var(--accent-warm-strong);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -46,10 +47,17 @@
   --secondary: #f2ede8;
   --secondary-foreground: #3d3530;
   --muted: #f5f2ee;
-  --muted-foreground: #7c7268;
+  /* Darkened from #7c7268 → AA-legible (≥4.5:1) as small/large text on the page
+     (#faf9f7) and cards (#fff); more contrast never regresses a muted surface. */
+  --muted-foreground: #6f665c;
   --accent: #ebe4dc;
   --accent-foreground: #1a1614;
   --accent-warm: #b4501e;
+  /* Deeper accent for accent-coloured TEXT on low-contrast (tinted) surfaces —
+     e.g. text-accent-warm on a bg-accent-warm/10 pill. #b4501e text on the 10%
+     tint is only 4.25:1; this clears AA (5.1:1) without darkening the brand
+     accent used for fills/borders/focus rings. */
+  --accent-warm-strong: #a3441a;
   --destructive: #dc2626;
   --destructive-foreground: #faf9f7;
   --border: #e8e1d9;
@@ -86,10 +94,15 @@
   --secondary: #252220;
   --secondary-foreground: #c5bdb3;
   --muted: #1f1d1a;
-  --muted-foreground: #8a8077;
+  /* Lightened from #8a8077 → AA-legible on dark cards (#1c1a17); the tiny
+     step-hint text was 4.49:1, now ≥5:1. */
+  --muted-foreground: #948a7c;
   --accent: #2e2a26;
   --accent-foreground: #ede9e3;
   --accent-warm: #d4733e;
+  /* Dark accent-warm already clears AA as text on the tinted pill (5.0:1); keep
+     the strong token equal so the shared utility renders identically in dark. */
+  --accent-warm-strong: #d4733e;
   --destructive: #ef4444;
   --destructive-foreground: #ede9e3;
   --border: #2e2a26;
