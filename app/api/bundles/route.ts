@@ -44,6 +44,26 @@ export async function POST(request: Request) {
   const { room_id, name, product_ids } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
+
+  // Server-side input validation (client Zod is UX, not security): bound the
+  // write before it reaches the DB (Track G2). Bounds are generous — they only
+  // stop abuse (unbounded name / unbounded product_ids fan-out), not real use.
+  if (name !== undefined && name !== null && (typeof name !== "string" || name.length > 200)) {
+    return NextResponse.json({ error: "name must be a string of at most 200 characters" }, { status: 400 });
+  }
+  if (product_ids !== undefined && product_ids !== null) {
+    if (
+      !Array.isArray(product_ids) ||
+      product_ids.length > 200 ||
+      product_ids.some((id: unknown) => typeof id !== "string" || id.length > 200)
+    ) {
+      return NextResponse.json(
+        { error: "product_ids must be an array of at most 200 id strings (each at most 200 characters)" },
+        { status: 400 },
+      );
+    }
+  }
+
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
