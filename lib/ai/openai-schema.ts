@@ -73,11 +73,24 @@ function cleanForOpenAI(
       if (value.length === 1) {
         return cleanForOpenAI(value[0] as Record<string, unknown>, defs);
       }
-      // Multi-element: merge properties
+      // Multi-element: merge properties. Object.assign lets a later branch's
+      // `properties` replace an earlier branch's, but the earlier branch's
+      // `required` (added by the strict-mode pass when that branch was cleaned)
+      // would otherwise SURVIVE and reference properties that no longer exist —
+      // an invalid strict schema that 400s the request. Re-derive the strict
+      // invariants from the FINAL merged properties so `required` always matches.
       const merged: Record<string, unknown> = {};
       for (const sub of value) {
         const cleaned = cleanForOpenAI(sub as Record<string, unknown>, defs);
         Object.assign(merged, cleaned);
+      }
+      if (
+        merged.type === "object" &&
+        typeof merged.properties === "object" &&
+        merged.properties !== null
+      ) {
+        merged.additionalProperties = false;
+        merged.required = Object.keys(merged.properties as Record<string, unknown>);
       }
       return merged;
     }

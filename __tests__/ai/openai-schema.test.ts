@@ -106,6 +106,24 @@ describe("geminiSchemaToOpenAI — allOf / oneOf", () => {
     expect(merged.a).toBeUndefined();
   });
 
+  it("multi-element allOf leaves a strict-valid schema — `required` tracks the merged properties, not a stale branch", () => {
+    // Regression: the first branch (type:object) gets required:["a"] from the
+    // strict pass; the second branch replaces `properties` with {b} but carries
+    // no `required`, so a naive Object.assign leaves required:["a"] against
+    // properties:{b} — an invalid strict schema OpenAI 400s. `required` must be
+    // recomputed from the FINAL merged properties.
+    const out = geminiSchemaToOpenAI({
+      allOf: [
+        { type: "object", properties: { a: { type: "string" } } },
+        { properties: { b: { type: "number" } } },
+      ],
+    });
+    expect(new Set(out.required as string[])).toEqual(new Set(["b"]));
+    expect(out.additionalProperties).toBe(false);
+    // The whole node satisfies every OpenAI strict-mode invariant.
+    assertStrict(out);
+  });
+
   it("takes the first oneOf option", () => {
     const out = geminiSchemaToOpenAI({ oneOf: [{ type: "string" }, { type: "number" }] });
     expect(out).toEqual({ type: "string" });
