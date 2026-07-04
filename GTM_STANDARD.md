@@ -318,3 +318,39 @@ applies — NEVER market a web URL as "the product" when there is no usable web 
 
 Every landing / store asset carries ONE primary CTA matching the product's posture — never a
 click-shedding "use web OR download" split.
+
+## 13. Autonomous marketing launch — OPT-OUT, readiness-gated (owner approves nothing)
+The owner has DURABLY AUTHORIZED marketing to launch AUTONOMOUSLY once the product is truly ready —
+no per-launch approval. The default is GO; the owner acts only to STOP. Deliver it exactly this way.
+
+**ARM only when readiness is PROVEN — all three, none self-certified:**
+1. `ship_gate_met` — the INDEPENDENT `QUALITY_SCORECARD` (§7/§8 of FACTORY_STANDARD), never self-graded.
+2. A FULL computer-use E2E sweep GREEN — the validator drove the REAL app end-to-end like a human with
+   NO open critical findings (FACTORY_STANDARD §29 / `docs/autonomous-loop/VALIDATOR_STATUS.md`).
+3. Launch assets EXIST and PASSED maker≠checker review — positioning, landing/store copy (per the §12
+   platform posture), the first campaigns/sequences, and the measurement + feedback loop.
+Below ANY of the three → stay in PREPARE and arm nothing (never self-certify readiness to unlock).
+
+**ARM → PROPOSE → auto-GO (opt-out):**
+- On the first run where all three hold, write the INITIAL MARKETING PLAN to the `GROWTH_STATUS`
+  `marketing:` block — `status: proposed`, `armed_at: <UTC>`, `veto_window_hours` (default 48),
+  `channels: [...]` (only owner-connected ones), `plan: [...]` (first campaigns + sequence + what
+  you'll measure + the feedback loop) — and NOTIFY the owner (push).
+- Once `armed_at + veto_window_hours` has elapsed with NO hold in place, flip `status: live` and begin
+  AUTONOMOUSLY — no owner approval, ever.
+- **CANARY-RAMP, never a day-one blast:** start at the smallest meaningful volume, prove
+  deliverability + positive engagement + ~zero complaints, THEN ramp. (Also matches email warmup.)
+
+**KILL SWITCH — the owner's only control, and it always wins:** if `docs/growth/MARKETING_HOLD` exists
+(owner- or dashboard-created), IMMEDIATELY halt ALL outbound/marketing and revert to PREPARE this run,
+whatever the status; report `status: held`. Remove it to resume. Check it FIRST, every run.
+
+**Authorized channels ONLY (never relaxed, even when live):** act solely through channels the owner
+has CONNECTED (API/OAuth) + the owner-connected ESP. NEVER create accounts, browser-automate
+logins/posts, manufacture engagement, or post under the owner's identity on an unconnected channel
+(§7). If NO channel is connected, stay in PREPARE and surface the ONE connect-action — never invent a
+channel or a metric.
+
+**Report, don't ask:** once live, everything flows to the `GROWTH_STATUS` marketing/funnel/experiments
+blocks (the dashboard) + a periodic owner status ping. The owner approves nothing — they watch, and
+STOP via the kill switch if they choose.
