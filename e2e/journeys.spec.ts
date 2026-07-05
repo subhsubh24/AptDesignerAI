@@ -15,6 +15,8 @@
  *
  * See e2e/ROUTE_INVENTORY.md for full coverage + the tracked gaps.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import {
   adminAvailable,
@@ -23,6 +25,9 @@ import {
   seedProEntitlement,
   uniqueEmail,
 } from "./helpers/seed";
+
+/** The 8-byte PNG signature — the money-path render must return REAL image bytes. */
+const PNG_MAGIC_HEX = "89504e470d0a1a0a";
 
 // Rendered by app/error.tsx + app/global-error.tsx. A healthy screen NEVER shows it.
 const BOUNDARY_TEXT = /something went wrong/i;
@@ -217,5 +222,92 @@ test.describe("authenticated journeys", () => {
         name: /unlock unlimited designs|reached your free save limit/i,
       }),
     ).toHaveCount(0);
+  });
+
+  test("core money-path: POST /api/mockups renders a REAL, decodable image", async ({ page }) => {
+    // THE convergence assertion — the AI design→render money path returns a REAL
+    // image end to end, not a stub/TODO/500. Under E2E_AUTH_STACK the served
+    // app's Gemini image call is answered by the hermetic cassette (a real 1×1
+    // PNG), so this runs WITHOUT live LLM keys yet exercises the ACTUAL route:
+    // auth → ownership → agent-run → generateMockupImage → image extraction →
+    // storage-upload (or data-URI fallback) → JSON response. A placeholder
+    // string, empty body, or error status all FAIL this test.
+    await signIn(page); // establishes the signed-in Supabase session in the page
+
+    // Seed the project + room through the app's OWN API, from inside the page
+    // (browser fetch, credentials:"include"), so they live in the SAME data
+    // layer the mockups route reads. lib/supabase/server.ts's createClient()
+    // proxies all data ops to the in-memory store and uses real Supabase only
+    // for auth — so an admin/Postgres seed is invisible to the route; the room
+    // must be created through the app itself. All three POSTs run in the page's
+    // authenticated context, exactly as the app calls its own API.
+    const result = await page.evaluate(async () => {
+      async function postJson(path: string, payload: unknown) {
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        return { status: r.status, text: await r.text() };
+      }
+      const proj = await postJson("/api/projects", { name: "E2E Money-Path Project" });
+      if (proj.status !== 201) return { stage: "projects", ...proj };
+      const projectId = JSON.parse(proj.text).id as string;
+      const room = await postJson("/api/rooms", {
+        project_id: projectId,
+        name: "E2E Living Room",
+        room_type: "living_room",
+      });
+      if (room.status !== 201) return { stage: "rooms", ...room };
+      const roomId = JSON.parse(room.text).id as string;
+      const mockup = await postJson("/api/mockups", {
+        room_id: roomId,
+        recommendation_mockup: {
+          category: "accent_chair",
+          search_title: "Cognac leather accent chair",
+          specs: "Full-grain leather, walnut legs, 30in wide",
+        },
+      });
+      return { stage: "mockups", ...mockup };
+    });
+    expect(
+      result.status,
+      `money-path failed at ${result.stage}: ${result.status} ${result.text}`,
+    ).toBe(200);
+    const body = JSON.parse(result.text);
+    expect(body.recommendation_mockup).toBe(true);
+    const imageUrl: unknown = body.image_url;
+    expect(typeof imageUrl === "string" && imageUrl.length > 0, "no image_url returned").toBe(true);
+
+    // Resolve the rendered image bytes across the possible return shapes:
+    //  - `data:image/png;base64,…`  → decode inline (upload-failure fallback)
+    //  - `/uploads/…`               → the memory store's storage writes the PNG
+    //    under public/uploads and returns a RELATIVE url; `next start` does not
+    //    serve runtime-written public/ files over HTTP, so read the committed
+    //    bytes straight from disk (the test shares the runner with the app),
+    //    mirroring how lib/ai/gemini.ts resolves `/uploads/` paths.
+    //  - absolute URL              → fetch it (real object storage).
+    let bytes: Buffer;
+    const url = imageUrl as string;
+    if (url.startsWith("data:")) {
+      bytes = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+    } else if (url.startsWith("/uploads/")) {
+      const filePath = path.join(process.cwd(), "public", url);
+      expect(fs.existsSync(filePath), `rendered image missing on disk: ${filePath}`).toBe(true);
+      bytes = fs.readFileSync(filePath);
+    } else {
+      const imgRes = await page.request.get(url);
+      expect(imgRes.status(), `image URL ${url} not fetchable`).toBe(200);
+      bytes = Buffer.from(await imgRes.body());
+    }
+
+    // A REAL PNG: 8-byte signature + a non-zero IHDR width/height (parsed from
+    // the header). This is the functional-reality assertion with teeth — a
+    // truncated/placeholder body cannot satisfy both the magic and the dims.
+    expect(bytes.length).toBeGreaterThan(24);
+    expect(bytes.subarray(0, 8).toString("hex")).toBe(PNG_MAGIC_HEX);
+    expect(bytes.readUInt32BE(16)).toBeGreaterThan(0); // IHDR width
+    expect(bytes.readUInt32BE(20)).toBeGreaterThan(0); // IHDR height
   });
 });

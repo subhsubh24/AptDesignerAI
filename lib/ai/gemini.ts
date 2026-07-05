@@ -9,6 +9,7 @@ import { isBaseTier, TEXT_TIERS } from "@/lib/ai/models";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
+import { cassetteProvider } from "./cassette-provider";
 import type {
   AIProvider,
   AIMessage,
@@ -385,7 +386,7 @@ function convertTools(tools?: GeminiTool[]): {
   };
 }
 
-export const geminiProvider: AIProvider = {
+const realGeminiProvider: AIProvider = {
   async chat({
     model,
     system,
@@ -794,5 +795,65 @@ export const geminiProvider: AIProvider = {
       functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
       modelContentParts: rawModelParts,
     };
+  },
+};
+
+let _cassetteWarned = false;
+
+/**
+ * FAIL-CLOSED guard: the AI cassette must NEVER answer on a deployed platform.
+ * If E2E_AUTH_STACK is ever set on Vercel (any deploy — prod OR preview), REFUSE
+ * TO BOOT — routing the render pipeline to canned images would silently serve
+ * fake mockups to real, paying users (a product-integrity disaster far worse
+ * than a crash). CI/local have no `VERCEL` env, so the cassette works there.
+ * Runs at module load (first import on a serverless cold start) so a
+ * misconfigured deploy fails fast + loud. Mirrors assertRateLimitBypassSafe()
+ * in lib/utils/rate-limiter.ts — the exact same env-flag safety class.
+ */
+export function assertCassetteSafe(): void {
+  if (process.env.E2E_AUTH_STACK === "1" && process.env.VERCEL) {
+    throw new Error(
+      "FATAL: E2E_AUTH_STACK is set on a deployed (Vercel) environment — it routes " +
+        "the AI pipeline to the hermetic test cassette (canned images) and must ONLY " +
+        "ever be set in CI. Unset it immediately.",
+    );
+  }
+}
+assertCassetteSafe();
+
+/**
+ * TEST-ONLY: route Gemini traffic to the hermetic {@link cassetteProvider} for
+ * the CI functional-journey suite, so the photo→…→mockup money path runs end to
+ * end and returns a REAL decodable image WITHOUT live LLM keys. Gated SOLELY on
+ * E2E_AUTH_STACK=1 — an env var PRODUCTION MUST NEVER SET (the CI workflow sets
+ * it only on the journeys job). Not gated on NODE_ENV: the suite serves a
+ * PRODUCTION build via `next start` (NODE_ENV=production), so a NODE_ENV check
+ * would wrongly disable the cassette in CI. assertCassetteSafe() above
+ * hard-refuses the flag on any Vercel deploy. Logs once, loudly.
+ */
+function cassetteActiveForTest(): boolean {
+  const on = process.env.E2E_AUTH_STACK === "1";
+  if (on && !_cassetteWarned) {
+    _cassetteWarned = true;
+    log.warn(
+      "[gemini] E2E_AUTH_STACK active — routing AI calls to the hermetic test " +
+        "cassette. This is CI/test only; PRODUCTION must never set this env var.",
+    );
+  }
+  return on;
+}
+
+/**
+ * Public Gemini provider. In normal operation this is the real Gemini
+ * implementation; under the CI journeys flag it delegates to the hermetic
+ * cassette (see {@link cassetteActiveForTest}). Every caller — including the
+ * ~20 agents that import `geminiProvider` directly — goes through this gate.
+ */
+export const geminiProvider: AIProvider = {
+  async chat(params) {
+    if (cassetteActiveForTest()) {
+      return cassetteProvider.chat(params);
+    }
+    return realGeminiProvider.chat(params);
   },
 };

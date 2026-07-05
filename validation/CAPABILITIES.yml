@@ -44,6 +44,7 @@ non_credential_allowlist:
   - DETERMINISTIC_MODE
   - DETERMINISTIC_SEED
   - E2E_RATE_LIMIT_BYPASS        # test-only rate-limit bypass; guarded separately (fail-closed on Vercel)
+  - E2E_AUTH_STACK               # CI journeys flag; routes the AI pipeline to the hermetic cassette (fail-closed on Vercel via assertCassetteSafe)
   - NEXT_PUBLIC_APP_URL
   - NEXT_PUBLIC_SITE_URL
   - COMPUTER_USE_MODEL
