@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles, X, Maximize2, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles, X, Maximize2, Download, AlertTriangle, RefreshCw } from "lucide-react";
 import { ShareButton } from "@/components/ui/share-button";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +42,8 @@ export default function MockupsPage() {
   const [generating, setGenerating] = useState(false);
   const [rotationIndex, setRotationIndex] = useState(0);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   // Cycle the rotating generation status label while generating.
   useEffect(() => {
@@ -52,26 +54,49 @@ export default function MockupsPage() {
     return () => clearInterval(id);
   }, [generating]);
 
-  useEffect(() => {
-    async function load() {
+  const loadMockups = useCallback(async () => {
+    try {
       const res = await fetch(`/api/mockups?room_id=${roomId}`);
-      if (res.ok) setMockups(await res.json());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setMockups(Array.isArray(data) ? data : []);
+      setLoadError(false);
+    } catch {
+      // Surface the failure instead of silently rendering the "no mockups yet"
+      // empty state — a load error the user reads as an empty room has no path
+      // to recovery. Existing mockups stay on screen if a later refresh fails.
+      setLoadError(true);
+    } finally {
       setLoading(false);
     }
-    load();
   }, [roomId]);
+
+  useEffect(() => {
+    loadMockups();
+  }, [loadMockups]);
 
   const handleGenerate = async () => {
     setGenerating(true);
+    setGenerateError(null);
     setRotationIndex(0);
 
     try {
       const productsRes = await fetch(`/api/products?room_id=${roomId}`);
-      if (!productsRes.ok) return;
-      const products = await productsRes.json();
+      if (!productsRes.ok) throw new Error("We couldn't load this room's products. Please try again.");
+      // Guard the parse: a malformed/non-JSON body would otherwise throw a raw
+      // SyntaxError whose .message reaches the banner. Fall back to the curated
+      // message (mirrors products/page.tsx #445's .json().catch()).
+      const products = await productsRes.json().catch(() => null);
+      if (!Array.isArray(products)) {
+        throw new Error("We couldn't load this room's products. Please try again.");
+      }
       const selected = products.filter(
         (p: { status: string }) => p.status === "shortlisted" || p.status === "accepted"
       );
+
+      if (selected.length === 0) {
+        throw new Error("Shortlist or accept a few products first, then generate a mockup.");
+      }
 
       const res = await fetch("/api/mockups", {
         method: "POST",
@@ -82,10 +107,14 @@ export default function MockupsPage() {
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setMockups((prev) => [data, ...prev]);
-      }
+      if (!res.ok) throw new Error("Mockup generation failed. Please try again in a moment.");
+      const data = await res.json().catch(() => null);
+      if (!data) throw new Error("Mockup generation failed. Please try again in a moment.");
+      setMockups((prev) => [data, ...prev]);
+    } catch (err) {
+      // The generate button is the core money moment — a silent no-op (spinner
+      // stops, nothing appears) reads as a broken product. Surface why.
+      setGenerateError(err instanceof Error ? err.message : "Mockup generation failed. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -140,6 +169,17 @@ export default function MockupsPage() {
         </div>
       </div>
 
+      {/* Generation error banner */}
+      {generateError && !generating && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive/70 mt-0.5" />
+          <p className="text-sm text-foreground">{generateError}</p>
+        </div>
+      )}
+
       {/* Generation progress */}
       {generating && (
         <Card variant="elevated" className="animate-fade-in-up">
@@ -161,7 +201,25 @@ export default function MockupsPage() {
         </Card>
       )}
 
-      {mockups.length === 0 && !generating ? (
+      {loadError && mockups.length === 0 && !generating ? (
+        <Card className="border-dashed border-2 border-destructive/30">
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
+              <AlertTriangle className="h-8 w-8 text-destructive/70" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load mockups</h3>
+            <p className="text-sm text-muted-foreground text-center max-w-sm mb-5">
+              Something went wrong loading this room&apos;s mockups. Check your connection and try again.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => { setLoadError(false); setLoading(true); loadMockups(); }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : mockups.length === 0 && !generating ? (
         <Card className="border-dashed border-2">
           <CardContent className="flex flex-col items-center justify-center py-20">
             <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-6 animate-float">
