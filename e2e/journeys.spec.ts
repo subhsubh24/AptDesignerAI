@@ -21,7 +21,6 @@ import {
   createConfirmedUser,
   deleteUser,
   seedProEntitlement,
-  seedRoom,
   uniqueEmail,
 } from "./helpers/seed";
 
@@ -231,35 +230,50 @@ test.describe("authenticated journeys", () => {
     // auth → ownership → agent-run → generateMockupImage → image extraction →
     // storage-upload (or data-URI fallback) → JSON response. A placeholder
     // string, empty body, or error status all FAIL this test.
-    const roomId = await seedRoom(userId!);
     await signIn(page); // establishes the signed-in Supabase session in the page
 
-    // Issue the POST from INSIDE the page (browser fetch, credentials:"include")
-    // so it authenticates EXACTLY like the app's own client — the same session
-    // context the app uses to call its API routes. (A raw page.request.post does
-    // not reliably thread the Supabase session's JWT to the DB, so RLS sees
-    // auth.uid()=null and the ownership check 404s even for an owned room.)
-    const posted = await page.evaluate(
-      async ({ roomId }) => {
-        const r = await fetch("/api/mockups", {
+    // Seed the project + room through the app's OWN API, from inside the page
+    // (browser fetch, credentials:"include"), so they live in the SAME data
+    // layer the mockups route reads. lib/supabase/server.ts's createClient()
+    // proxies all data ops to the in-memory store and uses real Supabase only
+    // for auth — so an admin/Postgres seed is invisible to the route; the room
+    // must be created through the app itself. All three POSTs run in the page's
+    // authenticated context, exactly as the app calls its own API.
+    const result = await page.evaluate(async () => {
+      async function postJson(path: string, payload: unknown) {
+        const r = await fetch(path, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({
-            room_id: roomId,
-            recommendation_mockup: {
-              category: "accent_chair",
-              search_title: "Cognac leather accent chair",
-              specs: "Full-grain leather, walnut legs, 30in wide",
-            },
-          }),
+          body: JSON.stringify(payload),
         });
         return { status: r.status, text: await r.text() };
-      },
-      { roomId },
-    );
-    expect(posted.status, `mockups POST did not return 200: ${posted.text}`).toBe(200);
-    const body = JSON.parse(posted.text);
+      }
+      const proj = await postJson("/api/projects", { name: "E2E Money-Path Project" });
+      if (proj.status !== 201) return { stage: "projects", ...proj };
+      const projectId = JSON.parse(proj.text).id as string;
+      const room = await postJson("/api/rooms", {
+        project_id: projectId,
+        name: "E2E Living Room",
+        room_type: "living_room",
+      });
+      if (room.status !== 201) return { stage: "rooms", ...room };
+      const roomId = JSON.parse(room.text).id as string;
+      const mockup = await postJson("/api/mockups", {
+        room_id: roomId,
+        recommendation_mockup: {
+          category: "accent_chair",
+          search_title: "Cognac leather accent chair",
+          specs: "Full-grain leather, walnut legs, 30in wide",
+        },
+      });
+      return { stage: "mockups", ...mockup };
+    });
+    expect(
+      result.status,
+      `money-path failed at ${result.stage}: ${result.status} ${result.text}`,
+    ).toBe(200);
+    const body = JSON.parse(result.text);
     expect(body.recommendation_mockup).toBe(true);
     const imageUrl: unknown = body.image_url;
     expect(typeof imageUrl === "string" && imageUrl.length > 0, "no image_url returned").toBe(true);
