@@ -265,26 +265,35 @@ export default function FocusPage() {
         setFloorPlanFound(false);
       }
 
-      // Check existing analysis. Guarded: a parse/network hiccup here should
-      // fall through to running a fresh analysis, never throw out of analyze()
-      // and strand the user on the spinner.
+      // Check existing analysis. Guarded: a parse/network hiccup while
+      // DETERMINING whether an analysis exists should fall through to running a
+      // fresh one, never throw out of analyze() and strand the user on the
+      // spinner.
       try {
         if (existingRes.ok) {
           const existing = await existingRes.json();
           if (existing.analysis) {
             setAreaAnalysis(existing.analysis);
             setStep("analysis");
-            // Load existing products
-            const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-            if (prodRes.ok) {
-              const prods = await prodRes.json();
-              if (prods.length > 0) { setProducts(prods); setStep("results"); }
+            // Load existing products in a SEPARATE guard: once we've found an
+            // existing analysis we're done, so a failure HERE must NOT escape to
+            // the outer fallthrough and trigger an unintended fresh analysis —
+            // we keep the analysis we already have and just skip preloading.
+            try {
+              const prodRes = await fetch(`/api/products?room_id=${roomId}`);
+              if (prodRes.ok) {
+                const prods = await prodRes.json();
+                if (Array.isArray(prods) && prods.length > 0) { setProducts(prods); setStep("results"); }
+              }
+            } catch {
+              // Keep the existing analysis; products just won't preload.
             }
             return;
           }
         }
       } catch {
-        // Fall through to a fresh analysis below.
+        // Only a failure to determine whether an existing analysis exists falls
+        // through to a fresh analysis below.
       }
 
       // Run new analysis
