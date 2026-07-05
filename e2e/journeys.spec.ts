@@ -15,6 +15,8 @@
  *
  * See e2e/ROUTE_INVENTORY.md for full coverage + the tracked gaps.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import {
   adminAvailable,
@@ -278,13 +280,22 @@ test.describe("authenticated journeys", () => {
     const imageUrl: unknown = body.image_url;
     expect(typeof imageUrl === "string" && imageUrl.length > 0, "no image_url returned").toBe(true);
 
-    // Resolve the image bytes whether the route returned a storage URL or the
-    // data-URI fallback (Supabase-local may lack the room-images storage bucket,
-    // in which case uploadMockupImage returns a `data:image/png;base64,…` URI).
+    // Resolve the rendered image bytes across the possible return shapes:
+    //  - `data:image/png;base64,…`  → decode inline (upload-failure fallback)
+    //  - `/uploads/…`               → the memory store's storage writes the PNG
+    //    under public/uploads and returns a RELATIVE url; `next start` does not
+    //    serve runtime-written public/ files over HTTP, so read the committed
+    //    bytes straight from disk (the test shares the runner with the app),
+    //    mirroring how lib/ai/gemini.ts resolves `/uploads/` paths.
+    //  - absolute URL              → fetch it (real object storage).
     let bytes: Buffer;
     const url = imageUrl as string;
     if (url.startsWith("data:")) {
       bytes = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+    } else if (url.startsWith("/uploads/")) {
+      const filePath = path.join(process.cwd(), "public", url);
+      expect(fs.existsSync(filePath), `rendered image missing on disk: ${filePath}`).toBe(true);
+      bytes = fs.readFileSync(filePath);
     } else {
       const imgRes = await page.request.get(url);
       expect(imgRes.status(), `image URL ${url} not fetchable`).toBe(200);
