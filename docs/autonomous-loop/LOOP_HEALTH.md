@@ -26,26 +26,24 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-03
-  last_run: 60                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 60
+  as_of: 2026-07-05
+  last_run: 66                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 64            # next DEEP AUDIT due ~Run 68
   this_run:
-    changes_shipped: 4           # #394-397 merged (gate green, 2 Sonnet approvals each, no re-review cycles): 3× F2 test (pagination, image-mime, build-profile) + mobile results-loading a11y liveRegion
-    changes_abandoned: 2         # #393 (authed-axe) + #398 (brand titles) — BOTH via the gates working, not churn
-    abandoned_reasons:           # classify every dropped change so the next run doesn't re-attempt the dead-end
-      - id: "#393 authed-axe dashboard"
-        reason: gate_test        # both-APPROVED but the CI journeys job FAILED on REAL serious WCAG AA color-contrast violations on the signed-in dashboard welcome step (the gate working). Landing the gate needs the contrast FIXED first — unsafe to nail blind (no local auth-stack render, dark-mode parity, axe measured mid-StaggerItem animation opacity). Exact targets on issue #204; re-add WITH the fix + reducedMotion:'reduce' + drop the networkidle wait.
-      - id: "#398 brand-metadata titles"
-        reason: review_value     # both reviewers REQUEST_CHANGES: fixing <title> while leaving footer/body/watermark/email stale creates NEW inconsistency (metric-chasing). Needs a wholesale brand sweep behind a single BRAND_NAME constant, or not at all.
-    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all changes root+mobile. #393's failure was a CI-only axe gate on a surface that cannot be rendered locally (no auth stack), not a local verify-cycle failure.
-    review_rejections: 1         # LOOP-3: #398 both reviewers REQUEST_CHANGES on value (partial brand fix creates new inconsistency) → abandoned (not reworked; the right fix is a larger wholesale sweep). The value bar working as intended.
+    changes_shipped: 6           # #451-456 ALL merged (gate green, 2 Sonnet approvals each): 4× A1 silent-failure guards (mockups/bundles/setup/dashboard) + 2× F2 test (provider-factory routing+latch, deepseek request conversion)
+    changes_abandoned: 0         # every scouted candidate that cleared the value bar shipped; borderline items (mobile-hook .catch swallows, 1-line stale doc) correctly NOT selected
+    abandoned_reasons: []        # none abandoned this run
+    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all 6 (tsc/eslint/test root); baseline green on entry (1754 tests) → 1767 after +21 F2 tests
+    review_rejections: 0         # LOOP-3: 12 first-pass reviews; #456 (mockups) got ONE Reviewer-A REQUEST_CHANGES (unguarded .json() could leak a raw SyntaxError) → fixed (.json().catch + curated fallback, matching #445) + re-reviewed APPROVE. Not an abandon — the gate working.
     circuit_breaker_trips: 0
+    ci_flake: "journeys/supabase-setup-cli@v1 version:latest GitHub-API rate-limit recurred on #451 (cost 1 rerun_failed_jobs). Non-required check; the 6 required checks (verify/build/mobile/lint/validate-capabilities/validate-gtm) were green. Recurring — pinning a fixed CLI version would fix it, but .github/ is not loop-editable."
   rolling_7d:
-    merged_prs: 54               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
+    merged_prs: 56               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
-    recurring_failures: []       # no stuck pattern: the two abandonments were the gates catching real issues (an a11y bug + a metric-chasing edit), not repeated dead-ends
+    recurring_failures:          # the journeys setup-cli rate-limit flake keeps costing ~1 rerun/run; harness-fixable only (pin the CLI version) but .github/ is not loop-editable
+      - "journeys/supabase-setup-cli@v1 version:latest GitHub-API rate-limit (Runs 64/65/66); mitigated each time by rerun_failed_jobs; non-required check so it never blocks the merge gate"
     harness_proposals_open: 0    # note (not stuck): authed-surface changes (E2E/a11y) are only CI-verifiable here — no local auth stack (no supabase CLI/docker). The gates catch real issues, so this is friction not failure; fixes needing a live render (e.g. dashboard contrast) should be done in a way that can render the surface.
   validation:                    # self-validation capability gate (validation/CAPABILITIES.yml + the REQUIRED validate-capabilities check). Dashboard reads this block.
     enforced_in_ci: true         # validate-capabilities is a required status check (fails closed on undeclared/unmet capabilities)
