@@ -232,25 +232,34 @@ test.describe("authenticated journeys", () => {
     // storage-upload (or data-URI fallback) → JSON response. A placeholder
     // string, empty body, or error status all FAIL this test.
     const roomId = await seedRoom(userId!);
-    await signIn(page); // establishes the Supabase auth cookie on the shared context
+    await signIn(page); // establishes the signed-in Supabase session in the page
 
-    // page.request shares the browser context's cookies, so this authed POST
-    // carries the session the UI sign-in just established.
-    const res = await page.request.post("/api/mockups", {
-      data: {
-        room_id: roomId,
-        recommendation_mockup: {
-          category: "accent_chair",
-          search_title: "Cognac leather accent chair",
-          specs: "Full-grain leather, walnut legs, 30in wide",
-        },
+    // Issue the POST from INSIDE the page (browser fetch, credentials:"include")
+    // so it authenticates EXACTLY like the app's own client — the same session
+    // context the app uses to call its API routes. (A raw page.request.post does
+    // not reliably thread the Supabase session's JWT to the DB, so RLS sees
+    // auth.uid()=null and the ownership check 404s even for an owned room.)
+    const posted = await page.evaluate(
+      async ({ roomId }) => {
+        const r = await fetch("/api/mockups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            room_id: roomId,
+            recommendation_mockup: {
+              category: "accent_chair",
+              search_title: "Cognac leather accent chair",
+              specs: "Full-grain leather, walnut legs, 30in wide",
+            },
+          }),
+        });
+        return { status: r.status, text: await r.text() };
       },
-    });
-    expect(
-      res.status(),
-      `mockups POST did not return 200: ${await res.text().catch(() => "<no body>")}`,
-    ).toBe(200);
-    const body = await res.json();
+      { roomId },
+    );
+    expect(posted.status, `mockups POST did not return 200: ${posted.text}`).toBe(200);
+    const body = JSON.parse(posted.text);
     expect(body.recommendation_mockup).toBe(true);
     const imageUrl: unknown = body.image_url;
     expect(typeof imageUrl === "string" && imageUrl.length > 0, "no image_url returned").toBe(true);
