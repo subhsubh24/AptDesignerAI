@@ -21,6 +21,7 @@ import {
   Globe,
 } from "lucide-react";
 import { PageTransition } from "@/components/ui/motion";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 
 interface SavedDesignFull {
@@ -109,9 +110,20 @@ export default function SavedDesignDetailPage() {
 
   const handleDelete = async () => {
     setDeleting(true);
-    const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
-    if (res.ok) router.push("/saved");
-    setDeleting(false);
+    try {
+      const res = await fetch(`/api/saved-designs/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        // Surface the failure instead of silently resetting the button — the
+        // design is still saved, so the user must not be left thinking it's gone.
+        toast.error("Couldn't delete design", "Please try again in a moment.");
+        setDeleting(false);
+        return;
+      }
+      router.push("/saved");
+    } catch {
+      toast.error("Couldn't delete design", "Check your connection and try again.");
+      setDeleting(false);
+    }
   };
 
   const handleToggleShare = async (enable: boolean) => {
@@ -122,11 +134,20 @@ export default function SavedDesignDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_public: enable }),
       });
-      if (res.ok) {
-        const data = await res.json() as { share_token: string | null; is_public: boolean };
-        setShareToken(data.share_token ?? null);
-        setIsPublic(data.is_public);
+      if (!res.ok) {
+        // The share state didn't change on the server — tell the user rather
+        // than resetting the toggle as if it succeeded.
+        toast.error(
+          enable ? "Couldn't create share link" : "Couldn't make private",
+          "Please try again in a moment.",
+        );
+        return;
       }
+      const data = await res.json() as { share_token: string | null; is_public: boolean };
+      setShareToken(data.share_token ?? null);
+      setIsPublic(data.is_public);
+    } catch {
+      toast.error("Couldn't update sharing", "Check your connection and try again.");
     } finally {
       setSharing(false);
     }
