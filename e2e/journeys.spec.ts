@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import {
   adminAvailable,
   createConfirmedUser,
@@ -171,6 +172,41 @@ test.describe("authenticated journeys", () => {
     await expectNoErrorBoundary(page);
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
+
+  // Authed a11y GATE (design_taste): the public-page axe scan (e2e/a11y.spec.ts)
+  // never reaches the signed-in, design-dense surfaces. Scan the authed routes a
+  // fresh user can reach WITHOUT deep seeding — dashboard (the primary home),
+  // account, the free-tier /saved gate, and the paywall — and fail on any
+  // critical/serious WCAG 2 A/AA violation. reducedMotion avoids confetti/
+  // animation churn so the scan is deterministic.
+  const AUTHED_A11Y_ROUTES = ["/dashboard", "/account", "/saved", "/billing/upgrade?tier=pro"];
+  for (const route of AUTHED_A11Y_ROUTES) {
+    test(`authed a11y: ${route} has no critical/serious axe violations`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await signIn(page);
+      await page.goto(route);
+      await expectNoErrorBoundary(page);
+      await page.waitForLoadState("networkidle");
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      const criticalOrSerious = results.violations.filter(
+        (v) => v.impact === "critical" || v.impact === "serious",
+      );
+      if (criticalOrSerious.length > 0) {
+        const summary = criticalOrSerious
+          .map(
+            (v) =>
+              `[${v.impact}] ${v.id}: ${v.description}\n  ` +
+              v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
+          )
+          .join("\n\n");
+        console.error(`Authed accessibility violations on ${route}:\n${summary}`);
+      }
+      expect(criticalOrSerious, `axe violations on ${route}`).toHaveLength(0);
+    });
+  }
 
   test("paywall: /billing/upgrade renders a REAL Stripe checkout entry", async ({ page }) => {
     await signIn(page);
