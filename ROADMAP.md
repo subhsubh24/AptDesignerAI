@@ -572,6 +572,8 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 > loop never invents public claims or fake metrics, and never posts under the
 > owner's identity without a connected, owner-authorized channel.
 
+- [ ] **§11 marketing media-gen adapter (image + video + music + voiceover).** Build the thin media-gen adapter (GTM_STANDARD §11) so the marketing loop produces multi-format creative on the EXISTING Gemini key: IMAGE (Nano Banana), VIDEO (Gemini Omni Flash), MUSIC (Lyria 3), VOICEOVER (Gemini TTS) — a video can carry soundtrack and/or narration from the same key. Route via `getProvider`/`geminiProvider` + the Interactions API. Every asset passes the maker≠checker not-obviously-AI + FTC audit before publish; cost-governed; preview ids pinned. Stages creative pre-launch, publishes only post-§13-approval on a connected channel. Build epic: #470.
+
 ### Track F — World-class quality, validation & evals (the excellence bar)
 The product must be demonstrably top-grade — not "tests pass," but rigorously
 validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
