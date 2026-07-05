@@ -250,7 +250,7 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
 - **Reddit + X need a CONNECTED data source — plain WebSearch/WebFetch does NOT reliably reach them**
   (Reddit search dead-ends; X is login/API-walled). Mine the FEASIBLE-NOW sources every run regardless
   (competitor App Store/Play reviews, review sites, niche forums, HN, Quora, Google). Add Reddit when
-  `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are set (a Reddit API app) and X when its API/listening
+  `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are set (a standard Reddit OAuth **script** app at reddit.com/prefs/apps — NOT Devvit, which is only for in-subreddit apps; OAuth to a bearer token, then read via `oauth.reddit.com`) and X when its API/listening
   key is set; if unset, surface a `connect-<source>` owner action and mark that source `unconnected` in
   coverage. NEVER fabricate a Reddit/X citation you could not actually fetch — an uncovered source is
   honest; a made-up quote is a §4 failure.
