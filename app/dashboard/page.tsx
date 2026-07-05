@@ -292,11 +292,23 @@ export default function DashboardPage() {
     const roomId = roomIds[roomType];
     if (!roomId) return;
 
-    await fetch(`/api/rooms/${roomId}/images`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_id: imageId }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/rooms/${roomId}/images`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_id: imageId }),
+      });
+    } catch {
+      toast.error("Couldn't remove photo", "Check your connection and try again.");
+      return;
+    }
+    if (!res.ok) {
+      // The DELETE failed — leave the photo in place rather than showing it gone
+      // while it still exists on the server (a silent state/server desync).
+      toast.error("Couldn't remove photo", "Please try again in a moment.");
+      return;
+    }
 
     setRoomImages((prev) => ({
       ...prev,
