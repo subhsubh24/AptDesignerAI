@@ -13,6 +13,7 @@ import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autoc
 import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { trackEvent } from "@/lib/analytics";
+import { toast } from "@/components/ui/toast";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -188,7 +189,13 @@ export default function DashboardPage() {
           description: `${bedrooms}BD/${bathrooms}BA${city ? ` in ${city}` : ""}`,
         }),
       });
+      // Guard the response: a non-ok status used to slip through and set
+      // projectId = undefined, which then poisoned every downstream room/upload/
+      // analyze call — the canonical "account → broken dashboard" failure. Throw
+      // so callers surface it instead of proceeding with a bad id.
+      if (!res.ok) throw new Error(`Failed to create your project (HTTP ${res.status})`);
       const project = await res.json();
+      if (!project?.id) throw new Error("Project creation returned no id");
       setProjectId(project.id);
       return project.id as string;
     })();
@@ -203,11 +210,14 @@ export default function DashboardPage() {
   // Save project metadata
   const saveProjectMeta = useCallback(async (data: Record<string, unknown>) => {
     const projId = await ensureProject();
-    await fetch(`/api/projects/${projId}`, {
+    const res = await fetch(`/api/projects/${projId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    // Throw on failure so the caller can keep the user on the current step
+    // instead of advancing while their bedrooms/location silently failed to save.
+    if (!res.ok) throw new Error(`Failed to save your details (HTTP ${res.status})`);
   }, [ensureProject]);
 
   // Ensure room exists
@@ -223,37 +233,58 @@ export default function DashboardPage() {
         room_type: roomType,
       }),
     });
+    if (!res.ok) throw new Error(`Failed to create the room (HTTP ${res.status})`);
     const room = await res.json();
+    if (!room?.id) throw new Error("Room creation returned no id");
     setRoomIds((prev) => ({ ...prev, [roomType]: room.id }));
     return room.id;
   }, [roomIds]);
 
   // Handle image upload
   const handleUpload = useCallback(async (roomType: string, label: string, files: File[]) => {
-    const projId = await ensureProject();
-    const roomId = await ensureRoom(projId, roomType, label);
+    try {
+      const projId = await ensureProject();
+      const roomId = await ensureRoom(projId, roomType, label);
 
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("bucket", "room-images");
+      let failed = 0;
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("bucket", "room-images");
 
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!uploadRes.ok) continue;
-      const { url, path } = await uploadRes.json();
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+        if (!uploadRes.ok) { failed++; continue; }
+        const { url, path } = await uploadRes.json();
 
-      const imageRes = await fetch(`/api/rooms/${roomId}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: url, image_type: "room", storage_path: path }),
-      });
-      if (!imageRes.ok) continue;
-      const imageData = await imageRes.json();
+        const imageRes = await fetch(`/api/rooms/${roomId}/images`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_url: url, image_type: "room", storage_path: path }),
+        });
+        if (!imageRes.ok) { failed++; continue; }
+        const imageData = await imageRes.json();
 
-      setRoomImages((prev) => ({
-        ...prev,
-        [roomType]: [...(prev[roomType] || []), { id: imageData.id, url, path }],
-      }));
+        setRoomImages((prev) => ({
+          ...prev,
+          [roomType]: [...(prev[roomType] || []), { id: imageData.id, url, path }],
+        }));
+      }
+
+      // Per-file failures used to be silently skipped — the photo just never
+      // appeared, with no explanation. Tell the user how many didn't upload.
+      if (failed > 0) {
+        toast.error(
+          `${failed} photo${failed > 1 ? "s" : ""} didn't upload`,
+          "Check your connection and try adding them again.",
+        );
+      }
+    } catch (err) {
+      // ensureProject / ensureRoom now throw on failure — surface it instead of
+      // an unhandled rejection that leaves the user staring at an inert dropzone.
+      toast.error(
+        "Couldn't set up your room",
+        err instanceof Error ? err.message : "Please try again in a moment.",
+      );
     }
   }, [ensureProject, ensureRoom]);
 
@@ -482,12 +513,21 @@ export default function DashboardPage() {
               className="w-full h-12"
               onClick={async () => {
                 const sqftNum = apartmentSqft ? parseInt(apartmentSqft, 10) : null;
-                await saveProjectMeta({
-                  bedrooms,
-                  bathrooms,
-                  ...(sqftNum && !Number.isNaN(sqftNum) ? { apartment_sqft: sqftNum } : {}),
-                });
-                setStep("location");
+                try {
+                  await saveProjectMeta({
+                    bedrooms,
+                    bathrooms,
+                    ...(sqftNum && !Number.isNaN(sqftNum) ? { apartment_sqft: sqftNum } : {}),
+                  });
+                  setStep("location");
+                } catch (err) {
+                  // Don't advance past a failed save — the user would lose these
+                  // details silently and hit a broken flow downstream.
+                  toast.error(
+                    "Couldn't save your details",
+                    err instanceof Error ? err.message : "Please try again in a moment.",
+                  );
+                }
               }}
             >
               Continue
@@ -587,13 +627,20 @@ export default function DashboardPage() {
               size="lg"
               className="flex-1 h-12"
               onClick={async () => {
-                await saveProjectMeta({
-                  city, state, neighborhood,
-                  location_place_id: locationPlaceId,
-                  latitude: locationCoords?.lat,
-                  longitude: locationCoords?.lng,
-                });
-                setStep("setup");
+                try {
+                  await saveProjectMeta({
+                    city, state, neighborhood,
+                    location_place_id: locationPlaceId,
+                    latitude: locationCoords?.lat,
+                    longitude: locationCoords?.lng,
+                  });
+                  setStep("setup");
+                } catch (err) {
+                  toast.error(
+                    "Couldn't save your location",
+                    err instanceof Error ? err.message : "Please try again in a moment.",
+                  );
+                }
               }}
               disabled={!city}
             >
