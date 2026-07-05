@@ -247,6 +247,26 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
   personal info, and never contact anyone from this (that is the separate, owner-sent outreach, §6).
 - Write the synthesis + citations to a `demand_signal` block in `GROWTH_STATUS` (themes, cited
   examples, solved-vs-not, confidence, disconfirming notes) so it feeds the dashboard and the roadmap read.
+- **Reddit + X need a CONNECTED data source — plain WebSearch/WebFetch does NOT reliably reach them**
+  (Reddit search dead-ends; X is login/API-walled). Mine the FEASIBLE-NOW sources every run regardless
+  (competitor App Store/Play reviews, review sites, niche forums, HN, Quora, Google). Add Reddit when
+  `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are set (a Reddit API app) and X when its API/listening
+  key is set; if unset, surface a `connect-<source>` owner action and mark that source `unconnected` in
+  coverage. NEVER fabricate a Reddit/X citation you could not actually fetch — an uncovered source is
+  honest; a made-up quote is a §4 failure.
+- **DEMAND-DRIVEN AUTO-STEER (the pre-launch initial-direction engine).** A demand theme that is
+  CORROBORATED — ≥3 independent real cited posts across ≥2 independent sources, recent + recurring,
+  with DIRECT product-fit — MAY AUTONOMOUSLY open a ROADMAP / feature / positioning / GTM steer (not
+  merely recommend), through the maker≠checker reviewer + the auto-merge gate, citing the corroborated
+  evidence. Below that corroboration bar → RECOMMEND only (write to GROWTH_STATUS, do NOT steer). The
+  VISION north-star keeps §3's higher bar — never auto-pivot the core product identity on social signal.
+  Post-launch, REAL funnel/retention data (§1) OUTRANKS demand signal as the higher-authority steer.
+  This is how corroborated market pain sets the initial product + GTM direction pre-launch.
+- **The `demand_signal` block is the dashboard's initial-signal source — write it every run:** `as_of`;
+  `overall_strength` (none|weak|emerging|strong); `sources_covered[]` + `sources_unconnected[]`;
+  `themes[]` (each: `label`, `strength`, `cited_count`, `quote`, `url`, `product_solves` yes|partial|no,
+  `recency`); `disconfirming[]`; `steers_opened[]` this run. `overall_strength` reflects CORROBORATED
+  demand — it is DISTINCT from user PMF (`pmf.signal`, which stays 0/null until real users exist post-launch).
 
 ## 11. Marketing creative — multi-format, credible (never obviously AI), audited before posting, evaluated
 Content you publish IS the brand in the wild. It must be credible, never look AI-generated, pass an
@@ -319,38 +339,38 @@ applies — NEVER market a web URL as "the product" when there is no usable web 
 Every landing / store asset carries ONE primary CTA matching the product's posture — never a
 click-shedding "use web OR download" split.
 
-## 13. Autonomous marketing launch — OPT-OUT, readiness-gated (owner approves nothing)
-The owner has DURABLY AUTHORIZED marketing to launch AUTONOMOUSLY once the product is truly ready —
-no per-launch approval. The default is GO; the owner acts only to STOP. Deliver it exactly this way.
+## 13. Marketing launch — autonomous + self-improving, with TWO owner approval gates
+Marketing runs AUTONOMOUSLY and self-improves; the owner APPROVES exactly TWO checkpoints (opt-in —
+nothing at these two points happens until the owner says go). They are the only public, hard-to-reverse
+actions. Everything between and after them is autonomous.
 
-**ARM only when readiness is PROVEN — all three, none self-certified:**
-1. `ship_gate_met` — the INDEPENDENT `QUALITY_SCORECARD` (§7/§8 of FACTORY_STANDARD), never self-graded.
-2. A FULL computer-use E2E sweep GREEN — the validator drove the REAL app end-to-end like a human with
-   NO open critical findings (FACTORY_STANDARD §29 / `docs/autonomous-loop/VALIDATOR_STATUS.md`).
-3. Launch assets EXIST and PASSED maker≠checker review — positioning, landing/store copy (per the §12
-   platform posture), the first campaigns/sequences, and the measurement + feedback loop.
-Below ANY of the three → stay in PREPARE and arm nothing (never self-certify readiness to unlock).
+**GATE 1 — START WAITLIST OUTREACH (opt-in).** Precondition = readiness PROVEN, all three, none
+self-certified: (a) `ship_gate_met` (independent QUALITY_SCORECARD, §7/§8 of FACTORY_STANDARD); (b) a
+FULL computer-use E2E sweep GREEN (§29 / `VALIDATOR_STATUS.md`); (c) waitlist/launch assets exist +
+passed maker≠checker. When proven, PROPOSE the waitlist plan to the `marketing:` block
+(`stage: waitlist`, `status: awaiting_approval`, `plan[]` + `channels[]` + what you'll measure + the
+feedback loop) and NOTIFY the owner. Do NOTHING outbound until the owner APPROVES (`docs/growth/MARKETING_APPROVED`
+present / approved on the dashboard). On approval → run waitlist outreach autonomously and SELF-IMPROVE:
+measure which messages/channels/segments convert to waitlist signups, keep winners, kill losers, report
+to the dashboard. Pre-launch every link → the PUBLIC waitlist, never the gated app.
 
-**ARM → PROPOSE → auto-GO (opt-out):**
-- On the first run where all three hold, write the INITIAL MARKETING PLAN to the `GROWTH_STATUS`
-  `marketing:` block — `status: proposed`, `armed_at: <UTC>`, `veto_window_hours` (default 48),
-  `channels: [...]` (only owner-connected ones), `plan: [...]` (first campaigns + sequence + what
-  you'll measure + the feedback loop) — and NOTIFY the owner (push).
-- Once `armed_at + veto_window_hours` has elapsed with NO hold in place, flip `status: live` and begin
-  AUTONOMOUSLY — no owner approval, ever.
-- **CANARY-RAMP, never a day-one blast:** start at the smallest meaningful volume, prove
-  deliverability + positive engagement + ~zero complaints, THEN ramp. (Also matches email warmup.)
+**GATE 2 — LAUNCH (opt-in).** When the waitlist + product signals say launch-ready, PROPOSE launch
+(`stage: launch`, `status: awaiting_approval`, the launch plan + the go/no-go evidence) and NOTIFY the
+owner. Do NOTHING public-launch until the owner APPROVES. On approval → execute launch → then run the
+POST-LAUNCH self-improving loop on real funnel/retention/revenue metrics (§1), autonomously.
 
-**KILL SWITCH — the owner's only control, and it always wins:** if `docs/growth/MARKETING_HOLD` exists
-(owner- or dashboard-created), IMMEDIATELY halt ALL outbound/marketing and revert to PREPARE this run,
-whatever the status; report `status: held`. Remove it to resume. Check it FIRST, every run.
+**AUTONOMOUS between + after the gates (no approval):** demand-signal mining + product/GTM direction
+(§10), asset creation, waitlist-conversion optimization, post-launch growth experiments — all
+self-improving. The owner approves only the two gates and watches the dashboard.
 
-**Authorized channels ONLY (never relaxed, even when live):** act solely through channels the owner
-has CONNECTED (API/OAuth) + the owner-connected ESP. NEVER create accounts, browser-automate
-logins/posts, manufacture engagement, or post under the owner's identity on an unconnected channel
-(§7). If NO channel is connected, stay in PREPARE and surface the ONE connect-action — never invent a
-channel or a metric.
+**CANARY-RAMP once a gate is approved:** start at the smallest meaningful volume, prove
+deliverability/engagement/~zero complaints, THEN ramp.
 
-**Report, don't ask:** once live, everything flows to the `GROWTH_STATUS` marketing/funnel/experiments
-blocks (the dashboard) + a periodic owner status ping. The owner approves nothing — they watch, and
-STOP via the kill switch if they choose.
+**KILL SWITCH — always wins:** `docs/growth/MARKETING_HOLD` HALTS all outbound/marketing immediately,
+whatever the stage; report `status: held`. Checked FIRST, every run. (Approval and hold are independent:
+a hold overrides an approval.)
+
+**AUTHORIZED CHANNELS ONLY (never relaxed):** act solely through owner-CONNECTED channels + the
+connected ESP. NEVER create accounts, browser-automate logins/posts, manufacture engagement, or post
+under the owner's identity on an unconnected channel (§7). No channel connected → stay in PREPARE,
+surface the ONE connect-action, never invent a channel or a metric.
