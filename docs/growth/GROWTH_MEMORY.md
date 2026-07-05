@@ -330,3 +330,113 @@ Research-backed candidate swap (if competition validates):
   (15 min). No new blocker this run; the demand-signal tooling gap is a research-quality note, not an
   owner blocker (no owner action can fix WebFetch's egress policy from inside this loop — flagged to the
   owner as a "check when convenient," not a priority-ordered blocker).
+
+---
+
+## Run 6 — 2026-07-05
+
+### What we found
+- All Run 1-5 owner blockers remain unresolved: SITE_GATE_PASSWORD, RESEND_API_KEY/RESEND_FROM_EMAIL,
+  INTERNAL_METRICS_TOKEN, CRON_SECRET, and DB migrations 021/022/023/026/027/029 are still
+  unset/unapplied. `PENDING_OPS.md`'s own `as_of` is still 2026-06-29 — unchanged since Run 3, now
+  spanning 4 runs (~6 days) — confirming no owner action has landed.
+- Re-attempted a direct connection to `https://aptdesignerai.com/` (curl + the metrics API) — still
+  unreachable, this time HTTP 502 "CONNECT tunnel failed" (a third distinct failure signature across
+  three probe attempts: Run 4's 403 policy-denial → Run 5's bare connection error → this run's 502;
+  the proxy status endpoint independently corroborates the same host/timestamp). Practical conclusion
+  unchanged: no reachable path to the production host from this runtime, regardless of credentials.
+- Between Run 5 and Run 6 the Product Factory shipped ~50 more commits (through PR #448): mostly
+  security/a11y/test-coverage work, a GTM_STANDARD/FACTORY_STANDARD sync (§12 platform posture, §13
+  autonomous marketing launch + kill switch, §29 deployed-app validator proof), and — notably —
+  **PR #432**: the factory's OWN removal of invented "500+ rooms designed / 4.9★ / hundreds of happy
+  renters" adoption metrics from the landing hero, footer CTA, and signup panel (2026-07-04). This is
+  the Product Factory correcting an honesty gap on its own, a positive signal; verified via grep that
+  none of those fabricated numbers ever leaked into any GTM-owned doc (store-listing, press-kit,
+  social-drafts, content-calendar, email docs, OUTREACH.md) — clean, no edit needed here.
+  `docs/quality/QUALITY_SCORECARD.md` is still `as_of: 2026-07-01`, `overall: C`,
+  `ship_gate_met: false` — read as DATA; phase correctly stays `pre_launch`. `GTM_SCORECARD.md` still
+  does not exist (no separate GTM Auditor routine has run yet).
+- **New environment finding:** this session's sandbox now also has `CRON_SECRET` set (in addition to
+  `SITE_GATE_PASSWORD`, present since Run 5). Applied the same S4 fail-closed reasoning Run 5 used for
+  `SITE_GATE_PASSWORD`: a value in this agent's own sandbox is not evidence the production Vercel
+  deployment has it configured — did not use it, did not infer the activation cron is live.
+- **Corrected an overstated Run 5 conclusion.** Run 5 concluded "this session's network egress policy
+  blocks WebFetch generally" based on failures across reddit.com/apps.apple.com/play.google.com/
+  trustpilot.com/news.ycombinator.com (all 403, including a neutral control URL). This run, the SAME
+  category of test came back different: WebSearch works fully, and WebFetch succeeds cleanly on
+  apple.com, the news.ycombinator.com homepage, emarketer.com, and firstchair.app. Testing each
+  blocked domain individually revealed the real, narrower picture: reddit.com/old.reddit.com are
+  hard-blocked by the WebFetch TOOL itself (a fixed message, not a proxy error) — separate from this
+  environment's egress policy entirely; trustpilot.com returns its own Cloudflare 403 (site-side
+  bot-block); news.ycombinator.com's `item?id=` pages specifically 429 (site-side rate-limit on that
+  one endpoint — the HN homepage loads fine). Lesson: a failure on one domain does not mean the whole
+  session is network-restricted — test each domain, and distinguish "this tool won't fetch X" from
+  "this site blocks bots" from "this environment's proxy denies this host."
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-05; corrected the `internal_metrics_api`
+  validation reason to list all three distinct failure signatures across three probe attempts and to explicitly
+  scope the unreachability to `aptdesignerai.com` rather than implying a blanket network block; upgraded
+  `demand_signal.confidence` from `weak` to `emerging` on the strength of two NEW hand-verified,
+  dated, named-source verbatim quotes obtained via direct WebFetch this run: eMarketer (2026-05-18,
+  Dan Bennett/furniture.com CMO — "nine hours and 13 tabs used just to find a solution to a furniture
+  problem") corroborating the furniture-shopping-paralysis theme, and First Chair blog (2026-06-15 —
+  four direct quotes on AI tools generating unpurchasable/single-retailer furniture) corroborating and
+  sharpening the "AI tools generate unbuyable furniture" theme with a genuinely new differentiation
+  angle (multi-retailer sourcing vs. Decorify's single-retailer limitation). Also found and fixed a
+  mis-cited Hacker News URL from Run 5 (wrong item id; corrected via HN's own Algolia search API,
+  though the corrected page itself still 429s under direct fetch so it is URL-corrected, not
+  re-quoted). Refreshed `learnings`/`next_actions`/`owner_blockers` with all of the above, re-scoping
+  the network-policy ask from a blanket request to the specific `aptdesignerai.com` host. Ran
+  `npm install` (materializes `js-yaml`, already a declared dependency, into a fresh `node_modules` —
+  no `package.json` change) then `node scripts/validate-gtm.mjs` — parses clean.
+- **Re-verified marketing-doc consistency** (store-listing, press-kit, email-lifecycle, social-drafts,
+  content-calendar, OUTREACH.md) against PR #432's removed fabricated metrics and the live pricing —
+  clean; no edit needed.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (502 this time).
+  Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD) — both
+  lanes of GTM_STANDARD §6 stay hard-off below the readiness bar. Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md / VISION.md / BUSINESS_CASE.md: the strengthened `demand_signal` evidence is
+  still qualitative and nowhere near the §3 bar (real quantified data, sufficient N, causal revenue
+  link) for a steer — recorded as sharpened research, not a steer, per the standard's own instruction.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search Ads
+  data; no new information since Run 3.
+- Did not use the sandbox-local `CRON_SECRET` or `SITE_GATE_PASSWORD` for anything: same S4 fail-closed
+  reasoning as Run 5 — presence in this agent's own sandbox is not evidence of the production
+  deployment's configuration.
+- Did not spawn an independent maker≠checker reviewer for this run's `GROWTH_STATUS.md` edit: this was
+  a routine S4/S5 dashboard-and-research update (correcting citations, refining a method note, updating
+  a confidence field on existing research) — no landing/email/ASO copy, campaign, pricing/positioning
+  claim, outreach draft, or roadmap/vision/business-case steer shipped, matching Run 5's precedent for
+  when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced beyond what's already listed there; the
+  re-scoped network-policy ask already lives in `GROWTH_STATUS.next_actions`/`owner_blockers`.
+
+### Lessons learned
+- The circuit breaker is now in its 6th consecutive run with the same 3 core blockers — `PENDING_OPS.md`
+  itself confirms this mechanically (its own `as_of` unmoved since Run 3). No further loop-side framing
+  changes that; this run's value-add was genuinely NEW research-quality work (the demand-signal
+  confidence upgrade + citation fix + the tooling-scope correction), not repeating the credential ask a
+  6th time verbatim.
+- **Don't over-generalize a tooling failure.** Run 5 saw failures on 5 domains and concluded "network
+  egress blocks everything" — testing individually this run showed each failure had a DIFFERENT cause
+  (tool-level Reddit block, site-side Trustpilot bot-block, site-side HN rate-limit) and none of them
+  indicated a blanket environment restriction (apple.com/emarketer.com/firstchair.app all worked fine).
+  Future runs: isolate and test each blocked domain before generalizing to "this environment is
+  network-restricted" — the correct, narrower conclusion changes which owner action (if any) is worth
+  asking for.
+- **A wrong citation is worse than no citation.** Run 5's HN URL didn't actually point at the thread it
+  claimed to cite. Verifying a citation by attempting to actually open it (not just trusting a research
+  subagent's URL) caught this — worth doing even when the page itself can't be re-fetched (the Algolia
+  search API cross-check was enough to catch and fix the error).
+- Sandbox-env-var findings (`SITE_GATE_PASSWORD` in Run 5, now also `CRON_SECRET` in Run 6) are a
+  RECURRING pattern in this validator-credential-scaffolded environment, not one-off noise — worth a
+  standing rule: never infer production config from this agent's own sandbox env, full stop.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-5? YES — circuit breaker remains FIRED (Run 6, 6th consecutive run).
+  Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
+  (15 min). No new blocker this run.
