@@ -264,8 +264,8 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
                   </div>
                 )}
                 {result.best_combination.analysis.what_should_be_swapped_first !== "Nothing" && (
-                  <div className="p-2 rounded bg-purple-50 dark:bg-purple-950/40">
-                    <span className="font-medium text-purple-700 dark:text-purple-300">Swap first: </span>
+                  <div className="p-2 rounded bg-slate-100 dark:bg-slate-900/50">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">Swap first: </span>
                     {result.best_combination.analysis.what_should_be_swapped_first}
                   </div>
                 )}
