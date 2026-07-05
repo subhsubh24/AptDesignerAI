@@ -7,6 +7,76 @@ history behind it.
 
 ---
 
+## 2026-07-05 — FOURTH INDEPENDENT GRADE (functional_reality C→A; overall breaks off C→B; design_taste is the LAST ship-critical blocker)
+
+**Overall: B · ship_gate_met: false.** The headline finally MOVED off C — held for three prior cycles.
+**functional_reality C→A** closed the long-standing binding constraint (the core money-path had no
+outcome-asserting runtime E2E that actually RAN). Now **design_taste (B) is the SOLE ship-critical
+dimension below A** and the only thing between overall B and `ship_gate_met: true` — every other
+ship-critical dim is A/A+.
+
+**Per-dimension diff vs 2026-07-03:** functional_reality **C→A** ⬆⬆ · correctness **A→A** · security_rls
+**A+→A+** · design_taste **B→B** (both capping gaps persist) · store_readiness **A→A** ·
+artifact_integrity **A→A** · business_case_strength **A→A** · tests_evals **B→B** · performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **1775 passed / 11 skipped** (up from 1544; 11 skips are RUN_EVALS-gated by design).
+- `npx vitest run --coverage` → **56.21% stmts / 45.08% branch / 60.21% funcs / 57.32% lines** (up from
+  ~53%), well above the 40/30/42/40 floor.
+- `npx vitest run __tests__/integration/render-pipeline-cassette.test.ts` → **2 passed** (the hermetic
+  per-PR money-path test).
+- CI: the "CI" workflow is **GREEN on main** (run 28735583211, head c5f01c14). The `journeys` job runs
+  the AUTHED tier (E2E_AUTH_STACK=1 + ephemeral Supabase, full run-journeys.sh) — an unconditional,
+  no-continue-on-error job — so a green CI run means the authed money-path + paywall-unlock E2E PASSED,
+  not skipped. This is the key delta: the authed tier is now CI-runnable and demonstrably green (it was
+  UNVERIFIABLE cold in every prior cycle).
+
+**Why functional_reality raised C→A (verified by a fresh adversarial grader that did NOT write the code):**
+- **Hermetic per-PR layer:** `__tests__/integration/render-pipeline-cassette.test.ts` runs in `npm test`,
+  drives the REAL render glue (buildMockupContext→generateMockupPrompt→generateMockupImage; only the LLM
+  boundary is mocked), and terminally decodes the output to a REAL PNG (signature + non-zero IHDR dims).
+  A 2nd case proves the cassette THROWS on an unrecorded stage (no silent fallback).
+- **Authed-browser-in-CI layer:** `journeys.spec.ts:227` POSTs `/api/mockups` through the real route and
+  asserts a real decodable PNG; `:201` seeds the real stripe_customers row and asserts the ENTITLEMENT
+  FLIP (`/api/billing/status` hasPaid===true + free-tier CTA gone); `:175` asserts a real checkout button.
+- **Fail-closed for prod:** `gemini.ts:813-822 assertCassetteSafe()` refuses to boot if E2E_AUTH_STACK=1
+  on a Vercel deploy; a regression test (`cassette-guard.test.ts`) pins it.
+- **A, not A+:** the E2E seeds the recommendation_mockup payload via API and drives only the RENDER leg
+  through the browser; the upstream photo-upload→understand→diagnose→source UI legs aren't yet one authed
+  browser walk. That's the remaining A→A+ item — bounded, not ship-blocking.
+
+**Why the other dimensions held:**
+- **design_taste B:** both capping gaps UNCHANGED — a11y.spec.ts still axe-covers ONLY the 7 public pages
+  (zero authed AxeBuilder despite journeys.spec having a full login fixture); `e2e/__screenshots__/` still
+  absent (F7). The a11y PRs (#420/#437/#438) strengthen the pages but don't touch the capping axis.
+- **performance B (held, NOT dropped):** a fresh grader proposed "C+" citing lack of progress, but (a) C+
+  isn't a valid grade and (b) the rubric is criterion-referenced (rule 5: same state → same grade) — a
+  letter is not decayed merely because a cycle passed with no change. The STATE is materially the same as
+  the three prior B cycles: a single named, non-blocking N+1 (embedding-index full-table scan, ivfflat
+  index unused) on a non-ship-critical path; raw `<img>` even dropped 13→6. Held B and documented the
+  reasoning explicitly so it reads as discipline, not inflation.
+- **tests_evals B:** CI verify still runs bare `vitest run` (no --coverage) so the floor never gates CI;
+  live-eval.yml exists but can't be shown green here (owner keys, weekly-only).
+
+**Issues reconciled:** functional_reality #199 → CLOSED (raised to A; gap closed). design_taste #204 →
+updated (still B, now the SOLE ship-critical blocker; priority raised). tests_evals #200 and performance
+#385 → updated (still B, gaps unchanged/narrowed).
+
+**Lessons for next run:**
+1. The ship gate is now ONE dimension away. design_taste → A takes exactly two well-scoped changes
+   (already named in #204): an authed AxeBuilder pass over dashboard/diagnosis/mockups/compare behind the
+   existing journeys login fixture, and `toHaveScreenshot` baselines in `e2e/__screenshots__/` (light+dark,
+   empty/error). Land both and overall → A/A+ with ship_gate_met true.
+2. Cold-start recipe re-confirmed: npm install first. The authed journeys tier is NO LONGER unverifiable —
+   grade functional_reality on the CI `journeys` job result (green on main) plus the hermetic per-PR test,
+   both of which have real PNG-decode/entitlement teeth. But still grade on ASSERTIONS present + CI status,
+   never on a cold local suite run (env-fragile).
+3. Resist "no-progress → lower grade" pressure on stable dimensions. Criterion-referenced grading means an
+   unchanged state keeps its letter; only a changed state moves it. Document the call to keep it honest.
+
+---
+
 ## 2026-07-03 — THIRD INDEPENDENT GRADE (two ship-critical dims raised; overall STILL gated by functional_reality)
 
 **Overall: C · ship_gate_met: false.** Overall is UNCHANGED from the 2026-06-29/07-01 baseline, but the
