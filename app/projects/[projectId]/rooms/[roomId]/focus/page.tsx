@@ -201,14 +201,24 @@ export default function FocusPage() {
     analysisStartedRef.current = true;
 
     async function analyze() {
-      // Fetch room info, project, and existing analysis in parallel
-      const [roomRes, projRes, existingRes] = await Promise.all([
-        fetch(`/api/rooms/${roomId}`),
-        fetch(`/api/projects/${projectId}`),
-        fetch(`/api/area-analysis?room_id=${roomId}`),
-      ]);
+      // Fetch room info, project, and existing analysis in parallel. These
+      // initial loads + the existing-analysis handling are guarded so a network
+      // failure surfaces a retryable error instead of hanging on the "analyzing"
+      // spinner forever — a real "builds but breaks" boundary on first paint.
+      let roomRes: Response, projRes: Response, existingRes: Response;
+      try {
+        [roomRes, projRes, existingRes] = await Promise.all([
+          fetch(`/api/rooms/${roomId}`),
+          fetch(`/api/projects/${projectId}`),
+          fetch(`/api/area-analysis?room_id=${roomId}`),
+        ]);
+      } catch {
+        setAnalysisError("Couldn't load this room. Please check your connection and try again.");
+        setStep("analysis");
+        return;
+      }
 
-      if (roomRes.ok) setRoomInfo(await roomRes.json());
+      if (roomRes.ok) setRoomInfo(await roomRes.json().catch(() => null));
 
       // Process floor plan from project
       try {
@@ -255,20 +265,35 @@ export default function FocusPage() {
         setFloorPlanFound(false);
       }
 
-      // Check existing analysis
-      if (existingRes.ok) {
-        const existing = await existingRes.json();
-        if (existing.analysis) {
-          setAreaAnalysis(existing.analysis);
-          setStep("analysis");
-          // Load existing products
-          const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-          if (prodRes.ok) {
-            const prods = await prodRes.json();
-            if (prods.length > 0) { setProducts(prods); setStep("results"); }
+      // Check existing analysis. Guarded: a parse/network hiccup while
+      // DETERMINING whether an analysis exists should fall through to running a
+      // fresh one, never throw out of analyze() and strand the user on the
+      // spinner.
+      try {
+        if (existingRes.ok) {
+          const existing = await existingRes.json();
+          if (existing.analysis) {
+            setAreaAnalysis(existing.analysis);
+            setStep("analysis");
+            // Load existing products in a SEPARATE guard: once we've found an
+            // existing analysis we're done, so a failure HERE must NOT escape to
+            // the outer fallthrough and trigger an unintended fresh analysis —
+            // we keep the analysis we already have and just skip preloading.
+            try {
+              const prodRes = await fetch(`/api/products?room_id=${roomId}`);
+              if (prodRes.ok) {
+                const prods = await prodRes.json();
+                if (Array.isArray(prods) && prods.length > 0) { setProducts(prods); setStep("results"); }
+              }
+            } catch {
+              // Keep the existing analysis; products just won't preload.
+            }
+            return;
           }
-          return;
         }
+      } catch {
+        // Only a failure to determine whether an existing analysis exists falls
+        // through to a fresh analysis below.
       }
 
       // Run new analysis
