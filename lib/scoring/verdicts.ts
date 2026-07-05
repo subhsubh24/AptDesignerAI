@@ -15,9 +15,13 @@ export const VERDICT_COLORS: Record<Verdict, string> = {
 };
 
 export function getScoreColor(score: number): string {
-  if (score >= 8) return "text-emerald-600 dark:text-emerald-400";
-  if (score >= 6) return "text-amber-600 dark:text-amber-400";
-  return "text-rose-600 dark:text-rose-400";
+  // Darker light-mode weights so score text clears WCAG 2 AA (4.5:1) on the
+  // near-white app background — emerald/amber/rose-600 sit at ~3.0–3.6:1 and
+  // fail an axe color-contrast check. The -700/-800 weights keep the same
+  // traffic-light semantics while passing AA; dark-mode -400 already passes.
+  if (score >= 8) return "text-emerald-700 dark:text-emerald-400";
+  if (score >= 6) return "text-amber-800 dark:text-amber-400";
+  return "text-rose-700 dark:text-rose-400";
 }
 
 export function getScoreBgColor(score: number): string {
