@@ -67,6 +67,7 @@ export default function ProductsPage() {
   const [evaluating, setEvaluating] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithEval | null>(null);
 
   // Filters
@@ -75,12 +76,21 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState("score");
 
   const loadProducts = async () => {
-    const res = await fetch(`/api/products?room_id=${roomId}`);
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/products?room_id=${roomId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setProducts(data);
+      setProducts(Array.isArray(data) ? data : []);
+      setLoadError(false);
+    } catch {
+      // Surface the failure instead of silently rendering the "no products yet"
+      // empty state — an error the user believes is an empty room, not a load
+      // failure, has no path to recovery. Existing products stay on screen; the
+      // error card only takes over when there is nothing to show.
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -324,6 +334,24 @@ export default function ProductsPage() {
             <SkeletonCard key={i} />
           ))}
         </div>
+      ) : loadError && products.length === 0 ? (
+        <Card className="border-dashed border-2 border-destructive/30">
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
+              <AlertTriangle className="h-8 w-8 text-destructive/70" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h3>
+            <p className="text-sm text-muted-foreground text-center max-w-sm mb-5">
+              Something went wrong loading this room&apos;s products. Check your connection and try again.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => { setLoadError(false); setLoading(true); loadProducts(); }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filteredProducts.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="flex flex-col items-center justify-center py-20">
