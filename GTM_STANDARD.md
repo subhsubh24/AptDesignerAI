@@ -247,13 +247,21 @@ relevant subreddits), **competitor App Store / Play reviews** ("I wish it did X"
   personal info, and never contact anyone from this (that is the separate, owner-sent outreach, §6).
 - Write the synthesis + citations to a `demand_signal` block in `GROWTH_STATUS` (themes, cited
   examples, solved-vs-not, confidence, disconfirming notes) so it feeds the dashboard and the roadmap read.
-- **Reddit + X need a CONNECTED data source — plain WebSearch/WebFetch does NOT reliably reach them**
-  (Reddit search dead-ends; X is login/API-walled). Mine the FEASIBLE-NOW sources every run regardless
-  (competitor App Store/Play reviews, review sites, niche forums, HN, Quora, Google). Add Reddit when
-  `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are set (a standard Reddit OAuth **script** app at reddit.com/prefs/apps — NOT Devvit, which is only for in-subreddit apps; OAuth to a bearer token, then read via `oauth.reddit.com`) and X when its API/listening
-  key is set; if unset, surface a `connect-<source>` owner action and mark that source `unconnected` in
-  coverage. NEVER fabricate a Reddit/X citation you could not actually fetch — an uncovered source is
-  honest; a made-up quote is a §4 failure.
+- **Default to the UNRESTRICTED sources; Reddit + X programmatic mining is TOS-GATED, not just key-gated.**
+  Every run, mine the sources that carry NO commercial-access gate for READING and are reliably
+  fetchable: competitor App Store/Play reviews, review sites (ComplaintsBoard etc.), niche forums,
+  Hacker News, Quora, Google-indexed pages, competitor/press pages. These are the DEFAULT signal source
+  (and where the real cited demand has come from). Reddit's **Responsible Builder Policy** requires
+  EXPLICIT written approval to programmatically mine Reddit data for COMMERCIAL purposes (building or
+  marketing a product) — a free "script" OAuth app, anonymous/unauthenticated mode, or a third-party
+  Reddit MCP does NOT make commercial mining compliant, and Reddit gates app creation on it. X's API is
+  similarly paid/gated. So add Reddit/X ONLY via the platform's OWN sanctioned, owner-arranged access
+  (Reddit commercial Data API approval / X paid API, under their terms) — the owner sets
+  `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` / the X key ONLY after that approval exists. NEVER circumvent
+  a platform's access controls, use anonymous/unauthenticated modes to dodge a gate, or run unreviewed
+  third-party code with the owner's credentials to scrape (§7 boundary). Until sanctioned access exists,
+  mark Reddit/X `unconnected` in coverage, surface it as an owner DECISION (not a routine connect-step),
+  and never fabricate a citation you could not compliantly fetch — an uncovered source is honest.
 - **DEMAND-DRIVEN AUTO-STEER (the pre-launch initial-direction engine).** A demand theme that is
   CORROBORATED — ≥3 independent real cited posts across ≥2 independent sources, recent + recurring,
   with DIRECT product-fit — MAY AUTONOMOUSLY open a ROADMAP / feature / positioning / GTM steer (not
