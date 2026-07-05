@@ -4,6 +4,37 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-05 (Run 67) — the design_taste convergence push: authed axe gate + its root-cause contrast fix, + 3 A1 guards + 3 F2 tests + 1 slop fix. ALL 9 MERGED.
+
+### State on entry
+- Cold container. Reset to origin tip `cd53278` (post Run 66 #451-456 + housekeeping #457 + quality FOURTH grade #458). npm install root+mobile. Baseline gate GREEN: tsc clean, **1775 tests** pass / 11 skip, determinism clean, eslint 0 (root+mobile), mobile tsc clean.
+- **DEEP AUDIT NOT due** (Run 64 ran the full 8-lens sweep → next ~Run 68).
+- QUALITY_SCORECARD (as_of 2026-07-05, overall **B**, ship_gate_met false): functional_reality RAISED C→A; **design_taste (B) is now the SOLE ship-critical dim below A** — the last thing between the headline and the ship gate. The auditor named its 2 capping items precisely: (1) NO axe coverage on authed design-dense routes (grep AxeBuilder → only e2e/a11y.spec.ts's 7 public routes); (2) NO committed visual artifacts (e2e/__screenshots__/ absent). GROWTH_STATUS pre-launch → no lever signal.
+
+### The design_taste attack (the convergence-critical work)
+Docker/Supabase-local are UNAVAILABLE in this sandbox (docker daemon down; supabase CLI download blocked) → the authed axe + authed screenshots can only be verified in CI's `journeys` job. Scouted the a11y RISK first (a prior authed-axe attempt, issue #204/#393, found real WCAG violations) to de-risk landing the gate red.
+- **#459 (the ROOT CAUSE):** an a11y scout found `lib/scoring/verdicts.ts` `getScoreColor()` returns `text-emerald-600 / amber-600 / rose-600` in light mode — ~3.0–3.6:1 on the near-white `#faf9f7` bg, FAILING WCAG 2 AA (4.5:1). Used across compare/diagnosis/bundles/products/focus/picks. Fixed to -700/-800 (≥5.2:1), keeping traffic-light semantics; dark-mode -400 already passes. Existing verdicts.test.ts asserts color FAMILY not shade → stays green. THIS is why the gate can land green.
+- **#460 (the gate):** authed AxeBuilder scan (wcag2a/2aa/21a/21aa, reducedMotion) over the 4 signed-in routes the journeys fixture reaches WITHOUT deep seeding — /dashboard, /account, /saved, /billing/upgrade?tier=pro — asserting zero critical/serious. Diagnosis/mockups/compare need a seeded project (tracked gap in ROUTE_INVENTORY) → honestly excluded, NOT overreached. Runs in CI's journeys job (E2E_AUTH_STACK=1). The 4 axed routes do NOT use getScoreColor, so #460 passes independent of #459's merge order.
+- **#461:** replaced an off-token `bg-purple` "Swap first" chip (auditor-named slop; VISION forbids purple/violet) with on-system slate on ManualScorecardView.
+
+### The rest — A1 guards + F2 tests (all disjoint)
+- **#462 A1** dashboard `removeImage`: unconditional UI removal after a DELETE → a failed delete showed the photo gone while it lived on the server (state/server desync). Now res.ok-guarded + toast.
+- **#463 A1** saved/[id]: `handleDelete` reset the button on a failed DELETE with no error; `handleToggleShare` silently accepted a failed PATCH. Both guarded + toast; spinner state always cleared.
+- **#464 A1** compare page: load fell through to the "No products" empty state on a failed fetch (hiding the failure). Now a distinct retryable error card + cancelled race-guard + Array.isArray guard.
+- **#465/#466/#467 F2** — tavily.ts / semantic-extract.ts / user-cache.ts, each with 0 prior coverage: HTTP body-assembly + 429 retry / normalization+clamping+canonicalization guards / cache-hit+dedup+memoized-null. +33 tests → 1808.
+
+### Outcome + lessons
+- **ALL 9 MERGED** (#459-467; required checks verify+build+mobile+lint+validate-capabilities+validate-gtm green; default tip 2661c39). 18 first-pass Sonnet reviews + **2 re-reviews on #464** — BOTH reviewers independently REQUEST_CHANGES: RevA caught a REAL stale-`loadError` bug (never cleared on a successful load; roomId is an effect dep, so a later good room keeps the error card) → added `setLoadError(false)` on success; RevB flagged the hand-rolled `<button>` vs the shared `<Button variant="outline">` used by sibling focus/error.tsx → swapped. Both re-reviews APPROVE. Reviewers mutation-tested the F2 suites (load-bearing, not tautological).
+- **No ROADMAP box ticked** — advances F2 (already [x]); the authed axe closes 1 of design_taste's 2 named capping items (auditor-owned, NEVER self-graded). F4/F7 stay [ ].
+- **LESSONS:** (1) fix the a11y ROOT CAUSE (one shared token fn) before landing the gate, not the symptom per-page. (2) `git stash -u` stores NEW/untracked files in `stash^3`, NOT `stash@{0}` — `git checkout stash@{0}^3 -- <path>` to restore them. (3) A vi.mock for a `new`-constructed SDK MUST be a `class`/`function`, not `vi.fn().mockImplementation(()=>({...}))` — an arrow impl under `new` discards the returned object → `client.caches` undefined → every call silently returns null. (4) A reviewer subagent's mutation test left a stray edit (removed the HSL clamp) in the SHARED working tree → caught by `git status` before building branches; **always re-verify a clean tree after review subagents run.**
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 68 (next run).** Run the full 8-lens sweep BEFORE scouting.
+- **design_taste is STILL the ship gate blocker until the auditor re-grades.** Capping item #1 (authed axe) is now LANDED (#459 fix + #460 gate). Capping item #2 (committed visual artifacts, F7) REMAINS — needs the auth stack to produce authed screenshots (Docker/Supabase unavailable in-sandbox; the CI journeys job CAN produce them but committing them from a headless run isn't clean). Consider: capture PUBLIC-page screenshots locally + wire authed capture in CI, OR flag the sandbox limitation as a harness issue. Verify the authed axe went GREEN on the default branch (monitor was watching run 28747677125) before assuming #460 is truly working.
+- **A1 backlog (carry, mostly drained):** 3 mobile hooks (_layout RevenueCat sync / use-push-notifications / use-free-quota `.catch(()=>{})`) — lower value. dashboard/setup/bundles/mockups/focus/products/picks/saved/compare + saved/[id] all done.
+- **F2 candidates (carry):** scene-assembler.ts (orchestrator — higher integration-test value), semantic-extract remaining helpers, tavily rate-limiter internals (module-private — not directly testable). tavily/semantic-extract/user-cache done this run.
+- **DO-NOT-RE-FLAG:** getScoreColor contrast fixed; authed axe over dashboard/account/saved/billing landed; ManualScorecardView purple gone; the named A1 pages guarded; tavily/semantic-extract/user-cache tested. Security CLEAN through 029. App data layer = in-memory store (seed E2Es via app API). `vi.mock` of `new`-constructed SDKs needs a class. Re-check `git status` clean after review subagents.
+
 ## Run 2026-07-05 (Run 66) — 6 disjoint value-bar changes: 4× A1 silent-failure guards + 2× F2 tests on critical AI-routing paths. ALL 6 MERGED.
 
 ### State on entry
