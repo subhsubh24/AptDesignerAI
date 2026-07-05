@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Plus, Sparkles, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Sparkles, LayoutGrid, AlertTriangle, RefreshCw } from "lucide-react";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { PageTransition, ScrollReveal } from "@/components/ui/motion";
 import { SkeletonBundleCard } from "@/components/ui/skeleton";
@@ -124,31 +124,46 @@ export default function BundlesPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [evaluating, setEvaluating] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadBundles = async () => {
-    const res = await fetch(`/api/bundles?room_id=${roomId}`);
-    if (res.ok) setBundles(await res.json());
-    setLoading(false);
-  };
+  const loadBundles = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/bundles?room_id=${roomId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setBundles(Array.isArray(data) ? data : []);
+      setLoadError(false);
+    } catch {
+      // Surface the failure instead of silently rendering the empty state — a
+      // load error the user reads as "no bundles yet" has no recovery path.
+      // Existing bundles stay on screen if a later refresh fails.
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId]);
 
   useEffect(() => {
     loadBundles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+  }, [loadBundles]);
 
   const handleCreateFromShortlisted = async () => {
     setCreating(true);
+    setActionError(null);
     try {
       const productsRes = await fetch(`/api/products?room_id=${roomId}`);
-      if (!productsRes.ok) return;
+      if (!productsRes.ok) throw new Error("We couldn't load this room's products. Please try again.");
       const products = await productsRes.json();
-      const shortlisted = products.filter(
+      const shortlisted = (Array.isArray(products) ? products : []).filter(
         (p: { status: string }) => p.status === "shortlisted" || p.status === "accepted"
       );
 
-      if (shortlisted.length === 0) return;
+      if (shortlisted.length === 0) {
+        throw new Error("Shortlist or accept a few products first, then build a bundle.");
+      }
 
-      await fetch("/api/bundles", {
+      const res = await fetch("/api/bundles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -157,7 +172,11 @@ export default function BundlesPage() {
           product_ids: shortlisted.map((p: { id: string }) => p.id),
         }),
       });
-      loadBundles();
+      if (!res.ok) throw new Error("Couldn't create the bundle. Please try again in a moment.");
+      await loadBundles();
+    } catch (err) {
+      // A silent no-op on the primary action reads as a broken button. Say why.
+      setActionError(err instanceof Error ? err.message : "Couldn't create the bundle. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -165,13 +184,17 @@ export default function BundlesPage() {
 
   const handleEvaluate = async (bundleId: string) => {
     setEvaluating(bundleId);
+    setActionError(null);
     try {
-      await fetch("/api/bundles/evaluate", {
+      const res = await fetch("/api/bundles/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bundle_id: bundleId }),
       });
-      loadBundles();
+      if (!res.ok) throw new Error("Couldn't score the bundle. Please try again in a moment.");
+      await loadBundles();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn't score the bundle. Please try again.");
     } finally {
       setEvaluating(null);
     }
@@ -221,7 +244,35 @@ export default function BundlesPage() {
         </div>
       </div>
 
-      {bundles.length === 0 ? (
+      {actionError && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive/70 mt-0.5" />
+          <p className="text-sm text-foreground">{actionError}</p>
+        </div>
+      )}
+
+      {loadError && bundles.length === 0 ? (
+        <Card className="border-dashed border-2 border-destructive/30">
+          <CardContent className="py-20 text-center">
+            <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 mx-auto">
+              <AlertTriangle className="h-8 w-8 text-destructive/70" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load bundles</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-5">
+              Something went wrong loading this room&apos;s bundles. Check your connection and try again.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => { setLoadError(false); setLoading(true); loadBundles(); }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : bundles.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="py-20 text-center">
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
