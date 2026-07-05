@@ -21,8 +21,12 @@ import {
   createConfirmedUser,
   deleteUser,
   seedProEntitlement,
+  seedRoom,
   uniqueEmail,
 } from "./helpers/seed";
+
+/** The 8-byte PNG signature — the money-path render must return REAL image bytes. */
+const PNG_MAGIC_HEX = "89504e470d0a1a0a";
 
 // Rendered by app/error.tsx + app/global-error.tsx. A healthy screen NEVER shows it.
 const BOUNDARY_TEXT = /something went wrong/i;
@@ -217,5 +221,59 @@ test.describe("authenticated journeys", () => {
         name: /unlock unlimited designs|reached your free save limit/i,
       }),
     ).toHaveCount(0);
+  });
+
+  test("core money-path: POST /api/mockups renders a REAL, decodable image", async ({ page }) => {
+    // THE convergence assertion — the AI design→render money path returns a REAL
+    // image end to end, not a stub/TODO/500. Under E2E_AUTH_STACK the served
+    // app's Gemini image call is answered by the hermetic cassette (a real 1×1
+    // PNG), so this runs WITHOUT live LLM keys yet exercises the ACTUAL route:
+    // auth → ownership → agent-run → generateMockupImage → image extraction →
+    // storage-upload (or data-URI fallback) → JSON response. A placeholder
+    // string, empty body, or error status all FAIL this test.
+    const roomId = await seedRoom(userId!);
+    await signIn(page); // establishes the Supabase auth cookie on the shared context
+
+    // page.request shares the browser context's cookies, so this authed POST
+    // carries the session the UI sign-in just established.
+    const res = await page.request.post("/api/mockups", {
+      data: {
+        room_id: roomId,
+        recommendation_mockup: {
+          category: "accent_chair",
+          search_title: "Cognac leather accent chair",
+          specs: "Full-grain leather, walnut legs, 30in wide",
+        },
+      },
+    });
+    expect(
+      res.status(),
+      `mockups POST did not return 200: ${await res.text().catch(() => "<no body>")}`,
+    ).toBe(200);
+    const body = await res.json();
+    expect(body.recommendation_mockup).toBe(true);
+    const imageUrl: unknown = body.image_url;
+    expect(typeof imageUrl === "string" && imageUrl.length > 0, "no image_url returned").toBe(true);
+
+    // Resolve the image bytes whether the route returned a storage URL or the
+    // data-URI fallback (Supabase-local may lack the room-images storage bucket,
+    // in which case uploadMockupImage returns a `data:image/png;base64,…` URI).
+    let bytes: Buffer;
+    const url = imageUrl as string;
+    if (url.startsWith("data:")) {
+      bytes = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+    } else {
+      const imgRes = await page.request.get(url);
+      expect(imgRes.status(), `image URL ${url} not fetchable`).toBe(200);
+      bytes = Buffer.from(await imgRes.body());
+    }
+
+    // A REAL PNG: 8-byte signature + a non-zero IHDR width/height (parsed from
+    // the header). This is the functional-reality assertion with teeth — a
+    // truncated/placeholder body cannot satisfy both the magic and the dims.
+    expect(bytes.length).toBeGreaterThan(24);
+    expect(bytes.subarray(0, 8).toString("hex")).toBe(PNG_MAGIC_HEX);
+    expect(bytes.readUInt32BE(16)).toBeGreaterThan(0); // IHDR width
+    expect(bytes.readUInt32BE(20)).toBeGreaterThan(0); // IHDR height
   });
 });

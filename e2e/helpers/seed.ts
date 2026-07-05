@@ -98,3 +98,39 @@ export async function seedProEntitlement(userId: string): Promise<void> {
     throw new Error(`seed: seedProEntitlement failed: ${error.message}`);
   }
 }
+
+/**
+ * Seed a minimal project + room owned by `userId` and return the room id.
+ *
+ * The AI design→render money path (POST /api/mockups) requires an owned room,
+ * but walking the whole photo→diagnose→source UI first is far too slow + brittle
+ * for a journey assertion. The `recommendation_mockup` branch of the route needs
+ * ONLY an owned room (no diagnosis/product rows), so this seeds the minimum: a
+ * project + a `living_room` (a valid room_type per migration 001). Service-role
+ * bypasses RLS; the room's project.user_id = userId, so the route's own
+ * user-scoped ownership + agent_runs RLS checks (auth.uid() = userId) pass.
+ */
+export async function seedRoom(userId: string): Promise<string> {
+  const db = admin();
+  const { data: project, error: projectError } = await db
+    .from("projects")
+    .insert({ user_id: userId, name: "E2E Money-Path Project" })
+    .select("id")
+    .single();
+  if (projectError || !project) {
+    throw new Error(
+      `seed: seedRoom project insert failed: ${projectError?.message ?? "no row returned"}`,
+    );
+  }
+  const { data: room, error: roomError } = await db
+    .from("rooms")
+    .insert({ project_id: project.id, name: "E2E Living Room", room_type: "living_room" })
+    .select("id")
+    .single();
+  if (roomError || !room) {
+    throw new Error(
+      `seed: seedRoom room insert failed: ${roomError?.message ?? "no row returned"}`,
+    );
+  }
+  return room.id;
+}
