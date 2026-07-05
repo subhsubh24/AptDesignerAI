@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ArrowRight, Paperclip, Lightbulb } from "lucide-react";
+import { ArrowLeft, ArrowRight, Paperclip, Lightbulb, AlertTriangle, RefreshCw } from "lucide-react";
 import { PageTransition } from "@/components/ui/motion";
 
 export default function RoomSetupPage() {
@@ -37,40 +37,50 @@ export default function RoomSetupPage() {
   const [userContext, setUserContext] = useState("");
   const [referenceImages, setReferenceImages] = useState<{ id: string; url: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setBudgetMode(data.budget_mode || "balanced");
+      setBudgetDollars(data.budget_dollars ? String(data.budget_dollars) : "");
+      setSourcingMode(data.sourcing_mode || "manual");
+      setKeepItems((data.keep_items || []).join(", "));
+      setReplaceItems((data.replace_items || []).join(", "));
+      setPriorities((data.priorities || []).join(", "));
+      setUserContext(data.user_context || "");
+      const roomImgs: { id: string; url: string }[] = [];
+      const refImgs: { id: string; url: string }[] = [];
+      for (const img of (data.room_images || []) as { id: string; image_url: string; image_type: string }[]) {
+        if (img.image_type === "detail") {
+          refImgs.push({ id: img.id, url: img.image_url });
+        } else {
+          roomImgs.push({ id: img.id, url: img.image_url });
+        }
+      }
+      setImages(roomImgs);
+      setReferenceImages(refImgs);
+      setRoom(data);
+      setLoadError(false);
+    } catch {
+      // Without this the failed load leaves room=null forever → an infinite
+      // skeleton with no error and no recovery path. Surface it instead.
+      setLoadError(true);
+    }
+  }, [roomId]);
 
   useEffect(() => {
-    async function load() {
-      const res = await fetch(`/api/rooms/${roomId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRoom(data);
-        setBudgetMode(data.budget_mode || "balanced");
-        setBudgetDollars(data.budget_dollars ? String(data.budget_dollars) : "");
-        setSourcingMode(data.sourcing_mode || "manual");
-        setKeepItems((data.keep_items || []).join(", "));
-        setReplaceItems((data.replace_items || []).join(", "));
-        setPriorities((data.priorities || []).join(", "));
-        setUserContext(data.user_context || "");
-        const roomImgs: { id: string; url: string }[] = [];
-        const refImgs: { id: string; url: string }[] = [];
-        for (const img of (data.room_images || []) as { id: string; image_url: string; image_type: string }[]) {
-          if (img.image_type === "detail") {
-            refImgs.push({ id: img.id, url: img.image_url });
-          } else {
-            roomImgs.push({ id: img.id, url: img.image_url });
-          }
-        }
-        setImages(roomImgs);
-        setReferenceImages(refImgs);
-      }
-    }
     load();
-  }, [roomId]);
+  }, [load]);
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      await fetch(`/api/rooms/${roomId}`, {
+      const res = await fetch(`/api/rooms/${roomId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -83,8 +93,14 @@ export default function RoomSetupPage() {
           user_context: userContext.trim() || null,
         }),
       });
+      // Only navigate away once the save actually succeeded — otherwise the
+      // user's budget / sourcing / keep-replace / priorities / context is
+      // silently lost and they land back on the room believing it was saved.
+      if (!res.ok) throw new Error("We couldn't save your room preferences. Please try again.");
       router.push(`/projects/${projectId}/rooms/${roomId}`);
       router.refresh();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "We couldn't save your room preferences. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -97,6 +113,27 @@ export default function RoomSetupPage() {
   const handleReferenceUploaded = (image: { url: string; path: string; id: string }) => {
     setReferenceImages((prev) => [...prev, { id: image.id, url: image.url }]);
   };
+
+  if (!room && loadError) {
+    return (
+      <div className="max-w-3xl mx-auto py-16 px-4">
+        <Card className="border-dashed border-2 border-destructive/30">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
+              <AlertTriangle className="h-8 w-8 text-destructive/70" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load this room</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mb-5">
+              Something went wrong loading this room&apos;s setup. Check your connection and try again.
+            </p>
+            <Button variant="outline" onClick={() => { setLoadError(false); load(); }}>
+              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!room) {
     return (
@@ -301,6 +338,16 @@ export default function RoomSetupPage() {
           </div>
         </CardContent>
       </Card>
+
+      {saveError && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive/70 mt-0.5" />
+          <p className="text-sm text-foreground">{saveError}</p>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => router.back()}>
