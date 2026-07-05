@@ -4,6 +4,48 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-05 (Run 65) — functional_reality increment 2 SHIPPED (THE convergence blocker): cassette wired into the served app + authed mockup money-path journey asserting a REAL PNG, CI-green; + 3 disjoint A1/F2 changes. ALL 4 MERGED.
+
+### State on entry
+- Cold container. Reset to origin tip `4639667` (post Run 64 #434-440 + housekeeping #441). npm install root+mobile. Baseline gate GREEN: tsc clean, 1735 tests pass / 11 skip, determinism clean, eslint 0 (root+mobile).
+- DEEP AUDIT NOT due (Run 64 ran the full 8-lens sweep → next ~Run 68).
+- QUALITY_SCORECARD (as_of 2026-07-03, overall C, ship_gate_met false): ship-critical dims below A remain functional_reality (C) and design_taste (B). GROWTH_STATUS pre-launch → no lever signal.
+- This was the FOCUSED run for functional_reality increment 2 (Run 63/64 mapped it precisely).
+
+### THE KEY MOVE — functional_reality increment 2 (#442, MERGED, journeys money-path CI-GREEN)
+Wired the recorded-provider cassette (lib/ai/cassette-provider.ts, increment 1) into the served app so the CI journeys suite drives the AI design→render money path end to end and asserts a REAL image, without live LLM keys.
+- lib/ai/gemini.ts: geminiProvider now delegates to cassetteProvider when E2E_AUTH_STACK=1.
+- **CRITICAL CORRECTION to the Run-64 plan:** the plan said gate on `E2E_AUTH_STACK==="1" AND NODE_ENV!=="production"`. WRONG — the CI journeys job serves a PRODUCTION build via `next start` (NODE_ENV=production), so a NODE_ENV!=="production" gate DISABLES the cassette in CI. Correct gate = the codebase's OWN pattern: gate SOLELY on the flag, with a fail-closed `assertCassetteSafe()` that throws at module load if the flag is set on `process.env.VERCEL` (mirrors assertRateLimitBypassSafe in lib/utils/rate-limiter.ts, whose comment says "Not gated on NODE_ENV (the suite runs a production build via next start)"). VERCEL is the prod signal, NOT NODE_ENV.
+- e2e/journeys.spec.ts: authed journey creates a project+room **via the app's OWN API** (POST /api/projects → /api/rooms) then POSTs /api/mockups (recommendation_mockup branch — one cassette stage, skipVerification:true) and asserts a REAL PNG (8-byte magic + non-zero IHDR), reading the produced /uploads/ image from disk.
+- validation/CAPABILITIES.yml: declared E2E_AUTH_STACK (env-manifest guard test capabilities.test.ts FAILS on any undeclared env read; caught it).
+- __tests__/ai/cassette-guard.test.ts: BOTH Sonnet reviewers (A req-changes, B approve) named the SAME sole gap — no unit test for the gate. Added it (throws only on flag+VERCEL; chat() delegates a real PNG under the flag, no network). Both then APPROVE.
+
+### functional_reality inc 2 — the CI money-path test peeled FOUR stacked causes (DEEP_DIAGNOSIS in action)
+Each journeys re-run surfaced ONE cause; fixed it; re-ran; peeled the next (BUILDS≠WORKS — 15 other journeys passed each iteration, only the new money-path test failed). journeys is NOT a required check (required = verify/build/mobile/lint/validate-capabilities/validate-gtm), so it never blocks auto-merge — but the money-path test HAD to run GREEN before merging #442, so I watched + iterated:
+1. **supabase/setup-cli@v1 "rate limit exceeded"** (INFRA) — the action resolves `version: latest` via the GitHub releases API; hit a rate limit → all journeys steps SKIPPED → the test never ran. Fix: `rerun_failed_jobs` (cleared on attempt 2). **On any journeys failure, first check whether it failed at setup-cli (infra → re-run) vs the actual test.**
+2. **`permission denied for table projects`** at an admin-client seedRoom INSERT — mis-diagnosed as a supabase-local default-privilege gap; "fixed" with migration 030 (mirror of 029). RED HERRING → migration 030 + admin seedRoom REVERTED once cause #4 was found.
+3. **404 `{"error":"Not found"}`** from userOwnsRoom — mis-hypothesized as a page.request-vs-page.evaluate auth difference; switched to `page.evaluate(fetch)` → STILL 404 (hypothesis wrong).
+4. **THE REAL ROOT CAUSE:** `lib/supabase/server.ts` `createClient()` returns a HYBRID PROXY — `Object.create(memoryClient)` with only `.auth` replaced by real Supabase. So **ALL data ops (`.from()`, `.storage`) go to the IN-MEMORY store (`createMemoryClient`), NOT real Postgres** ("memory store as the data layer until a full DB migration is done"). The route's userOwnsRoom read the MEMORY store; the admin seedRoom wrote to real Postgres — a DIFFERENT layer the route never sees → 404. Fix: seed project+room through the app's OWN API (writes to the memory store the route reads). Memory storage then writes the cassette PNG to `public/uploads/room-images/mockups/<key>.png` and returns a RELATIVE `/uploads/...` URL — but `next start` does NOT serve runtime-written public/ files over HTTP (a 5th micro-cause) → read the bytes from disk (same runner), mirroring gemini.ts's `/uploads/` handling. GREEN.
+
+### LOAD-BEARING LESSON (do not forget): the app's DATA layer is the IN-MEMORY store, NOT Supabase Postgres
+`createClient()` (lib/supabase/server.ts) proxies all data ops to `createMemoryClient`; real Supabase is used ONLY for auth. Admin-only tables (stripe_customers/entitlements) go through `getAdminClient()` = REAL Postgres (hence migration 029 mattered + the paywall test works). So: **ANY E2E that needs app data (projects/rooms/mockups/saved/diagnoses) MUST seed through the app's API, never via the admin/Postgres client.** Migration-created table Postgres grants are IRRELEVANT to the core app flow (it never touches Postgres for that data). Memory storage writes real files under public/uploads and returns relative URLs `next start` won't serve at runtime → read from disk in tests.
+
+### The 3 disjoint supporting changes (all both-Sonnet-APPROVED, MERGED)
+- **#444 F2** — __tests__/config/env.test.ts: 7 cases covering assertProductionEnv (prod-boot env contract, 0 prior tests): enforce gating, provider-conditional DeepSeek requirement, MissingEnvError shape.
+- **#445 A1** — app/.../products/page.tsx: loadProducts() swallowed failed fetches → misleading empty state; now guarded (r.ok + Array.isArray) with an error+retry card gated on `loadError && products.length===0` (existing products survive a refresh blip).
+- **#443 A1** — app/.../focus/page.tsx: mount-time loads (initial Promise.all + existing-analysis .json()/products fetch) were unguarded → infinite "analyzing" spinner on first-paint network failure. Now guarded → surfaces the retryable analysisError. Reviewer A (cycle 1) REQUEST_CHANGES: the existing-analysis try was too broad — a products-fetch failure would fall through to an unintended fresh /api/area-analysis POST; fixed by scoping the products fetch to its own inner try/catch so the early return always fires. Re-review APPROVE.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 68.**
+- **functional_reality:** increment 2 landed (money-path render asserted GREEN in CI). The scorecard's functional_reality gap ("core money path has ZERO outcome-asserting runtime E2E") is now ADDRESSED — the SEPARATE Quality Auditor will re-grade (do NOT self-grade). Next functional_reality work: extend the cassette STAGE_CASSETTES + journey to the FULL photo→diagnose→source→mockup path (needs provider-factory/deepseek ALSO gated on E2E_AUTH_STACK — text stages route through getProvider→DeepSeek dummy key; seed via app API); + a Stripe test-mode checkout→webhook→entitlement E2E (paywall UNLOCK already asserted via seedProEntitlement — that's an admin-client/Postgres table, so seeding it via admin IS correct there).
+- **design_taste (ship-critical, B) is now the lone remaining sub-A ship-critical dim:** the authed axe GATE (AxeBuilder over ≥1 logged-in route, reducedMotion:'reduce') + F7 screenshots (e2e/__screenshots__/). Touches the journeys suite — keep disjoint.
+- **A1 correctness backlog (carry):** bundles/page.tsx + mockups/page.tsx silent load/action; 3 mobile hooks (_layout RevenueCat sync / use-push-notifications / use-free-quota .catch(()=>{})). focus + products done this run.
+- **F2 candidates (carry):** deepseek.ts convertMessages/convertTools/buildResponseFormat, semantic-extract.ts timeout fallback, provider-factory.ts fallback latch. (env.ts done.)
+- **HARNESS/CI flake:** journeys' supabase/setup-cli@v1 `version:latest` GitHub-API rate-limit flake recurs (cost 1 re-run this run); `.github/` not loop-editable → an FYI/harness-improvement issue is the only lever if it keeps costing re-runs. Pinning a fixed CLI version would fix it.
+- **DO-NOT-RE-FLAG:** focus/products silent-load fixed; env.ts tested; cassette wired + guard-tested; CAPABILITIES.yml has E2E_AUTH_STACK. The app data layer is the memory store (seed E2Es via app API). RLS clean through 029 (migration 030 was reverted — not needed). Carry Run 64's list forward.
+
+---
+
 ## Run 2026-07-04 (Run 64) — DEEP AUDIT (8-lens) + 7 disjoint value-bar changes (3× G2 security + 2× a11y design_taste + 1× A1 correctness + 1× F2 security-test); functional_reality increment 2 DEFERRED as a focused run with a sharpened plan
 
 ### State on entry
