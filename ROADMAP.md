@@ -574,6 +574,8 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 
 - [ ] **§11 marketing media-gen adapter (image + video + music + voiceover).** Build the thin media-gen adapter (GTM_STANDARD §11) so the marketing loop produces multi-format creative on the EXISTING Gemini key: IMAGE (Nano Banana), VIDEO (Gemini Omni Flash), MUSIC (Lyria 3), VOICEOVER (Gemini TTS) — a video can carry soundtrack and/or narration from the same key. Route via `getProvider`/`geminiProvider` + the Interactions API. Every asset passes the maker≠checker not-obviously-AI + FTC audit before publish; cost-governed; preview ids pinned. Stages creative pre-launch, publishes only post-§13-approval on a connected channel. Build epic: #470.
 
+- [ ] **§34 pre-launch funnel — public demo of the core aha + gated beta.** Replace the blank waitlist with: a public, no-account, bounded + HARDENED (Track H) demo of the core aha (upload a room photo → see an AI redesign of that room instantly, no ac…) that goes live only after it clears the quality bar, driving the waitlist; then a gated-beta invite mechanism (waitlist → codes → real app, site gate up for others) yielding the first real PMF cohort. Full product stays gated; demo/beta build is autonomous + quality-gated, traffic/invites post-§13-Gate-1, public launch = Gate 2. Build epic: #475.
+
 ### Track F — World-class quality, validation & evals (the excellence bar)
 The product must be demonstrably top-grade — not "tests pass," but rigorously
 validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
