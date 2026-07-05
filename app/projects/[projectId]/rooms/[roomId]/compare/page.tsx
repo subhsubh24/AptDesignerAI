@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, GitCompare, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, GitCompare, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "@/lib/scoring/verdicts";
 import { PageTransition } from "@/components/ui/motion";
 import { SkeletonCompareRow } from "@/components/ui/skeleton";
@@ -61,26 +62,48 @@ export default function ComparePage() {
 
   const [products, setProducts] = useState<ProductWithEval[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      const res = await fetch(`/api/products?room_id=${roomId}`);
-      if (res.ok) {
+      try {
+        const res = await fetch(`/api/products?room_id=${roomId}`);
+        if (!res.ok) throw new Error(`products request failed: ${res.status}`);
         const data = await res.json();
+        if (cancelled) return;
+        // Clear any prior error — a later room whose fetch succeeds must not keep
+        // showing the error card from an earlier failed room (roomId is a dep).
+        setLoadError(false);
         setProducts(
-          data.filter(
+          (Array.isArray(data) ? data : []).filter(
             (p: ProductWithEval) =>
               p.product_evaluations?.length > 0 &&
               (p.status === "evaluated" || p.status === "shortlisted")
           )
         );
+      } catch {
+        // Surface a retryable error instead of falling through to the "No
+        // products to compare" empty state, which would hide the real failure.
+        if (!cancelled) setLoadError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, [roomId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, reloadKey]);
+
+  const handleRetry = () => {
+    setLoading(true);
+    setLoadError(false);
+    setReloadKey((k) => k + 1);
+  };
 
   const sortedProducts = useMemo(() => {
     if (!sortKey) return products;
@@ -152,7 +175,23 @@ export default function ComparePage() {
         </p>
       </div>
 
-      {sortedProducts.length === 0 ? (
+      {loadError ? (
+        <Card className="border-dashed border-2">
+          <CardContent className="py-20 text-center">
+            <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 mx-auto">
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Something went wrong fetching the scored products. Please try again.
+            </p>
+            <Button onClick={handleRetry} variant="outline">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : sortedProducts.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="py-20 text-center">
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
