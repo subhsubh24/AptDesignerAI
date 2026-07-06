@@ -5,6 +5,7 @@ import { scoreProduct, type ScoringContext } from "@/lib/agents/fit-scorer";
 import { evaluateBundle, type BundleContext } from "@/lib/agents/bundle-optimizer";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { logServerError } from "@/lib/utils/api-error";
+import { validateExternalUrl } from "@/lib/utils/url-validator";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -140,6 +141,14 @@ export async function POST(request: Request) {
   const extractionPromises = items.flatMap((item) =>
     item.urls.map(async (url) => {
       try {
+        // SSRF guard: extractFromUrl fetches this URL server-side. Reject private
+        // IPs / loopback / cloud-metadata / credentialed URLs before the fetch,
+        // mirroring the /api/products/ingest route.
+        const validation = validateExternalUrl(url);
+        if (!validation.valid) {
+          return { category: item.category, url, product: null, error: validation.error || "Invalid URL" };
+        }
+
         const result = await extractFromUrl(url, designProfile, roomImageUrls);
         if (!result.success || !result.data) {
           return { category: item.category, url, product: null, error: result.error || "Extraction failed" };
