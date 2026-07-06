@@ -54,11 +54,13 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
   const [budgetMode, setBudgetMode] = useState("balanced");
   const [sourcingMode, setSourcingMode] = useState("manual");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleCreate = async () => {
     if (!name.trim() || !roomType) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/rooms", {
         method: "POST",
@@ -72,21 +74,30 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
         }),
       });
       if (!res.ok) throw new Error("Failed to create room");
-      const room = await res.json();
+      const room = (await res.json()) as { id?: string };
+      if (!room?.id) throw new Error("Failed to create room");
       setOpen(false);
       setName("");
       setRoomType("");
       router.push(`/projects/${projectId}/rooms/${room.id}`);
       router.refresh();
     } catch {
-      // Error handling enhanced in Phase 8
+      // Keep the dialog open and tell the user, rather than silently
+      // clearing the spinner (which read as "nothing happened").
+      setError("Couldn't create the room. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setError(null);
+        setOpen(next);
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -158,6 +169,14 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
             </div>
           </div>
         </div>
+        {error && (
+          <p
+            role="alert"
+            className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
