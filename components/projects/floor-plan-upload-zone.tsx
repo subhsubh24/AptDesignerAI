@@ -25,6 +25,7 @@ export function FloorPlanUploadZone({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [extracted, setExtracted] = useState<ExtractedFloorPlan | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Load existing floor plan on mount
   useEffect(() => {
@@ -43,12 +44,26 @@ export function FloorPlanUploadZone({
   }, [projectId]);
 
   const handleRemove = async () => {
-    await fetch(`/api/projects/${projectId}/floor-plan`, { method: "DELETE" });
+    setRemoveError(null);
+    let res: Response;
+    try {
+      res = await fetch(`/api/projects/${projectId}/floor-plan`, { method: "DELETE" });
+    } catch {
+      // Do NOT clear the UI when the server delete failed — that would show the
+      // floor plan as removed while it still exists server-side (state/server desync).
+      setRemoveError("Couldn't remove the floor plan. Please try again.");
+      return;
+    }
+    if (!res.ok) {
+      setRemoveError("Couldn't remove the floor plan. Please try again.");
+      return;
+    }
     setExtracted(null);
     setImageUrl(null);
     setPreview(null);
     setState("idle");
     setErrorMsg(null);
+    setRemoveError(null);
     onExtracted?.(null);
   };
 
@@ -198,6 +213,16 @@ export function FloorPlanUploadZone({
             Replace
           </button>
         </p>
+
+        {removeError && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {removeError}
+          </div>
+        )}
       </div>
     );
   }
