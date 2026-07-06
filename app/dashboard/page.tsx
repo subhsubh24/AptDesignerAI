@@ -1014,7 +1014,7 @@ export default function DashboardPage() {
                       <CheckCircle2 className="h-3 w-3" /> Done
                     </span>
                   ) : isInProgress ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/90 text-white text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold shadow">
                       In Progress
                     </span>
                   ) : isOutstanding ? (
