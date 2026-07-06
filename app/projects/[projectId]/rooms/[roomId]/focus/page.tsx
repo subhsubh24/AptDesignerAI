@@ -873,10 +873,12 @@ export default function FocusPage() {
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={mockupUrl} alt={`${item.search_title || item.category} in your room`} className="w-full h-auto" />
                               <button
-                                className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                                type="button"
+                                aria-label="Close expanded image"
+                                className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white"
                                 onClick={() => setExpandedMockup(null)}
                               >
-                                <X className="h-3 w-3" />
+                                <X className="h-3 w-3" aria-hidden="true" />
                               </button>
                             </div>
                             <p className="text-xs text-muted-foreground mt-1.5">AI-generated visualization of the recommended product</p>
@@ -1417,10 +1419,12 @@ function ImageOverlay({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
           <button
+            type="button"
+            aria-label="Close"
             onClick={onClose}
-            className="absolute top-4 right-4 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+            className="absolute top-4 right-4 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         <div className="p-6 space-y-4">
