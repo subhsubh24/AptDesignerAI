@@ -66,7 +66,18 @@ export async function topKSimilar(
     });
   }
 
-  scored.sort((a, b) => b.similarity - a.similarity);
+  // Descending by similarity, with a deterministic final tiebreaker so equal-
+  // similarity matches (e.g. duplicate/near-duplicate product images) always sort
+  // in a stable order — required by the determinism contract (a sort keyed only on
+  // a float score is non-deterministic on ties).
+  scored.sort(
+    (a, b) =>
+      b.similarity - a.similarity ||
+      a.image_url.localeCompare(b.image_url) ||
+      a.brand.localeCompare(b.brand) ||
+      a.model.localeCompare(b.model) ||
+      (a.variant ?? "").localeCompare(b.variant ?? ""),
+  );
   return scored.slice(0, k);
 }
 
