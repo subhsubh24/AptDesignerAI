@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  const updatedDate = "April 16, 2026";
+  const updatedDate = "July 4, 2026";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
