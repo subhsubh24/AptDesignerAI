@@ -5,11 +5,36 @@ so work builds toward the product, not just toward "tests pass." Operating rules
 live in `AGENTS.md` (aka `CLAUDE.md`); this file is the *why* and the *what good
 looks like*.
 
+## The north star — be the best interior designer, so nobody needs to hire one
+The ambition is not "a helpful design tool." It is to **deliver the judgment,
+taste, and end-to-end service of the best-of-the-best professional interior
+designer** — and to do it so well that a user **never needs to hire one again**.
+Every run should ask: *would an elite, in-demand interior designer be proud to
+put their name on this — and would this client happily pay a designer's fee for
+it?* If not, the product isn't there yet.
+
+That means matching a top designer on the things that actually make one worth
+their fee, not just generating pretty pictures:
+- **Spatial & functional judgment** — reads the room like a pro: proportion,
+  flow, light, scale, focal points, what's fighting the space and why.
+- **Taste and a coherent point of view** — a deliberate, cohesive design
+  direction with a rationale, not a mood-board average of the internet.
+- **Real, budget-honest sourcing** — actual buyable products that fit the space,
+  the style, and the stated budget — the unglamorous work clients pay for.
+- **The full service, end to end** — understand → diagnose → direct → source →
+  visualize, so the user gets a finished, actionable result, not homework.
+- **Trust** — grounded in the user's actual photos and constraints; it earns the
+  confidence a client places in a designer they hired.
+
+This is the bar the whole pipeline serves. "Replaces an interior designer" is the
+test of done, not a tagline.
+
 ## What we're building
-An AI interior-design copilot. A user photographs a room (often many angles),
-optionally adds a floor plan and free-text notes, and the app holistically
-understands the space, diagnoses what's working/missing, sets a design direction,
-sources real products in budget, and renders mockups — end to end.
+An AI interior-design copilot that stands in for a professional designer. A user
+photographs a room (often many angles), optionally adds a floor plan and free-text
+notes, and the app holistically understands the space, diagnoses what's
+working/missing, sets a design direction, sources real products in budget, and
+renders mockups — end to end.
 
 ## Who it's for
 Primarily **Gen Z and millennials**: design-literate, mobile-first, taste-driven,
