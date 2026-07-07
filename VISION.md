@@ -67,6 +67,27 @@ Concretely, weight work toward:
 Not every change is a feature — paying down reliability, latency, and cost debt
 is directly commercial because it protects the margin and the churn rate.
 
+## Positioning & the value anchor (how GTM leads)
+The north star above is also the **positioning**. Marketing, store copy, and
+outreach should lead with the category-defining promise — *the interior designer
+in your pocket; designer-quality results without hiring a designer* — not a
+feature list ("AI room generator", "photo → mockup"). Sell the outcome a designer
+delivers and the fee it replaces, not the mechanism.
+- **The value anchor is a designer's fee.** The honest comparison isn't other
+  apps — it's hiring a pro (commonly hundreds to thousands of dollars per room,
+  or ~$100–200+/hr). That gap is the willingness-to-pay story: a designer-grade
+  result for a rounding error on a designer's invoice. Frame the business case
+  and pricing against that anchor — cite **real, sourced** designer-cost
+  benchmarks; never invent a number to make the ratio look better.
+- **Proof, not adjectives.** "Replaces a designer" is a strong claim, so it must
+  be *earned and shown* — before/after, the reasoning behind the direction, the
+  real sourced products — never asserted with hype or fabricated testimonials.
+  Overclaiming a result the product can't yet deliver is off-brand and off-vision.
+- **This steers the GTM artifacts.** brand kit, store listing/ASO, landing,
+  email, and the business case should all reconcile to this promise and this
+  anchor; a marketing asset that positions the app as a generic "AI design tool"
+  is a positioning bug to fix.
+
 ## What "good" looks like (optimize for these)
 - **Trustworthy output.** Recommendations are grounded in the actual photos and
   the user's constraints — no hallucinated specificity. The maker/checker
