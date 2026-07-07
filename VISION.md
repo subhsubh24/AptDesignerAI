@@ -5,11 +5,36 @@ so work builds toward the product, not just toward "tests pass." Operating rules
 live in `AGENTS.md` (aka `CLAUDE.md`); this file is the *why* and the *what good
 looks like*.
 
+## The north star — be the best interior designer, so nobody needs to hire one
+The ambition is not "a helpful design tool." It is to **deliver the judgment,
+taste, and end-to-end service of the best-of-the-best professional interior
+designer** — and to do it so well that a user **never needs to hire one again**.
+Every run should ask: *would an elite, in-demand interior designer be proud to
+put their name on this — and would this client happily pay a designer's fee for
+it?* If not, the product isn't there yet.
+
+That means matching a top designer on the things that actually make one worth
+their fee, not just generating pretty pictures:
+- **Spatial & functional judgment** — reads the room like a pro: proportion,
+  flow, light, scale, focal points, what's fighting the space and why.
+- **Taste and a coherent point of view** — a deliberate, cohesive design
+  direction with a rationale, not a mood-board average of the internet.
+- **Real, budget-honest sourcing** — actual buyable products that fit the space,
+  the style, and the stated budget — the unglamorous work clients pay for.
+- **The full service, end to end** — understand → diagnose → direct → source →
+  visualize, so the user gets a finished, actionable result, not homework.
+- **Trust** — grounded in the user's actual photos and constraints; it earns the
+  confidence a client places in a designer they hired.
+
+This is the bar the whole pipeline serves. "Replaces an interior designer" is the
+test of done, not a tagline.
+
 ## What we're building
-An AI interior-design copilot. A user photographs a room (often many angles),
-optionally adds a floor plan and free-text notes, and the app holistically
-understands the space, diagnoses what's working/missing, sets a design direction,
-sources real products in budget, and renders mockups — end to end.
+An AI interior-design copilot that stands in for a professional designer. A user
+photographs a room (often many angles), optionally adds a floor plan and free-text
+notes, and the app holistically understands the space, diagnoses what's
+working/missing, sets a design direction, sources real products in budget, and
+renders mockups — end to end.
 
 ## Who it's for
 Primarily **Gen Z and millennials**: design-literate, mobile-first, taste-driven,
@@ -41,6 +66,27 @@ Concretely, weight work toward:
 
 Not every change is a feature — paying down reliability, latency, and cost debt
 is directly commercial because it protects the margin and the churn rate.
+
+## Positioning & the value anchor (how GTM leads)
+The north star above is also the **positioning**. Marketing, store copy, and
+outreach should lead with the category-defining promise — *the interior designer
+in your pocket; designer-quality results without hiring a designer* — not a
+feature list ("AI room generator", "photo → mockup"). Sell the outcome a designer
+delivers and the fee it replaces, not the mechanism.
+- **The value anchor is a designer's fee.** The honest comparison isn't other
+  apps — it's hiring a pro (commonly hundreds to thousands of dollars per room,
+  or ~$100–200+/hr). That gap is the willingness-to-pay story: a designer-grade
+  result for a rounding error on a designer's invoice. Frame the business case
+  and pricing against that anchor — cite **real, sourced** designer-cost
+  benchmarks; never invent a number to make the ratio look better.
+- **Proof, not adjectives.** "Replaces a designer" is a strong claim, so it must
+  be *earned and shown* — before/after, the reasoning behind the direction, the
+  real sourced products — never asserted with hype or fabricated testimonials.
+  Overclaiming a result the product can't yet deliver is off-brand and off-vision.
+- **This steers the GTM artifacts.** brand kit, store listing/ASO, landing,
+  email, and the business case should all reconcile to this promise and this
+  anchor; a marketing asset that positions the app as a generic "AI design tool"
+  is a positioning bug to fix.
 
 ## What "good" looks like (optimize for these)
 - **Trustworthy output.** Recommendations are grounded in the actual photos and
