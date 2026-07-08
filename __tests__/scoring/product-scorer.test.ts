@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeFinalItemScore, determineVerdict } from "@/lib/scoring/product-scorer";
+import { computeFinalItemScore, determineVerdict, groundConfidence } from "@/lib/scoring/product-scorer";
 import type { ProductScores } from "@/lib/types/scoring";
 
 function makeScores(override: Partial<ProductScores> = {}): ProductScores {
@@ -176,5 +176,69 @@ describe("determineVerdict", () => {
     expect(determineVerdict(5.0, 0)).toBe("maybe");
     // Just below maybe
     expect(determineVerdict(4.99, 10)).toBe("no");
+  });
+});
+
+describe("groundConfidence", () => {
+  const ALL_PRESENT = {
+    hasProductImage: true,
+    hasDimensions: true,
+    hasMaterials: true,
+    hasPrice: true,
+    hasDescription: true,
+    hasRoomImages: true,
+    mathValidationRan: true,
+  };
+
+  it("returns the raw confidence unchanged when every signal is present", () => {
+    expect(groundConfidence(8, ALL_PRESENT)).toBe(8);
+    expect(groundConfidence(5.5, ALL_PRESENT)).toBe(5.5);
+  });
+
+  it("applies each individual signal's penalty exactly", () => {
+    // Each penalty is subtracted from a high raw score so nothing hits the clamp.
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasProductImage: false })).toBe(7.5); // -1.5
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasDimensions: false })).toBe(8); // -1.0
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasMaterials: false })).toBe(8.5); // -0.5
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasPrice: false })).toBe(8.7); // -0.3
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasDescription: false })).toBe(8.8); // -0.2
+    expect(groundConfidence(9, { ...ALL_PRESENT, hasRoomImages: false })).toBe(8); // -1.0
+    expect(groundConfidence(9, { ...ALL_PRESENT, mathValidationRan: false })).toBe(8.5); // -0.5
+  });
+
+  it("stacks penalties cumulatively", () => {
+    // Missing product image (-1.5) + dimensions (-1.0) + room images (-1.0) = -3.5
+    expect(
+      groundConfidence(9, {
+        ...ALL_PRESENT,
+        hasProductImage: false,
+        hasDimensions: false,
+        hasRoomImages: false,
+      })
+    ).toBe(5.5);
+  });
+
+  it("clamps the floor to 1 when penalties exceed the raw score", () => {
+    // All signals missing = -5.0 total penalty; from a raw 3 that would be -2 → clamp to 1.
+    const noneMissing = {
+      hasProductImage: false,
+      hasDimensions: false,
+      hasMaterials: false,
+      hasPrice: false,
+      hasDescription: false,
+      hasRoomImages: false,
+      mathValidationRan: false,
+    };
+    expect(groundConfidence(3, noneMissing)).toBe(1);
+    expect(groundConfidence(1, ALL_PRESENT)).toBe(1);
+  });
+
+  it("clamps the ceiling to 10", () => {
+    expect(groundConfidence(12, ALL_PRESENT)).toBe(10);
+  });
+
+  it("rounds to one decimal place", () => {
+    // 8.85 with no penalties stays 8.85 → rounds to 8.9 (Math.round(88.5)/10).
+    expect(groundConfidence(8.85, ALL_PRESENT)).toBe(8.9);
   });
 });
