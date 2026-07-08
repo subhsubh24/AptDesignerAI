@@ -9,11 +9,23 @@ arr_year1:
   optimistic: 276800
 planning_case: base
 floor_usd: 100000
-floor_met_year1: true
-time_to_floor: "base case exceeds the $100K floor in year 1 (with Pro Annual tier)"
-as_of: 2026-07-04
+floor_met_year1: false
+time_to_floor: "$122.9K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$58-60K because the Pro subscriber pools compound over time; the $100K floor is reached ~year 3 as the monthly and annual Pro pools fill toward steady state"
+as_of: 2026-07-08
 ```
 
+> **Floor-timing honesty recompute 2026-07-08 (Run 71).** Corrected an overstatement:
+> the summary previously read `floor_met_year1: true` ("exceeds the $100K floor in year 1"),
+> but the $122.9K base ARR is built entirely from **steady-state** subscriber pools (~171
+> monthly + ~167 annual Pro subs, below) that are fed by only ~12 + 4 net-new subs/month and
+> take years to accumulate. The honest **year-1 exit run-rate is ~$58–60K** (month-12 pools:
+> ~100 monthly Pro × $34.30 + ~42 annual Pro × $23.28 + ~$487/mo apartment ≈ $4.9K MRR ≈
+> $59K ARR); the **$100K floor is reached ~year 3** as the pools compound — consistent with
+> Scenario A's own note that the identical steady-state model "requires 2–3 years to compound
+> to $100K." Set `floor_met_year1: false` and rewrote `time_to_floor`; the $122.9K figure is
+> relabelled **steady-state** throughout the body so the summary reconciles. The ARR magnitude,
+> margin math, and levers are unchanged — only the year-1 *timing* claim was wrong.
+>
 > **COGS recompute 2026-07-04 (Run 61).** Corrected the per-analysis unit-economics
 > to the model the code actually uses: the reasoning-heavy stages (apartment/area
 > understanding + diagnosis) run at HIGH thinking and route to `TEXT_TIERS.mid` =
@@ -227,6 +239,13 @@ Paid conversions: 1,000 × 0.04 = 40/month
 Total MRR: $10,240  →  ARR: ~$122,900/year ✓✓ (+23% vs monthly-only model)
 ```
 
+> **Steady-state, not year-1.** The $122,900 above is the ARR once the monthly/annual Pro
+> pools have filled to steady state. Because those pools are fed by only ~12 + 4 net-new
+> subs/month against 7%/2.4% monthly churn, they compound over years: the **year-1 exit
+> run-rate is ~$58–60K** and the **$100K floor is reached ~year 3** (see the summary block's
+> `time_to_floor`). The steady-state figure is the right planning anchor for whether the model
+> *can* clear the floor; the ramp is the honest timeline for *when*.
+
 ARR is unchanged from the prior 50%-organic version: **organic share moves marketing COST
 and net margin, not revenue.** Installs × retention × conversion × price set the $122.9K ARR;
 the acquisition mix sets how much of it survives marketing spend. So the floor is still
@@ -241,8 +260,9 @@ cleared at $122.9K — the honest question is net margin.
 | 50% | 2,000 | $103,200 | **+$19,700** |
 | 65% | 1,400 | $72,240 | **+$50,660** |
 
-**Verdict:** The base case clears the **$100K ARR floor** at $122.9K regardless of acquisition
-mix. But at the honest 40%-organic anchor it is only **≈ break-even on net margin** with
+**Verdict:** The base case clears the **$100K ARR floor** at its **steady-state** $122.9K
+regardless of acquisition mix (year-1 exit run-rate ~$58–60K; floor reached ~year 3 as the
+pools compound). But at the honest 40%-organic anchor it is only **≈ break-even on net margin** with
 pure paid acquisition — so sustainable profit depends on driving non-paid share toward 50%+.
 That is precisely what the two **built** levers below are for; the annual tier (which lifts
 LTV by cutting renewal churn on 25% of Pro conversions from 84%/yr to 25%/yr) compounds the
@@ -358,9 +378,11 @@ and the growth model doesn't work regardless of installs.
 
 ## The honest statement
 
-The base case (Scenario B) shows a credible path to **$122.9K ARR** — 23% above the $100K
-floor — but it is not automatic. The **floor is revenue-secured** at 4,000 installs × 4%
-conversion regardless of acquisition mix; the honest constraint is **net margin**, which is
+The base case (Scenario B) shows a credible path to a **steady-state $122.9K ARR** — 23% above
+the $100K floor — but it is neither automatic nor instant: the year-1 exit run-rate is ~$58–60K
+and the floor is reached **~year 3** as the monthly/annual Pro pools compound. The **floor is
+revenue-secured** at 4,000 installs × 4% conversion regardless of acquisition mix; the honest
+constraint is **net margin**, which is
 ≈ break-even at the 40%-organic anchor and turns solidly positive as non-paid share rises.
 Reaching it requires five things:
 - Consistently reaching 4,000 installs/month (strong ASO + organic channels)
