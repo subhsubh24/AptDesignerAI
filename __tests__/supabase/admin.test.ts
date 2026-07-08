@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { assertServiceRoleKey } from "@/lib/supabase/admin";
 
 // The admin client memoizes a module-level singleton and reads env at call time,
 // so each test imports the module FRESH after arranging env. We re-register the
@@ -85,5 +86,57 @@ describe("getAdminClient", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+// Build a legacy-format Supabase JWT ("header.payload.signature") whose payload
+// carries the given `role` claim. The signature is never verified — assertion
+// only decodes the payload — so a dummy signature segment is sufficient.
+function jwtWithRole(role: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ role, iss: "supabase" })).toString("base64url");
+  return `${header}.${payload}.dummy-signature`;
+}
+
+// The §28/§32 fail-loud guard: a present-but-WRONG SUPABASE_SERVICE_ROLE_KEY
+// (the anon key pasted in, or a publishable key) constructs a client fine but
+// makes every admin call fail with a cryptic "User not allowed" — which once
+// fully blocked signup in prod. assertServiceRoleKey rejects such a key at
+// construction with an actionable message. These tests lock that contract so a
+// refactor can never silently reopen the hole.
+describe("assertServiceRoleKey", () => {
+  it("rejects an anon-role JWT (the classic wrong-key paste)", () => {
+    expect(() => assertServiceRoleKey(jwtWithRole("anon"))).toThrow(/"anon"/);
+    // The message must be actionable — name the fix, not just "invalid".
+    expect(() => assertServiceRoleKey(jwtWithRole("anon"))).toThrow(/service_role/);
+  });
+
+  it("rejects any non-service_role JWT (e.g. authenticated)", () => {
+    expect(() => assertServiceRoleKey(jwtWithRole("authenticated"))).toThrow(/"authenticated"/);
+  });
+
+  it("accepts a genuine service_role JWT", () => {
+    expect(() => assertServiceRoleKey(jwtWithRole("service_role"))).not.toThrow();
+  });
+
+  it("rejects a publishable (sb_publishable_…) key", () => {
+    expect(() => assertServiceRoleKey("sb_publishable_abc123")).toThrow(/publishable/);
+  });
+
+  it("accepts the newer sb_secret_… secret-key format (not a decodable JWT, not publishable)", () => {
+    // jwtRole() returns null for the non-JWT sb_secret_ format, and it is not a
+    // publishable key — so the guard must let it through to the runtime client.
+    expect(() => assertServiceRoleKey("sb_secret_abc123")).not.toThrow();
+  });
+
+  it("accepts an opaque non-JWT key (unknown format falls through, not a false reject)", () => {
+    // The guard only rejects keys it can PROVE are wrong; an undecodable key is
+    // allowed through rather than blocking a valid but unrecognized format.
+    expect(() => assertServiceRoleKey("service-role-key")).not.toThrow();
+  });
+
+  it("does not throw on a malformed three-segment token whose payload isn't valid base64 JSON", () => {
+    // jwtRole() catches the decode failure and returns null → no false reject.
+    expect(() => assertServiceRoleKey("a.b.c")).not.toThrow();
   });
 });
