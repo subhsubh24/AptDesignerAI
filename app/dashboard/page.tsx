@@ -1010,7 +1010,7 @@ export default function DashboardPage() {
                 {/* Status badge — top-left */}
                 <div className="absolute top-3 left-3">
                   {isDone ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-semibold shadow">
                       <CheckCircle2 className="h-3 w-3" /> Done
                     </span>
                   ) : isInProgress ? (
@@ -1018,7 +1018,7 @@ export default function DashboardPage() {
                       In Progress
                     </span>
                   ) : isOutstanding ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-semibold shadow">
                       Outstanding
                     </span>
                   ) : null}
