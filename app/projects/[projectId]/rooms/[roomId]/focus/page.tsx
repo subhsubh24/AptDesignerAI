@@ -38,6 +38,7 @@ import { PageTransition, StaggerList, StaggerItem, ScrollReveal } from "@/compon
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 import { trackEvent } from "@/lib/analytics";
+import { toast } from "@/components/ui/toast";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -512,9 +513,11 @@ export default function FocusPage() {
       if (res.ok) {
         trackEvent("design_saved", { stage });
         setSavedStage(stage);
+      } else {
+        toast.error("Couldn't save design", "Please try again in a moment.");
       }
     } catch {
-      // silently fail — non-critical
+      toast.error("Couldn't save design", "Check your connection and try again.");
     }
     setSaving(false);
   };
@@ -635,16 +638,22 @@ export default function FocusPage() {
       .sort((a, b) => (b.product_evaluations?.[0]?.final_item_score || 0) - (a.product_evaluations?.[0]?.final_item_score || 0))
       .slice(0, 5);
 
-    const res = await fetch("/api/mockups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room_id: roomId, product_ids: tierProducts.map((p) => p.id) }),
-    });
+    try {
+      const res = await fetch("/api/mockups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_id: roomId, product_ids: tierProducts.map((p) => p.id) }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      setMockupUrl(data.image_url);
-      setShowMockupOverlay(true);
+      if (res.ok) {
+        const data = await res.json();
+        setMockupUrl(data.image_url);
+        setShowMockupOverlay(true);
+      } else {
+        toast.error("Couldn't generate the mockup", "Please try again in a moment.");
+      }
+    } catch {
+      toast.error("Couldn't generate the mockup", "Check your connection and try again.");
     }
     setGeneratingMockup(false);
   };
@@ -664,20 +673,34 @@ export default function FocusPage() {
         setStep("manual_results");
       } else {
         const err = await res.json().catch(() => ({ error: "Failed to evaluate" }));
-        console.error("Manual sourcing error:", err);
+        toast.error(
+          "Couldn't evaluate those products",
+          typeof err?.error === "string" ? err.error : "Please check the links and try again.",
+        );
       }
-    } catch (err) {
-      console.error("Manual sourcing error:", err);
+    } catch {
+      toast.error("Couldn't evaluate those products", "Check your connection and try again.");
     }
     setManualLoading(false);
   };
 
   const handleSaveAndContinue = async () => {
-    await fetch(`/api/rooms/${roomId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "completed" }),
-    });
+    // Mark this room complete FIRST — if this fails, do not navigate away, or the
+    // user would leave believing the room is done while the server still has it open.
+    try {
+      const patchRes = await fetch(`/api/rooms/${roomId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      if (!patchRes.ok) {
+        toast.error("Couldn't mark this room complete", "Please try again in a moment.");
+        return;
+      }
+    } catch {
+      toast.error("Couldn't mark this room complete", "Check your connection and try again.");
+      return;
+    }
 
     // Find the next incomplete room in this project
     try {
