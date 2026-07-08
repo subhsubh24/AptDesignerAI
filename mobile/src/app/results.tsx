@@ -154,7 +154,15 @@ async function analyzeRoom(
     throw new Error(body.error ?? `Analysis failed (${analyzeResp.status})`);
   }
 
-  const json = await analyzeResp.json() as { analysis: AnalysisResult };
+  const json = await analyzeResp.json() as { analysis?: AnalysisResult };
+  // Validate the payload before returning. Without this, a malformed 200 (e.g.
+  // `{}` or a missing `analysis` field) returns undefined, the screen reaches
+  // stage 'done' with no analysis, and the user is left staring at a BLANK
+  // screen — no results, no error, no retry. Throw so run()'s catch surfaces
+  // the retryable error UI instead.
+  if (!json.analysis || typeof json.analysis !== 'object') {
+    throw new Error('We couldn’t read the analysis result. Please try again.');
+  }
   return json.analysis;
 }
 
