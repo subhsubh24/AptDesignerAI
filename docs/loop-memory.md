@@ -4,6 +4,45 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-08 (Run 70) — 4 disjoint value-bar changes: 1 A1 silent-failure guard on the CORE journey + 1 F2 pure-logic test suite + 2 a11y/design contrast fixes. ALL 4 MERGED.
+
+### State on entry
+- Cold container. Reset to origin tip `99fdd9e` (post Run 69 #491-493 + housekeeping #495 + CI auto-migrate #496). `npm install` root + mobile. Baseline gate GREEN: tsc clean, **1822 tests** pass / 11 skip, determinism clean, eslint 0 (root), mobile tsc clean.
+- **DEEP AUDIT NOT due** — Run 69 ran the 6-lens sweep earlier today (2026-07-08); next due ~Run 72.
+- QUALITY_SCORECARD (as_of 2026-07-05, overall **B**, ship_gate_met false): **design_taste (B) remains the SOLE ship-critical dim below A**; its 2 capping items unchanged (authed axe on seeded diagnosis/mockups/compare; F7 committed screenshots) — both CI/auth-stack-bound, unverifiable in-sandbox (supabase-local: registry 503 + rlimit-denied container init, per Run 67/68/69). NOT attempted blind. GROWTH_STATUS pre-launch 0/null → no lever signal.
+
+### Scouting — 7 parallel Haiku lenses
+- **A1 web correctness:** rich vein in the CORE `focus/page.tsx` — 4 handlers swallow failures (see shipped). dashboard photo-load (decorative degradation, deferred — conflicts file-wise with #499 anyway).
+- **F2 coverage:** `identifiable-brands.ts` genuinely under-covered (only isAllowListedBrand had 2 asserts) → shipped. `diagnosis-examples.ts` weaker (only 1 exported fn; helpers unexported) → deferred.
+- **SECURITY/RLS: CLEAN** through 028/029 (RLS solid, entitlements fail-CLOSED in prod, SSRF guarded, no secrets) → no busywork. **STORE readiness CLEAN.**
+- **MOBILE:** #500 linkPrimary blue shipped. **VERIFIED-DOWN a scout false positive:** the "off-brand blue splash gradient, first visual users see" is `AnimatedIcon` (expo-logo + blue gradient) = DEAD template code (exported, never rendered; real splash is on-brand `AnimatedSplashOverlay`) → dropped as churn.
+- **DESIGN/A11Y:** #499 dashboard badges shipped (real WCAG AA fail). SharedDesignView priority badges are dark-text-on-light (AA-passing) → taste not a11y, deferred (semantic keep/remove coloring defensible, consistent with prior runs treating semantic feedback colors as acceptable).
+- **ARTIFACT:** pricing/processors/README consistent. The share-links-marketed-Pro-but-ungated inconsistency is a monetization DECISION (gate behind Pro vs keep free as a viral loop) touching the business case → deferred, not forced unilaterally.
+- **PERF:** all findings inert under the in-memory data layer (topKSimilar N+1 needs a human pgvector migration AND a MemoryClient that supports .rpc → deferred, same as #385). No perf change cleared the bar.
+
+### Shipped 4 file-disjoint changes (each own branch off 99fdd9e; 2 Sonnet reviewers each — 8/8 APPROVE)
+- **#497 (C1) fix(a1)** — the core per-room `focus/page.tsx` swallowed failures on 4 action handlers: handleSaveDesign (fake success), handleGenerateMockup (unguarded fetch throw → stuck spinner, no error), handleManualSubmit (console-only), handleSaveAndContinue (the "mark room completed" PATCH was ENTIRELY unchecked → a failed completion still navigated the user away believing the room was done = state/server desync / progress loss). Fixed via the app's existing `toast.error` primitive + block navigation in handleSaveAndContinue unless the completion PATCH succeeds. Reviewers verified against the real PATCH endpoint semantics.
+- **#498 (C2) test(f2)** — `identifiable-brands.ts` (product-identifier prompt + confidence-floor gate) had only 2 thin asserts → +18 tests: getIdentifiableBrands env-override parse/merge/dedup-by-lowercase/malformed-filter + never-throw fallbacks (bad JSON / non-array / missing file), lookupBrand case/trim, formatBrandsForPrompt hint-slice + limit boundaries. Real temp file, cleaned up in afterEach; deterministic (no Date.now/random).
+- **#499 (C3) a11y** — dashboard Done/Outstanding badges = white on bg-emerald-600/90 (~3.4:1) + bg-amber-500/90 (~1.9:1), both FAILING WCAG AA (10px text; /90 composited over room photos = background-dependent) → solid bg-emerald-700 (~5.5:1) + bg-amber-700 (~5.0:1), semantics kept, In Progress badge untouched.
+- **#500 (C4) design(mobile)** — ThemedText `linkPrimary` hardcoded `color: '#3c87f7'` (off-brand blue that ALSO failed WCAG AA ≈3.3:1 on the light bg) overriding the theme → routed through the theme brand `accent` (#b4501e/#d4733e, AA-safe), hardcoded hex removed. Explicit themeColor still wins.
+
+### Outcome / bookkeeping
+- All 4 both-Sonnet-APPROVED, auto-merge SQUASH, file-disjoint (focus page / test / dashboard / mobile primitive). **ALL 4 MERGED** (#497→82db90d, #498→c9c869d, #499→99c0018, #500→82a86da; required checks verify+build+mobile+lint green; default tip 82a86da). Baseline 1822 → **1840** (+18 F2).
+- No new migrations/secrets → PENDING_OPS unchanged. **No ROADMAP box ticked** (#497 → Track A/A1 already [x]; #498 → F2 already [x]; #499/#500 feed auditor-owned design_taste but don't touch its capping axis) — never mass-tick, never self-grade.
+- Readiness NOT attempted (design_taste still auditor-owned at B; its closure is CI-verifiable-only build work, not doable blind in-sandbox).
+
+### Lessons
+1. **VERIFY scout claims about "used"/"first visual" before building.** The mobile splash "violation" was `AnimatedIcon` — exported dead template code, never rendered. The real splash (`AnimatedSplashOverlay`) is already on-brand. Cheap Haiku discovery is a LEAD; confirm the component is actually mounted before treating a color as a shipped violation.
+2. **An unchecked mutation PATCH immediately before navigate() is the highest-severity silent-failure class** — it's progress-loss / state desync, not just a missing toast. Gate the navigation on the write actually succeeding (early-return on !ok), don't just add a toast.
+3. **A translucent badge fill (`/90`) over user-content images makes a static contrast ratio meaningless** — the effective color depends on the photo behind it. Solid fills are both the a11y fix and a determinism win.
+4. **design_taste remains the lone ship blocker and is genuinely CI/auth-stack-bound here.** Its closure = the "extend the render cassette to the text stages → seed authed diagnosis/mockups/compare → authed axe + toHaveScreenshot baselines" push (Run-65-flagged), a CI-only-verifiable focused run. Do NOT attempt it blind in-sandbox (supabase-local unrunnable both axes).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 72** (Run 69 ran the last one 2026-07-08).
+- **design_taste (ship-critical, B) is STILL the lone ship blocker** — CI/cassette-bound (see lesson 4). Highest-value convergence work but needs push-and-watch-CI, not in-sandbox verification.
+- **DO-NOT-RE-FLAG:** focus-page 4-handler silent failures (fixed #497); identifiable-brands coverage (#498); dashboard Done/Outstanding badge contrast (#499); mobile linkPrimary blue (#500). Security CLEAN through 028/029. Perf N+1 inert under the in-memory store. `AnimatedIcon` blue gradient is DEAD code (not a shipped violation). SharedDesignView priority badges pass AA (taste, not a11y). The share-links-Pro-gating inconsistency is an unresolved monetization DECISION (gate vs free viral loop) — needs an owner call, not a unilateral factory fix.
+- **A1/F2 carry (lower value):** dashboard building-photo load (decorative degradation); diagnosis-examples.ts (only 1 exported fn, helpers unexported — heavier).
+
 ## Run 2026-07-08 (Run 69) — DEEP AUDIT (6-lens) + 3 disjoint value-bar changes (1 mobile null-crash fix + 1 security-critical test + 1 living-artifacts doc). ALL 3 MERGED.
 
 ### State on entry
