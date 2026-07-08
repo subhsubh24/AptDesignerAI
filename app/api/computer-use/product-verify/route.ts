@@ -13,6 +13,7 @@ import { runProductVerifier } from "@/lib/agents/computer-use/product-verifier";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { validateExternalUrl } from "@/lib/utils/url-validator";
 
 const log = createLogger("api-computer-use-product-verify");
 
@@ -61,6 +62,15 @@ export async function POST(request: Request) {
 
   if (!product_url || typeof product_url !== "string") {
     return NextResponse.json({ error: "product_url required" }, { status: 400 });
+  }
+
+  // SSRF guard: the verifier drives Browserbase to fetch this URL server-side, so
+  // an authenticated caller could otherwise point it at internal/metadata hosts
+  // (169.254.169.254, localhost, private ranges). Mirror the guard the sibling
+  // ingest route already applies before any server-side fetch.
+  const validation = validateExternalUrl(product_url);
+  if (!validation.valid) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
   try {
