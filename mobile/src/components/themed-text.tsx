@@ -14,7 +14,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   return (
     <Text
       style={[
-        { color: theme[themeColor ?? 'text'] },
+        { color: themeColor ? theme[themeColor] : type === 'linkPrimary' ? theme.accent : theme.text },
         type === 'default' && styles.default,
         type === 'defaultSemiBold' && styles.defaultSemiBold,
         type === 'title' && styles.title,
@@ -69,7 +69,6 @@ const styles = StyleSheet.create({
   linkPrimary: {
     lineHeight: 30,
     fontSize: 14,
-    color: '#3c87f7',
   },
   code: {
     fontFamily: Fonts.mono,
