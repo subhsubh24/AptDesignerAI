@@ -4,6 +4,50 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-08 (Run 71) — 7 disjoint value-bar changes: 1 SSRF + 2× G2 PATCH validation + 1 A1 dashboard guard + 1 mobile blank-screen guard + 1 F2 test + 1 ship-critical business-case honesty fix (closes #486). ALL 7 MERGED.
+
+### State on entry
+- Cold container. Reset to origin tip `8b30d64` (post Run 70 #497-500 + housekeeping #501). `npm install` root + mobile. Baseline gate GREEN: tsc clean, **1840 tests** pass / 11 skip, determinism clean, eslint 0 (root), mobile tsc clean.
+- **DEEP AUDIT NOT due** — Run 69 ran the 6-lens sweep 2026-07-08; next due ~Run 72.
+- QUALITY_SCORECARD (as_of 2026-07-05, overall **B**, ship_gate_met false): **design_taste (B) remains the SOLE ship-critical dim below A** (functional_reality/correctness/security_rls/store_readiness/artifact_integrity/business_case_strength all A/A+); its 2 capping items (authed axe on seeded diagnosis/mockups/compare; F7 committed screenshots) are CI/auth-stack-bound, unverifiable in-sandbox per Runs 67-70 → NOT attempted blind. GROWTH_STATUS pre-launch 0/null → no lever signal.
+- Open-issue scan surfaced **#486 (business-case honesty, ship-critical, GTM-auditor-filed)** as actionable + sandbox-verifiable factory-owned work → became this run's anchor change.
+
+### Scouting — 7 parallel Haiku lenses
+- **A1 web correctness:** rich vein in `dashboard/page.tsx` — handleAnalyze silently reverted to setup on a failed apartment analysis (no error), room-notes PATCH console-only → shipped #504 (BuildingPhoto decorative-degradation deferred as before).
+- **SECURITY/RLS:** CLEAN through 029 EXCEPT one real NEW SSRF: `computer-use/product-verify` passed a user `product_url` into Browserbase server-side with no `validateExternalUrl()` (sibling ingest guards) → shipped #503.
+- **Track G/F hardening:** `rooms/[roomId]` + `products/[productId]` PATCH copied ALLOWED_KEYS straight to the DB with ZERO validation while the sibling POSTs validate (real G2 gap) → shipped #509 + #505.
+- **F2 coverage:** `groundConfidence()` (core scorer, 7 penalties, 0 coverage) → shipped #506. Validation formatters (access-constraints/budget-allocation) deferred as lower value.
+- **MOBILE:** `results.tsx` analyzeRoom unchecked `as {analysis}` cast → a malformed 200 renders a BLANK dead-end screen → shipped #507.
+- **a11y/design:** the toast/badge `info` blue variants (scout-flagged as VISION generic-blue violations) have **NO call sites** (only a doc-comment example) → DEAD → dropped as churn. Topbar emerald step-indicator = defensible semantic (done=green) → deferred.
+- **ARTIFACT:** pricing/processors/BUSINESS_CASE_SUMMARY consistent; the sole finding (email-lifecycle omits Pro Annual) is low-value AND entangled with the open #487 owner decision (Pro-Annual transactability pending migration 021) → deferred.
+
+### Shipped 7 file-disjoint changes (integration-tree → split-into-branches; gated once at 1846 tests; 2 Sonnet reviewers each)
+- **#503 (security) SSRF** — `app/api/computer-use/product-verify/route.ts` now `validateExternalUrl(product_url)` before `runProductVerifier` (Browserbase server-side fetch), mirroring the sibling ingest route. Reviewers noted the shared-validator residuals (DNS-rebinding, alt IP encodings, redirect-time) are pre-existing on both call sites → future shared-validator hardening, out of scope.
+- **#509 (G2) rooms PATCH validation** — string-length + **enum-membership** (room_type per migration 002's replacement constraint, status/budget_mode/sourcing_mode per 001) + **integer** budget_dollars + **non-empty** name/room_type (the only 2 NOT NULL cols) + array bounds → clean 400 instead of a DB 500. **Reviewer A REQUEST_CHANGES (cycle 1) → 3 real gaps fixed (see lessons).**
+- **#505 (G2) products PATCH validation** — mirrors the sibling POST bounds exactly (strings ≤2000, arrays ≤100/≤500, dimensions/metadata objects ≤50KB, finite price/user_rating); all 14 ALLOWED_KEYS covered 1:1.
+- **#504 (A1) dashboard silent failures** — handleAnalyze failure/throw now `toast.error` + reverts; room-notes PATCH failure now `toast.error` (informs, still navigates — the note is optional; toast persists across client nav via the root ToastProvider singleton).
+- **#507 (mobile) blank-screen guard** — `analyzeRoom` throws on a missing/non-object `analysis` so `run()`'s catch shows the existing retry UI instead of a blank stage-'done' screen; type loosened to `analysis?` (tsc narrows after the guard).
+- **#506 (F2) groundConfidence tests** — +6 tests: each of 7 signal penalties isolated (catches a mis-wired signal→penalty), stacking, floor clamp to 1, ceiling clamp to 10, `8.85→8.9` rounding.
+- **#508 (docs, ship-critical honesty) BUSINESS_CASE #486** — `floor_met_year1: true→false`; `time_to_floor` rewritten to the honest ramp (year-1 exit run-rate ≈$58-60K from the doc's own month-12 pool math, floor ~year 3); $122.9K relabelled steady-state across summary/Scenario B/sensitivity table/honest-statement; arr_year1.base stays 122900 (body+preflight consistent); no inputs inflated. Both reviewers independently re-derived the ~$59K run-rate + confirmed reconciliation.
+
+### Outcome / bookkeeping
+- **ALL 7 MERGED** (#503→d519696, #504→f135422, #505→98c79f2, #506→aeefd0d, #507→90429be, #508→219ef4c, #509→a3b93db; required checks verify+build+mobile+lint green; final default tip 98c79f2). Baseline 1840 → **1846** (+6 F2).
+- Closed **#486** (fix merged #508) with a reference comment; left the grade to the independent auditor (maker ≠ checker).
+- No new migrations/secrets → PENDING_OPS unchanged. **No ROADMAP box ticked** — G2 validation is partial (not every write endpoint re-audited, so G2 stays [ ]); #504→A1, #506→F2, #507→Track B all already [x]; #508 fixes honesty but the DoD business-case box stays [ ] (still needs the maximization levers).
+- Readiness NOT attempted (design_taste still auditor-owned at B; CI-verifiable-only closure).
+
+### Lessons
+1. **A scout "design violation" in a shared UI primitive must be confirmed to have real CALL SITES before building.** The toast/badge `info` blue variants read as VISION generic-blue violations but had zero usages (only a doc-comment `toast.info(...)` example) → dead code; fixing them would have been churn. Grep for actual call sites, not just the definition.
+2. **Server-side validation that duplicates DB CHECK/NOT-NULL constraints must be verified against the ACTUAL current migration.** `room_type`'s live constraint is migration 002's 10-value replacement, NOT 001's stale 5-value list; an over-restrictive allow-list would REJECT legitimate values (a worse regression than the gap). Cross-check the enum against what the app actually sends (getRoomSections, the Select options) before shipping.
+3. **A present-but-null value slips past `v !== null`-guarded checks and 500s at a NOT NULL column.** Validate NOT NULL columns (here name/room_type) explicitly with a "present ⇒ non-empty string" check; the generic string-limit loop that skips null is not enough.
+4. **The integration-tree → split-into-per-change-branches pattern gates a large disjoint batch ONCE** (7 changes, one tsc/test/determinism/eslint run) then reviews+merges independently — efficient and conflict-free when every change is file-disjoint.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 72** (Run 69 ran the last one 2026-07-08). Run the full sweep BEFORE scouting next run.
+- **design_taste (ship-critical, B) is STILL the lone ship blocker** — CI/cassette-bound (extend the render cassette to the text stages → seed authed diagnosis/mockups/compare → authed axe + toHaveScreenshot baselines). Highest-value convergence work but needs push-and-watch-CI, not in-sandbox verification.
+- **DO-NOT-RE-FLAG:** product-verify SSRF (fixed #503); rooms/products PATCH validation (fixed #509/#505); dashboard handleAnalyze + room-notes silent failures (fixed #504); mobile results blank-screen (fixed #507); groundConfidence coverage (#506); BUSINESS_CASE floor-timing honesty (fixed #508, #486 closed). Security CLEAN through 029. toast/badge `info` blue variants are DEAD (no call sites). Topbar emerald step-indicator = defensible semantic. email-lifecycle Pro-Annual + share-links-Pro-gating (#502) are entangled with owner decisions (#487/#502) — not unilateral factory fixes.
+- **Track G carry:** G2 has more write endpoints to potentially validate (rate-limit-only gaps on projects PUT/email-preferences/bundles/products POST — lower value, RLS-confined); G1 rate-limiting + G4 auth-hardening still open. F2 formatters (access-constraints/budget-allocation) are cleanly testable carry.
+
 ## Run 2026-07-08 (Run 70) — 4 disjoint value-bar changes: 1 A1 silent-failure guard on the CORE journey + 1 F2 pure-logic test suite + 2 a11y/design contrast fixes. ALL 4 MERGED.
 
 ### State on entry
