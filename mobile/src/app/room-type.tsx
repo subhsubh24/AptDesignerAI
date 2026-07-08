@@ -22,7 +22,7 @@ const ROOM_OPTIONS: { value: string; label: string; hint: string }[] = [
 export default function RoomTypeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const handleSelect = useCallback(
     (value: string) => {

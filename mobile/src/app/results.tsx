@@ -161,7 +161,7 @@ async function analyzeRoom(
 export default function ResultsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   // peek (non-consuming) so back → room-type → results remounts correctly
   const [imageUri] = useState<string | null>(peekPendingImageUri);
