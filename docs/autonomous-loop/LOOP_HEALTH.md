@@ -26,30 +26,30 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-05
-  last_run: 66                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 64            # next DEEP AUDIT due ~Run 68
+  as_of: 2026-07-08
+  last_run: 71                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 69            # next DEEP AUDIT due ~Run 72
   this_run:
-    changes_shipped: 6           # #451-456 ALL merged (gate green, 2 Sonnet approvals each): 4× A1 silent-failure guards (mockups/bundles/setup/dashboard) + 2× F2 test (provider-factory routing+latch, deepseek request conversion)
-    changes_abandoned: 0         # every scouted candidate that cleared the value bar shipped; borderline items (mobile-hook .catch swallows, 1-line stale doc) correctly NOT selected
+    changes_shipped: 7           # #503-509 ALL merged (gate green, 2 Sonnet approvals each): 1 SSRF + 2× G2 PATCH validation (rooms/products) + 1 A1 dashboard guard + 1 mobile blank-screen guard + 1 F2 test (groundConfidence) + 1 ship-critical business-case honesty fix (closes #486)
+    changes_abandoned: 0         # every scouted candidate that cleared the value bar shipped; borderline items (dead toast/badge info-blue variants, topbar emerald semantic, email-lifecycle Pro-Annual entangled w/ owner #487) correctly NOT selected
     abandoned_reasons: []        # none abandoned this run
-    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all 6 (tsc/eslint/test root); baseline green on entry (1754 tests) → 1767 after +21 F2 tests
-    review_rejections: 0         # LOOP-3: 12 first-pass reviews; #456 (mockups) got ONE Reviewer-A REQUEST_CHANGES (unguarded .json() could leak a raw SyntaxError) → fixed (.json().catch + curated fallback, matching #445) + re-reviewed APPROVE. Not an abandon — the gate working.
+    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all 7 (tsc/eslint/test/determinism root + mobile tsc); baseline green on entry (1840 tests) → 1846 after +6 F2 tests
+    review_rejections: 1         # LOOP-3: 16 first-pass reviews; #509 (rooms PATCH) got ONE Reviewer-A REQUEST_CHANGES (3 real gaps: enum-membership not checked, budget_dollars not integer-checked, present-but-null on NOT NULL cols → all would 500 at the DB instead of a clean 400) → all 3 fixed + both cycle-2 reviewers APPROVE. Not an abandon — the gate working as designed.
     circuit_breaker_trips: 0
-    ci_flake: "journeys/supabase-setup-cli@v1 version:latest GitHub-API rate-limit recurred on #451 (cost 1 rerun_failed_jobs). Non-required check; the 6 required checks (verify/build/mobile/lint/validate-capabilities/validate-gtm) were green. Recurring — pinning a fixed CLI version would fix it, but .github/ is not loop-editable."
+    ci_flake: "none observed this run — all 7 required-check runs (verify/build/mobile/lint) went green first try; #505 took longer to auto-merge due to runner-queue congestion behind the post-merge CI, not a flake."
   rolling_7d:
-    merged_prs: 56               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
+    merged_prs: 57               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
-    recurring_failures:          # the journeys setup-cli rate-limit flake keeps costing ~1 rerun/run; harness-fixable only (pin the CLI version) but .github/ is not loop-editable
-      - "journeys/supabase-setup-cli@v1 version:latest GitHub-API rate-limit (Runs 64/65/66); mitigated each time by rerun_failed_jobs; non-required check so it never blocks the merge gate"
-    harness_proposals_open: 0    # note (not stuck): authed-surface changes (E2E/a11y) are only CI-verifiable here — no local auth stack (no supabase CLI/docker). The gates catch real issues, so this is friction not failure; fixes needing a live render (e.g. dashboard contrast) should be done in a way that can render the surface.
+    recurring_failures:          # the journeys setup-cli rate-limit flake (harness-fixable only — pin the CLI version — but .github/ is not loop-editable); not triggered this run
+      - "journeys/supabase-setup-cli@v1 version:latest GitHub-API rate-limit (intermittent, Runs 64-66); non-required check so it never blocks the merge gate"
+    harness_proposals_open: 0    # note (not stuck): authed-surface changes (E2E/a11y, design_taste closure) are only CI-verifiable here — no local auth stack (supabase-local unrunnable: registry 503 + rlimit-denied container init). The gates catch real issues, so this is friction not failure.
   validation:                    # self-validation capability gate (validation/CAPABILITIES.yml + the REQUIRED validate-capabilities check). Dashboard reads this block.
     enforced_in_ci: true         # validate-capabilities is a required status check (fails closed on undeclared/unmet capabilities)
     capabilities_total: 14       # external services declared in validation/CAPABILITIES.yml
     unmet: []                    # capabilities needing an owner-only secret to validate (ci_validatable:false). EACH unmet entry MUST also be an urgent OWNER_ACTION in PENDING_OPS so it surfaces to the owner.
-  signal: improving              # bootstrapping | improving | steady | churning | stuck
+  signal: steady                 # bootstrapping | improving | steady | churning | stuck
 ```
 
 ## How to read it (owner + loop)
