@@ -372,9 +372,13 @@ export default function DashboardPage() {
         trackEvent("analysis_complete");
         setStep("room_select");
       } else {
+        // Surface the failure — silently dropping back to "setup" leaves the
+        // user staring at the upload step with no idea their analysis failed.
+        toast.error("Couldn't analyze your apartment", "Something went wrong. Please check your photos and try again.");
         setStep("setup");
       }
     } catch {
+      toast.error("Couldn't analyze your apartment", "Something went wrong. Please check your connection and try again.");
       setStep("setup");
     } finally {
       setAnalyzing(false);
@@ -942,6 +946,10 @@ export default function DashboardPage() {
           });
           if (!res.ok) {
             console.error("[dashboard] Failed to save user_context:", await res.text());
+            // Don't let the save fail silently — the user typed notes and
+            // believes they were captured. Inform them; the note is optional to
+            // the room flow, so we still proceed rather than trapping them.
+            toast.error("Your notes didn't save", "We'll take you to the room, but please re-enter any notes there.");
           }
         } finally {
           setSavingContext(false);
