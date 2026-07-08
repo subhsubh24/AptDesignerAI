@@ -73,7 +73,7 @@ type Props = {
 
 export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [options, setOptions] = useState<DisplayOption[]>(FALLBACK_OPTIONS);
   const [selectedIndex, setSelectedIndex] = useState(0);

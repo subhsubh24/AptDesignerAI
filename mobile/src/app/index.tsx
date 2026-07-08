@@ -10,7 +10,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function DashboardScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   return (
     <ThemedView style={styles.container}>

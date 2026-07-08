@@ -15,7 +15,7 @@ import { setPendingImageUri } from '@/state/photo-session';
 export default function PhotoCaptureScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
 

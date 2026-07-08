@@ -22,7 +22,7 @@ interface LoginScreenProps {
 
 export function LoginScreen({ onSignup }: LoginScreenProps) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'unspecified' ? 'light' : colorScheme];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
