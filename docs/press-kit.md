@@ -128,6 +128,7 @@ Happy to do a demo call or provide a review account.
 | Free tier | 1 full room analysis, no card required |
 | Apartment plan | $29 one-time, unlimited rooms in one apartment |
 | Pro plan | $49/month, unlimited apartments |
+| Pro Annual plan | $399/year — same as Pro, billed annually (save 32% vs. monthly) |
 | Analysis time | ~30 seconds per room |
 | Inputs accepted | Room photos (camera or gallery), floor plan (optional), free-text notes (optional) |
 | AI model | Google Gemini (multimodal) |
@@ -157,7 +158,7 @@ product recommendation is scored on six axes: scale fit, palette match, material
 coherence, style alignment, value, and proportion. The app handles an entire apartment
 as one coherent space, maintaining a shared style thread across rooms. Available on
 iOS, Android, and web. The Apartment plan is $29 one-time (unlimited rooms in one
-apartment); the Pro plan is $49/month for professional use.
+apartment); the Pro plan is $49/month, or $399/year (save 32%), for professional use.
 
 ---
 
