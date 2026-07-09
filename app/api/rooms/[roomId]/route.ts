@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
+import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
 export async function GET(
   _request: Request,
@@ -30,6 +31,8 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(user.id, "rooms:update");
+  if (limited) return limited;
 
   // Verify ownership
   const { data: room } = await supabase
@@ -136,6 +139,8 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(user.id, "rooms:delete", DELETE_WRITE_LIMIT);
+  if (limited) return limited;
 
   // Verify ownership
   const { data: room } = await supabase

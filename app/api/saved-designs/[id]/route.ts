@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
+import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
 export async function GET(
   _req: NextRequest,
@@ -33,6 +34,10 @@ export async function PATCH(
   const { id } = await params;
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+  if (userId) {
+    const limited = enforceWriteRateLimit(userId, "saved-designs:update");
+    if (limited) return limited;
+  }
 
   let body: { is_public?: boolean };
   try {
@@ -80,6 +85,10 @@ export async function DELETE(
   const { id } = await params;
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+  if (userId) {
+    const limited = enforceWriteRateLimit(userId, "saved-designs:delete", DELETE_WRITE_LIMIT);
+    if (limited) return limited;
+  }
 
   const { error } = await supabase
     .from("saved_designs")

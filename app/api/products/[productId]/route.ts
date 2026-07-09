@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsCandidateProduct } from "@/lib/auth/ownership";
+import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
 export async function PATCH(
   request: Request,
@@ -11,6 +12,8 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(user.id, "products:update");
+  if (limited) return limited;
   if (!(await userOwnsCandidateProduct(supabase, productId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -86,6 +89,8 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(user.id, "products:delete", DELETE_WRITE_LIMIT);
+  if (limited) return limited;
   if (!(await userOwnsCandidateProduct(supabase, productId, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

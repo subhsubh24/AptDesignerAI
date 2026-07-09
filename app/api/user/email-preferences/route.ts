@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
 
 // User-scoped (cookie-authed) endpoint for managing the signed-in user's
 // marketing-email preference. Uses the request-scoped client so RLS (migration
@@ -30,6 +31,8 @@ export async function PUT(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(user.id, "email-preferences");
+  if (limited) return limited;
 
   let body: unknown;
   try {
