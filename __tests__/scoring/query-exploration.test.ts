@@ -98,3 +98,76 @@ describe("generateExplorationQueries", () => {
     expect(typeof q2).toBe("string");
   });
 });
+
+// The 8% trigger rate makes any single room unlikely to explore. Scan a
+// deterministic sequence of room IDs to reliably land on triggering cases —
+// generateExplorationQueries is pure, so this scan is fully reproducible and
+// independent of the hash internals.
+const EXPLORE_CATEGORIES = [
+  "coffee_table", "sofa", "area_rug", "floor_lamp",
+  "side_table", "accent_chair", "bookshelf", "console_table",
+];
+
+function findExploration(
+  tasks: Array<{ category: string; tier: PriceTier; query: string }>,
+  direction: string,
+  predicate: (q: { category: string; tier: PriceTier; query: string; angle: string }) => boolean,
+): { roomId: string; query: string } {
+  for (let i = 0; i < 8000; i++) {
+    const roomId = `scan-${i}`;
+    const match = generateExplorationQueries(tasks, roomId, direction).find(predicate);
+    if (match) return { roomId, query: match.query };
+  }
+  throw new Error(`no triggering room found for direction="${direction}"`);
+}
+
+describe("generateExplorationQueries — branch behavior on a triggered exploration", () => {
+  it("swaps the style term IN PLACE when the base query already contains it", () => {
+    // Base queries are "mid-century <cat> under $500" and the direction is
+    // mid-century → the style is replaced inside the existing query.
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { query } = findExploration(tasks, "mid-century modern", () => true);
+    expect(query.toLowerCase()).not.toContain("mid-century");
+    expect(query).toMatch(/danish modern|atomic age|retro modern|1960s inspired/i);
+  });
+
+  it("rebuilds the query from a synonym + tier when the base query lacks the style", () => {
+    // Direction matches 'bohemian' but the base query ("mid-century ...") does
+    // not contain it → the else branch builds `<synonym> <category> <tier>`.
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { query } = findExploration(tasks, "bohemian eclectic", () => true);
+    expect(query).toMatch(/boho chic|global eclectic|collected look|artisan/i);
+    expect(query.toLowerCase()).not.toContain("mid-century");
+  });
+
+  it("appends the budget tier suffix 'affordable' in the synonym-rebuild branch", () => {
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { query } = findExploration(tasks, "bohemian eclectic", (q) => q.tier === "budget");
+    expect(query.toLowerCase()).toContain("affordable");
+  });
+
+  it("appends the high-end tier suffix 'luxury' in the synonym-rebuild branch", () => {
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { query } = findExploration(tasks, "bohemian eclectic", (q) => q.tier === "high_end");
+    expect(query.toLowerCase()).toContain("luxury");
+  });
+
+  it("falls back to an exploration modifier + category when no style matches", () => {
+    // 'unclassified aesthetic' matches no STYLE_SYNONYMS key → modifier fallback.
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { query } = findExploration(tasks, "unclassified aesthetic", () => true);
+    expect(query).toMatch(
+      /artisan handmade|boutique designer|emerging brand|vintage-inspired|sustainable eco-friendly|unique statement|small-batch|local maker/i,
+    );
+    // The truncated direction prose must NOT leak into the fallback query.
+    expect(query.toLowerCase()).not.toContain("unclassified");
+  });
+
+  it("picks a stable synonym for the same (room, category) across runs", () => {
+    const tasks = makeTasks(EXPLORE_CATEGORIES);
+    const { roomId } = findExploration(tasks, "mid-century modern", () => true);
+    const run1 = generateExplorationQueries(tasks, roomId, "mid-century modern");
+    const run2 = generateExplorationQueries(tasks, roomId, "mid-century modern");
+    expect(run1.map((q) => q.query)).toEqual(run2.map((q) => q.query));
+  });
+});
