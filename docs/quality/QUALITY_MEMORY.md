@@ -7,6 +7,82 @@ history behind it.
 
 ---
 
+## 2026-07-09 — FIFTH INDEPENDENT GRADE (overall B→C — a fresh pass surfaced the PRODUCTION DATA LAYER is a non-persistent in-memory mock; functional_reality A→C corrects a 4-cycle over-grade)
+
+**Overall: C · ship_gate_met: false.** The headline DROPPED from B to C — not because code regressed, but
+because a fresh adversarial pass caught what the previous four cycles missed: **the production data layer is
+a non-persistent in-memory mock.** `lib/store/memory-store.ts:3-8` is explicit — "In-memory data store that
+replaces Supabase … Data persists only for the lifetime of the server process." `lib/supabase/server.ts`
+`createClient()` ALWAYS returns `Object.create(createMemoryClient())` with only `.auth` swapped to real
+Supabase (:42-45), so every `.from()`/`.storage` DATA op hits in-memory arrays in **all** environments (real
+Postgres for AUTH only); the 26/26 RLS never executes at runtime and `MemoryClient.rpc` is a no-op (:399).
+On Vercel serverless (or any restart/multi-replica host) a user's projects/rooms/diagnoses/saved-designs do
+not persist across instances — the retention-critical "revisit your saved designs" journey is broken in
+prod. The money-path E2E passes ONLY because a single `next start` process keeps the store warm across the
+test's requests — textbook **BUILDS≠WORKS**. This is a documented, deliberate, human-gated interim ("until a
+full DB migration is done"); DoD Track A ("web app reliable") is correctly unchecked and the factory's own
+`docs/loop-memory.md:331` calls it a "LOAD-BEARING LESSON." So functional_reality **A→C** and the headline is
+capped at the weakest ship-critical link.
+
+**Per-dimension diff vs 2026-07-05:** functional_reality **A→C** ⬇⬇ (over-grade correction) · correctness
+**A→A** · security_rls **A+→A** ⬇ (one missed IDOR guard) · design_taste **B→B** (gap 1 narrowed) ·
+store_readiness **A→A** · artifact_integrity **A→B** ⬇ (OWNER_ACTIONS schema regression) · business_case
+**A→A** · tests_evals **B→B** · performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **1889 passed / 11 skipped** (up from 1775; 11 skips RUN_EVALS-gated by design).
+- `npx vitest run --coverage` → **58.17% stmts / 47.08% branch / 63.24% funcs / 59.15% lines** (up from
+  56/45/60/57), above the 40/30/42/40 floor.
+- `bash scripts/preflight.sh` → **FAILED, 3 gates:** functional-journeys (cold-env, can't stand up authed
+  stack here), DoD 9-unchecked (expected, pre-launch), **OWNER_ACTIONS UNPARSEABLE** (real — see below).
+  GATE 6 RLS green (26/26 tables), no secret leaks.
+- CI on main HEAD (22b363e) is GREEN incl. the authed `journeys` job (run 29006307038) — confirms the IDOR
+  pass did not break the money path, and that the E2E green is a single-process signal (see functional_reality).
+
+**Why functional_reality dropped A→C (the anchor finding):** graded on production reality, not the literal
+E2E-green signal. A green E2E that only passes inside one warm process, over a data layer that "persists only
+for the lifetime of the server process," is exactly the inflation the auditor exists to catch. C not B
+(persistence is BLOCKING for a sellable app), C not D (everything else — the whole AI pipeline, billing, auth,
+UI — genuinely works; it's one well-defined layer from viable). RAISE = wire real persistent Supabase for
+DATA (not just auth) + runtime RLS + a persistence integration test across a simulated cold start; likely a
+human-reviewed migration, so PREPARE it rather than silently ship a risky cutover.
+
+**Other movers:**
+- **security_rls A+→A:** RLS gate still green, IDOR pass (#519-522) real + tested, but a fresh grader found
+  ONE missed route of the exact class: `GET /api/area-analysis` (route.ts:40-67) reads room_diagnoses by a
+  client-supplied room_id with no `userOwnsRoom` guard (its POST + refine-chat siblings are guarded). With RLS
+  inert at runtime, the app-layer guard is the sole boundary → live per-instance cross-tenant read. Add the
+  guard + extend idor-read-guards.test.ts to regain A+.
+- **artifact_integrity A→B:** preflight GATE 5 now RED — OWNER_ACTIONS feed in `PENDING_OPS.md` uses
+  `priority: low` on two items (email-verification-deferred :65, tune-daily-spend-cap :141), outside the
+  validator's urgent/high/normal enum (preflight.sh:475). Parses as YAML but violates the dashboard's schema
+  contract → broken machine-readable artifact; regression since #469. Trivial fix; factory-owned (auditor does
+  not edit PENDING_OPS.md).
+- **design_taste B→B (narrowed):** authed AxeBuilder now runs (dashboard/account/saved/upgrade, journeys.spec
+  :182-209) — a real advance — but structurally misses the design-dense diagnosis/mockups/compare surfaces the
+  prior gap named, and e2e/__screenshots__/ is still absent (F7). No longer the SOLE blocker (functional_reality
+  is now the binding one).
+
+**Issues to reconcile:** file a NEW `quality: functional_reality C -> raise to A` (persistence blocker; #199
+was closed last cycle — this is a fresh, distinct root cause). Update design_taste **#204** (still B, narrowed,
+no longer sole blocker). File/update artifact_integrity + the security IDOR sub-gap. Keep #385 (perf) and #200
+(tests) open, unchanged.
+
+**Lessons for next run:**
+1. **VERIFY THE DATA LAYER BEFORE GRADING functional_reality.** This repo runs entirely on the in-memory store
+   for DATA (real Supabase = auth only). A green money-path E2E is a SINGLE-PROCESS signal — it does not prove
+   production persistence. Grade functional reality on whether user data survives a serverless cold start, not
+   on E2E status alone. The prior four cycles graded the render and missed the persistence layer.
+2. Don't let a literal rubric mechanical signal (E2E green → A) override the deeper "does it actually work in
+   prod" question — the rubric is explicit that a grade may not exceed what the evidence supports, and BUILDS≠WORKS.
+3. The perf N+1 (#385) is INERT under the memory store (in-process array ops; MemoryClient.rpc is a no-op) — a
+   pgvector RPC would be dead code until the real-DB migration. Sequence perf-DB fixes WITH that migration, not before.
+4. Cold-start recipe re-confirmed: npm install first; grade on assertions + CI status, never a cold local authed
+   suite (env-fragile). preflight's functional-journeys + OWNER_ACTIONS failures are the honest RED flags this run.
+
+---
+
 ## 2026-07-05 — FOURTH INDEPENDENT GRADE (functional_reality C→A; overall breaks off C→B; design_taste is the LAST ship-critical blocker)
 
 **Overall: B · ship_gate_met: false.** The headline finally MOVED off C — held for three prior cycles.
