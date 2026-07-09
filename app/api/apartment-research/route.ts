@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsProject } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
@@ -469,6 +470,16 @@ export async function POST(request: Request) {
 
   if (!building_name && !building_url) {
     return NextResponse.json({ error: "building_name or building_url required" }, { status: 400 });
+  }
+
+  // Ownership guard: when a project_id is supplied the route reads that project's
+  // room images and WRITES the resolved building_research back onto it. The id is
+  // client-supplied, so without this check any authenticated caller could pull
+  // another user's room images into the research prompt and overwrite that
+  // project's building_research (IDOR). No project_id → building-only research,
+  // no project touched, so no check needed.
+  if (project_id && !(await userOwnsProject(supabase, project_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const searchContext = [

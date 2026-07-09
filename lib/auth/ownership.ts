@@ -20,6 +20,30 @@ export async function userOwnsRoom(
 }
 
 /**
+ * Verifies the authenticated user owns the given project directly.
+ * Returns true only when the project exists AND its `user_id` is `userId`.
+ * Uses the provided (user-scoped) client so RLS still applies as defence-in-depth.
+ *
+ * Guards the apartment-level routes (analyze-apartment, apartment-research) that
+ * resolve a project by a client-supplied `project_id`: without this check any
+ * authenticated caller could drive expensive LLM work on — or overwrite the
+ * building research of — another user's project (IDOR / broken access control).
+ */
+export async function userOwnsProject(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", userId)
+    .single();
+  return Boolean(data);
+}
+
+/**
  * Verifies the authenticated user owns the candidate product
  * (via room → project → user chain).
  */
