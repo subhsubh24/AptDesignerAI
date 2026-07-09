@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-06-29
+  as_of: 2026-07-09
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -37,7 +37,7 @@ OWNER_ACTIONS:
       priority: urgent
       status: open
       why: "The app is live on Vercel and calls paid APIs (Gemini, Tavily, Browserbase, Stripe); an abuse spike or runaway loop can run up cost. A provider-side spend cap is the only hard backstop."
-      how: "Set hard daily budgets/limits + 50%-of-cap alerts in each provider console (Google AI Studio / Gemini, Anthropic, Tavily, Browserbase), and regenerate any key you suspect is exposed."
+      how: "Set hard daily budgets/limits + 50%-of-cap alerts in each provider console (Google AI Studio / Gemini, DeepSeek, Tavily, Browserbase), and regenerate any key you suspect is exposed."
       blocks: launch-safety
     - id: connect-channels
       title: Connect + authorize marketing channels to switch the Growth Agent into execute mode

@@ -680,9 +680,15 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   stricter on anything that hits Gemini/Tavily/Browserbase/Stripe or auth. An unthrottled
   expensive endpoint is a money leak and a brute-force surface. Reviewer A REJECTS any new
   expensive/auth route without rate limiting.
-- [ ] G2. **Server-side validation on every write** (client Zod is UX, not security):
+- [x] G2. **Server-side validation on every write** (client Zod is UX, not security):
   re-validate types/lengths/shape on the server for every endpoint that writes to the DB
   or calls a paid API; reject malformed/oversized input.
+  **[DONE — the Run 72 DEEP AUDIT G2 lens confirmed server-side re-validation is
+  comprehensive across ~45 endpoints; the sole remaining gap (`rooms/[roomId]/images`
+  POST, which only checked image_url truthiness) was closed Run 72 (#511 — accepted-URL
+  helper `lib/utils/image-url.ts` rejecting off-origin/active-content schemes + length
+  bounds on image_type/storage_path/caption). Builds on Run 71's rooms/products PATCH
+  validation (#509/#505) and the sibling POST/mobile validators. Gate green: 1875 tests.]**
 - [x] G3. **Error-message hygiene**: generic user-facing errors ("not found"), full
   context logged SERVER-SIDE only; never leak schema/table/column names, stack traces, or
   query logic to the client. No enumeration via error differences.
