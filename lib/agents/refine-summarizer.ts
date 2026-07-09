@@ -6,6 +6,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
 import { createLogger } from "@/lib/logging/logger";
 
@@ -67,6 +68,11 @@ Return ONLY the summary sentence(s) — no JSON, no quotes, no markdown.`;
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
           max_tokens: 1200,
           thinkingConfig: { thinkingLevel: "low" },
+          // Determinism contract: every LLM call passes the fixed seed so the
+          // summary is reproducible in prod (resolveSeed only forces the seed
+          // under the DETERMINISTIC flag; without it an omitted seed is undefined
+          // = non-deterministic — every sibling agent call seeds explicitly).
+          seed: DETERMINISTIC_SEED,
         });
         const text = (response.content || "").trim();
         const tokens =
