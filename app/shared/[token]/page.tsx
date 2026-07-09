@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SharedDesignView } from "./SharedDesignView";
+import { isValidSnapshot } from "./snapshot-guard";
 
 export type SharedDesign = {
   id: string;
@@ -61,6 +62,13 @@ const getSharedDesign = cache(async (token: string): Promise<SharedDesign | null
   if (!data) return null;
 
   const row = data as SharedDesign & { is_public: boolean };
+
+  // A public row whose snapshot is missing/malformed (an older or partially
+  // written save) would otherwise 500 the page — generateMetadata and the view
+  // both dereference `snapshot.assessment`. Treat it as not-found so a shared
+  // link degrades to a clean 404 instead of a crash on a public growth surface.
+  if (!isValidSnapshot(row.snapshot)) return null;
+
   return {
     id: row.id,
     title: row.title,
