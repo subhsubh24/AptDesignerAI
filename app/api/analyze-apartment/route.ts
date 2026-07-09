@@ -12,6 +12,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { logServerError } from "@/lib/utils/api-error";
+import { userOwnsProject } from "@/lib/auth/ownership";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -26,6 +27,12 @@ export async function GET(request: NextRequest) {
 
   const projectId = request.nextUrl.searchParams.get("project_id");
   if (!projectId) return NextResponse.json({ error: "project_id required" }, { status: 400 });
+
+  // Ownership guard: the project_id is client-supplied — without this check any
+  // authenticated caller could read another user's rooms + diagnoses (IDOR).
+  if (!(await userOwnsProject(supabase, projectId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Load existing diagnoses and build summary
   const { data: rooms } = await supabase
@@ -64,6 +71,14 @@ export async function POST(request: Request) {
   }
   const { project_id } = body;
   if (!project_id) return NextResponse.json({ error: "project_id required" }, { status: 400 });
+
+  // Ownership guard BEFORE any expensive LLM work: the project_id is
+  // client-supplied — without this check any authenticated caller could drive a
+  // full apartment analysis on (and write diagnoses into) another user's project
+  // (IDOR + LLM-cost abuse + cross-tenant data pollution).
+  if (!(await userOwnsProject(supabase, project_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Load project with building research
   const { data: project } = await supabase

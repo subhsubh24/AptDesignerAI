@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { userOwnsRoom, userOwnsCandidateProduct } from "@/lib/auth/ownership";
+import { userOwnsRoom, userOwnsCandidateProduct, userOwnsProject } from "@/lib/auth/ownership";
 
 function makeSupabase(data: unknown, error: unknown = null): SupabaseClient {
   const single = vi.fn().mockResolvedValue({ data, error });
@@ -52,6 +52,40 @@ describe("userOwnsRoom", () => {
     expect(vi.mocked(chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
       "projects.user_id",
       "user-xyz"
+    );
+  });
+});
+
+// ── userOwnsProject ───────────────────────────────────────────────────────────
+
+describe("userOwnsProject", () => {
+  it("returns true when the project exists and belongs to the user", async () => {
+    const supabase = makeSupabase({ id: "proj-1" });
+    expect(await userOwnsProject(supabase, "proj-1", "user-1")).toBe(true);
+  });
+
+  it("returns false when the query returns no data (project not found or not owned)", async () => {
+    const supabase = makeSupabase(null);
+    expect(await userOwnsProject(supabase, "proj-99", "user-1")).toBe(false);
+  });
+
+  it("returns false when data is undefined", async () => {
+    const supabase = makeSupabase(undefined);
+    expect(await userOwnsProject(supabase, "proj-1", "user-1")).toBe(false);
+  });
+
+  it("queries the projects table filtered by BOTH id and user_id", async () => {
+    const { supabase, from, chain } = makeTrackedSupabase(null);
+
+    await userOwnsProject(supabase, "proj-abc", "user-xyz");
+
+    expect(from).toHaveBeenCalledWith("projects");
+    expect(vi.mocked(chain.select as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("id");
+    expect(vi.mocked(chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("id", "proj-abc");
+    // The user_id filter is the access-control boundary — assert it is applied.
+    expect(vi.mocked(chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
+      "user_id",
+      "user-xyz",
     );
   });
 });
