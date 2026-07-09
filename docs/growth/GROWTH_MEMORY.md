@@ -440,3 +440,126 @@ Research-backed candidate swap (if competition validates):
 - Same owner blockers as Runs 1-5? YES — circuit breaker remains FIRED (Run 6, 6th consecutive run).
   Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
   (15 min). No new blocker this run.
+
+---
+
+## Run 7 — 2026-07-09
+
+### What we found
+- All Run 1-6 owner blockers remain unresolved: verified directly against `PENDING_OPS.md` (not
+  inferred) that `set-site-gate-password`, `connect-email-resend`, `set-metrics-token`, and
+  `set-cron-secret` are all still `status: open`. `PENDING_OPS.md`'s own `as_of` DID move this time
+  (2026-06-29 -> 2026-07-09), but `git log -p` on the file shows that move was the Product Factory's
+  own Run 72 housekeeping commit (#516 — refreshed `as_of` + fixed a phantom "Anthropic" mention in
+  the spend-caps item), not an owner action on any of the 4 growth blockers.
+- Re-probed `https://aptdesignerai.com/` a fourth time: HTTP 502 "CONNECT tunnel failed" again — same
+  signature as Run 6, cross-checked against the agent-proxy's `/__agentproxy/status` endpoint
+  (`recentRelayFailures`, timestamp 2026-07-09T05:08:58Z). No new information; same conclusion.
+- `docs/quality/QUALITY_SCORECARD.md` moved since Run 6: now `as_of: 2026-07-05`, `overall` RAISED
+  C -> B (`functional_reality` closed C -> A via a real render-pipeline cassette test + an authed
+  browser E2E asserting a decodable PNG and the paywall entitlement flip). `ship_gate_met` is STILL
+  `false` — `design_taste` (B) is now the sole sub-A ship-critical dimension. Read as DATA; phase
+  correctly stays `pre_launch`.
+- **`docs/growth/GTM_SCORECARD.md` now exists** — the first Independent GTM Auditor run landed
+  between Run 6 and Run 7 (`as_of: 2026-07-06`, `overall: C`, `ship_gate_met: false`). Two top_gaps:
+  (1) **ship-critical F on `business_case_honesty`** — `docs/BUSINESS_CASE.md`'s summary block
+  claimed `floor_met_year1: true` ("exceeds the $100K floor in year 1") while the $122.9K base ARR is
+  actually a STEADY-STATE figure (year-1 exit run-rate ~$58-60K; the floor is reached ~year 3) — the
+  auditor called this a gamed floor-timing claim. **Already fixed by the Product Factory independently**
+  at PR #508 (2026-07-06, `docs(business-case): correct floor timing`), which predates even the
+  scorecard's own `as_of` — verified by reading `docs/BUSINESS_CASE.md` directly: it now reads
+  `floor_met_year1: false` with the honest steady-state/~year-3 framing throughout. Nothing to do here
+  (Product-Factory-owned fix, already landed); noted as DATA. (2) **`artifact_freshness` B, severity
+  2** — `store-listing.md` (lines 77/152) and, we additionally found, `press-kit.md` (lines 131/161)
+  were advertising the Pro Annual ($399/yr) tier while migration 021 (the DB `pro_annual` CHECK
+  constraint) is still unapplied to prod (`PENDING_OPS.md apply-migration-021`, `status: open`) — an
+  annual checkout today would fail with a Postgres constraint violation, so both docs advertised a
+  plan visitors could not actually purchase. Compounding it, the auditor found the GTM Factory's OWN
+  audit trail (Run 5/6 `GROWTH_MEMORY.md`/`GROWTH_STATUS.md` entries) FALSELY claimed these docs
+  "correctly omitted" Pro Annual all along — traced this: PR #150 (2026-06-27) added Pro Annual to
+  `store-listing.md`, which PREDATES Run 5 (2026-07-03), so the original claim was wrong from the
+  moment it was written, not merely stale.
+
+### What we built this run
+- **`docs/store-listing.md`**: removed the Pro Annual line from both the Apple App Store and Google
+  Play description fenced code blocks (the parts the owner copy-pastes verbatim into App Store
+  Connect / Play Console), replacing each with a dated explanatory blockquote OUTSIDE the fenced
+  blocks (so it can't leak into a real submission) naming migration 021 / `PENDING_OPS.md
+  apply-migration-021` and when to re-add the tier.
+- **`docs/press-kit.md`**: same fix — removed the Pro Annual row from the app-facts table and the
+  $399/yr mention from the 100-word boilerplate, added the same dated explanatory note.
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-09; added a structured `web_research`
+  entry to `validation:` (`status: degraded`, naming the Reddit tool-block and Trustpilot site-block
+  as the two persistent gaps) per the GTM_SCORECARD's `self_validation_honesty` gap (previously only
+  documented in `demand_signal` prose, not a structured source); refreshed the `internal_metrics_api`
+  reason with the 4th probe attempt; refreshed the `site_gate` reason to note PENDING_OPS status
+  explicitly; **added a transparent "CORRECTION (Run 7)" learning** stating the Run 5/6 "Pro Annual
+  correctly omitted" claim was false and why, WITHOUT editing the historical Run 5/6 entries in this
+  file (append-only by design — see below); refreshed `demand_signal` (see next); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 7th consecutive circuit-breaker run.
+- **`demand_signal` research**: closed both of Run 6's open verification gaps via direct WebFetch —
+  Baymard Institute's AR-avoidance article (`baymard.com/blog/deprioritize-view-in-room-augmented-
+  reality`, dated 2024-05-15) fetched cleanly: "87% of test participants who encountered 'View in
+  Room' chose not to use it," only "6%... sought out and used it proactively." TechCrunch's Modsy
+  shutdown piece also fetched cleanly on the CORRECTED URL (Run 5/6's cited path was a guessed,
+  non-resolving one) — `techcrunch.com/2022/07/17/modsy-quietly-shut-down-while-some-customers-were-
+  still-awaiting-refunds/`: "Capital constraints and uncertain market conditions forced the company to
+  cease operations on July 6" (CEO Shanna Tellerman), plus customer quotes citing $4,500 and $50,000
+  in undelivered orders. All 4 `demand_signal` themes now carry at least one directly-fetched,
+  hand-verified, dated, named-source quote (up from 2 of 4 in Run 6). Held `confidence` at `emerging`
+  rather than raising to `strong` — per-theme source COUNT is still thin (1-3/theme) and Reddit stays
+  completely unreachable, so verbatim-ness alone doesn't clear the higher bar; recorded the reasoning
+  explicitly rather than defaulting upward.
+- **Independent review (maker != checker)** on the store-listing.md/press-kit.md fix: a fresh reviewer
+  subagent confirmed `apply-migration-021` is genuinely still open, confirmed the fenced-block/note
+  separation is correct, confirmed no other Pro Annual references remained, but returned
+  REQUEST_CHANGES on round 1 because the auditor's named fix was a conjunction (strip the copy AND
+  correct the false self-report) and only the copy had been fixed at that point. Addressed by adding
+  the press-kit.md fix (the reviewer had also flagged it as the same live inconsistency) and the
+  GROWTH_STATUS.md correction note; sent back for a final verdict (round 2 in progress / see
+  GROWTH_STATUS.md's own record of the outcome if merged).
+
+### What we did NOT do (and why)
+- Did not edit `GROWTH_MEMORY.md`'s Run 5/6 entries: this file is documented at the top as
+  "Appended to (never overwritten) by each run" — silently rewriting a past entry to make it
+  retroactively true would erase the mistake instead of transparently correcting it, which is worse
+  for audit-trail integrity than leaving the wrong historical claim visible next to this run's
+  correction. This entry IS the correction.
+- Did not touch `docs/BUSINESS_CASE.md`: the GTM_SCORECARD's ship-critical F on it was already fixed
+  by the Product Factory at PR #508, independently of this run. Re-verified the fix is real (read the
+  file directly) rather than trusting the scorecard's stale `as_of` alone.
+- Did not re-grade `QUALITY_SCORECARD.md` or `GTM_SCORECARD.md`: both are owned by independent
+  Auditor routines (maker != checker); consumed as data only.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD) —
+  both S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4 fail-closed
+  reasoning as Runs 5-6.
+- Did not attempt to re-fetch Trustpilot or the corrected Hacker News item id (35267253): both
+  re-probed this run and both failed exactly as before (403 site-block, 429 rate-limit) — no new
+  workaround exists from inside this loop.
+
+### Lessons learned
+- **A "grep clean" / "correctly omitted" claim in a learning is only as good as the actual command
+  run.** Run 5 asserted store-listing.md/press-kit.md omitted Pro Annual without actually grepping for
+  it — the claim was wrong from the moment it was written (PR #150 had added it a week earlier), and
+  it then got copy-forwarded through Run 6 unverified. The independent GTM Auditor caught what two
+  runs of self-review didn't. Going forward: when a learning states a consistency check was done,
+  paste the actual grep/read output the claim rests on, not just the conclusion.
+- **Independent review works — use it even on doc-only changes when the doc is public-facing marketing
+  copy.** The reviewer's first pass caught that fixing the copy without correcting the audit trail
+  only half-satisfies the named fix; that's exactly the adversarial value maker != checker is supposed
+  to add.
+- **The GTM Auditor's ship-critical findings can be pre-empted by the Product Factory.** PR #508
+  landed the business-case honesty fix without this loop's involvement — worth checking `git log`
+  against a scorecard's `top_gaps` before assuming a named gap is still open; it may already be moot.
+- **PENDING_OPS.md's `as_of` moving is not itself evidence of owner action** — it can be (and this run,
+  was) a Product-Factory housekeeping commit. Always read the actual per-item `status` field, never
+  infer from the top-level date alone.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-6? YES — circuit breaker remains FIRED (Run 7, 7th consecutive run).
+  Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
+  (15 min). No new blocker this run; migration 021 (already tracked) gained a second reason to apply
+  it (unblocks re-adding Pro Annual to marketing copy, not just annual billing itself).

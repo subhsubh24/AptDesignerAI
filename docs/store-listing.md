@@ -74,14 +74,22 @@ Explore for free — analyze one room end-to-end at no cost, no credit card requ
 
 **Pro ($49/month)** — unlimited apartments and projects, client-ready share links, and priority support. For designers and property managers.
 
-**Pro Annual ($399/year)** — everything in Pro, billed yearly. Save 32% vs monthly ($33.25/month).
-
 Pricing details shown at checkout. 30-day money-back guarantee on paid plans.
 
 PRIVACY
 
 Room photos are processed by AI to generate your design plan. Photos are stored in your account and deleted when you delete your account. We do not sell your data. See our full privacy policy at aptdesignerai.com/privacy.
 ```
+
+> **Pro Annual ($399/year) intentionally omitted (2026-07-09).** The `pro_annual` tier exists in
+> code (Stripe checkout, pricing page) but its DB tier CHECK constraint (migration
+> `021_stripe_customers_annual_tier.sql`) is still unapplied to prod per `PENDING_OPS.md`
+> (`apply-migration-021`, `status: open`) — an annual checkout today would fail with a Postgres
+> constraint violation on write. Advertising it in the store listing before the constraint is live
+> would point App Store / Play visitors at a plan that cannot actually be purchased. Re-add
+> `**Pro Annual ($399/year)** — everything in Pro, billed yearly. Save 32% vs monthly ($33.25/month).`
+> to both the Apple and Google description blocks once migration 021 is confirmed applied (see
+> `PENDING_OPS.md`).
 
 ### Keywords (max 100 chars, comma-separated — Apple indexes these for search)
 ```
@@ -149,7 +157,6 @@ PRICING
 Free: analyze one room, no credit card needed.
 Apartment ($29, one-time): every room in your apartment — unlimited analyses, cross-room coherence, AI mockups.
 Pro ($49/month): unlimited apartments and projects for designers and property managers.
-Pro Annual ($399/year): everything in Pro, billed yearly — save 32% vs monthly.
 
 Pricing details shown at checkout. 30-day money-back guarantee.
 
