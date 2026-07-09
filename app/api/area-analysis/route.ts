@@ -45,6 +45,15 @@ export async function GET(request: NextRequest) {
   const roomId = request.nextUrl.searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
+  // Ownership guard BEFORE the read: room_id is client-supplied and the
+  // memory-store read is not user-scoped (RLS is inert at runtime), so without
+  // this check any authenticated caller could pull another user's private
+  // diagnosis JSON by guessing/enumerating a room_id (IDOR / cross-tenant read).
+  // The POST + refine-chat siblings already guard; this closes the read leak.
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { data: diagnosis } = await supabase
     .from("room_diagnoses")
     .select("*")

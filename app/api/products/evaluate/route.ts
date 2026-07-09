@@ -70,6 +70,15 @@ export async function POST(request: Request) {
 
   const product = productRes.data;
   const room = roomRes.data;
+
+  // Bind the client-supplied product_id to the owned room. userOwnsRoom(room_id)
+  // proves the caller owns the ROOM, but product_id is a separate client value —
+  // without this check a caller who owns room A could pass another user's
+  // candidate product_id and have its data read + scored (IDOR). The data layer
+  // is not user-scoped at runtime, so this app-layer bind is the only boundary.
+  if (product.room_id !== room_id) {
+    return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  }
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
 
   // Fetch project (building/apartment context), this room's latest diagnosis
