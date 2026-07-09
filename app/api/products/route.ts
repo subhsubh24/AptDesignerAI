@@ -14,6 +14,14 @@ export async function GET(request: Request) {
   const roomId = searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
+  // Ownership guard: room_id is client-supplied and the memory-store query is not
+  // user-scoped, so without this check any authenticated caller could enumerate
+  // another user's candidate products + evaluations (IDOR). The POST handler
+  // already guards this way; the GET read was missing it.
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 200, maxLimit: 500 });
 
   const { data, error } = await supabase

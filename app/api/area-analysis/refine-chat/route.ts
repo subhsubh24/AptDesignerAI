@@ -15,6 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { getSystemPrompt } from "@/lib/prompts/system";
@@ -64,6 +65,13 @@ export async function GET(request: NextRequest) {
   const roomId = request.nextUrl.searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
 
+  // Ownership guard: room_id is client-supplied and the memory-store query is not
+  // user-scoped, so without this check any authenticated caller could read
+  // another user's refinement chat history (IDOR).
+  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { data: messages } = await supabase
     .from("refine_messages")
     .select("*")
@@ -98,6 +106,13 @@ export async function POST(request: NextRequest) {
   const { room_id, content } = body;
   if (!room_id || !content || typeof content !== "string" || content.trim().length === 0) {
     return NextResponse.json({ error: "room_id and content required" }, { status: 400 });
+  }
+
+  // Ownership guard BEFORE re-running the full (paid) analysis: without it any
+  // authenticated caller could append chat + drive the LLM refinement pipeline
+  // on another user's room (IDOR + LLM-cost abuse + cross-tenant write).
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const { data: room } = await supabase
