@@ -4,6 +4,7 @@ import { apiError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { hasProEntitlementWeb, FREE_SAVE_LIMIT_WEB } from "@/lib/entitlements/web";
 
 export async function GET(request: NextRequest) {
@@ -53,6 +54,15 @@ export async function POST(request: NextRequest) {
 
   if (!room_id) {
     return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  }
+
+  // Ownership guard: room_id (and the optional project_id below) are
+  // client-supplied and the memory-store reads are not user-scoped, so without
+  // this check any authenticated caller could snapshot another user's private
+  // diagnosis + sourced products + bundles into their OWN saved_designs, then
+  // read them back — a cross-tenant data-exposure IDOR.
+  if (!(await userOwnsRoom(supabase, room_id, userId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   // Fetch room details
