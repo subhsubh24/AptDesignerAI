@@ -53,6 +53,13 @@ OWNER_ACTIONS:
       why: "Before the Growth Agent drives any pre-launch traffic, the app should be password-gated so the public can't see the unfinished product; the waitlist/landing routes stay exempt so people can still join. Once the product is launch-ready (ship-critical QUALITY_SCORECARD A/A+ + readiness), unset it to open the app."
       how: "The gate middleware now ships (Run 39, PR #173 — lib/security/site-gate.ts). Set SITE_GATE_PASSWORD to a value of your choice on the deployment (Vercel env). Behavior once set: non-exempt browser routes redirect to /waitlist (API routes return 503) while /waitlist + /api/waitlist + legal/marketing pages stay public; unlock your own browser by visiting any URL once with ?gate=<password> (sets an httpOnly cookie). Then flip GROWTH_STATUS.site_gate_up: true so the Growth Agent can begin pre-launch outreach. At launch, UNSET SITE_GATE_PASSWORD to open the app. Never commit the value."
       blocks: pre-launch-marketing
+    - id: cutover-to-persistent-data
+      title: "Cut the DATA layer over to real Supabase Postgres (set DATA_BACKEND=supabase) — persistence is a launch blocker"
+      priority: high
+      status: open
+      why: "The app's DATA layer is currently the in-memory store (lib/store/memory-store.ts); real Supabase is used for AUTH only. Data 'persists only for the lifetime of the server process', so on Vercel serverless (or any restart / multi-replica host) a user's projects/rooms/diagnoses/saved-designs do NOT survive across instances — the retention-critical 'revisit your saved designs' journey is broken in production, and the 26/26 RLS policies never execute at runtime. This is why QUALITY_SCORECARD.functional_reality is C and DoD Track A stays unchecked. The persistent path is now BUILT + code-reviewed behind a flag (PR #531): setting DATA_BACKEND=supabase routes ALL data ops through a real user-scoped Supabase client with RLS enforced. It ships INERT (default = memory) so the cutover is a deliberate owner step, not a blind flip."
+      how: "1) Apply ALL pending migrations to the prod Supabase project (`supabase db push`, or run the numbered supabase/migrations/*.sql in order — see the other apply-migration-* items). 2) Confirm NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY (+ SUPABASE_SERVICE_ROLE_KEY) are set on the deployment. 3) Set DATA_BACKEND=supabase on the deployment (Vercel env) and redeploy. 4) VERIFY the money path survives a cold start: create a project/room, run a diagnosis, save a design, then redeploy (or restart) and confirm the saved design is still there and RLS blocks another user from reading it. If creds are missing while DATA_BACKEND=supabase, the app FAILS LOUD by design (no silent fallback to the non-persistent store). Do NOT flip this until the migrations are applied — an un-migrated schema will error on first query."
+      blocks: launch
     - id: apply-migration-021
       title: "Apply migration 021_stripe_customers_annual_tier.sql to prod before enabling annual billing"
       priority: normal
@@ -62,7 +69,7 @@ OWNER_ACTIONS:
       blocks: annual-billing
     - id: email-verification-deferred
       title: "Account email verification is intentionally OFF (no email pipeline) — re-enable ONLY with the round-trip test"
-      priority: low
+      priority: normal
       status: open
       why: "Signup previously required an email confirmation link, but no transactional-email pipeline exists pre-launch, so every new user dead-ended at 'check your email' with no email ever arriving. Decision: signup now creates an already-confirmed account server-side (app/api/auth/signup/route.ts) — no verification. This is the correct pre-launch call; do NOT 'fix' it back to requiring verification while the email loop is unverified."
       how: "If you WANT email verification later: (1) connect a real provider for Supabase Auth (custom SMTP / Resend) with a verified domain; (2) FIRST add the signup->receive-email->click-link->confirmed round-trip to the journey suite (ROADMAP F4.1) so it is proven end to end; (3) only then switch the flow back to requiring confirmation. Never ship a verification gate whose email send is not round-trip-tested."
@@ -138,7 +145,7 @@ OWNER_ACTIONS:
       blocks: growth-execution
     - id: tune-daily-spend-cap
       title: "(Optional) tune DAILY_PAID_CALL_LIMIT for the paid-API spend ceiling (G7)"
-      priority: low
+      priority: normal
       status: open
       why: "The per-user/day spend circuit breaker (PR #119) defaults to 60 paid calls/user/day. This is a code-level backstop; the durable protection is the provider-dashboard hard caps in the `spend-caps` item above."
       how: "Set DAILY_PAID_CALL_LIMIT (integer > 0) on the deployment only if 60/user/day is too low/high for your real usage; otherwise leave unset."

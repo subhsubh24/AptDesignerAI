@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-09 (Run 74) — SCORECARD-DRIVEN: data-layer persistence PREPARE (the new #1 ship blocker) + 2 IDOR/security + side-effect-integrity + mobile null-guard. ALL 4 MERGED.
+
+### State on entry
+- Cold container, detached HEAD. Reset to origin tip `6361589` (post Run 73 #519-522 + housekeeping #523, + the independent quality grade #524). `npm install` root + mobile (mobile node_modules was ABSENT — installed it, else mobile `npx tsc` pulls broken DOM lib types from root node_modules and false-fails). Baseline gate GREEN: tsc clean, **1889 tests** pass / 11 skip, determinism clean, eslint 0, mobile tsc clean.
+- **DEEP AUDIT NOT due** — Run 72 ran the last 8-lens sweep 2026-07-09; next due ~Run 76.
+- **QUALITY_SCORECARD (as_of 2026-07-09) DROPPED overall B→C.** THREE ship-critical dims now below A: `functional_reality` **A→C** (the PRODUCTION DATA LAYER is a non-persistent in-memory mock — the #1 blocker), `design_taste` B (unchanged, CI/LLM-bound), `artifact_integrity` **A→B** (preflight GATE 5 red). `security_rls` **A+→A** (one missed IDOR). GROWTH_STATUS pre-launch 0/null → no lever signal. This run worked directly off the scorecard's named gaps.
+
+### Scouting — 3 Haiku lenses + direct scorecard-gap targeting
+- The scorecard NAMED the top gaps precisely, so selection was scorecard-driven rather than blind scouting. 3 Haiku lenses (F2 coverage; web correctness/a11y/design; mobile+security-IDOR) confirmed + surfaced the disjoint set.
+- **F2 lens:** ergonomics/pairwise-proportions/access-constraints under-covered — BUT their rule helpers are UNEXPORTED (only computeX/formatX exported) and all already have test files; adding non-duplicative branch coverage is murky → SKIPPED this run rather than pad (the scout's "test the private helpers directly" premise didn't hold).
+- **Web lens:** `products/page.tsx` `handleEvaluate`/`handleStatusChange` fire-and-forget (no `res.ok` guard) → fake success → shipped #528. (Gallery/palette raw-hex "finding" REJECTED — a palette swatch legitimately renders the literal color; not a token violation.)
+- **Mobile+security lens:** confirmed the products/evaluate product↔room IDOR (Run-73 residual) → #530; `results.tsx` unguarded array fields → #529.
+
+### Shipped 4 file-disjoint (integration tree → gated once at 1899 → split into per-change branches; 2 Sonnet reviewers each)
+- **#531 (functional_reality — THE #1 SHIP BLOCKER) `DATA_BACKEND` selector.** `lib/supabase/server.ts`: default (`memory`, unset) is byte-equivalent to before (in-memory data + real auth proxied); `DATA_BACKEND=supabase` returns a real user-scoped `@supabase/ssr` client for BOTH auth AND data → persistent Postgres + RLS at runtime. Missing creds under the flag FAIL LOUD in both `createClient()` + `getCurrentUserId()` (no silent memory fallback = the BUILDS≠WORKS trap). Ships INERT (default unchanged); owner cutover = PENDING_OPS `cutover-to-persistent-data`. This is EXACTLY the scorecard's prescription: "PREPARE it (real data client + runtime RLS + persistence test), not a risky cutover." + 7-state wiring test + CAPABILITIES.yml decl. **2 REQUEST_CHANGES → fixed → 2 fresh re-reviews APPROVE** (see lessons).
+- **#530 (security_rls A→A+ direction) last 2 IDOR gaps.** `userOwnsRoom` guard on `GET /api/area-analysis` (leaked another user's private diagnosis JSON by client room_id; POST+refine-chat siblings were already guarded — the scorecard named this exact route). Product↔room bind on `POST /api/products/evaluate`: `product.room_id !== room_id` → 404 before the paid scoring (a caller owning room A could pass another user's candidate product_id). Used the direct equality bind, NOT the `userOwnsCandidateProduct` helper — the helper only proves ownership of SOME owned room, not the requested one (a reviewer confirmed the direct check is strictly more correct). + regression tests. Both reviewers APPROVE first pass.
+- **#528 (side-effect integrity) products-page silent failure.** `handleEvaluate`/`handleStatusChange` reloaded regardless of `res.ok` → user saw fake success. Guard + `toast.error` (existing pattern) + reload only on success.
+- **#529 (mobile) results.tsx array null-guards.** `?? []` on the 5 AI-analysis array fields (was only a top-level object check from #507); prevents an unrecoverable native white-screen crash (no error boundary in `mobile/`).
+
+### Outcome / bookkeeping
+- **ALL 4 MERGED** (#528→515c5f1, #529→deeb1d0, #530→f9d9d32, #531→5e08246; required checks verify+build+mobile+lint green; final tip 5e08246). Baseline 1889 → **1899** (+10).
+- Housekeeping: reconciled 2 `priority: low` OWNER_ACTIONS (`email-verification-deferred`, `tune-daily-spend-cap`) → `normal` — preflight GATE 5's enum is urgent/high/normal, so `low` failed it → **artifact_integrity B→A** (validated the block parses, 20 items). Added `cutover-to-persistent-data` OWNER_ACTIONS item (referenced by #531).
+- **No new ROADMAP ticks** — data-layer is PREPARE-only (Track A stays [ ] until the owner cutover; functional_reality stays C until data actually persists). IDOR/silent-failure/mobile map to already-ticked A/B boxes. No migrations/secrets committed.
+
+### Lessons
+1. **"PREPARE, don't cutover" = a flag-gated, inert-by-default REAL path whose default is byte-equivalent.** The whole app + 1889 tests + CI journey-seeding depend on the memory store, so a blind flip to real Supabase would break everything and can't be verified in-sandbox (no real Postgres). A `DATA_BACKEND` selector defaulting to memory ships reviewable persistence code with zero behavior change, and the human owns the actual cutover (apply migrations → set env → flip → verify cold start). This is how you advance a big human-gated blocker without a risky guess.
+2. **A code comment must NOT cite a shared-ledger (PENDING_OPS) entry that only lands in the LATER housekeeping PR.** Both C1 reviewers REJECTED on the dangling `cutover-to-persistent-data` slug (didn't exist at C1-merge time). Fix: make the comment SELF-CONTAINED (describe the human steps inline), and add the ledger entry in the same run's housekeeping. Don't assert repo state a code branch can't guarantee.
+3. **Fail-loud must be SYMMETRIC across every entry point.** The first C1 had it in `createClient()` but not `getCurrentUserId()` (silently returned the mock UUID under the flag) — a hole in the safety guarantee. Gate EVERY function that reads the creds on the same flag check.
+4. **Install `/mobile` deps before running mobile `tsc`** — absent mobile node_modules makes tsc resolve DOM lib types from root node_modules and emit dozens of false lib errors. Not a real failure; `cd mobile && npm install` first.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 76** (Run 72 ran the last 8-lens sweep 2026-07-09).
+- **functional_reality (C) is the binding ship blocker and is now OWNER-GATED, not loop-buildable further:** the persistent path is built (#531, DATA_BACKEND flag); it stays C until the owner applies migrations + flips DATA_BACKEND=supabase + verifies a cold start (PENDING_OPS `cutover-to-persistent-data`). Do NOT re-build this — a possible loop follow-on is a persistence INTEGRATION test that runs the money path against a real Postgres when a `SUPABASE_TEST_URL` is provided (skip-gated like the evals), to prove the cutover before the owner flips it — but that needs a test DB the sandbox can't reliably stand up (supabase-local: registry 503 + rlimit per Runs 67-71).
+- **design_taste (B) still the other CI/LLM-bound ship blocker** — authed axe on seeded diagnosis/mockups/compare + F7 committed screenshots; not sandbox-verifiable (needs push-and-watch-CI). Unchanged from Run 73.
+- **REAL follow-up bugs found this run but NOT fixed (queue for next run, each disjoint):**
+  1. **`PATCH /api/products/[productId]` silently drops `status`** — a C3 reviewer found `ALLOWED_KEYS` in that route does NOT include `"status"`, so `handleStatusChange`'s status update returns 200 but never persists (verify before fixing — if real, changing a product's status is a no-op user-facing bug). Disjoint file: `app/api/products/[productId]/route.ts`.
+  2. **`products/evaluate-set` product-in-room binding** — Run-73 residual; evaluate-set creates its own products from the body so it's LOWER risk than evaluate was, but double-check no client product_id is read cross-room.
+  3. Mobile `results.tsx` palette/materials cards render unconditionally (empty card with just a header on an empty payload) — minor UX inconsistency vs the what-works cards which hide when empty. Low value.
+- **DO-NOT-RE-FLAG (carry from Run 73):** #385 embedding pgvector-RPC + all DB/N+1 perf are INERT under the memory data layer UNTIL the cutover above lands (then sequence the pgvector RPC WITH it). `--score-*` token swap is churn (contrast-regression risk). Pro-Annual/migration-021 + share-link gating are OWNER decisions. Palette-swatch raw-hex is NOT a token violation (it renders the literal color).
+
 ## Run 2026-07-09 (Run 73) — SECURITY: broken-access-control (IDOR) hardening pass — 3 disjoint security PRs + 1 determinism fix. ALL 4 MERGED.
 
 ### State on entry
