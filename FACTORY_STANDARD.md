@@ -25,14 +25,18 @@ is ONE cohesive thing, not a pile of disconnected PRs.
 ## 1. The loop (per run)
 1. **Hill-climb:** `gh pr list --state all --limit 60`, `git log --oneline -40`, read the
    loop-memory file + IMPROVEMENT_LOG + ROADMAP + the business case + the DATA feeds
-   (§7, §8). Note the last DEEP AUDIT date. `git fetch` + rebase onto the latest default
-   branch before building/testing.
+   (§7, §8). Note the last DEEP AUDIT date. **RUN-START SYNC (detached-HEAD-safe):** `git fetch origin`,
+   then FORCE the local default ref — `git branch -f <default> origin/<default>` — which advances it even
+   on a detached HEAD (a bare `git reset --hard origin/<default>` moves HEAD but NOT the ref), so every
+   diagnostic that reads the default branch sees reality. A stale local default ref manufactures phantom
+   "regressions" (a merged change looks reverted). Then rebase/build off the latest default.
 2. **Deep audit (conditional, ~daily):** if no DEEP AUDIT in the last ~24h/~4 runs, run §10 first.
 3. **Scout → select → implement:** ~8 parallel scout subagents (cheap tier) return RANKED
    candidates only. SELECT the MAXIMAL mutually file-DISJOINT set that clears the VALUE
    BAR (§5), highest-value first, preferring the lowest incomplete item + CRITICAL audit
    findings (security first) + any ship-critical quality dim below A + the binding growth
-   lever. Implement each on its own branch from the latest default branch.
+   lever. Implement each on its own branch cut with `git checkout -B <name> origin/<default>` — ALWAYS
+   branch from `origin/<default>`, NEVER from the local default ref (which can be stale/behind).
 4. **Verify (§6) → independent review (§4) → auto-merge** each change through the CI gate.
 5. **One bookkeeping PR** at the end for the shared ledger files (loop-memory,
    IMPROVEMENT_LOG, PENDING_OPS, ROADMAP tick-offs, business case) — never edited in code branches.
