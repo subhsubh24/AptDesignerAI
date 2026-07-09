@@ -4,6 +4,44 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-09 (Run 73) — SECURITY: broken-access-control (IDOR) hardening pass — 3 disjoint security PRs + 1 determinism fix. ALL 4 MERGED.
+
+### State on entry
+- Cold container. Reset to origin tip `d6defcd` (post Run 72 #511-515 + housekeeping #516, and gtm Run 7 #518). `npm install` root + mobile. Baseline gate GREEN: tsc clean, **1875 tests** pass / 11 skip, determinism clean, eslint 0 (root), mobile tsc clean.
+- **DEEP AUDIT NOT due** — Run 72 ran the last 8-lens sweep 2026-07-09; next due ~Run 76.
+- QUALITY_SCORECARD (as_of 2026-07-05, overall **B**, ship_gate false): **design_taste (B) STILL the sole ship-critical dim below A.** Feasibility-scouted its closure this run (below) → confirmed still CI/LLM-bound, correctly deferred. GROWTH_STATUS pre-launch 0/null → no lever signal. No open PRs on entry.
+
+### Scouting — 6 parallel Haiku lenses + a design_taste feasibility probe
+- **WEB RELIABILITY lens surfaced the run's anchor: a SYSTEMIC missing-ownership-check (IDOR) cluster.** ~11 API routes call `getUser()`/`getCurrentUserId()` then resolve a room/project/bundle by a **client-supplied id** with NO ownership check. Root cause = the in-memory data layer (`createClient()`→`createMemoryClient()` for data; real Supabase only for auth) whose `QueryBuilder` does NOT auto-scope by user — so tenancy is enforced ONLY by an explicit `userOwnsRoom`/`userOwnsProject` guard. Verified EACH by direct read (`picks` + `rooms/[roomId]/diagnosis` were already correctly scoped; the rest were not). `diagnosis/route.ts` passed a deliberately-unused `_userId` — a reliable smoking gun for a dropped guard.
+- **F2 lens:** pairwise-proportions/access-constraints/product-scorer/ergonomics untested branches (deferred — the security cluster was the maximal disjoint value this run).
+- **MOBILE lens:** palette chips render `colors.backgroundElement` not the recommended color — but `recommended_palette` holds color NAMES, not hex, so a name-as-CSS swatch isn't a clean fix → deprioritized (uncertain).
+- **STORE/ARTIFACT lens:** top items are the known owner-gated Pro-Annual/migration-021 (#487) + a small auth-page-metadata SEO fix (deferred).
+- **AI-PIPELINE lens:** `refine-summarizer.ts` `.chat()` missing `seed: DETERMINISTIC_SEED` (shipped #522).
+- **design_taste feasibility probe:** diagnosis/mockups axe is NOT hermetically runnable per-PR (needs live LLM or a multi-stage cassette expansion — the cassette's generic JSON stage returns a mockup-prompt body that would fail diagnosis Zod parsing); compare is borderline (needs seeded evaluated products, invisible to the memory-store route unless seeded via the app API); F7 screenshots need committed baselines un-generatable in-sandbox. → design_taste stays correctly deferred (6th+ run confirming).
+
+### Shipped 4 file-disjoint (integration tree → gated once at 1889 → split into per-change branches; 2 Sonnet reviewers each)
+- **#519 (SEC-A) read-leak IDORs** — `userOwnsRoom` guard on `GET /api/products`, `GET+POST /api/area-analysis/refine-chat`, `POST /api/saved-designs`. Each previously leaked another user's candidate products / refine chat / a full snapshot of their private diagnosis+products+bundles. + 8-test regression suite (non-owner→404 before any read; owner still passes). **1 REQUEST_CHANGES → added refine-chat POST coverage + owner-happy-path asserts → re-review APPROVE (mutation-tested).**
+- **#520 (SEC-B) compute/write IDORs** — `userOwnsRoom` guard BEFORE the paid LLM call on `POST` diagnosis, diagnosis/stream, area-analysis/refine, bundles/evaluate (via bundle.room_id), products/evaluate, products/evaluate-set. refine also now derives the project from the OWNED room (not a client `project_id`). + 2-route regression test.
+- **#521 (SEC-C) project-scoped IDORs** — NEW `userOwnsProject` helper (filters projects by BOTH id+user_id) + unit tests; applied to `analyze-apartment` GET+POST and `apartment-research` POST (the latter WRITES building_research back to a client `project_id` → cross-tenant overwrite). apartment-research guards only when project_id is truthy (building-only research touches no project).
+- **#522 (determinism)** — `refine-summarizer.ts` `.chat()` was the lone agent call missing `seed: DETERMINISTIC_SEED`; `resolveSeed(undefined)` returns undefined in prod (DETERMINISTIC flag off) → non-deterministic. Added the seed.
+
+### Outcome / bookkeeping
+- **ALL 4 MERGED** (#519→597c3b4, #520→c9055c2, #521→36ddc73, #522→81ddd67; required checks verify+build+mobile+lint green; final tip 81ddd67). Baseline 1875 → **1889** (+14). No new migrations/secrets → PENDING_OPS unchanged.
+- **No ROADMAP box ticked** — no specific IDOR/access-control checkbox exists; recorded as Track A (secure web app) / Track G (security & abuse hardening) hardening. Parent boxes stay [ ]. design_taste readiness NOT attempted.
+- Guards return **404 (not 403)** matching the codebase convention (`products/[productId]`, `refine`) — no existence-enumeration oracle.
+
+### Lessons
+1. **The in-memory-store data layer makes EVERY route responsible for its own tenancy.** There is no RLS backstop for data (real Supabase is auth-only), so a route that resolves a resource by a client id without a `userOwns*` guard is an IDOR. Grep pattern to hunt the class: `getUser`/`getCurrentUserId` + `.eq("id"/"room_id"/"project_id", <client value>)` with no `userOwns*` call. A `_`-prefixed unused `userId` param is a smoking gun for a guard that was dropped.
+2. **Placement matters:** guard BEFORE the resource read for read-leaks (else you still leak), and BEFORE the LLM/agent call for compute-abuse. For the bundle→room chain the one cheap `product_bundles` lookup is unavoidable (you need room_id to check ownership), but evaluation + product exposure are all gated after it.
+3. **Don't trust a client-supplied SECONDARY id even when the primary is owned** — area-analysis/refine took `project_id || room.project_id`, letting an owner of the room feed a different user's project into the prompt; derive it from the owned room instead.
+4. **A large same-class security fix splits cleanly by the helper it needs** (room-scoped vs project-scoped) — keeps each PR coherent + file-disjoint while fixing the whole class in one run rather than leaving known holes open across the 6h cadence.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 76** (Run 72 ran the last, 2026-07-09).
+- **design_taste (ship-critical, B) is STILL the lone ship blocker** — CI/LLM-bound (authed axe on diagnosis/mockups needs a multi-stage cassette expansion + seeded pipeline data; F7 screenshots need committed baselines). Not sandbox-verifiable; needs push-and-watch-CI infra work, not a blind attempt.
+- **IDOR follow-ups (NOT fixed Run 73):** (a) `products/evaluate` + `products/evaluate-set` verify room ownership but NOT that the client `product_id` belongs to that room — the existing `userOwnsCandidateProduct` helper is unused there (already used in `products/[productId]`); (b) SEC-B regression test covers 2 of 6 routes (rest verified by review). (c) Consider a lint/test guard that flags a route resolving a client id without a `userOwns*` call, so this class can't silently reappear.
+- **DO-NOT-RE-FLAG / DO-NOT-BUILD (carry):** #385 embedding pgvector-RPC + all "DB payload/N+1" perf are INERT under the in-memory data layer. `--score-*` token swap is churn (contrast-regression risk). #348 entitlement-fail-open already RESOLVED. Mobile palette-swatch needs a name→hex map (not a clean win). Pro-Annual/migration-021 (#487) + share-link gating (#502) are OWNER decisions.
+
 ## Run 2026-07-09 (Run 72) — DEEP AUDIT (8-lens) + 5 disjoint value-bar changes: G2 (last write-endpoint validation gap) + G1 (rate-limit sweep) + A1 (public-share reliability) + 2× F2 tests. ALL 5 MERGED.
 
 ### State on entry
