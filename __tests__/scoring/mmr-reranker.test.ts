@@ -126,4 +126,74 @@ describe("selectByMMR", () => {
     const result = selectByMMR([a, b], evals, 2, 0.7);
     expect(result.length).toBe(2);
   });
+
+  it("with lambda=0.0 (pure diversity) picks the most different second", () => {
+    const best = makeProduct({ id: "best", retailer: "west elm", materials: ["walnut"], colors: ["brown"], price: 500 });
+    const redundant = makeProduct({ id: "redundant", retailer: "west elm", materials: ["walnut"], colors: ["brown"], price: 500 });
+    const diverse = makeProduct({ id: "diverse", retailer: "ikea", materials: ["metal"], colors: ["black"], price: 150 });
+    const evals = new Map([
+      ["best", makeEvaluation(9.0)],
+      ["redundant", makeEvaluation(8.9)],
+      ["diverse", makeEvaluation(8.5)],
+    ]);
+    // First pick is always the highest relevance (best); with zero relevance
+    // weight the second pick maximizes -maxSim, i.e. the least-similar item.
+    const result = selectByMMR([best, redundant, diverse], evals, 2, 0.0);
+    expect(result[0].id).toBe("best");
+    expect(result[1].id).toBe("diverse");
+  });
+
+  it("caps selection at k when there are more products than k", () => {
+    const products = [
+      makeProduct({ id: "p1", retailer: "a" }),
+      makeProduct({ id: "p2", retailer: "b" }),
+      makeProduct({ id: "p3", retailer: "c" }),
+      makeProduct({ id: "p4", retailer: "d" }),
+    ];
+    const evals = new Map(products.map((p, i) => [p.id, makeEvaluation(9 - i)] as const));
+    expect(selectByMMR(products, evals, 2).length).toBe(2);
+  });
+
+  it("does not NaN or throw when every relevance score is identical (range=0)", () => {
+    const products = [
+      makeProduct({ id: "x", retailer: "a", materials: ["oak"] }),
+      makeProduct({ id: "y", retailer: "b", materials: ["metal"] }),
+      makeProduct({ id: "z", retailer: "c", materials: ["glass"] }),
+    ];
+    const evals = new Map(products.map((p) => [p.id, makeEvaluation(7)] as const));
+    const result = selectByMMR(products, evals, 3, 0.7);
+    expect(result.length).toBe(3);
+    // Selection order must be a stable permutation of the inputs (no dupes/holes).
+    expect(new Set(result.map((p) => p.id))).toEqual(new Set(["x", "y", "z"]));
+  });
+});
+
+describe("productSimilarity — exact weighted formula (0.3 retailer + 0.3 material + 0.2 color + 0.2 price)", () => {
+  it("same retailer + same price but disjoint materials/colors → 0.3*1 + 0.2*1 = 0.5", () => {
+    const a = makeProduct({ id: "a", retailer: "west elm", materials: ["oak"], colors: ["brown"], price: 500 });
+    const b = makeProduct({ id: "b", retailer: "west elm", materials: ["metal"], colors: ["black"], price: 500 });
+    expect(productSimilarity(a, b)).toBeCloseTo(0.5, 6);
+  });
+
+  it("computes fractional material Jaccard (1 shared of 3 union → 1/3) into the weighted sum", () => {
+    // retailer differs (0), colors disjoint (0), materials {oak,walnut} vs {walnut,metal} → 1/3,
+    // price 100 vs 300 → priceSim 1 - 200/300 = 1/3. Sum = 0.3*(1/3) + 0.2*(1/3) = 1/6.
+    const a = makeProduct({ id: "a", retailer: "ikea", materials: ["oak", "walnut"], colors: ["brown"], price: 100 });
+    const b = makeProduct({ id: "b", retailer: "cb2", materials: ["walnut", "metal"], colors: ["black"], price: 300 });
+    expect(productSimilarity(a, b)).toBeCloseTo(1 / 6, 6);
+  });
+
+  it("treats two empty material/color sets as similarity 0 (not divide-by-zero)", () => {
+    // Both materials/colors empty → Jaccard 0 each; same retailer + same price → 0.3 + 0.2 = 0.5.
+    const a = makeProduct({ id: "a", retailer: "west elm", materials: [], colors: [], price: 400 });
+    const b = makeProduct({ id: "b", retailer: "west elm", materials: [], colors: [], price: 400 });
+    expect(productSimilarity(a, b)).toBeCloseTo(0.5, 6);
+  });
+
+  it("uses the maxP=1 floor so two zero-priced items score priceSim=1 (no NaN)", () => {
+    // Different retailer, disjoint materials/colors, both price 0 → only price contributes: 0.2*1 = 0.2.
+    const a = makeProduct({ id: "a", retailer: "ikea", materials: ["oak"], colors: ["brown"], price: 0 });
+    const b = makeProduct({ id: "b", retailer: "cb2", materials: ["metal"], colors: ["black"], price: 0 });
+    expect(productSimilarity(a, b)).toBeCloseTo(0.2, 6);
+  });
 });
