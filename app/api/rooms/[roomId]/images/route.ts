@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { isAcceptableStoredImageUrl } from "@/lib/utils/image-url";
 
 // Room-image writes are cheap DB rows, but an authenticated client can still
 // spam create/delete to bloat storage-adjacent tables or thrash the row. A
@@ -64,8 +65,31 @@ export async function POST(
   }
   const { image_url, image_type, storage_path, caption } = body;
 
-  if (!image_url) {
+  // Server-side input validation (client Zod is UX, not security — Track G2):
+  // re-validate types/lengths/shape before the write. image_url is rendered
+  // back into <img> tags, so it must be a bounded https URL — reject
+  // javascript:/data: schemes and oversized/malformed values at the boundary.
+  if (typeof image_url !== "string" || image_url.length === 0) {
     return NextResponse.json({ error: "image_url is required" }, { status: 400 });
+  }
+  if (image_url.length > 2000) {
+    return NextResponse.json({ error: "image_url must be at most 2000 characters" }, { status: 400 });
+  }
+  // Accept the internal same-origin storage path (`/uploads/...` from the
+  // memory-store getPublicUrl) or an absolute https URL; reject other schemes
+  // (javascript:/data:/http:) and protocol-relative `//host` before persisting
+  // a value that is later rendered into an <img> tag.
+  if (!isAcceptableStoredImageUrl(image_url)) {
+    return NextResponse.json({ error: "image_url must be an https URL or an internal storage path" }, { status: 400 });
+  }
+  if (image_type !== undefined && image_type !== null && (typeof image_type !== "string" || image_type.length > 50)) {
+    return NextResponse.json({ error: "image_type must be a string of at most 50 characters" }, { status: 400 });
+  }
+  if (storage_path !== undefined && storage_path !== null && (typeof storage_path !== "string" || storage_path.length > 500)) {
+    return NextResponse.json({ error: "storage_path must be a string of at most 500 characters" }, { status: 400 });
+  }
+  if (caption !== undefined && caption !== null && (typeof caption !== "string" || caption.length > 500)) {
+    return NextResponse.json({ error: "caption must be a string of at most 500 characters" }, { status: 400 });
   }
 
   const { data, error } = await supabase
