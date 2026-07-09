@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
@@ -43,9 +44,17 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { room_id, project_id, user_feedback, previous_analysis } = body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { room_id, user_feedback, previous_analysis } = body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!room_id || !user_feedback) {
     return NextResponse.json({ error: "room_id and user_feedback required" }, { status: 400 });
+  }
+
+  // Ownership guard BEFORE the (paid) re-analysis: room_id is client-supplied and
+  // the memory-store read is not user-scoped, so without this check any
+  // authenticated caller could drive the LLM refinement on another user's room
+  // (IDOR + LLM-cost abuse).
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   // Load room with images
@@ -57,11 +66,12 @@ export async function POST(request: Request) {
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
-  // Load project
+  // Load project. Derive the project from the OWNED room (not a client-supplied
+  // project_id) so the prompt can never be fed a different user's project.
   const { data: project } = await supabase
     .from("projects")
     .select("*")
-    .eq("id", project_id || room.project_id)
+    .eq("id", room.project_id)
     .single();
 
   // Load other rooms for cross-room awareness

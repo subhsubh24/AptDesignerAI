@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
 import { assembleRoomSceneGraph } from "@/lib/agents/scene-assembler";
 import {
@@ -71,9 +72,17 @@ export async function POST(request: Request) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleDiagnosisPost(supabase: any, _userId: string, room_id: unknown) {
+async function handleDiagnosisPost(supabase: any, userId: string, room_id: unknown) {
   if (!room_id || typeof room_id !== "string") {
     return NextResponse.json({ error: "room_id required" }, { status: 400 });
+  }
+
+  // Ownership guard BEFORE the (paid) diagnosis pipeline: room_id is
+  // client-supplied and the memory-store read is not user-scoped, so without
+  // this check any authenticated caller could run diagnosis on — and write a
+  // diagnosis row into — another user's room (IDOR + LLM-cost abuse).
+  if (!(await userOwnsRoom(supabase, room_id, userId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   // Fetch room + images
