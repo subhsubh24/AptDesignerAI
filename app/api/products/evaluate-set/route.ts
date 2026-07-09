@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { extractFromUrl } from "@/lib/agents/product-extractor";
 import { scoreProduct, type ScoringContext } from "@/lib/agents/fit-scorer";
 import { evaluateBundle, type BundleContext } from "@/lib/agents/bundle-optimizer";
@@ -64,6 +65,14 @@ export async function POST(request: Request) {
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!items?.length) return NextResponse.json({ error: "items required" }, { status: 400 });
+
+  // Ownership guard BEFORE the (paid) fan-out of extraction + scoring + bundle
+  // evaluation: room_id is client-supplied and the memory-store reads are not
+  // user-scoped, so without this check any authenticated caller could run the
+  // full set evaluation against another user's room (IDOR + LLM-cost abuse).
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // ── Fetch room + project + diagnosis context ──────────────────
   const [roomRes, diagRes] = await Promise.all([

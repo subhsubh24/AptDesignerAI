@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -44,6 +45,14 @@ export async function POST(request: Request) {
 
   if (!product_id || !room_id) {
     return NextResponse.json({ error: "product_id and room_id required" }, { status: 400 });
+  }
+
+  // Ownership guard BEFORE the (paid) per-product scoring: room_id is
+  // client-supplied and the memory-store reads are not user-scoped, so without
+  // this check any authenticated caller could score products against — and pull
+  // the diagnosis/design context of — another user's room (IDOR + LLM-cost abuse).
+  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   // Fetch product, room, project, and diagnosis in parallel

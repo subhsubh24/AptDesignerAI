@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
+import { userOwnsRoom } from "@/lib/auth/ownership";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -49,6 +50,15 @@ export async function POST(request: Request) {
     .single();
 
   if (!bundle) return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+
+  // Ownership guard BEFORE the (paid) bundle evaluation: bundle_id is
+  // client-supplied and the memory-store read is not user-scoped. Verify the
+  // caller owns the bundle's room (bundle → room → project → user) so no
+  // authenticated caller can evaluate — or read the products of — another user's
+  // bundle (IDOR + LLM-cost abuse).
+  if (!(await userOwnsRoom(supabase, bundle.room_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const products = (bundle.product_bundle_items || []).map(
     (item: { candidate_products: unknown }) => item.candidate_products
