@@ -431,7 +431,7 @@ export default function ResultsScreen() {
                   Colour Palette
                 </ThemedText>
                 <ThemedView style={styles.chipRow}>
-                  {analysis.recommended_palette.map((color) => (
+                  {(analysis.recommended_palette ?? []).map((color) => (
                     <ThemedView
                       key={color}
                       style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
@@ -448,7 +448,7 @@ export default function ResultsScreen() {
                   Materials &amp; Textures
                 </ThemedText>
                 <ThemedView style={styles.chipRow}>
-                  {[...analysis.recommended_materials, ...analysis.recommended_textures].map((item) => (
+                  {[...(analysis.recommended_materials ?? []), ...(analysis.recommended_textures ?? [])].map((item) => (
                     <ThemedView
                       key={item}
                       style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
@@ -460,12 +460,12 @@ export default function ResultsScreen() {
               </ThemedView>
 
               {/* What Works */}
-              {analysis.what_works.length > 0 && (
+              {(analysis.what_works ?? []).length > 0 && (
                 <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
                   <ThemedText type="subtitle" style={styles.cardTitle}>
                     What to Keep
                   </ThemedText>
-                  {analysis.what_works.map((item) => (
+                  {(analysis.what_works ?? []).map((item) => (
                     <ThemedView key={item} style={styles.listRow}>
                       <View style={[styles.listDot, { backgroundColor: colors.accent }]} />
                       <ThemedText type="default" style={[styles.listItemText, { color: colors.mutedForeground }]}>
@@ -477,12 +477,12 @@ export default function ResultsScreen() {
               )}
 
               {/* What Should Go */}
-              {analysis.what_should_go.length > 0 && (
+              {(analysis.what_should_go ?? []).length > 0 && (
                 <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
                   <ThemedText type="subtitle" style={styles.cardTitle}>
                     What to Remove
                   </ThemedText>
-                  {analysis.what_should_go.map((item) => (
+                  {(analysis.what_should_go ?? []).map((item) => (
                     <ThemedView key={item} style={styles.listRow}>
                       <View style={[styles.listDot, { backgroundColor: colors.destructive }]} />
                       <ThemedText type="default" style={[styles.listItemText, { color: colors.mutedForeground }]}>
