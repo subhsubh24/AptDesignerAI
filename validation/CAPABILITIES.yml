@@ -39,6 +39,7 @@ version: 1
 non_credential_allowlist:
   - NODE_ENV
   - VERCEL
+  - DATA_BACKEND                 # data-layer selector: "memory" (default, in-memory store) | "supabase" (real persistent Postgres + runtime RLS). Human-gated cutover (apply migrations, set Supabase env, flip flag, verify cold start).
   - LOG_LEVEL
   - AI_PROVIDER
   - DETERMINISTIC_MODE
