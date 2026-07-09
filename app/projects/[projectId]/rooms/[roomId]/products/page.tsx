@@ -149,24 +149,40 @@ export default function ProductsPage() {
   const handleEvaluate = async (productId: string) => {
     setEvaluating(productId);
     try {
-      await fetch("/api/products/evaluate", {
+      const res = await fetch("/api/products/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product_id: productId, room_id: roomId }),
       });
-      loadProducts();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error("Evaluation failed", body?.error || `Could not evaluate this product (HTTP ${res.status}).`);
+        return;
+      }
+      await loadProducts();
+    } catch {
+      toast.error("Evaluation failed", "Network error — could not reach the evaluation service.");
     } finally {
       setEvaluating(null);
     }
   };
 
   const handleStatusChange = async (productId: string, status: string) => {
-    await fetch(`/api/products/${productId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    loadProducts();
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error("Update failed", body?.error || `Could not update the product status (HTTP ${res.status}).`);
+        return;
+      }
+      await loadProducts();
+    } catch {
+      toast.error("Update failed", "Network error — could not update the product status.");
+    }
   };
 
   const handleAgenticSearch = async () => {
