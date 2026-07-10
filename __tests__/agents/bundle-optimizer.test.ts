@@ -134,4 +134,26 @@ describe("prefilterBundleCombos — deterministic ordering", () => {
     const tiedKeys = result.kept.map(keyOf);
     expect(tiedKeys.indexOf("aaa|bbb")).toBeLessThan(tiedKeys.indexOf("ccc|ddd"));
   });
+
+  it("also breaks ties deterministically on the minKept fallback sort path", () => {
+    // Force the OTHER sort site: an impossibly-high mathFloor drops every combo
+    // (overall is 0..1), so surviving.length (0) < minKept and the handler falls
+    // back to `scored.sort(...).slice(0, N)`. Three single-item combos with
+    // identical specs all tie on math.overall, so only the fallback tiebreaker
+    // decides which top-N survive and in what order — it must be stable across
+    // input permutations.
+    const cA = [makeProduct("aaa")];
+    const cB = [makeProduct("bbb")];
+    const cC = [makeProduct("ccc")];
+    const opts = { minKept: 2, mathFloor: 2 };
+
+    const forward = prefilterBundleCombos([cA, cB, cC], ctx, opts);
+    const reversed = prefilterBundleCombos([cC, cB, cA], ctx, opts);
+
+    // Prove we actually exercised the fallback branch, not the primary sort.
+    expect(forward.reasons.fallback_topN).toBe(1);
+    // Deterministic top-2 by sorted-id key, identical regardless of input order.
+    expect(forward.kept.map(keyOf)).toEqual(["aaa", "bbb"]);
+    expect(reversed.kept.map(keyOf)).toEqual(["aaa", "bbb"]);
+  });
 });
