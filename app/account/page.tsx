@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Trash2, User } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { EmailPreferences } from "./email-preferences";
+import { SubscriptionCard } from "./subscription-card";
 
 const CONFIRM_PHRASE = "delete my account";
 
@@ -69,6 +70,9 @@ export default function AccountPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Subscription & billing (self-serve via Stripe portal) */}
+      <SubscriptionCard />
 
       {/* Email preferences (CAN-SPAM opt-out) */}
       <EmailPreferences />

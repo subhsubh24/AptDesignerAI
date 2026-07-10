@@ -93,6 +93,28 @@ export async function createCheckoutSession(
   return { sessionId: session.id, url: session.url };
 }
 
+/**
+ * Create a Stripe Billing Portal session so a web subscriber can self-serve:
+ * update their payment method, download invoices, switch plans, or cancel. The
+ * caller MUST have already resolved `customerId` from the current user's own
+ * stripe_customers row (never a client-supplied id) — the portal exposes full
+ * billing management for whatever customer id is passed.
+ */
+export async function createBillingPortalSession(
+  customerId: string,
+  returnUrl: string,
+): Promise<{ url: string }> {
+  const stripe = getStripe();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  });
+  if (!session.url) {
+    throw new Error("[billing] Stripe returned a billing portal session with no URL.");
+  }
+  return { url: session.url };
+}
+
 export interface WebhookResult {
   type: string;
   processed: boolean;
