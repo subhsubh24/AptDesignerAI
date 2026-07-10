@@ -936,7 +936,7 @@ export default function FocusPage() {
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="font-semibold text-sm">Design Direction</h3>
                   {areaAnalysis.style_name && (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-warm/15 text-accent-warm border border-accent-warm/20">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent-warm/15 text-accent-warm-strong border border-accent-warm/20">
                       {areaAnalysis.style_name}
                     </span>
                   )}
