@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet } from 'react-native';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
+import Purchases from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
+import { RC_KEY } from '@/lib/rc-init';
 import { supabase } from '@/lib/supabase';
 
 const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
@@ -64,6 +66,31 @@ export default function SettingsScreen() {
   const openLink = useCallback((url: string) => {
     // In-app browser keeps users inside the app (matches ExternalLink elsewhere).
     void openBrowserAsync(url, { presentationStyle: WebBrowserPresentationStyle.AUTOMATIC });
+  }, []);
+
+  // Apple guideline 3.1.2 (Subscriptions) / Google Play expect an in-app path to
+  // manage (change / cancel) a store subscription. RevenueCat surfaces the platform-native
+  // management page via CustomerInfo.managementURL — App Store subscriptions on
+  // iOS, Play subscriptions on Android. Null when there's no store-managed
+  // subscription (or RC isn't configured), in which case we point the user at
+  // their store account settings rather than a dead end.
+  const handleManageSubscription = useCallback(async () => {
+    const storeSettingsHint =
+      'Manage your subscription in your device’s App Store (Settings → your name → Subscriptions) or Google Play (Play Store → Payments & subscriptions) account settings.';
+    if (!RC_KEY) {
+      Alert.alert('Manage subscription', storeSettingsHint);
+      return;
+    }
+    try {
+      const info = await Purchases.getCustomerInfo();
+      if (info.managementURL) {
+        await Linking.openURL(info.managementURL);
+        return;
+      }
+      Alert.alert('No active subscription', `We couldn’t find an active subscription on this account. ${storeSettingsHint}`);
+    } catch {
+      Alert.alert('Manage subscription', storeSettingsHint);
+    }
   }, []);
 
   const performDelete = useCallback(async () => {
@@ -167,6 +194,18 @@ export default function SettingsScreen() {
           <Row label="Privacy Policy" onPress={() => openLink(PRIVACY_URL)} colors={colors} accessibilityHint="Opens the privacy policy in your browser" />
           <Row label="Terms of Service" onPress={() => openLink(TERMS_URL)} colors={colors} accessibilityHint="Opens the terms of service in your browser" />
           <Row label="Support" onPress={() => openLink(SUPPORT_URL)} colors={colors} accessibilityHint="Opens the support page in your browser" />
+        </ThemedView>
+
+        <ThemedView style={styles.section}>
+          <ThemedText type="small" style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+            Subscription
+          </ThemedText>
+          <Row
+            label="Manage subscription"
+            onPress={() => void handleManageSubscription()}
+            colors={colors}
+            accessibilityHint="Opens your App Store or Google Play subscription settings to change or cancel your plan"
+          />
         </ThemedView>
 
         <ThemedView style={styles.section}>
