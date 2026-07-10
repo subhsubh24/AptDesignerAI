@@ -3261,3 +3261,38 @@ Opened #540-544, auto-merge (squash) enabled on all 5. Integrated gate GREEN in-
 - **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox). Still the CI-only-verifiable closure.
 - **E7 lifecycle tail is the richest remaining buildable growth work** (upgrade/habit email templates + a habit-emails cron, analytics-aggregates surface E7.6, experiment engine E7.7) — real but each touches shared call sites (signup/analysis) or new migrations; scope carefully, one at a time, file-disjoint.
 - **Deferred low-value this run:** `app-tabs.web.tsx` "Expo Starter" text; muted-text-on-amber-tint a11y nits (identified-product-pill, scene-coverage-card); saved.tsx unhandled Share fallback; validation-agent partial-response hard-fail (currently safe/logged).
+
+---
+
+## Run 2026-07-10 (Run 77)
+
+### State on entry
+- Default tip `36a9084` (#545). Baseline gate GREEN: tsc clean, **1916 tests** pass / 11 skip, determinism green, eslint clean.
+- No DEEP AUDIT due (last was Run 76; next ~Run 80).
+- **Discovered #543 (Run 76 Stripe Customer Portal) was still OPEN, not merged** — the Run 76 ledger row listed it under "#540-544 merged" but `app/api/billing/portal/route.ts` did NOT exist on default. Its `journeys` CI check had failed on a `/account` axe color-contrast serious violation.
+
+### #543 recovery (the headline)
+- Root cause of the journeys failure: #543's new "Manage subscription" `warm-outline` button rendered `text-accent-warm` (#b4501e) → **4.44:1** on the card tint `#f8ede8`, just below AA 4.5:1. #543 was branched from `80396ba`, which is BEFORE #542 (Run 76) changed `warm-outline`→`text-accent-warm-strong` (#a3441a, ~5.4:1 on that bg).
+- Fix = **rebase #543 onto the current default** (now includes #542). No code change. Confirmed the button now resolves to `accent-warm-strong`; tsc + billing-portal tests green; force-pushed → journeys GREEN → auto-merged. The independent CI gate confirmed the contrast fix.
+
+### Changes shipped (all 4 merged)
+- **#543** (recovered) — self-serve Stripe Customer Portal on /account.
+- **#547 (DETERMINISM)** — `lib/agents/orchestrator.ts`: two per-category score sorts (coordinator state + self-correction state) had no tiebreaker → tied `final_item_score` kept async insertion order → `topPickTitle`/`topPickPrice` fed to `planCorrections()`'s LLM prompt drift run-to-run. Extracted exported `compareByFinalScoreDesc()` (score-desc + `tiebreakProduct` URL tiebreak, the pattern already inline ~8× in the file) + applied at both sites + regression test.
+- **#548 (MOBILE)** — `mobile/src/app/settings.tsx`: added a "Manage subscription" row (Apple 3.1.2 / Play) opening RevenueCat `CustomerInfo.managementURL`; honest alert when RC unconfigured / no store sub. Mirrors #543's web portal.
+- **#549 (A11Y)** — `app/page.tsx`: landing hero "Designed for you" caption `text-accent-warm/60` (~2.1:1 over the CSS gradient; axe can't flag text over a gradient) → `text-accent-warm-strong` (~5.2:1).
+
+### Merge outcome
+Integrated gate GREEN in-run (3 new merged onto a scratch branch): tsc clean, **1919 tests** (+3), determinism green, eslint clean. 6 Sonnet reviews on the 3 new PRs, all APPROVE (#548 had one conditional-APPROVE: Reviewer B caught the code comment citing Apple "5.1.1(i)" — that's the Privacy-Policy guideline, not subscription-management (3.1.2); fixed the comment). #543's prior both-APPROVE held (rebase-only). #548's journeys job flaked once (~12s fail, missing `/tmp/app.log` = app never started; a mobile-only diff can't affect web journeys) → `rerun_failed_jobs` → GREEN. No migrations/secrets; no new PENDING_OPS. No ROADMAP box ticked (all incremental / enhancements to complete Track C/D).
+
+### Lessons learned
+1. **Don't trust a prior ledger's "merged" claim — verify the artifact on default.** #543's row said merged; the portal route file was absent and the PR was still open with a red `journeys` check. On entry, `ls` the promised artifact / `git log -- <path>` before assuming a recent PR landed.
+2. **A stale base can be the whole bug.** #543 failed an a11y gate purely because it predated the sibling token fix (#542). Rebasing onto the current default fixed it with zero code change — always check the base before hand-patching a red PR from a prior run.
+3. **Re-verify scout findings against the code AND the tests.** Two false positives this run: the search/route "insert-order" bug (Run 76 already dismissed it) and a spatial-math "coverage gap" the existing test already covers. A 30-second check of the real file/test avoided two churn changes.
+4. **Distinguish an infra flake from a test failure.** A journeys job that dies in ~12s with `/tmp/app.log: No such file or directory` never started the app — it's a setup flake, re-run it. Especially when your diff (mobile-only) structurally cannot touch the failing surface (web journeys).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 80** (last Run 76). Next 1–2 runs can lean on scouts/scorecard.
+- **#1 ship blocker stays functional_reality (persistence, in-memory data layer)** — human-gated (`cutover-to-persistent-data`); not headlessly buildable, do NOT fabricate busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
+- **Richest remaining buildable growth work = E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine — both file-disjoint, E7.7 needs new migration 030; deferred this run as larger pre-launch infra with no live data yet). Reviewer-A follow-up nit from #547: two other orchestrator sort sites (~2652 runAudit, ~3243 live-confidence) already inline the tiebreak but could adopt `compareByFinalScoreDesc` for DRY — low value, optional.
+- **Deferred low-value this run:** mobile results.tsx `Array.isArray` hardening (already has `?? []`); saved-designs POST parallelization (marginal under in-memory store).
