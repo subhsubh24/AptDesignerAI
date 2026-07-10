@@ -265,7 +265,7 @@ export default function LandingPage() {
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center space-y-2">
                       <Palette className="h-8 w-8 text-accent-warm/40 mx-auto" />
-                      <p className="text-sm text-accent-warm/60 font-medium">Designed for you</p>
+                      <p className="text-sm text-accent-warm-strong font-medium">Designed for you</p>
                     </div>
                   </div>
                   <div className="absolute top-4 left-4">
