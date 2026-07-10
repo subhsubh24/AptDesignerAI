@@ -363,17 +363,17 @@ ${synthInput}
       `[analyze-apartment] Synthesis pass complete. Total tokens: ${roomResults.reduce((s, r) => s + r.tokensUsed, 0) + synthTokens}`,
     );
 
-    // Save diagnosis for each room — normalize keys to handle case/format mismatches
-    const normalizedRooms: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(analysisRooms)) {
-      normalizedRooms[key.toLowerCase().replace(/[\s-]+/g, "_")] = value;
-    }
-
-    for (const room of rooms) {
-      const normalizedType = room.room_type.toLowerCase().replace(/[\s-]+/g, "_");
-      const roomAnalysis = normalizedRooms[normalizedType]
-        || normalizedRooms[room.room_type]
-        || analysisRooms[room.room_type];
+    // Persist each room's OWN diagnosis. roomResults is index-aligned with rooms
+    // (Promise.all preserves input order), so roomResults[i] holds the analysis
+    // produced for rooms[i]. This MUST NOT be looked up via a room_type-keyed
+    // map: an apartment with two rooms of the same type (e.g. two bedrooms)
+    // collapses in that map, so both rooms would be saved the LAST same-type
+    // room's analysis — persisting the wrong keep/replace/add recommendations
+    // for the other. (analysisRooms stays room_type-keyed for the coarse
+    // apartment-level overview only.)
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i];
+      const roomAnalysis = roomResults[i]?.analysis;
       if (!roomAnalysis) continue;
 
       // Persist the diagnosis first, then only flip the room to "diagnosed"
