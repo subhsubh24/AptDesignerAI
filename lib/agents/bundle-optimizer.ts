@@ -83,6 +83,18 @@ export interface BundlePrefilterResult {
   reasons: Record<string, number>;
 }
 
+// Deterministic tiebreaker for combo ranking: two combos with an identical
+// math.overall must sort in a stable order. Without it, Array.sort leaves
+// equal-score combos in input order — which depends on upstream async
+// completion order — so the top-N kept set (and thus the chosen bundle) can
+// differ run-to-run, violating the determinism contract. Key by the combo's
+// sorted product ids (stable + unique), mirroring vibeCacheKey above.
+function comboTiebreak(a: CandidateProduct[], b: CandidateProduct[]): number {
+  const ak = a.map((p) => p.id).sort().join("|");
+  const bk = b.map((p) => p.id).sort().join("|");
+  return ak.localeCompare(bk);
+}
+
 export function prefilterBundleCombos(
   combos: CandidateProduct[][],
   bundleCtx: BundleContext,
@@ -142,12 +154,12 @@ export function prefilterBundleCombos(
     surviving.push(s);
   }
 
-  // Sort by math.overall desc so the best combos survive
-  surviving.sort((a, b) => b.math.overall - a.math.overall);
+  // Sort by math.overall desc (stable tiebreak on combo id) so the best combos survive
+  surviving.sort((a, b) => (b.math.overall - a.math.overall) || comboTiebreak(a.combo, b.combo));
 
   // Guarantee minKept: if filter was too aggressive, fall back to top-N by math.overall
   if (surviving.length < minKept) {
-    scored.sort((a, b) => b.math.overall - a.math.overall);
+    scored.sort((a, b) => (b.math.overall - a.math.overall) || comboTiebreak(a.combo, b.combo));
     return {
       kept: scored.slice(0, Math.min(combos.length, Math.max(minKept, surviving.length))).map((s) => s.combo),
       dropped: combos.length - Math.min(combos.length, Math.max(minKept, surviving.length)),
