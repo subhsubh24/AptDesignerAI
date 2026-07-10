@@ -830,3 +830,29 @@ AND keep it small:
   then carries only `open` + freshly-resolved work — fewer, current items beat a 600-line audit scroll.
 - **Honest only (anti-gaming):** never mass-flip to `done` to look clear, and never delete an `open` item
   to shrink the list. Bounded means CURATED, not hidden.
+
+## 39. Coherence & traceability — keep intent↔spec↔code↔tests ONE governed object (anti-drift)
+Writing code was never the bottleneck — DRIFT is: requirements drift from docs, docs from code, code from
+tests, until nobody understands the system (the 18-million-line COBOL failure mode). Agent fleets that
+generate a lot of code against unsynchronized specs induce that drift FASTER, not slower. So coherence is a
+first-class, GOVERNED property of the line here — not a hope:
+- **One synchronized object.** intent (VISION) ↔ spec (ROADMAP / the business rules) ↔ code ↔ tests ↔
+  production behavior move TOGETHER. This is §14 (living artifacts) promoted to a gate and made BIDIRECTIONAL:
+  a change to the requirement updates the code; a hotfix to the code updates the spec/doc/test IN THE SAME
+  work. A doc/spec that contradicts the code is a COHERENCE DEFECT — a bug to fix now, never deferred, never
+  churned.
+- **Traceability ("lot number") per shipped unit.** Every unit already goes branch → PR → independent review
+  → CI → merge, logged in IMPROVEMENT_LOG + loop-memory. Make the linkage EXPLICIT: name the ROADMAP DoD item
+  / rule it advances → the PR that implements it → the test that verifies it → the merge that deployed it. A
+  DoD box ticks ONLY with that chain real on the default branch (§7 evidence-based-done). "The agent wrote it"
+  is not provenance.
+- **The coherence gate (promote the deep-audit drift lens to first-class, §10).** Each deep audit + the
+  readiness gate verify: does the code still match VISION / ROADMAP / the business case; are docs ↔ code ↔
+  tests synchronized; is every ticked box still provable? A divergence is a finding that JUMPS THE QUEUE like
+  a security bug. The value bar (§5, no churn), the disjoint rule (§15), maker ≠ checker (§4), CI-as-enforced-
+  spec, and determinism (§22) are the levers that KEEP it coherent — treat them as anti-drift, not just quality.
+- **Stand behind the output (accountability).** When production breaks, the loop OWNS it: observe the real
+  system (DEEP_DIAGNOSIS), fix the ROOT cause (§6c), add a regression test that fails LOUD, record the
+  incident — never "as-is, verification is the owner's problem." The owner is the accountable party; the loop
+  is the production system that self-heals. Honesty: a coherence/traceability claim counts ONLY if the check
+  actually ran (same anti-gaming rule as the number).
