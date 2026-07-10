@@ -60,6 +60,22 @@ function tiebreakProduct(a: CandidateProduct, b: CandidateProduct): number {
   const bu = b.product_url || "";
   return au.localeCompare(bu);
 }
+// Score-descending comparator with the URL tiebreaker applied. A plain
+// `sB - sA` sort leaves tied-score candidates in async-insertion order, so the
+// "top pick" fed into the coordinator/self-correction state (and from there
+// into planCorrections()'s LLM prompt) drifts run-to-run. The tiebreaker makes
+// the same candidate set always yield the same ranking — see
+// .claude/rules/determinism.md ("every sort on a computed score needs a stable
+// id-keyed tiebreaker on EVERY sort site").
+export function compareByFinalScoreDesc(
+  evaluations: Map<string, ProductEvaluationResult>,
+): (a: CandidateProduct, b: CandidateProduct) => number {
+  return (a, b) => {
+    const sA = evaluations.get(a.id)?.final_item_score || 0;
+    const sB = evaluations.get(b.id)?.final_item_score || 0;
+    return sB - sA || tiebreakProduct(a, b);
+  };
+}
 function tiebreakBundle(a: CandidateProduct[], b: CandidateProduct[]): number {
   const au = [...a.map((p) => p.product_url || "")].sort().join("|");
   const bu = [...b.map((p) => p.product_url || "")].sort().join("|");
@@ -2720,11 +2736,7 @@ export async function runAgenticSearch(
             .filter((s): s is number => s !== undefined)
             .sort((a, b) => a - b);
           const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : undefined;
-          const sortedByScore = [...products].sort((a, b) => {
-            const sA = evaluations.get(a.id)?.final_item_score || 0;
-            const sB = evaluations.get(b.id)?.final_item_score || 0;
-            return sB - sA;
-          });
+          const sortedByScore = [...products].sort(compareByFinalScoreDesc(evaluations));
           cats[cat] = {
             productCount: products.length,
             tiersCovered: Array.from(
@@ -2970,11 +2982,7 @@ export async function runAgenticSearch(
         tiersCovered: string[];
       }> = {};
       for (const [category, products] of Object.entries(candidatesByCategory)) {
-        const sorted = [...products].sort((a, b) => {
-          const sA = evaluations.get(a.id)?.final_item_score || 0;
-          const sB = evaluations.get(b.id)?.final_item_score || 0;
-          return sB - sA;
-        });
+        const sorted = [...products].sort(compareByFinalScoreDesc(evaluations));
         const tiersCovered = Array.from(
           new Set(products.map((p) => ((p.metadata as { price_tier?: string } | null)?.price_tier) || "balanced"))
         );
