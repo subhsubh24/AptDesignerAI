@@ -26,19 +26,19 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-08
-  last_run: 71                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 69            # next DEEP AUDIT due ~Run 72
+  as_of: 2026-07-10
+  last_run: 76                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 76            # 8-lens sweep ran Run 76; next due ~Run 80
   this_run:
-    changes_shipped: 7           # #503-509 ALL merged (gate green, 2 Sonnet approvals each): 1 SSRF + 2× G2 PATCH validation (rooms/products) + 1 A1 dashboard guard + 1 mobile blank-screen guard + 1 F2 test (groundConfidence) + 1 ship-critical business-case honesty fix (closes #486)
-    changes_abandoned: 0         # every scouted candidate that cleared the value bar shipped; borderline items (dead toast/badge info-blue variants, topbar emerald semantic, email-lifecycle Pro-Annual entangled w/ owner #487) correctly NOT selected
-    abandoned_reasons: []        # none abandoned this run
-    verify_cycle_failures: 0     # LOOP-2 (local gate) clean for all 7 (tsc/eslint/test/determinism root + mobile tsc); baseline green on entry (1840 tests) → 1846 after +6 F2 tests
-    review_rejections: 1         # LOOP-3: 16 first-pass reviews; #509 (rooms PATCH) got ONE Reviewer-A REQUEST_CHANGES (3 real gaps: enum-membership not checked, budget_dollars not integer-checked, present-but-null on NOT NULL cols → all would 500 at the DB instead of a clean 400) → all 3 fixed + both cycle-2 reviewers APPROVE. Not an abandon — the gate working as designed.
+    changes_shipped: 5           # #540-544 all opened + auto-merge enabled (integrated gate green, 2 Sonnet approvals each): #540 correctness (harmony chunk-merge) + #541 security/IDOR (bundles product↔room binding) + #542 a11y (warm-variant contrast) + #543 monetization (Stripe customer portal) + #544 side-effect-integrity (checkout-success entitlement gate)
+    changes_abandoned: 0         # 2 scout findings VERIFIED-DOWN as false positives before any code (proxy.ts=correct Next-16 convention; search INSERT…RETURNING preserves order); lower-value items (E7 email tail, app-tabs "Expo Starter", muted-on-amber a11y nits) correctly NOT selected, not abandoned mid-build
+    abandoned_reasons: []        # none started-then-dropped this run
+    verify_cycle_failures: 0     # LOOP-2 clean for all 5 (tsc/eslint/test/determinism); baseline 1908 → integrated 1920 (+12)
+    review_rejections: 0         # LOOP-3: 10/10 first-pass APPROVE, ZERO REQUEST_CHANGES (unusually clean; reviewers reverted #540/#541 to prove tests fail without the fix, hand-computed #542 ratios, adversarially checked #543 for IDOR/secret-leak)
     circuit_breaker_trips: 0
-    ci_flake: "none observed this run — all 7 required-check runs (verify/build/mobile/lint) went green first try; #505 took longer to auto-merge due to runner-queue congestion behind the post-merge CI, not a flake."
+    ci_flake: "awaiting required CI (verify/build/mobile) on #540-544 at bookkeeping time; none observed."
   rolling_7d:
-    merged_prs: 57               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
+    merged_prs: 50               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)

@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-07-09
+  as_of: 2026-07-10
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -67,6 +67,13 @@ OWNER_ACTIONS:
       why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
       how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
       blocks: annual-billing
+    - id: enable-stripe-customer-portal
+      title: "Activate & configure the Stripe Customer Portal so /account 'Manage subscription' works"
+      priority: normal
+      status: open
+      why: "Run 76 (#543) added self-serve subscription management: POST /api/billing/portal -> Stripe billingPortal.sessions.create, linked from /account. Stripe requires the Customer Portal to be ACTIVATED + configured in the Dashboard before session creation succeeds; until then the route returns 502 and web subscribers cannot self-manage/cancel. No code or secret change is needed — only the dashboard config."
+      how: "Stripe Dashboard -> Settings -> Billing -> Customer portal: activate the portal; enable 'cancel subscription', 'update payment method', and invoice history; set the business/return info. Configure BOTH test mode and live mode (separate). The route already reads STRIPE_SECRET_KEY from env, so nothing to commit."
+      blocks: none
     - id: email-verification-deferred
       title: "Account email verification is intentionally OFF (no email pipeline) — re-enable ONLY with the round-trip test"
       priority: normal
