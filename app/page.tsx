@@ -23,7 +23,7 @@ export default function LandingPage() {
               {/* Left: Copy */}
               <div className="max-w-xl">
                 {/* Pill badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm mb-8">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm-strong mb-8">
                   Personalized interior design
                 </div>
 

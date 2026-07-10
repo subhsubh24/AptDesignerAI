@@ -49,7 +49,7 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
         <StaggerList className="space-y-3">
           <StaggerItem>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-warm/10 border border-accent-warm/20 text-xs font-medium text-accent-warm-strong">
                 <Sparkles className="h-3 w-3" />
                 AI-designed room
               </span>
