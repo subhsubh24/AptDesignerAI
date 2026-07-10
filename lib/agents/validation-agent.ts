@@ -21,6 +21,7 @@ import type { AgentResult } from "./types";
 import type { DynamicDesignProfile } from "@/lib/design-context/user-profile";
 import type { DiagnosisData, DesignDirection, ExtractedFloorPlan } from "@/lib/types/database";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
+import { mergeParallelChunkScores } from "@/lib/agents/chunk-merge";
 import { computeSetMathScores, formatSetMathForPrompt } from "@/lib/validation/set-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps, type HarmonySubScores as CompositeSubScores } from "@/lib/scoring/harmony-composite";
 
@@ -531,28 +532,13 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
         runHarmonyPassAChunk(buildPassAPromptText(group2, true), chunkMaxTokens),
       ]);
 
-      // Merge in original item order; filter each chunk to its assigned categories only
-      // (guards against the model accidentally scoring items outside its group).
-      // Key by `${groupIndex}:${category}` to correctly handle duplicate categories
-      // (e.g. two "wall_art" items) — a plain category key would overwrite the first.
-      const group1Keys = new Set(group1.map((item, i) => `0:${i}:${item.category as string}`));
-      const group2Start = group1.length;
-      const group2Keys = new Set(group2.map((item, i) => `1:${i}:${item.category as string}`));
-      // Build lookup: for each chunk, match returned scores back to original indices by position
-      const mergedByIndex = new Map<number, HarmonyValidationResult["item_scores"][number]>();
-      for (let i = 0; i < group1.length; i++) {
-        const score = r1.scores.find(s => s.category === (group1[i].category as string));
-        if (score) mergedByIndex.set(i, score);
-      }
-      for (let i = 0; i < group2.length; i++) {
-        const score = r2.scores.find(s => s.category === (group2[i].category as string));
-        if (score) mergedByIndex.set(group2Start + i, score);
-      }
-      // Suppress unused-variable warnings from the Set variables above
-      void group1Keys; void group2Keys;
-      itemScoresResult = whatItNeeds
-        .map((_, idx) => mergedByIndex.get(idx))
-        .filter((s): s is HarmonyValidationResult["item_scores"][number] => s !== undefined);
+      // Re-assemble the two chunks in original item order. Merge POSITIONALLY
+      // (score[i] belongs to group[i]) — NOT by category name. Item lists
+      // routinely contain duplicate categories (two "wall_art"/"throw_pillow"
+      // items); a `.find()` by category returns the first match for both
+      // duplicates, silently assigning one item's score to the other and
+      // dropping a real score. Mirrors the Final Assessment merge below.
+      itemScoresResult = mergeParallelChunkScores(r1.scores, group1.length, r2.scores, group2.length);
 
       passATokens = r1.tokens + r2.tokens;
       responseModel = r1.usedModel;
@@ -1042,19 +1028,9 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
         runFinalPassAChunk(buildFinalPassAPromptText(group2, true), chunkMaxTokens),
       ]);
 
-      // Merge by positional index within each chunk so duplicate
-      // categories (e.g. two throw_pillows) don't overwrite each other.
-      const mergedByIndex = new Map<number, FinalAssessmentResult["item_scores"][number]>();
-      const group2Start = group1.length;
-      for (let i = 0; i < r1.scores.length && i < group1.length; i++) {
-        mergedByIndex.set(i, r1.scores[i]);
-      }
-      for (let i = 0; i < r2.scores.length && i < group2.length; i++) {
-        mergedByIndex.set(group2Start + i, r2.scores[i]);
-      }
-      itemScores = whatItNeeds
-        .map((_, idx) => mergedByIndex.get(idx))
-        .filter((s): s is FinalAssessmentResult["item_scores"][number] => s !== undefined);
+      // Merge by positional index within each chunk so duplicate categories
+      // (e.g. two throw_pillows) don't overwrite each other (see mergeParallelChunkScores).
+      itemScores = mergeParallelChunkScores(r1.scores, group1.length, r2.scores, group2.length);
 
       passATokens = r1.tokens + r2.tokens;
       responseModel = r1.usedModel;
