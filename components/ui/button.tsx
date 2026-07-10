@@ -20,8 +20,8 @@ const buttonVariants = cva(
         link: "text-accent-warm underline-offset-4 hover:underline",
         warm: "bg-gradient-warm-button text-white shadow-warm-sm hover:shadow-warm-md hover:brightness-110",
         "warm-outline":
-          "border-2 border-accent-warm text-accent-warm bg-transparent hover:bg-accent-warm/10 shadow-sm",
-        "warm-ghost": "text-accent-warm hover:bg-accent-warm/10",
+          "border-2 border-accent-warm text-accent-warm-strong bg-transparent hover:bg-accent-warm/10 shadow-sm",
+        "warm-ghost": "text-accent-warm-strong hover:bg-accent-warm/10",
       },
       size: {
         default: "h-10 px-4 py-2",
