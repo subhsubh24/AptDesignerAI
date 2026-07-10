@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { parsePagination } from "@/lib/utils/pagination";
 import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
+import { userOwnsProject } from "@/lib/auth/ownership";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -11,6 +12,15 @@ export async function GET(request: NextRequest) {
 
   const projectId = request.nextUrl.searchParams.get("project_id");
   if (!projectId) return NextResponse.json({ error: "project_id required" }, { status: 400 });
+
+  // Ownership guard: project_id is client-supplied and the memory-store query is
+  // not user-scoped (RLS is inert at runtime), so without this check any
+  // authenticated caller could enumerate another user's rooms by guessing a
+  // project_id (IDOR / cross-tenant read). The POST sibling applies the same
+  // guard before inserting.
+  if (!(await userOwnsProject(supabase, projectId, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 300 });
 
@@ -69,6 +79,13 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+  }
+
+  // Ownership guard (write side): reject a room insert into a project the caller
+  // does not own. Without it, an authenticated user could pollute another user's
+  // project by POSTing a room with their project_id (IDOR / cross-tenant write).
+  if (!(await userOwnsProject(supabase, project_id, user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const { data, error } = await supabase
