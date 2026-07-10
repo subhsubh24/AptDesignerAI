@@ -3188,3 +3188,38 @@ Three file-disjoint deliverables on separate branches:
 - **Migration 019 PENDING** — owner must apply `supabase/migrations/019_fix_saved_designs_rls.sql` and verify the share-link fetch path before the RLS fix is live. Verify whether the app uses JWT-claim or column-filter approach.
 - **F4 (E2E + a11y + perf)** is the next unstarted quality gate after F3. Playwright + axe + Lighthouse budget on the hot paths.
 - **Auto-merge on PR #76** requires branch protection rules — owner should enable "Require status checks to pass before merging" in repository settings and then auto-merge will work for future PRs.
+
+---
+
+## Run 2026-07-10 (Run 75)
+
+### State on entry
+- Default tip `6484e8b` (#534). Baseline gate GREEN: tsc clean, **1900 tests** pass / 11 skip, determinism green, eslint clean.
+- Independent QUALITY_SCORECARD (as_of 2026-07-09): overall **C**, ship_gate **false**. Three ship-critical dims below A: `functional_reality` C (production data layer is a non-persistent in-memory mock — THE #1 ship blocker), `design_taste` B (authed a11y misses dense routes + no F7 screenshots), `artifact_integrity` B (preflight GATE 5 red on `priority: low`).
+- Last full 8-lens DEEP AUDIT: Run 72 (3 runs ago). Used the fresh adversarial scorecard as this run's prioritized findings (its top_gaps ARE an independent audit); a separate redundant 8-lens sweep was not run — noted for next run (a full DEEP AUDIT is due ~Run 76).
+
+### Reconciliation — 2 of 3 top ship-critical gaps were ALREADY closed
+- **security_rls** (scorecard: A, missed `GET /api/area-analysis` guard) → **already fixed by #530** (Run 74) with `idor-followup-guards.test.ts`. No work.
+- **artifact_integrity** (scorecard: B, preflight GATE 5 `priority: low` enum) → **already fixed by #532** (Run 74). Re-ran GATE 5 python check this run: **GREEN** (0 bad priorities). No work.
+- **functional_reality** (C, in-memory data layer) → human-gated PREPARE-complete: #531's `DATA_BACKEND=supabase` selector already returns a real user-scoped `@supabase/ssr` client for all data ops and is thoroughly wiring-tested. The remaining RAISE (real Postgres round-trip across a cold start) needs the owner cutover + a live/embedded Postgres+PostgREST — NOT headlessly buildable without heavy new infra. Left as-is; still the binding blocker, correctly on the human checklist.
+
+### Area served — 4 file-disjoint value-bar changes (from an 8-Haiku-scout sweep)
+- **#535 SECURITY/IDOR** — `GET+POST /api/rooms`: no `userOwnsProject` guard on a client-supplied `project_id`. Since the runtime data layer is the in-memory store (RLS inert), the app-layer guard is the sole tenancy boundary → authed cross-tenant room ENUMERATION (GET) + project POLLUTION (POST, insert into another user's project). Added the guard before read+insert (404) + 4 regression tests in `idor-read-guards.test.ts`.
+- **#536 CORRECTNESS/data-loss** — `analyze-apartment` per-room persistence looked analyses up in a `room_type`-keyed map; two rooms of the same type (2 bedrooms/bathrooms — common) collapsed → both saved the LAST same-type room's diagnosis (silent corruption on a core path). Fixed to index-aligned `roomResults[i].analysis` (Promise.all preserves order). New `analyze-apartment-persistence.test.ts` route-mock test proven to FAIL on the pre-fix lookup.
+- **#537 DETERMINISM** — `prefilterBundleCombos` had no sort tiebreaker on either sort site → equal-score combos ordered by unstable async completion order → chosen bundle drifts run-to-run (determinism.md violation). Added `comboTiebreak` (sorted product-id key) on both sorts + tests for primary AND `minKept` fallback paths.
+- **#538 A11Y** — 3 accent text pills on `bg-accent-warm/10|15` tint used `text-accent-warm` (≈4.25:1, below AA) → swapped to the purpose-built `text-accent-warm-strong` (5.1:1), consistent with dashboard's existing pattern. Icons/normal-bg uses left unchanged.
+
+### Merge outcome
+Opened **#535 #536 #537 #538**, auto-merge (squash) enabled on all 4. Full INTEGRATED gate green in-run (merged all 4 onto a scratch branch): tsc clean, **1908 tests** pass (+8), determinism green, eslint clean. All 4 both-Sonnet-APPROVED (10 reviews total; #536 + #537 each took one REQUEST_CHANGES→fix→re-review-APPROVE cycle for stronger tests). Awaiting required CI (verify+build+mobile) to land. No migrations/secrets. No ROADMAP box ticked (all 4 are incremental hardening; no Track item fully completed).
+
+### Lessons learned
+1. **Reconcile a stale-ish scorecard against HEAD before acting.** 2 of the 3 named top ship-critical gaps were already fixed by the prior run (#530 security, #532 artifact). Verifying HEAD first (grep the guard, re-run the preflight gate) avoided re-doing done work and redirected the run to a fresh scout sweep for the real remaining value.
+2. **`Promise.all(xs.map(fn))` preserves input order — persist index-aligned, never via a lossy secondary key.** Keying per-entity persistence by a non-unique attribute (`room_type`) silently clobbers duplicates. A "two-of-the-same-type" fixture is the cheap regression guard.
+3. **Every sort on a computed score needs a stable id-keyed tiebreaker on EVERY sort site.** The first test covered only the primary sort; a reviewer caught the untested `minKept` fallback. Force each branch (impossibly-high `mathFloor` drives the fallback) and assert a branch marker (`fallback_topN`).
+4. **Don't over-justify a skipped test.** "Covered by the money-path E2E" was false (the E2E never touches analyze-apartment). Heavy multi-LLM routes ARE unit-mockable via the established route-mock (`idor-compute-guards.test.ts`) + `geminiProvider`-mock pattern — and the test must be proven to fail without the fix.
+
+### Rotation guide for next run
+- **A full 8-lens DEEP AUDIT is due (~Run 76)** — last true sweep was Run 72; Run 75 leaned on the independent scorecard instead. Run the read-only Haiku sweep before scouting next run.
+- **#1 ship blocker stays functional_reality (persistence).** PREPARE is complete (#531). Advancing further is human-gated (owner applies migrations, sets Supabase env, flips `DATA_BACKEND=supabase`, verifies a cold start) — see PENDING_OPS `cutover-to-persistent-data`. Not headlessly buildable; do NOT fabricate busywork here.
+- **design_taste B is the other open ship-critical dim** but its two capping items (authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots) are CI/auth-stack-bound (`E2E_AUTH_STACK`, Supabase-local) and unverifiable in-sandbox. A blind write is risky (deep seed chain, env-specific pixels); weigh carefully before attempting.
+- **Scout candidates deferred this run (real but lower-value):** `GEMINI_API_KEY` fail-loud guard in `lib/ai/gemini.ts` (borderline; cost-contract-sensitive file); G2 input-validation on `identified-products/confirm|correct` POST; per-user rate limit on `identified-products/search` + `picks` GET. `extractBackfillKeywords` is ALREADY well-tested (don't re-test). Mobile scout findings (hardcoded splash colors) were borderline churn.
