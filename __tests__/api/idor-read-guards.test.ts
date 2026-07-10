@@ -11,22 +11,24 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
   getCurrentUserId: vi.fn(),
 }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn(), userOwnsProject: vi.fn() }));
 
 import { createClient, getCurrentUserId } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { userOwnsRoom, userOwnsProject } from "@/lib/auth/ownership";
 import { GET as productsGet } from "@/app/api/products/route";
 import { GET as refineChatGet, POST as refineChatPost } from "@/app/api/area-analysis/refine-chat/route";
 import { POST as savedDesignsPost } from "@/app/api/saved-designs/route";
+import { GET as roomsGet, POST as roomsPost } from "@/app/api/rooms/route";
 
 const mockCreateClient = createClient as unknown as Mock;
 const mockGetCurrentUserId = getCurrentUserId as unknown as Mock;
 const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockUserOwnsProject = userOwnsProject as unknown as Mock;
 
 /** A chainable query stub whose terminal read resolves to `result`. */
 function queryStub(result: { data: unknown; error?: unknown }) {
   const chain: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "order", "neq", "limit"]) {
+  for (const m of ["select", "eq", "order", "neq", "limit", "insert"]) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }
   chain.range = vi.fn().mockResolvedValue({ error: null, ...result });
@@ -48,6 +50,7 @@ beforeEach(() => {
   mockCreateClient.mockReset();
   mockGetCurrentUserId.mockReset();
   mockUserOwnsRoom.mockReset();
+  mockUserOwnsProject.mockReset();
   mockGetCurrentUserId.mockResolvedValue("attacker-1");
 });
 afterEach(() => vi.restoreAllMocks());
@@ -186,5 +189,79 @@ describe("read-leak IDOR guards", () => {
     expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "own-room", "owner-1");
     // Guard passed → the handler advanced to the diagnosis snapshot read it gates.
     expect(fromSpy).toHaveBeenCalledWith("room_diagnoses");
+  });
+
+  it("GET /api/rooms 404s when the caller does not own the project, without reading rooms", async () => {
+    const fromSpy = vi.fn(() => queryStub({ data: [] }));
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
+      from: fromSpy,
+    });
+    mockUserOwnsProject.mockResolvedValue(false);
+
+    const res = await roomsGet(
+      new NextRequest("http://localhost/api/rooms?project_id=victim-project"),
+    );
+
+    expect(res.status).toBe(404);
+    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
+    // The guard runs before any rooms read — the rooms table is never touched.
+    expect(fromSpy).not.toHaveBeenCalledWith("rooms");
+  });
+
+  it("GET /api/rooms serves rooms to the project owner (guard does not break the happy path)", async () => {
+    const rows = [{ id: "r1" }];
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: vi.fn(() => queryStub({ data: rows })),
+    });
+    mockUserOwnsProject.mockResolvedValue(true);
+
+    const res = await roomsGet(
+      new NextRequest("http://localhost/api/rooms?project_id=own-project"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(rows);
+  });
+
+  it("POST /api/rooms 404s a non-owner before inserting into another user's project", async () => {
+    const fromSpy = vi.fn(() => queryStub({ data: { id: "r1" } }));
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
+      from: fromSpy,
+    });
+    mockUserOwnsProject.mockResolvedValue(false);
+
+    const req = new Request("http://localhost/api/rooms", {
+      method: "POST",
+      body: JSON.stringify({ project_id: "victim-project", name: "Sneaky Room", room_type: "living_room" }),
+    });
+    const res = await roomsPost(req);
+
+    expect(res.status).toBe(404);
+    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
+    // The guard runs before the insert — the rooms table is never written.
+    expect(fromSpy).not.toHaveBeenCalledWith("rooms");
+  });
+
+  it("POST /api/rooms lets an owner past the guard (reaches the insert)", async () => {
+    const fromSpy = vi.fn(() => queryStub({ data: { id: "r1" } }));
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: fromSpy,
+    });
+    mockUserOwnsProject.mockResolvedValue(true);
+
+    const req = new Request("http://localhost/api/rooms", {
+      method: "POST",
+      body: JSON.stringify({ project_id: "own-project", name: "My Room", room_type: "living_room" }),
+    });
+    const res = await roomsPost(req);
+
+    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "own-project", "owner-1");
+    // Guard passed → the handler advanced to the rooms insert it gates.
+    expect(fromSpy).toHaveBeenCalledWith("rooms");
+    expect(res.status).toBe(201);
   });
 });
