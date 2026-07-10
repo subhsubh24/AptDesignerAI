@@ -71,6 +71,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Bind every product to THIS room before creating the bundle. product_ids are
+  // client-supplied and the memory-store query is not user-scoped, so owning the
+  // room is NOT enough: without this check an owner of room A could stuff another
+  // user's product ids (from room B) into the bundle, and a later bundles/evaluate
+  // would fetch + score those cross-tenant products (a paid-compute + read leak on
+  // data they don't own). Reject the whole request (404, no enumeration oracle)
+  // BEFORE any bundle row is created if any id isn't a product of this room.
+  if (product_ids && product_ids.length > 0) {
+    const { data: owned, error: bindErr } = await (supabase
+      .from("candidate_products")
+      .select("id")
+      .eq("room_id", room_id)
+      .in("id", product_ids) as unknown as Promise<{
+        data: { id: string }[] | null;
+        error: { message: string } | null;
+      }>);
+    if (bindErr) return apiError("bundles", bindErr);
+    const ownedIds = new Set((owned ?? []).map((p) => p.id));
+    if (product_ids.some((pid: string) => !ownedIds.has(pid))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  }
+
   // Create bundle
   const { data: bundle, error: bundleError } = await supabase
     .from("product_bundles")
