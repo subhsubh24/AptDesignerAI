@@ -3223,3 +3223,41 @@ Opened **#535 #536 #537 #538**, auto-merge (squash) enabled on all 4. Full INTEG
 - **#1 ship blocker stays functional_reality (persistence).** PREPARE is complete (#531). Advancing further is human-gated (owner applies migrations, sets Supabase env, flips `DATA_BACKEND=supabase`, verifies a cold start) — see PENDING_OPS `cutover-to-persistent-data`. Not headlessly buildable; do NOT fabricate busywork here.
 - **design_taste B is the other open ship-critical dim** but its two capping items (authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots) are CI/auth-stack-bound (`E2E_AUTH_STACK`, Supabase-local) and unverifiable in-sandbox. A blind write is risky (deep seed chain, env-specific pixels); weigh carefully before attempting.
 - **Scout candidates deferred this run (real but lower-value):** `GEMINI_API_KEY` fail-loud guard in `lib/ai/gemini.ts` (borderline; cost-contract-sensitive file); G2 input-validation on `identified-products/confirm|correct` POST; per-user rate limit on `identified-products/search` + `picks` GET. `extractBackfillKeywords` is ALREADY well-tested (don't re-test). Mobile scout findings (hardcoded splash colors) were borderline churn.
+
+---
+
+## Run 2026-07-10 (Run 76)
+
+### State on entry
+- Default tip `80396ba` (#539). Baseline gate GREEN: tsc clean, **1908 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- A full 8-lens DEEP AUDIT was DUE (last true sweep Run 72; Run 75 leaned on the scorecard). Ran it this run.
+
+### DEEP AUDIT — 2026-07-10 (Run 76), 7-Haiku-scout whole-codebase sweep
+Lenses: security/RLS · correctness/dead-code · perf · a11y/design-bar · mobile · monetization/growth · functional-reality/config. Findings distilled:
+- **SECURITY/RLS:** essentially CLEAN. All tenant tables RLS-enabled; IDOR guards present on the LLM/data routes (diagnosis, products/evaluate, bundles/evaluate, analyze-apartment, area-analysis GET+POST, search/stream, mockups). ONE real gap: `POST /api/bundles` didn't bind client `product_ids` to the room → shipped as **#541**. (Scorecard's area-analysis GET gap already fixed #530; GATE 5 priority already fixed #532.)
+- **CORRECTNESS:** the headline finding was the Harmony Pass A duplicate-category merge bug (shipped **#540**). A search/route.ts "insert-order mismatch" was a FALSE POSITIVE (INSERT…RETURNING preserves VALUES order; memory store preserves order). validation-agent partial-response silent-drop noted but left as safe/observable (logged), not hard-failed.
+- **PERF:** the standing N+1 (embedding-index topKSimilar) remains INERT under the in-memory data layer (in-process array ops; pgvector RPC would be dead code until the DB cutover). next/image still 0 adoption (raw <img> for external/CDN/blob URLs — mostly un-next/image-able). No perf change shipped (would be churn or inert).
+- **A11Y/DESIGN:** shared Badge `warm` + Button `warm-outline`/`warm-ghost` used text-accent-warm on accent tints below AA → shipped **#542**. Design SYSTEM stays A-territory (no emoji-in-JSX, warm-editorial tokens, no purple slop). Muted-text-on-amber-tint nits (identified-product-pill, scene-coverage-card) noted, deferred as lower-value.
+- **MOBILE:** core journey + entitlement gating production-ready (server-side 403). `photo.tsx` result.assets access is type-safe (discriminated union) — not a real crash. `app-tabs.web.tsx` "Expo Starter" stale text is real but low-value (web target isn't store-submitted) — deferred. saved.tsx unhandled Share fallback = minor, deferred.
+- **MONETIZATION/GROWTH:** Track C complete. Biggest real gap = NO self-serve subscription management → shipped **#543** (Stripe portal). E7 tail (lifecycle upgrade/habit email templates + crons, analytics-aggregates surface E7.6, experiment engine E7.7) remain buildable but touch risky shared call sites / are pre-launch-speculative — deferred, candidates for a future run.
+- **FUNCTIONAL-REALITY/CONFIG:** the checkout-success FAKE-SUCCESS page (confirmed copy from `?tier=` param, no verification) → shipped **#544**. `proxy.ts` "middleware not enforced" was a FALSE POSITIVE (Next 16.2.4 uses the `proxy.ts` convention — correctly wired). In-memory persistence remains the #1 human-gated blocker.
+- **ARTIFACT FRESHNESS:** docs consistent with code (pricing $29/$49-mo/$399-yr aligned across stripe.ts/pricing/BUSINESS_CASE; privacy processors all map to used deps). The "Pro Annual in BUSINESS_CASE vs migration-021-unapplied" is a time-horizon difference (business case models the launched state; 021 is on the owner cutover list), not a live contradiction — no change.
+
+### Area served — 5 file-disjoint value-bar changes
+#540 correctness (chunk-merge helper), #541 security/IDOR (bundles product↔room binding), #542 a11y (warm-variant contrast), #543 monetization (Stripe customer portal), #544 side-effect-integrity (checkout-success entitlement gate). See IMPROVEMENT_LOG Run 76 row for the full detail + outcomes.
+
+### Merge outcome
+Opened #540-544, auto-merge (squash) enabled on all 5. Integrated gate GREEN in-run (tsc/determinism/eslint clean, **1920 tests** = 1908 +12). ALL 5 both-Sonnet-APPROVED, 10/10 first-pass, ZERO REQUEST_CHANGES (unusually clean run — reviewers independently reverted #540/#541 to prove the tests fail without the fix, hand-computed #542 ratios, adversarially checked #543 for IDOR/secret-leak). Awaiting required CI (verify+build+mobile). No migrations/secrets; +1 PENDING_OPS owner step (`enable-stripe-customer-portal`). No ROADMAP box ticked (all incremental hardening).
+
+### Lessons learned
+1. **VERIFY scout findings against the real stack before acting — two false positives this run.** `proxy.ts` is the CORRECT Next 16 middleware convention (not dead middleware); a single `INSERT…RETURNING` preserves VALUES order (not a reorder bug). A Haiku scout trained on older framework versions will over-flag; a 30-second check (next version, one doc) saved two wasted changes.
+2. **An abandoned half-fix is a tell that the real bug survives.** `void group1Keys; void group2Keys` (composite keys built, never used) sat next to a `.find()`-by-category merge that the keys were meant to fix — the duplicate-category bug was still live. When a sibling path already does it right (Final Assessment positional merge), extract+share that, don't re-patch.
+3. **Fake-success applies to billing UI too.** A checkout-success page that prints "Welcome to Pro" from a query param is a SIDE-EFFECT INTEGRITY violation as surely as an undelivered email — gate the success on the real downstream effect (entitlement), and fall back to an honest auto-refreshing pending state, never the param.
+4. **A clean scorecard-reconcile still needs a fresh scout sweep for the real value.** 2 of the scorecard's 3 named ship-critical gaps were already closed at HEAD (#530/#532); the run's actual value (5 changes) came from the fresh DEEP AUDIT, not the stale named gaps.
+
+### Rotation guide for next run
+- **DEEP AUDIT ran Run 76** — next due ~Run 80 (~4 runs). Next run can lean on the scorecard/scouts.
+- **#1 ship blocker stays functional_reality (persistence)** — human-gated (`cutover-to-persistent-data`). Not headlessly buildable; do NOT fabricate busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox). Still the CI-only-verifiable closure.
+- **E7 lifecycle tail is the richest remaining buildable growth work** (upgrade/habit email templates + a habit-emails cron, analytics-aggregates surface E7.6, experiment engine E7.7) — real but each touches shared call sites (signup/analysis) or new migrations; scope carefully, one at a time, file-disjoint.
+- **Deferred low-value this run:** `app-tabs.web.tsx` "Expo Starter" text; muted-text-on-amber-tint a11y nits (identified-product-pill, scene-coverage-card); saved.tsx unhandled Share fallback; validation-agent partial-response hard-fail (currently safe/logged).
