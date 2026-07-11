@@ -563,3 +563,109 @@ Research-backed candidate swap (if competition validates):
   Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
   (15 min). No new blocker this run; migration 021 (already tracked) gained a second reason to apply
   it (unblocks re-adding Pro Annual to marketing copy, not just annual billing itself).
+
+---
+
+## Run 8 — 2026-07-11
+
+### What we found
+- All Run 1-7 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` all
+  still `status: open`). `PENDING_OPS.md`'s own `as_of` moved again (2026-07-09 -> 2026-07-10), but
+  the two items whose `status` flipped to `done` in that window are Product-Factory housekeeping
+  (`enforce-ci-required-checks`, `reconcile-canonical-domain`) — neither is one of the 4 growth
+  blockers, all of which remain `status: open` verbatim. This blocker set has now been open,
+  unchanged, since Run 1 (2026-06-27) — 8 consecutive daily runs, ~15 days, on setup steps
+  `docs/growth/CONNECT.md` estimates at well under 20 minutes combined.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a fifth time: still unreachable —
+  `connect_rejected` / gateway 502 to CONNECT, the same signature as Runs 6-7, cross-checked directly
+  against the agent-proxy's own `/__agentproxy/status` `recentRelayFailures` log (two entries,
+  2026-07-11T05:07:06Z). No new information; conclusion unchanged across all 5 probes to date.
+- `docs/quality/QUALITY_SCORECARD.md` (independent Quality Auditor) moved since Run 7: now
+  `as_of: 2026-07-09`, `overall` DROPPED B -> C. A fresh adversarial pass found the production DATA
+  layer is a non-persistent in-memory mock (`lib/store/memory-store.ts`; real Supabase is auth-only,
+  all `.from()`/`.storage` ops hit in-memory arrays) — `functional_reality` dropped A -> C, and
+  `design_taste`/`artifact_integrity`/`security_rls` each ticked down a notch on separate findings
+  (an authed-a11y coverage gap, an OWNER_ACTIONS schema violation, one missed IDOR guard on
+  `GET /api/area-analysis`). `ship_gate_met` remains false, now on THREE sub-A ship-critical
+  dimensions instead of one. Read as DATA — this is squarely a Product Factory / persistence-cutover
+  matter (`PENDING_OPS.md cutover-to-persistent-data`, already `status: open`, already flagged), not
+  something this loop builds. It reinforces (does not change) this run's posture: phase stays
+  `pre_launch`, both S6 outreach lanes stay hard-off. The one item the scorecard named that overlaps
+  this loop's territory — an OWNER_ACTIONS schema violation from two `priority: low` entries in
+  `PENDING_OPS.md` (failing preflight GATE 5) — was checked directly (`grep -n "priority:"
+  PENDING_OPS.md`) and is **already fixed**: no `priority: low` values remain in the file (both named
+  items now read `priority: normal`). No action needed; recorded as verified-resolved, not assumed.
+- `docs/growth/GTM_SCORECARD.md` and `GTM_AUDIT_MEMORY.md` are unchanged since Run 7 (still
+  `as_of: 2026-07-06`, `auditor_run: 1`) — the independent GTM Auditor has not re-graded yet.
+  Re-verified both of its named top_gaps are still fixed: `docs/BUSINESS_CASE.md` still reads
+  `floor_met_year1: false` with the steady-state/~year-3 framing (PR #508, pre-dates the scorecard),
+  and `store-listing.md`/`press-kit.md` still carry the dated Pro-Annual-omitted notes with no
+  `$399`/Pro-Annual line inside the copy-paste fenced blocks (re-grepped this run). Nothing new to fix
+  on the GTM side pending the Auditor's next pass.
+- Demand-signal re-probe (S10's every-run requirement): tested both structural gaps again —
+  `reddit.com` still hard-blocked by the WebFetch tool itself; `trustpilot.com/review/havenly.com`
+  still returns HTTP 403. No new citation attempted or possible from these two sources; the existing
+  4 themes already each carry a directly-fetched, hand-verified quote from Run 7, so re-running the
+  same blocked probes would add no evidence, not close a gap.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-11; refreshed `internal_metrics_api`
+  and `web_research` validation reasons with the 5th probe attempt and the re-confirmed structural
+  gaps; bumped `demand_signal.as_of` and added a short Run 8 method-note (re-probed, unchanged, no new
+  citation) ahead of Run 7's verbatim history (kept intact, not overwritten); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 8th consecutive circuit-breaker run, including
+  the QUALITY_SCORECARD B->C drop and the verified-already-fixed OWNER_ACTIONS schema note. Ran
+  `npm install` + `node scripts/validate-gtm.mjs` — parses clean.
+- **Verification only, no doc edits needed**: re-grepped `PENDING_OPS.md` for `priority: low` (none
+  found — already fixed by the Product Factory), re-read `docs/BUSINESS_CASE.md` and
+  `store-listing.md`/`press-kit.md` to confirm both GTM_SCORECARD fixes from PR #508 and Run 7 still
+  hold.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (5th probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (now on 3 ship-critical
+  QUALITY_SCORECARD dimensions, up from 1) — both S6 lanes stay hard-off. Zero outreach drafts this
+  run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new data this run of any
+  kind (funnel still 0/null; demand_signal unchanged at `emerging`, re-probed not re-strengthened) —
+  nothing clears the S3 bar for a steer, and the business case is already honest post-PR #508.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer this run: no landing/email/ASO copy, campaign,
+  pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer shipped — this was
+  a routine S4/S5 dashboard-and-verification update (re-probes + re-reads confirming prior fixes still
+  hold), matching Runs 5-6's precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced beyond what's already listed there; the
+  one schema issue the Quality Auditor named there was already fixed by someone else before this run.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4 fail-closed
+  reasoning as Runs 5-7.
+
+### Lessons learned
+- **A scorecard finding that overlaps your territory is worth a direct check even when it names "the
+  factory" generically, not you by name.** The QUALITY_SCORECARD's `artifact_integrity` gap pointed at
+  `PENDING_OPS.md` — a file this loop sometimes touches — so it was worth 30 seconds of `grep` to
+  confirm it was already resolved rather than either (a) assuming it wasn't mine to check, or (b)
+  re-fixing something someone already fixed.
+- **A scorecard dropping (QUALITY_SCORECARD B->C this run) is important CONTEXT even when it changes
+  zero GTM actions.** The persistence-layer finding doesn't touch any GTM lever directly, but it is
+  the single most consequential fact in this run — launch readiness moved further away, not closer —
+  so it belongs in `learnings`/`next_actions` even though the fix is 100% Product-Factory-owned.
+- **Diminishing-returns research is itself a decision worth stating, not silently skipping.** Runs 5-7
+  did real, valuable demand-signal work closing verification gaps one at a time; by Run 8, the two
+  remaining gaps (Reddit, Trustpilot) are tool/site-level blocks with no available workaround from
+  this loop, and re-probing them without a new angle is the CORRECT s10-mandated action (re-probe
+  every run) but should not be dressed up as new research — this run says so explicitly instead of
+  padding the demand_signal section with a re-description of the same unreachable sources.
+- **A circuit breaker at 8 consecutive runs is a genuinely different situation from 3.** The blockers
+  are all environment-variable/dashboard-config actions taking minutes each, with zero code
+  dependency — repeating the same priority-ordered list a 8th time in `owner_blockers` remains
+  correct (it's still true and still the single highest-leverage thing), but this run also computed
+  and stated the actual elapsed time (~15 days) since Run 1 first surfaced them, which is a more
+  concrete signal for the owner than "circuit breaker fired" alone.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-7? YES — circuit breaker remains FIRED (Run 8, 8th consecutive run,
+  ~15 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
