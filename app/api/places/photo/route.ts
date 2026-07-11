@@ -6,6 +6,11 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 const CACHE = new Map<string, { url: string; attributions: string[]; ts: number }>();
 const TTL = 24 * 60 * 60 * 1000; // 24h
 
+// Two external Google Places calls (details + media), each 5s-abort-bounded, plus
+// a Supabase read/write. Give the function an explicit budget above that stack so a
+// slow-but-not-timed-out external round-trip can't ride the platform default.
+export const maxDuration = 20;
+
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

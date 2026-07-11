@@ -40,6 +40,11 @@ const STAGES: StageConfig[] = [
 // exactly one window per stage.
 const WINDOW_HOURS = 4;
 
+// Loops over the day's activation candidates and sends one email per user
+// (each provider call 10s-abort-bounded). A large cohort must not be killed
+// mid-loop by the platform default, which would leave the run partially sent.
+export const maxDuration = 300;
+
 function tokenMatches(provided: string, expected: string): boolean {
   const key = "cron-auth-compare";
   const a = createHmac("sha256", key).update(provided).digest();
