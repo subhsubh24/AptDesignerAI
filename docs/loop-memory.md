@@ -3386,3 +3386,43 @@ All 5 opened + auto-merge (squash) enabled; required CI (verify+build+mobile+lin
 - **Named determinism follow-ups still open:** analyze-apartment (2 calls) + area-analysis/refine (2 calls) are zero-seeded `chat()` files — same contract gap as #566 but deferred this run to avoid over-batching identical seed changes; ship next run if judged value-bar-clearing (each brings a route into contract-compliance; weigh vs churn since no test catches it). Do NOT re-attempt domain-router (#564 abandoned by design — see Lesson 1).
 - **Richest remaining buildable growth work stays the E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine needs migration 030) — pre-launch with 0/null data, still speculative.
 - **Deferred low-value this run:** gemini.ts `GEMINI_API_KEY` fail-loud (borderline, sensitive file); `formatExamplesForPrompt` / `formatAccessConstraintsForPrompt` tests (real but lower-value than what shipped); dead-code `HintRow` in mobile.
+
+---
+
+## Run 2026-07-11 (Run 80)
+
+### State on entry
+- Default tip `fcb167e` (#569, the sixth independent quality grade). Baseline gate GREEN: tsc clean, **1948 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- DEEP AUDIT was DUE (last full sweep Run 76; Runs 77-79 leaned on scouts/scorecard). Ran it this run before scouting.
+
+### DEEP AUDIT — 2026-07-11 (Run 80), 8-Haiku-scout whole-codebase sweep
+Lenses: security/RLS · correctness/dead-code · perf · a11y/design-bar · mobile · functional-reality/config · tests/eval-coverage · Track-G hardening. Findings distilled:
+- **SECURITY/RLS:** CLEAN. Fresh adversarial sweep of all migrations + all 52 API routes resolving a client id — every tenant table RLS-enabled, every IDOR-class route ownership-gated, no SECURITY DEFINER/search_path gap, no secret leak. No change (clean = no-op).
+- **CORRECTNESS:** CLEAN. No new logic bug; all `.chat()` carry thinkingConfig, LLM calls timed, `.single()` null-checked. No change.
+- **G1 RATE-LIMITING found COMPLETE** (independent enumeration): 33 routes on `checkRateLimit`/`enforceWriteRateLimit` + 2 bespoke per-IP limiters (signup, waitlist) cover every paid/auth/expensive route; billing/webhook correctly unprotected (Stripe-driven), billing/status + identified-products/search are cheap auth reads. **NOT self-ticked** — maker≠checker; the readiness gate should confirm before G1's box flips.
+- **PERF:** all inert or already-done. Supabase projection-narrowing (`select("*, nested(*)")` → narrow) is INERT under the default in-memory data layer (no wire payload; same reasoning as the standing embedding-index N+1). The scout's "dashboard N+1" is ALREADY `Promise.all`-parallelized (`dashboard/page.tsx:135`) — false positive. No perf change shipped (would be inert/churn).
+- **A11Y/DESIGN:** mostly dead-code/false-positive. `global-error.tsx` inline hex is the CORRECT Next.js pattern (it renders WITHOUT the app stylesheet, so CSS vars are unavailable). `gallery/page.tsx` hex are literal color-swatch DATA, not styling. toast/badge emerald/amber are semantic status colors. The one real cluster (dead Expo-branded mobile code) folded into #571.
+- **MOBILE:** the real finding was dead Expo starter-template scaffolding (`AnimatedIcon` native+web + `WebBadge`, all unused; "Expo Starter" brand string; orphaned Expo/React assets) → shipped **#571**. Core journey + entitlement gating stay production-ready.
+- **FUNCTIONAL-REALITY/CONFIG:** 4 external-I/O routes lacked an explicit `maxDuration` (places/photo, upload, waitlist, cron/activation-emails) → shipped **#570**. The in-memory persistence blocker is unchanged (human-gated `cutover-to-persistent-data` — not re-filed). Stripe env "silent fail" deferred (throws at call time = arguably already loud; billing-sensitive).
+- **TESTS/EVAL:** the scout over-proposed 3 ALREADY-TESTED modules (turnstile, sanitize-prompt, email/preferences all have test files). Only `email/resend` (#572) and `db/diagnosis-examples` (#573) were genuinely untested → shipped both.
+
+### Area served — 4 file-disjoint value-bar changes
+#570 reliability (maxDuration on 4 I/O routes), #571 mobile/Track-D (strip Expo template scaffolding), #572 tests (ResendProvider.send), #573 tests (fetchDiagnosisExamples). See IMPROVEMENT_LOG Run 80 row for full detail.
+
+### Merge outcome
+Opened #570-573, auto-merge (squash) on all 4. Integrated gate GREEN in-run (all 4 on a scratch branch): tsc clean, **1964 tests** (1948 +16: 7 resend + 9 diagnosis-examples), determinism green, eslint clean; mobile tsc + expo lint clean (installed mobile deps to verify — sandbox lacked them). All 4 both-Sonnet-APPROVED (9 reviews incl. 1 re-review). Awaiting required CI (verify+build+mobile+lint+journeys). No migrations/secrets; no new PENDING_OPS. No ROADMAP box ticked.
+
+### Lessons learned
+1. **The tests scout over-proposes already-tested modules every run.** This run it named turnstile, sanitize-prompt, email/preferences — all with existing test files. Always `ls __tests__` / grep for the module before writing a test; verify the gap is real (same discipline as the prior "extractBackfillKeywords already tested" lesson).
+2. **Perf projection-narrowing is INERT under the in-memory backend.** A `.select()` payload narrow only helps once real Postgres is over a wire; today it's a no-op. Don't ship it as a perf win until the persistence cutover — Reviewer B would (correctly) call it inert.
+3. **`global-error.tsx` inline hex and literal color-swatch hex are correct, not token violations.** global-error renders without the app stylesheet (CSS vars unavailable → inline hex is mandatory); a swatch showing `#b4501e` IS the data. An a11y scout over-flags both.
+4. **When a cap runs BEFORE a filter, a test for the filter must place its target INSIDE the cap window.** My #573 "caps+strips" test put the invalid item beyond `slice(0,6)`, so the strip filter had zero coverage (Reviewer A proved it via mutation). A maker-side mutation check (delete the line, see if a test fails) before review would have caught it — do this for any test whose whole purpose is a specific branch.
+5. **Reviewer subagents can dirty the shared working tree** (one `git apply`'d a diff onto the wrong branch and left it). Discard-and-continue; keep giving reviewers the diff as a read-only file.
+
+### Rotation guide for next run
+- **DEEP AUDIT ran Run 80** — next due ~Run 84. Next few runs can lean on scouts/scorecard.
+- **#1 ship blocker stays functional_reality (in-memory persistence)** — human-gated (`cutover-to-persistent-data`); NOT headlessly buildable, do NOT fabricate busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox), still the CI-only-verifiable closure.
+- **G1 appears COMPLETE** (this run's independent enumeration) — a candidate for the readiness gate to confirm and tick; G4 (login lockout/backoff, password-reset enumeration guard) remains the open Track-G auth-hardening work but needs a server-side login route (larger).
+- **Richest remaining buildable growth work stays E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine → migration 030) — pre-launch, 0/null data, still speculative.
+- **Deferred low-value this run:** Stripe env fail-loud guard (borderline, billing-sensitive); the named zero-seeded `chat()` files from Run 79 (analyze-apartment ×2, area-analysis/refine ×2) still open — contract-compliance, weigh vs churn since no test catches it; toast/badge semantic-color→score-token routing (cosmetic); mobile `HintRow` dead code (still there).
