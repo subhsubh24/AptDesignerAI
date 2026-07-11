@@ -111,4 +111,27 @@ describe("prioritizeDomains", () => {
     const result = prioritizeDomains(["a.com", "b.com"], {});
     expect(result).toHaveLength(2);
   });
+
+  it("breaks equal-success-rate ties deterministically by domain name", () => {
+    // Unknown domains all share the default 0.5 rate, so only the tiebreak
+    // decides ordering. Two different input orders MUST yield the same result —
+    // this fails without the domain-name tiebreak (stable sort keeps input order).
+    const order1 = prioritizeDomains(["charlie.com", "alpha.com", "bravo.com"], {});
+    const order2 = prioritizeDomains(["bravo.com", "charlie.com", "alpha.com"], {});
+    expect(order1).toEqual(["alpha.com", "bravo.com", "charlie.com"]);
+    expect(order2).toEqual(order1);
+  });
+
+  it("keeps success rate dominant over the name tiebreak", () => {
+    // zzz.com has a higher rate than aaa.com, so it ranks first despite sorting
+    // later alphabetically.
+    const stats: DomainStatsMap = {
+      "zzz.com": { attempts: 4, successes: 4 },
+      "aaa.com": { attempts: 4, successes: 1 },
+    };
+    expect(prioritizeDomains(["aaa.com", "zzz.com"], stats)).toEqual([
+      "zzz.com",
+      "aaa.com",
+    ]);
+  });
 });

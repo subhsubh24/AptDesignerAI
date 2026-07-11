@@ -92,6 +92,12 @@ export function prioritizeDomains(
     .sort((a, b) => {
       const rateA = getDomainSuccessRate(stats, a);
       const rateB = getDomainSuccessRate(stats, b);
-      return rateB - rateA;
+      // Tie-break on the domain name so priority order is a pure function of the
+      // domain SET + stats, not the caller's array order. Equal success rates are
+      // common (unseen domains all share the default rate, and small-sample
+      // domains tie easily), so without the tiebreak WHICH domains are searched
+      // first — and thus which results survive downstream caps — would drift with
+      // input order (determinism.md: every score sort needs a final id tiebreak).
+      return rateB - rateA || a.localeCompare(b);
     });
 }
