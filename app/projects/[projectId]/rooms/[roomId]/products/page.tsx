@@ -251,6 +251,7 @@ export default function ProductsPage() {
         <CardContent className="pt-6 space-y-4">
           <div className="flex gap-3">
             <Input
+              aria-label="Paste a product URL"
               placeholder="Paste a product URL..."
               value={ingestUrl}
               onChange={(e) => setIngestUrl(e.target.value)}
