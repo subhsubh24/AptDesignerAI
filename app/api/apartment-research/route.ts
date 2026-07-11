@@ -270,6 +270,7 @@ async function disambiguateWithVision(
       messages: [{ role: "user", content: blocks }],
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
+      seed: DETERMINISTIC_SEED,
       thinkingConfig: { thinkingLevel: "low" },
     });
 
@@ -622,6 +623,7 @@ ${floorPlanSchema}`;
       messages: [{ role: "user", content: buildingContextPrompt }],
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
+      seed: DETERMINISTIC_SEED,
       thinkingConfig: { thinkingLevel: "low" },
       tools: [{ googleSearch: {} }, { urlContext: {} }],
     });
@@ -648,6 +650,7 @@ ${floorPlanSchema}`;
         messages: [{ role: "user", content: floorPlanPrompt }],
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
+        seed: DETERMINISTIC_SEED,
         thinkingConfig: { thinkingLevel: "low" },
         tools: [{ googleSearch: {} }, { urlContext: {} }],
       });
@@ -744,6 +747,7 @@ ${floorPlanSchema}`;
             messages: [{ role: "user", content: visionBlocks }],
             max_tokens: 64000,
             // No temperature override — Gemini 3 is optimized for its default (1.0).
+            seed: DETERMINISTIC_SEED,
             thinkingConfig: { thinkingLevel: "low" },
           });
 
