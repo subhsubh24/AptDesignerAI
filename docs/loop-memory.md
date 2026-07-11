@@ -3340,3 +3340,49 @@ Both opened (#558/#559), auto-merge (squash) enabled; awaiting required CI (veri
 - **Named determinism follow-up (file-disjoint next run):** the `verifyOrder` sort (~line 164, `lib/agents/identified-products-pipeline.ts`) sorts by `top?.confidence` with no tiebreak — same class as #559 but SAME file, so it was deferred this run. Ship it next run (with a proven-fails-without-fix test).
 - **Richest remaining buildable growth work stays the E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine needs migration 030) — but pre-launch with 0/null data and no reachable metrics endpoint, so it stays deferred as speculative until real data/connectivity lands.
 - **Deferred low-value this run:** web-a11y icon token-swaps (pass 3:1); mobile redundant accessibilityLabels; gemini.ts retry jitter (sensitive file, timing-only); orchestrator token-budget/tier unit tests (heavy-mock/low-value).
+
+---
+
+## Run 2026-07-11 (Run 79)
+
+### State on entry
+- Default tip `26c0bfa` (#561, a GTM routine commit). Baseline gate GREEN: tsc clean, **1928 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- No DEEP AUDIT due (last Run 76, ~1 day / ~3 runs ago; next ~Run 80). Leaned on a fresh 6-Haiku-scout sweep + a HEAD-reconcile of the (stale) QUALITY_SCORECARD.
+
+### Reconcile — the scorecard (as_of 2026-07-09) is 2 days stale; both named ship-critical gaps already fixed at HEAD
+- **security_rls A gap** (GET /api/area-analysis IDOR) → `app/api/area-analysis/route.ts` GET already has the `userOwnsRoom` guard before the `room_diagnoses` read (fixed #530). Stale.
+- **artifact_integrity B gap** (preflight GATE 5 `priority: low`) → all PENDING_OPS OWNER_ACTIONS priorities are high/normal/urgent now (fixed #532). Stale.
+- Remaining ship-critical-below-A: **functional_reality C** (in-memory persistence — human-gated `cutover-to-persistent-data`, not headlessly buildable) and **design_taste B** (seeded-AxeBuilder on diagnosis/mockups/compare + F7 screenshots — CI/auth-stack-bound, supabase-local unrunnable in-sandbox). No busywork on either.
+
+### Scout sweep (6 Haiku) + verification
+Lenses: determinism/correctness, security/RLS, mobile, web-a11y, tests, AI-pipeline.
+- **Security CLEAN** (29 migrations RLS-covered, IDOR guards on every client-id route, no secret leak). **Mobile CLEAN** (journey + entitlement gating + store-compliance entry points all production-ready; only dead-code `HintRow`).
+- **Determinism scout** flagged 10: 2 real TIER-1 sort-tiebreak gaps (verify-search, domain-router) + 8 "missing seed" `.chat()` calls. Verified the seed mechanism: `resolveSeed()` forces the seed under the DETERMINISTIC flag but passes the caller's value in prod → the missing-seed calls are invisible to `check:determinism` but real for prod reproducibility.
+- **Rejected / deferred:** gemini.ts `GEMINI_API_KEY` fail-loud (borderline, sensitive cost-contract file, delayed-error only — route try/catch 500s either way); analyze-apartment + area-analysis/refine seed additions (zero-seeded files — deferred to avoid over-batching identical seed changes; apartment-research shipped as the clearest partial-migration case); test-scout's `formatExamplesForPrompt`/`formatAccessConstraintsForPrompt` (real but lower-value than `computeDynamicBaseline`).
+
+### Shipped — 5 file-disjoint value-bar changes (all Track F)
+- **#562 (DETERMINISM)** — verify-phase priority sort in `identified-products-pipeline.ts`: extracted `compareVerifyPriority()`+`cropSortKey()` (confidence-desc + image/label/box tiebreak) so tied crops don't win the `maxVerifyCalls` budget by fan-out order. +6 tests.
+- **#563 (DETERMINISM)** — per-category verify pick in `verify-search-candidates.ts`: extracted `rankCandidatesByEvalScore()` (score-desc + product-id tiebreak) so the browser-verified pick is a pure function of the candidate set. +4 tests.
+- **#565 (A11Y)** — `aria-label` on the placeholder-only product-URL `Input` (room products page). WCAG 3.3.2/4.1.2, no visual change.
+- **#566 (DETERMINISM)** — seeded the 4 unseeded `chat()` calls in `apartment-research/route.ts` (1 of 5 was already seeded — partial migration). 2 take effect in prod; 2 with `urlContext` tools are inert-but-harmless (provider `!hasUrlContext` seed-drop) — disclosed in the PR.
+- **#567 (TESTS)** — 10 branch/boundary cases for `computeDynamicBaseline` (`lib/scoring/calibration.ts`), previously untested directly (existing calibration.test.ts runs with an empty drift buffer).
+
+### Abandoned — #564 (domain-router alphabetical tiebreak) on Reviewer-A REQUEST_CHANGES
+The `prioritizeDomains()` sort has no tiebreak, but at the SOLE call site (`shopping-researcher.ts`) the input domain list is deliberately CURATED (category retailers first, then tier defaults) and constant-derived, so JS stable sort already gives run-to-run reproducibility. An *alphabetical* tiebreak would discard that curated Tavily `include_domains` priority (unseen domains all tie at 0.5) with NO offsetting determinism gain; the only regression-free alternative (index/stable tiebreak) is a behavioral no-op = churn. Closed PR, deleted branch. The review process working exactly as intended.
+
+### Merge outcome
+All 5 opened + auto-merge (squash) enabled; required CI (verify+build+mobile+lint+journeys) GREEN on all → merged to default. Merged default = **1948 tests** (1928 → +20: verify-order 6 + verify-search 4 + calibration 10; #565/#566 add 0). The all-6 scratch showed 1950 before #564 was abandoned. tsc clean, determinism green, eslint clean. **All 5 both-Sonnet-APPROVED (10 reviews)** — reviewers reproduced each pre-fix failure, confirmed the extracted comparators behavior-equivalent, hand-verified the calibration arithmetic. Reviewers ran READ-ONLY against the diff FILES (per the Run 78 lesson) — no tree-dirtying this run. No migrations/secrets; no new PENDING_OPS. **No ROADMAP box ticked** (all incremental Track-F hardening).
+
+### Lessons learned
+1. **The determinism "every score sort needs a tiebreak" rule is NOT universal — it depends on whether the sort's INPUT order is meaningful.** Where the input is a curated, deterministic constant list (domain-router's `include_domains`), JS stable sort ALREADY guarantees reproducibility, and an id/alphabetical tiebreak REGRESSES the curated intent while adding nothing. Apply the tiebreak only where input order is non-deterministic (async fan-out: #562/#563) or semantically irrelevant. #564 was the counterexample; Reviewer A caught it.
+2. **Check the scorecard `as_of` before acting on its named gaps.** The 2026-07-09 scorecard (2 days stale) named 2 ship-critical gaps both already closed at HEAD (#530/#532). The real value came from the fresh scout sweep, not the stale gaps — same pattern as Runs 75/76/78.
+3. **Passing reviewers the diff as a read-only FILE cleanly avoids the Run-78 tree-dirtying failure mode.** Wrote each branch's diff to a scratchpad file, told reviewers to Read only that file + repo files for context, do NOT modify/checkout. Zero tree contamination, correct-branch reviews.
+4. **Verify a provider mechanism before trusting a "missing X" scout finding.** The 8 "missing seed" calls were real contract gaps but the effect is prod-only (resolveSeed forces the seed in test mode) and 2 of the 4 I shipped are inert due to the `urlContext` seed-drop guard — knowing that made the PR honest rather than over-claiming.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 80** (last Run 76). Next run should run a full 8-lens sweep (it will be ~4 runs / >24h since the last true audit).
+- **#1 ship blocker stays functional_reality (in-memory data-layer persistence)** — human-gated (`cutover-to-persistent-data`); not headlessly buildable, do NOT fabricate busywork.
+- **design_taste B** — seeded AxeBuilder on diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in-sandbox).
+- **Named determinism follow-ups still open:** analyze-apartment (2 calls) + area-analysis/refine (2 calls) are zero-seeded `chat()` files — same contract gap as #566 but deferred this run to avoid over-batching identical seed changes; ship next run if judged value-bar-clearing (each brings a route into contract-compliance; weigh vs churn since no test catches it). Do NOT re-attempt domain-router (#564 abandoned by design — see Lesson 1).
+- **Richest remaining buildable growth work stays the E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine needs migration 030) — pre-launch with 0/null data, still speculative.
+- **Deferred low-value this run:** gemini.ts `GEMINI_API_KEY` fail-loud (borderline, sensitive file); `formatExamplesForPrompt` / `formatAccessConstraintsForPrompt` tests (real but lower-value than what shipped); dead-code `HintRow` in mobile.
