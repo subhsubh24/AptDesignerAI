@@ -228,17 +228,30 @@ export async function runIdentifiedProductsPipeline(
  * We don't merge evidence because the higher-confidence entry's evidence is
  * usually from the clearer angle, which is what the UI wants to surface.
  */
-function dedupByBrandModel(
+function dedupKey(item: IdentifiedProductEnriched): string {
+  const variantKey = (item.variant ?? "").toLowerCase().trim();
+  return `${item.brand.toLowerCase().trim()}::${item.model.toLowerCase().trim()}::${variantKey}`;
+}
+
+export function dedupByBrandModel(
   items: IdentifiedProductEnriched[],
 ): IdentifiedProductEnriched[] {
   const byKey = new Map<string, IdentifiedProductEnriched>();
   for (const item of items) {
-    const variantKey = (item.variant ?? "").toLowerCase().trim();
-    const key = `${item.brand.toLowerCase().trim()}::${item.model.toLowerCase().trim()}::${variantKey}`;
+    const key = dedupKey(item);
     const existing = byKey.get(key);
     if (!existing || item.confidence > existing.confidence) {
       byKey.set(key, item);
     }
   }
-  return Array.from(byKey.values()).sort((a, b) => b.confidence - a.confidence);
+  // Sort by confidence, with the (brand,model,variant) key as a stable tiebreak.
+  // Ties are common — identification defaults to 0.5 and many products share it —
+  // and JS sort is stable, so without the tiebreak the output order would depend
+  // on Map insertion order (i.e. the upstream `items` order). That silently feeds
+  // downstream display + the scoring context an order that varies with input
+  // sequencing. The key tiebreak makes the result a pure function of the SET
+  // (determinism.md: every score sort needs a final id-keyed tiebreak).
+  return Array.from(byKey.values()).sort(
+    (a, b) => b.confidence - a.confidence || dedupKey(a).localeCompare(dedupKey(b)),
+  );
 }
