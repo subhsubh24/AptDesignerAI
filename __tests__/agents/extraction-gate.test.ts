@@ -65,4 +65,24 @@ describe("selectExtractionCandidates", () => {
     const kept = selectExtractionCandidates([c], 8, 4);
     expect(kept.length).toBe(1);
   });
+
+  it("selects the same subset regardless of input order when relevance ties (determinism)", () => {
+    // Five equal-relevance no-content candidates, cap = 3 → 2 must be dropped.
+    // Without the URL tiebreak, WHICH 3 survive depends on the incoming order
+    // (stable sort preserves it), so the same SET in a shuffled order would
+    // extract a different subset. The tiebreak makes it order-independent.
+    const mk = (order: string[]) =>
+      selectExtractionCandidates(
+        order.map((u) => cand(u, 0.5, false)),
+        8,
+        3,
+      ).map((c) => c.url);
+
+    const forward = mk(["e", "d", "c", "b", "a"]);
+    const shuffled = mk(["c", "a", "e", "b", "d"]);
+
+    // Deterministic URL-ascending selection: the first 3 by URL are a, b, c.
+    expect(forward).toEqual(["a", "b", "c"]);
+    expect(shuffled).toEqual(["a", "b", "c"]);
+  });
 });
