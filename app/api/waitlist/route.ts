@@ -7,6 +7,11 @@ import { verifyTurnstile } from "@/lib/security/turnstile";
 import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
 import { generateReferralCode, sanitizeReferralCode } from "@/lib/waitlist/referral";
 
+// Sends a confirmation email (10s-abort-bounded provider call) on the request
+// path plus a DB upsert. Bound the function so a stalled provider can't hold it
+// open past the platform default and surface as a client-side network error.
+export const maxDuration = 30;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
 

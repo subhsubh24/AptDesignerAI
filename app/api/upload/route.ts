@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
+// Accepts files up to 20MB and streams them to Supabase Storage. A large upload
+// over a slow client link can legitimately exceed the platform's default budget
+// and get killed mid-write; give it explicit headroom so the store call completes.
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
