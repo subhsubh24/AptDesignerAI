@@ -248,6 +248,26 @@ async function verifyOne(
   }
 }
 
+/**
+ * Rank a category's candidates by evaluation score (descending), breaking ties
+ * by product id. final_item_score defaults to 0 for un-evaluated products, so
+ * ties are common — without the id tiebreak WHICH product gets browser-verified
+ * (and written back as the category pick) would depend on the
+ * candidatesByCategory insertion order rather than the candidate SET
+ * (determinism.md: every score sort needs a final id-keyed tiebreak). Exported
+ * for the determinism regression test.
+ */
+export function rankCandidatesByEvalScore(
+  products: CandidateProduct[],
+  evaluations: Map<string, ProductEvaluationResult>,
+): CandidateProduct[] {
+  return [...products].sort((a, b) => {
+    const sa = evaluations.get(a.id)?.final_item_score ?? 0;
+    const sb = evaluations.get(b.id)?.final_item_score ?? 0;
+    return sb - sa || a.id.localeCompare(b.id);
+  });
+}
+
 // ─── Public API ───────────────────────────────────────────────────
 
 /**
@@ -279,11 +299,7 @@ export async function verifyTopSearchCandidates(
   const targets: { category: string; product: CandidateProduct; urlKey: string }[] = [];
   for (const [category, products] of Object.entries(candidatesByCategory)) {
     if (!products.length) continue;
-    const ranked = [...products].sort((a, b) => {
-      const sa = evaluations.get(a.id)?.final_item_score ?? 0;
-      const sb = evaluations.get(b.id)?.final_item_score ?? 0;
-      return sb - sa;
-    });
+    const ranked = rankCandidatesByEvalScore(products, evaluations);
     const top = ranked[0];
     if (top?.product_url) {
       targets.push({ category, product: top, urlKey: normaliseUrl(top.product_url) });
