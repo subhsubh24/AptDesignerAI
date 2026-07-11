@@ -7,6 +7,74 @@ history behind it.
 
 ---
 
+## 2026-07-11 — SIXTH INDEPENDENT GRADE (overall HELD at C; two ship-critical dims RECOVERED — security_rls A→A+, artifact_integrity B→A — but functional_reality still C caps the headline)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C, but the per-dimension picture improved: two of
+the three ship-critical dims that were below A last cycle RECOVERED. **security_rls A→A+** (the missed
+area-analysis IDOR guard closed + tested) and **artifact_integrity B→A** (the OWNER_ACTIONS schema violation
+fixed). Only **TWO ship-critical dims remain below A: functional_reality (C) and design_taste (B)** — down
+from three. Overall stays C because the rubric caps the headline at the weakest ship-critical link, and
+**functional_reality is still C**: the persistence PREPARE the last grade asked for genuinely landed (#531),
+but it ships INERT (DATA_BACKEND defaults to memory), so production is unchanged — user data still does not
+survive a cold start.
+
+**Per-dimension diff vs 2026-07-09:** functional_reality **C→C** (gap NARROWED — PREPARE landed) · correctness
+**A→A** · security_rls **A→A+** ⬆ · design_taste **B→B** (two capping gaps byte-for-byte unchanged) ·
+store_readiness **A→A** · artifact_integrity **B→A** ⬆ · business_case **A→A** · tests_evals **B→B** ·
+performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **1948 passed / 11 skipped** (up from 1889; 11 skips RUN_EVALS-gated by design).
+- `npx vitest run --coverage` → **59.04% stmts / 47.77% branch / 64.75% funcs / 60.03% lines** (up from
+  58.17/47.08/63.24/59.15), above the 40/30/42/40 floor.
+- `bash scripts/preflight.sh` → **GATE 5 (OWNER_ACTIONS) now GREEN** and **GATE 6 RLS green** (26/26 tables).
+  The only 2 remaining failures are the expected environmental/pre-launch ones: functional-journeys (cold env
+  can't stand up the authed stack) and DoD 9-unchecked — same as last cycle, NOT new regressions.
+
+**Why security_rls recovered A→A+:** #530 (f9d9d32) added `userOwnsRoom` to `GET /api/area-analysis`
+(route.ts:53, 404 on non-owner) and tested it (`idor-followup-guards.test.ts:50`); the sibling product↔room
+binding also closed. A fresh adversarial grader swept all 52 API routes resolving a client-supplied id against
+`lib/auth/ownership.ts` and found NO remaining missed guard of that class. RLS/secrets/spend-guards all clean →
+A+, zero findings.
+
+**Why artifact_integrity recovered B→A:** the two `priority: low` OWNER_ACTIONS items were reconciled to the
+validator enum; all 21 priorities now pass, all 4 dashboard blocks parse + pass schema, spot-checked roadmap
+ticks map to real artifacts, pricing consistent. Full mechanical + spot-check pass, zero findings → A.
+
+**Why functional_reality HELD at C (the anchor, graded on production reality):** #531 (5e08246) landed a real,
+reviewable persistent Supabase backend behind a `DATA_BACKEND` flag — `lib/supabase/server.ts:68-96` branches
+to a real Postgres+RLS client, FAILS LOUD on missing creds (:76-82), and is selection-tested
+(`data-backend.test.ts`). This is EXACTLY the PREPARE the last grade asked for (not a blind cutover). BUT the
+flag DEFAULTS to memory (:22-24, docstring: "ships INERT (memory backend)"), so by default every `.from()`/
+`.storage` op still hits the non-persistent memory store; on a serverless cold start / multi-replica host user
+data still doesn't persist — the retention-critical "revisit your saved designs" journey is still broken in the
+default prod config. And `data-backend.test.ts:6-9` EXPLICITLY defers the real-Postgres cold-start integration
+test to "a human-verified cutover step" — so the persistence-proof test the last grade named does NOT exist
+yet. C not B (persistence is blocking), C not D (one env flip + one test from viable). The PREPARE half is
+done; the remaining half is the human-gated cutover + proof test.
+
+**Issues reconciled:** CLOSE #527 (security_rls area-analysis IDOR — fixed + tested) and #526
+(artifact_integrity OWNER_ACTIONS — GATE 5 green). UPDATE #525 (functional_reality — PREPARE landed, gap
+narrowed, still C, remaining = flip to default + cold-start integration test). Keep #204 (design_taste, now the
+co-blocker), #200 (tests_evals), #385 (performance) open — unchanged.
+
+**Lessons for next run:**
+1. **The PREPARE landing did NOT move the grade — and that's correct.** functional_reality is graded on
+   production reality; a persistent backend that ships INERT behind a default-off flag leaves production
+   exactly as non-persistent as before. Resist crediting reviewable-but-inert code as a grade raise. The grade
+   moves when DATA_BACKEND=supabase becomes the default AND a cold-start persistence test proves data survives.
+2. Two ship-critical recoveries this cycle (security A→A+, artifact B→A) show the factory reads the scorecard
+   as data and closes named gaps — good. The ship gate is now TWO dimensions away (functional_reality C,
+   design_taste B); both fixes are well-scoped and already named in #525/#204.
+3. design_taste is the easier of the two remaining (no human-gated migration): extend AUTHED_A11Y_ROUTES to
+   seeded diagnosis/mockups/compare + land F7 screenshot baselines. functional_reality is the hard one (human
+   cutover). Watch that the factory doesn't keep picking the easy wins while the binding blocker sits.
+4. Cold-start recipe re-confirmed: npm install first; grade on assertions + CI/preflight status, never a cold
+   local authed suite. Perf N+1 still INERT under the memory store; raw <img> crept 13→32 (add a guard).
+
+---
+
 ## 2026-07-09 — FIFTH INDEPENDENT GRADE (overall B→C — a fresh pass surfaced the PRODUCTION DATA LAYER is a non-persistent in-memory mock; functional_reality A→C corrects a 4-cycle over-grade)
 
 **Overall: C · ship_gate_met: false.** The headline DROPPED from B to C — not because code regressed, but
