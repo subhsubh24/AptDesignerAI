@@ -3296,3 +3296,47 @@ Integrated gate GREEN in-run (3 new merged onto a scratch branch): tsc clean, **
 - **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
 - **Richest remaining buildable growth work = E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine — both file-disjoint, E7.7 needs new migration 030; deferred this run as larger pre-launch infra with no live data yet). Reviewer-A follow-up nit from #547: two other orchestrator sort sites (~2652 runAudit, ~3243 live-confidence) already inline the tiebreak but could adopt `compareByFinalScoreDesc` for DRY — low value, optional.
 - **Deferred low-value this run:** mobile results.tsx `Array.isArray` hardening (already has `?? []`); saved-designs POST parallelization (marginal under in-memory store).
+
+---
+
+## Run 2026-07-11 (Run 78)
+
+### State on entry
+- Default tip `2734bcf` (#557). Baseline gate GREEN: tsc clean, **1923 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- No DEEP AUDIT due (last Run 76; next ~Run 80). Leaned on a fresh scout sweep + a HEAD-reconcile of the open quality issues.
+
+### Reconcile — all 3 open quality issues are STALE (already fixed at HEAD)
+Per the Run 75/76 lesson (verify the scorecard/issues against HEAD before acting):
+- **#527** (security_rls A, GET /api/area-analysis IDOR) → `app/api/area-analysis/route.ts` GET already has the `userOwnsRoom` guard before the `room_diagnoses` read (fixed #530); covered by `__tests__/api/idor-followup-guards.test.ts`. Stale.
+- **#526** (artifact_integrity B, preflight GATE 5 `priority: low`) → all `PENDING_OPS.md` OWNER_ACTIONS priorities are now high/normal/urgent (fixed #532). Stale.
+- **#348** (entitlements fail-open) → `lib/entitlements/server.ts` already fails CLOSED in production, OPEN in dev, on a missing RC key. Stale.
+No work on any of these.
+
+### Scout sweep (6 Haiku) + what was rejected
+Lenses: security/RLS, correctness, web-a11y, mobile, tests, artifact-freshness.
+- **Security CLEAN, artifact-freshness CLEAN** (77 hardening runs + consistent docs; pricing $29/$49-mo/$399-yr aligned across BUSINESS_CASE/pricing/stripe.ts/store-listing).
+- **Web-a11y 5 findings — ALL over-flags, rejected.** 4 were ICON circles (Lucide icon on `bg-accent-warm/10`): icons are graphical → WCAG 3:1 bar, and `text-accent-warm` (~4.9:1) passes 3:1 comfortably. The 5th was a text link the scout itself scored ~5.8:1 (passes 4.5:1). Swapping a passing token for `-strong` is cosmetic churn. **Rule of thumb: apply 4.5:1 only to TEXT; icon/graphic circles use the 3:1 bar — don't token-swap passing icons.**
+- **Mobile 4 findings — ALL over-flags, rejected.** Each was a `Pressable`/`ThemedText` with a VISIBLE text child; React Native auto-derives the accessible label from child text, so VoiceOver/TalkBack already announce context. `accessibilityLabel` is redundant there. **Rule of thumb: a text-bearing RN Pressable is already labeled — only icon-only controls need an explicit accessibilityLabel.**
+- **Tests 4 findings — deferred.** Real branch gaps (token-budget early-exit, degradation gates, tier selection) but embedded in the ~2000-line `runAgenticSearch` (heavy mocking → assertion-light/low-value) or a 6-line private switch. Not the best value this run.
+- **Correctness gemini.ts jitter — rejected.** Sensitive cost-contract file; the jitter is retry-BACKOFF timing only (no output/ordering effect); `check:determinism` is green; and the scout's "retry.ts line 85 already gates it" premise is FALSE (no `lib/utils/retry.ts` exists). Not worth churning a floors-guarded file.
+
+### Shipped — 2 file-disjoint determinism-contract fixes
+- **#558 (extraction-gate)** — `selectExtractionCandidates` sorted each bucket by `relevanceScore` with no tiebreak; JS stable sort → equal-relevance ties kept incoming array order → WHICH candidates survived the per-bucket `slice(0,cap)` and reached paid Tavily-Extract + LLM scoring depended on upstream order, not the set (→ final bundles drift run-to-run). Added `|| a.url.localeCompare(b.url)` (matches `tiebreakProduct`/reranker.ts) + a test proven to fail without the fix.
+- **#559 (identified-products dedup)** — `dedupByBrandModel` sorted deduped products by `confidence` with no tiebreak; ties common (default 0.5) → tied entries kept Map-insertion (= upstream `items`) order, feeding display + the scoring/prompt context (`buildIdentifiedPiecesBlock`) an order that varies with input sequencing. Added the `(brand,model,variant)` key tiebreak via a shared `dedupKey` helper; exported the fn for a focused 4-case test (tie case proven to fail without the fix).
+
+### Merge outcome
+Both opened (#558/#559), auto-merge (squash) enabled; awaiting required CI (verify+build+mobile). Integrated gate GREEN in-run (both on a scratch branch): tsc clean, **1928 tests** (+5), determinism green, eslint clean. **Both both-Sonnet-APPROVED** (5 reviews total: #558 A+B; #559 A + two B — one B slot mis-targeted, see lesson). No migrations/secrets; no new PENDING_OPS. **No ROADMAP box ticked** (both incremental determinism hardening; no Track item completed).
+
+### Lessons learned
+1. **Reviewer subagents with write access can dirty the working tree AND read the wrong branch.** Two general-purpose reviewers applied/stashed the diff onto the live tree to test it; one Reviewer-B slot then reviewed the DEDUP change instead of the extraction-gate diff I pasted, because the working tree was checked out on the dedup branch and it read the repo rather than the prompt. Fix: cleaned the tree (`git checkout -- . && git clean -fd`), re-ran the missing review as a **read-only, diff-only, do-NOT-modify** reviewer with the correct branch checked out. NEXT RUN: spawn per-change reviewers with the target branch checked out AND an explicit "do not modify/stash/checkout; review only" instruction (or a read-only agent type) so they can't dirty the tree or drift onto the wrong branch.
+2. **Icons use the 3:1 contrast bar, not 4.5:1.** A whole class of a11y "AA failures" this run were `text-accent-warm` on Lucide icon circles — those pass 3:1 and need no change. Only TEXT on a tint needs `text-accent-warm-strong`. Verify text-vs-graphic before token-swapping.
+3. **Text-bearing RN Pressables are already accessible.** React Native derives a Pressable's accessible label from its visible Text child; adding `accessibilityLabel` there is redundant. Only icon-only controls need it. Don't ship redundant-label churn.
+4. **Stable sort hides latent non-determinism, not active drift.** Both fixes this run were sorts where input order is CURRENTLY deterministic (so `check:determinism` is green), but the missing tiebreak makes the output depend on upstream sequencing — a latent violation the contract's blanket rule targets. The meaningful test asserts order-INDEPENDENCE (same set, two input orders → identical output), which fails without the tiebreak even though the pipeline isn't visibly flipping yet.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 80** (last Run 76). Next run can still lean on scouts/scorecard, but a full 8-lens sweep is due within ~2 runs.
+- **#1 ship blocker stays functional_reality (in-memory data layer persistence)** — human-gated (`cutover-to-persistent-data`); not headlessly buildable, do NOT fabricate busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
+- **Named determinism follow-up (file-disjoint next run):** the `verifyOrder` sort (~line 164, `lib/agents/identified-products-pipeline.ts`) sorts by `top?.confidence` with no tiebreak — same class as #559 but SAME file, so it was deferred this run. Ship it next run (with a proven-fails-without-fix test).
+- **Richest remaining buildable growth work stays the E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine needs migration 030) — but pre-launch with 0/null data and no reachable metrics endpoint, so it stays deferred as speculative until real data/connectivity lands.
+- **Deferred low-value this run:** web-a11y icon token-swaps (pass 3:1); mobile redundant accessibilityLabels; gemini.ts retry jitter (sensitive file, timing-only); orchestrator token-budget/tier unit tests (heavy-mock/low-value).
