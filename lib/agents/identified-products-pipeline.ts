@@ -19,7 +19,7 @@
  * low-end accounts we let it be gated by `SKIP_PRODUCT_ID=1`.
  */
 
-import { runFurnitureCropper } from "./furniture-cropper";
+import { runFurnitureCropper, type FurnitureCrop } from "./furniture-cropper";
 import { runProductIdentifier } from "./product-identifier";
 import { runProductVerifier } from "./product-verifier";
 import { embedImage } from "@/lib/ai/embeddings";
@@ -158,12 +158,10 @@ export async function runIdentifiedProductsPipeline(
     totalTokens += r.tokens;
   }
 
-  // Verify phase — sequentially to respect maxVerifyCalls cap.
-  // Sort by top candidate confidence so the highest-confidence crops are verified
-  // first; low-confidence crops at the end are dropped when the cap is reached.
-  const verifyOrder = [...identifyResults].sort(
-    (a, b) => (b.top?.confidence ?? 0) - (a.top?.confidence ?? 0),
-  );
+  // Verify phase — sequentially to respect maxVerifyCalls cap. Highest-confidence
+  // crops are verified first; low-confidence crops are dropped when the cap is
+  // reached (see compareVerifyPriority for the determinism-critical tiebreak).
+  const verifyOrder = [...identifyResults].sort(compareVerifyPriority);
   for (const r of verifyOrder) {
     if (!r.top) continue;
     if (verifyCallsMade >= maxVerifyCalls) {
@@ -216,6 +214,37 @@ export async function runIdentifiedProductsPipeline(
     tokensUsed: totalTokens,
     model: cropperOut.model,
   };
+}
+
+/**
+ * Stable identity for a crop — source image + label + normalized box. Used as a
+ * deterministic tiebreak so equal-confidence crops verify in a fixed order,
+ * independent of the identify fan-out's insertion order.
+ */
+export function cropSortKey(
+  crop: Pick<FurnitureCrop, "source_image_url" | "label" | "box">,
+): string {
+  const { x, y, w, h } = crop.box;
+  return `${crop.source_image_url}|${crop.label}|${x},${y},${w},${h}`;
+}
+
+/**
+ * Verify-phase ordering: highest top-candidate confidence first, ties broken by
+ * the stable crop key. Confidence ties are common (identification defaults to
+ * 0.5) and JS sort is stable, so WITHOUT the tiebreak which tied crops win the
+ * maxVerifyCalls budget — and therefore which products get verified and reach
+ * the final list — would depend on the identify fan-out's insertion order rather
+ * than the crop SET. The key makes the outcome a pure function of the set
+ * (determinism.md: every score sort needs a final id-keyed tiebreak).
+ */
+export function compareVerifyPriority(
+  a: { crop: Pick<FurnitureCrop, "source_image_url" | "label" | "box">; top: { confidence: number } | null },
+  b: { crop: Pick<FurnitureCrop, "source_image_url" | "label" | "box">; top: { confidence: number } | null },
+): number {
+  return (
+    (b.top?.confidence ?? 0) - (a.top?.confidence ?? 0) ||
+    cropSortKey(a.crop).localeCompare(cropSortKey(b.crop))
+  );
 }
 
 /**
