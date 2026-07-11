@@ -28,8 +28,15 @@ export function selectExtractionCandidates(
 ): SearchCandidate[] {
   if (candidates.length === 0) return [];
 
+  // Sort by relevance, with a stable URL tiebreak. Without the tiebreak, equal-
+  // relevance candidates keep their incoming array order (JS sort is stable), so
+  // WHICH candidates survive the `slice(0, cap)` below would silently depend on
+  // upstream ordering — the same candidate SET in a different order could extract
+  // a different subset run-to-run. The URL tiebreak makes selection a pure
+  // function of the set (determinism.md: every score sort needs a final id/url
+  // tiebreaker), matching tiebreakProduct in orchestrator.ts and reranker.ts.
   const byRelevance = (a: SearchCandidate, b: SearchCandidate) =>
-    (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+    (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0) || a.url.localeCompare(b.url);
 
   const withContent = candidates.filter((c) => c.rawContent).sort(byRelevance);
   const noContent = candidates.filter((c) => !c.rawContent).sort(byRelevance);
