@@ -3466,3 +3466,45 @@ Opened #575-578, auto-merge (squash) on all 4; CI confirmed TRIGGERED (run #1155
 - **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
 - **`external-link.tsx` (mobile) is now near-dead** — after #576 its only importer is gone (settings/paywall reimplement inline); a candidate for deletion next run if still unreferenced.
 - **Still-deferred low-value:** Stripe env fail-loud (billing-sensitive); the Run-79 zero-seeded `chat()` files (analyze-apartment ×2, area-analysis/refine ×2) — but note the determinism scout confirmed `resolveSeed(undefined)` already forces the seed under the DETERMINISTIC flag, so these are prod-only reproducibility niceties no test catches (weigh hard vs churn); gallery example-score honesty relabel (subjective).
+
+---
+
+## Run 2026-07-12 (Run 82)
+
+### State on entry
+- Default tip `1e14f69` (#580, a growth/brand-identity docs commit after Run 81's #579 housekeeping). Baseline gate GREEN: tsc clean, **1970 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- No DEEP AUDIT due (ran Run 80; next ~Run 84). Ran an 8-Haiku-scout sweep + verified the scorecard's two ship-critical-below-A dims are still the known human-gated/CI-bound blockers (functional_reality C = in-memory persistence; design_taste B = seeded-AxeBuilder + F7 screenshots) — neither headlessly buildable, no busywork.
+
+### Scout sweep (8 Haiku) + what was rejected
+Lenses: tests/eval-coverage (F3), security/RLS, web-reliability/correctness, mobile, monetization, store-readiness/marketing, auth-hardening(G4)/a11y, determinism/cost-contract.
+- **Security CLEAN** (29+ migrations RLS-covered, id-routes ownership-gated, entitlements fail-safe, no secret leak). **Web-reliability CLEAN** — the flagged `.single()`-without-error-field sites are all defended by optional chaining (no crash), not real bugs.
+- **Rejected/stale over-flags:** (1) Issue #487 "store-listing sells non-transactable pro_annual" is ALREADY RESOLVED — store-listing.md intentionally omits pro_annual with a dated 2026-07-09 note (verified). (2) Issue #502 share-links-tier mismatch is a deliberate OWNER monetization decision (viral growth loop vs paywall lever) — the loop has correctly deferred it since Run 70; do NOT pick a direction unilaterally. (3) G4 login lockout/backoff needs a server-side login route (login is currently client-side supabase) — larger, deferred (still the open G4 work). (4) determinism scout's `social/index.ts` "untested" was a false positive (social-queue.test.ts covers isSocialDryRun/publishPost/validate). (5) "raise thinking to HIGH" — backwards vs cheapest-by-default.
+
+### Shipped — 7 file-disjoint value-bar changes
+- **#581 (BILLING/Track C)** — `subscription_data.metadata` at checkout omitted `tier`; Stripe subscription.updated/deleted webhooks see only the SUBSCRIPTION's metadata (not the session's), so `extractBillingInfoFromEvent`'s `?? "pro"` fallback misattributed every pro_annual subscriber to "pro" on renewal/cancel. Added tier + mutation-proven test. Entitlement gating was unaffected; only revenue attribution was wrong.
+- **#582 (MOBILE a11y/Track D)** — RN doesn't associate a visible `<Text>` label with a `TextInput`; added `accessibilityLabel` to login/signup inputs, account-toggle Pressables, Collapsible header.
+- **#583 (MOBILE/Track B)** — deleted unreferenced `external-link.tsx` (loop-memory Run 81 predicted this; last importer gone in #576).
+- **#584 (TESTS/Track F3-F4)** — 19-case unit test for the `updateSession` auth-gating boundary (was untested); mocks `@supabase/ssr`, covers public/protected × page/API, dev-mode, `/guides` prefix + `/guidesX` lookalike-negative, getUser-throw degrade.
+- **#585 (SECURITY/Track G)** — per-IP rate limit (60/min) on the unauthenticated `/api/shared/[token]` (only public data route with no limit); new `RATE_LIMITS.sharedDesign`; mutation-proven test.
+- **#586 (A11Y/Track F)** — dashboard bedroom/bathroom toggles were color-only selection; added `aria-pressed` + `role=group`/`aria-labelledby`, matching the room-selection buttons already in the file.
+- **#587 (DETERMINISM)** — seeded 5 unseeded `.chat()` calls (analyze-apartment ×2, area-analysis/refine ×2, area-analysis coordinator ×1); contract compliance, established pattern (#566/#562/#563).
+
+### Merge outcome
+All 7 opened (#581-587), auto-merge (squash), CI confirmed TRIGGERED (queued/in_progress — not the Run-81 zero-check limbo). **All 7 MERGED to default** (verified `git log`: tip 93d7359 carries #581-#587). Integrated gate GREEN in-run (all 7 on a scratch branch): tsc clean, **1994 tests** (1970 +24: 2 billing + 19 middleware + 3 shared-token), determinism green, eslint clean; mobile tsc + eslint clean. **All 7 both-Sonnet-APPROVED (14 reviews)** — reviewers mutation-verified the billing/middleware/shared-token tests catch their regressions. No migrations/secrets; no new PENDING_OPS. **No ROADMAP box ticked.**
+
+### Note on the default-branch push CI "failure"
+The push-event CI on the default tip shows a `migrate prod (auto-apply on push to default branch)` job FAILURE — it's the `supabase/setup-cli@v1` step (transient infra), with the apply step SKIPPED (no unapplied migrations; they're human-gated). ALL gating jobs (verify/build/journeys/lint/mobile/validate-*) are GREEN. This is a post-merge deploy-side job, not a PR-required check — my PRs merged on green PR CI. Do NOT treat this as a broken base.
+
+### Lessons learned
+1. **Stripe session metadata ≠ subscription metadata.** `checkout.session.completed` sees session `metadata`; `customer.subscription.*` events see only `subscription_data.metadata`. Anything a subscription webhook reads (tier) must be duplicated into `subscription_data.metadata`.
+2. **A vitest mock factory using an arrow fn is not `new`-able.** `vi.fn(() => obj)` throws "not a constructor" if the SUT does `new X()`; use a normal function. Prior tests may not catch it if they throw before the `new` (the createCheckoutSession guard threw on missing STRIPE_SECRET_KEY before `new Stripe()`).
+3. **`git checkout <file>` during a mutation-check also wipes an uncommitted edit on that file.** After neutering code to prove a test fails, `git checkout` restored HEAD and deleted my un-committed route change — re-apply after, or stash first.
+4. **Verify a scout's specific line-count claims.** The determinism scout flagged area-analysis:1915 as unseeded but also implied 541 — 541 already passes a local `seed` var. Grep for the actual field, don't trust the raw line list.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 84** (ran Run 80). Next 1-2 runs can lean on scouts/scorecard.
+- **#1 ship blocker stays functional_reality (in-memory persistence)** — human-gated (`cutover-to-persistent-data`); NOT headlessly buildable, no busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
+- **G4 remaining** = login lockout/backoff + password-reset/verification enumeration guards; needs a server-side `/api/auth/login` route (there is none today — login is client-side supabase). A larger, coherent feature for a future run.
+- **G1 rate-limiting now covers the last public data route** (#585 shared-design) — a candidate for the readiness gate to confirm-and-tick (maker≠checker; don't self-tick).
+- **Still-deferred low-value:** Stripe env fail-loud guard (billing-sensitive); share-links-tier (#502, owner decision); gallery example-score relabel (subjective). Migrations 019/020/021 remain human-gated in PENDING_OPS (share-link RLS + pro_annual CHECK).
