@@ -82,7 +82,7 @@ export async function createCheckoutSession(
     // Allow promotional codes entered by the user (e.g. EARLY30 discount).
     allow_promotion_codes: true,
     ...(mode === "subscription"
-      ? { subscription_data: { metadata: { user_id: userId } } }
+      ? { subscription_data: { metadata: { user_id: userId, tier } } }
       : {}),
   });
 

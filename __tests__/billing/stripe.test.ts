@@ -19,7 +19,10 @@ vi.mock("stripe", () => {
       constructEvent: vi.fn(),
     },
   };
-  return { default: vi.fn(() => mockStripe) };
+  // Use a normal function (not an arrow) so `new Stripe(...)` in getStripe()
+  // works — an arrow function throws "not a constructor". Called with or without
+  // `new`, it returns the shared mockStripe (an explicit object return wins).
+  return { default: vi.fn(function () { return mockStripe; }) };
 });
 
 function makeEvent(type: string, object: unknown): Stripe.Event {
@@ -221,5 +224,76 @@ describe("createCheckoutSession", () => {
         cancelUrl: "https://example.com/cancel",
       })
     ).rejects.toThrow(/STRIPE_SECRET_KEY/);
+  });
+});
+
+// ── createCheckoutSession — subscription metadata carries tier ───────────────
+// Regression guard: the checkout session's top-level metadata carries `tier`,
+// but Stripe's customer.subscription.updated/deleted webhooks only see the
+// SUBSCRIPTION's own metadata. If `tier` is omitted from subscription_data,
+// extractBillingInfoFromEvent falls back to "pro" (stripe.ts) — so a pro_annual
+// subscriber gets silently re-attributed to "pro" on any renewal/cancel event,
+// corrupting revenue tracking. This asserts tier is threaded into
+// subscription_data.metadata so it survives to the subscription events.
+describe("createCheckoutSession — subscription_data carries tier (revenue attribution)", () => {
+  // STRIPE_SECRET_KEY / STRIPE_PRICE_IDS are read at module import, so re-import
+  // the module after stubbing env to exercise the happy path.
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+  });
+
+  async function loadWithStripe() {
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_dummy");
+    vi.stubEnv("STRIPE_PRICE_ID_PRO_ANNUAL", "price_pro_annual");
+    vi.stubEnv("STRIPE_PRICE_ID_PRO_MONTHLY", "price_pro_monthly");
+    vi.stubEnv("STRIPE_PRICE_ID_APARTMENT", "price_apartment");
+    const stripeModule = await import("stripe");
+    const instance = (
+      stripeModule.default as unknown as () => {
+        checkout: { sessions: { create: ReturnType<typeof vi.fn> } };
+      }
+    )();
+    const create = instance.checkout.sessions.create;
+    create.mockResolvedValue({ id: "cs_1", url: "https://checkout.example/cs_1" });
+    const { createCheckoutSession: fn } = await import("@/lib/billing/stripe");
+    return { fn, create };
+  }
+
+  it("threads tier into subscription_data.metadata for a pro_annual subscription", async () => {
+    const { fn, create } = await loadWithStripe();
+    await fn({
+      userId: "u1",
+      userEmail: "u@example.com",
+      tier: "pro_annual",
+      successUrl: "https://example.com/s",
+      cancelUrl: "https://example.com/c",
+    });
+    const arg = create.mock.calls.at(-1)?.[0] as {
+      mode: string;
+      metadata: Record<string, string>;
+      subscription_data?: { metadata: Record<string, string> };
+    };
+    expect(arg.mode).toBe("subscription");
+    // Both the session metadata AND the subscription metadata must carry tier.
+    expect(arg.metadata).toEqual({ user_id: "u1", tier: "pro_annual" });
+    expect(arg.subscription_data?.metadata).toEqual({ user_id: "u1", tier: "pro_annual" });
+  });
+
+  it("omits subscription_data for a one-time apartment purchase (payment mode)", async () => {
+    const { fn, create } = await loadWithStripe();
+    await fn({
+      userId: "u2",
+      userEmail: "u2@example.com",
+      tier: "apartment",
+      successUrl: "https://example.com/s",
+      cancelUrl: "https://example.com/c",
+    });
+    const arg = create.mock.calls.at(-1)?.[0] as {
+      mode: string;
+      subscription_data?: unknown;
+    };
+    expect(arg.mode).toBe("payment");
+    expect(arg.subscription_data).toBeUndefined();
   });
 });
