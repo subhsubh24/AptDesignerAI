@@ -151,6 +151,37 @@ describe("pairwiseRerank", () => {
     expect(result.slice(8).map((p) => p.id)).toEqual(["p8", "p9", "p10", "p11"]);
   });
 
+  it("breaks equal-wins + equal-score ties by id ascending (deterministic order)", async () => {
+    // Input order is deliberately NOT id-sorted: id "b" appears before "a".
+    // With no wins (empty LLM result) and identical deep scores, the only thing
+    // separating "a" and "b" is the id tiebreaker — a plain stable sort would
+    // keep the input order ["b","a"], so asserting ["a","b"] fails without it.
+    const products = [
+      makeProduct("prod-b"),
+      makeProduct("prod-a"),
+      makeProduct("prod-c"),
+    ];
+    const evals = new Map([
+      ["prod-b", makeEval(7)],
+      ["prod-a", makeEval(7)], // tied with prod-b on score
+      ["prod-c", makeEval(6)], // strictly lower — always sorts last
+    ]);
+
+    mockChat.mockResolvedValue({
+      content: JSON.stringify([]), // no pairwise winners → all win counts 0
+      usage: { input_tokens: 100, output_tokens: 50, thinking_tokens: 0 },
+      model: "gemini-3.1-flash-lite",
+      truncated: false,
+    });
+
+    const result = await pairwiseRerank(products, evals, {
+      roomType: "living_room",
+      category: "coffee_table",
+    });
+
+    expect(result.map((p) => p.id)).toEqual(["prod-a", "prod-b", "prod-c"]);
+  });
+
   it("handles malformed LLM response gracefully", async () => {
     const products = [makeProduct("a"), makeProduct("b"), makeProduct("c")];
     const evals = new Map([
