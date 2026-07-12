@@ -4,6 +4,12 @@ import { verifyTurnstile } from "@/lib/security/turnstile";
 import { isAlreadyRegisteredError } from "@/lib/auth/signup-errors";
 import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
 
+// Signup makes an outbound Turnstile siteverify fetch plus a Supabase admin
+// createUser call. Bound the function so a slow upstream can't hang past the
+// serverless budget (the Turnstile fetch already carries its own 5s abort);
+// 20s mirrors the billing/webhook budget and stays well under the ceiling.
+export const maxDuration = 20;
+
 /**
  * Server-side account creation — auto-confirmed, NO email verification.
  *
