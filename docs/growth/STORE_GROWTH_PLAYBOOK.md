@@ -95,10 +95,13 @@ conversion more than a marketing logo (screenshots + icon sell — §A), so prio
   genuinely different directions (§21 branch-and-explore — e.g. a clean wordmark, a minimal symbol, a
   symbol+wordmark lockup), NOT one; each must clear the VISION design bar (§6b — intentional, not generic-AI
   slop) and pass VISION-VERIFY on the render (§40).
-- **Owner PICKS (human gate).** A logo is brand-defining + irreversible-ish, so STAGE 2–3 finalists — with the
-  icon shown at real store sizes (1024 / 180 / 120 / 60 px; must stay legible + distinctive when tiny) — for
-  the OWNER to choose. Do NOT auto-merge a final brand mark (VISION's "when unsure a visual clears the bar,
-  human-only" rule + the marketing-autonomy gates). Record the chosen mark + source files in brand-kit.md.
+- **The loop PICKS via an independent ensemble judge (§21) — fully autonomous.** Score the ≥3 concepts with
+  ≥2 INDEPENDENT judge subagents (NOT the maker) on explicit criteria — distinctiveness, legibility +
+  distinctiveness at 60 px, on-brand vs. the design bar (§6b), timeless-not-trendy, and works in monochrome +
+  light/dark. Render the icon at real store sizes (1024 / 180 / 120 / 60 px) and VISION-VERIFY each (§40); the
+  highest-consensus concept wins and ships through the normal 2-reviewer + design-bar gate. Record the chosen
+  mark + source files in brand-kit.md. (The owner can swap it later like any change — the loop does NOT wait
+  for a human to pick.)
 - **Then FREEZE it.** Once picked, the logo + icon are STABLE ANCHORS — do NOT re-design on later runs unless
   there is a real reason (a genuine rebrand, or it fails the design bar). Deliver the full set (SVG master +
   PNG exports + all app-icon sizes + light/dark + a favicon) and STOP. Keep every downstream use (store
