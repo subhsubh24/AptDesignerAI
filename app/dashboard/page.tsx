@@ -464,12 +464,13 @@ export default function DashboardPage() {
 
         <div className="space-y-8 mt-8">
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-3 block">Bedrooms</label>
-            <div className="flex gap-3">
+            <label id="bedrooms-label" className="text-sm font-medium text-muted-foreground mb-3 block">Bedrooms</label>
+            <div className="flex gap-3" role="group" aria-labelledby="bedrooms-label">
               {[{ value: 0, label: "Studio" }, { value: 1, label: "1" }, { value: 2, label: "2" }, { value: 3, label: "3+" }].map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => setBedrooms(opt.value)}
+                  aria-pressed={bedrooms === opt.value}
                   className={cn(
                     "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bedrooms === opt.value
@@ -484,12 +485,13 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-3 block">Bathrooms</label>
-            <div className="flex gap-3">
+            <label id="bathrooms-label" className="text-sm font-medium text-muted-foreground mb-3 block">Bathrooms</label>
+            <div className="flex gap-3" role="group" aria-labelledby="bathrooms-label">
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
                   onClick={() => setBathrooms(n)}
+                  aria-pressed={bathrooms === n}
                   className={cn(
                     "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bathrooms === n
