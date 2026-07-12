@@ -325,9 +325,11 @@ export async function POST(request: Request) {
   const result = await runAgenticSearch(ctx, missingCategories, undefined, categoryHints);
 
   // Record the search OUTCOME (the unit of productivity) to Margin so it can
-  // compute cost-per-outcome. Non-blocking + fail-safe: getMeter() is null in
-  // CI/tests and without a key. qualityScore normalizes confidence (0-10) to 0-1.
-  void getMeter()?.recordOutcome({
+  // compute cost-per-outcome. AWAITED (not floated) so it completes before this
+  // serverless function freezes on response; fail-safe: getMeter() is null in
+  // CI/tests and without a key, and the emit's error is swallowed (telemetry must
+  // never break search). qualityScore normalizes confidence (0-10) to 0-1.
+  await getMeter()?.recordOutcome({
     workflowId: "aptdesigner-search",
     passed: result.data?.validation?.isValid ?? false,
     qualityScore: (result.data?.validation?.confidence ?? 0) / 10,

@@ -19,7 +19,7 @@ import type {
   GeminiTool,
   FunctionDeclaration,
 } from "./provider";
-import { getMeter } from "@/lib/observability/margin-meter";
+import { getMeter, emit } from "@/lib/observability/margin-meter";
 
 const log = createLogger("deepseek");
 
@@ -392,8 +392,10 @@ export const deepseekProvider: AIProvider = {
       }
 
       // Emit this call's economics to Margin (cost-per-outcome telemetry).
-      // Non-blocking + fail-safe: getMeter() is null in CI/tests and without a key.
-      void getMeter()?.recordCall({
+      // Fail-safe: getMeter() is null in CI/tests and without a key. emit() hands
+      // the promise to Vercel waitUntil so it isn't dropped when the serverless
+      // instance freezes on response (a bare floating promise would be lost).
+      emit(getMeter()?.recordCall({
         workflowId: "aptdesigner-search",
         provider: "deepseek",
         model: DEEPSEEK_MODELS.text,
@@ -402,7 +404,7 @@ export const deepseekProvider: AIProvider = {
         cacheReadTokens: data.usage?.prompt_cache_hit_tokens || 0,
         latencyMs: Date.now() - marginStart,
         status: "ok",
-      })?.catch(() => {});
+      }));
 
       return {
         content,

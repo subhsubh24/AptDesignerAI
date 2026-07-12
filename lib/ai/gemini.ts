@@ -10,7 +10,7 @@ import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
 import { cassetteProvider } from "./cassette-provider";
-import { getMeter } from "@/lib/observability/margin-meter";
+import { getMeter, emit } from "@/lib/observability/margin-meter";
 import type {
   AIProvider,
   AIMessage,
@@ -783,8 +783,10 @@ const realGeminiProvider: AIProvider = {
     }
 
     // Emit this call's economics to Margin (cost-per-outcome telemetry).
-    // Non-blocking + fail-safe: getMeter() is null in CI/tests and without a key.
-    void getMeter()?.recordCall({
+    // Fail-safe: getMeter() is null in CI/tests and without a key. emit() hands
+    // the promise to Vercel waitUntil so it isn't dropped when the serverless
+    // instance freezes on response (a bare floating promise would be lost).
+    emit(getMeter()?.recordCall({
       workflowId: "aptdesigner-search",
       provider: "google",
       model,
@@ -793,7 +795,7 @@ const realGeminiProvider: AIProvider = {
       cacheReadTokens: usageMetadata?.cachedContentTokenCount || 0,
       latencyMs: Date.now() - marginStart,
       status: "ok",
-    })?.catch(() => {});
+    }));
 
     return {
       content,
