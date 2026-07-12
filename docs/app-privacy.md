@@ -70,6 +70,7 @@ by other companies?" question.
 | Cloudflare (Turnstile) | Bot-challenge token + IP address on the signup/waitlist forms — no account content | Bot / abuse protection on public forms. Inert until TURNSTILE_SECRET_KEY is set. |
 | DeepSeek | Design analysis text, product descriptions — no PII | AI analysis (optional secondary provider for cost optimization) |
 | Vercel (Web Analytics) | Aggregate app-usage events (screen views, feature interactions) — no PII; cookieless | Analytics — measure usage and funnel; no cross-app ad identifiers |
+| Margin | AI-usage telemetry only: token counts, latency, model name, per-request outcome quality score — no PII, photos, account identifiers, or prompt content | Cost-per-outcome economics. Inert until MARGIN_INGEST_KEY is set; never egresses in CI/E2E. |
 
 None of the above use this data to build ad profiles or track users across apps
 per their published data processing agreements. Tavily and Google Maps queries
@@ -108,6 +109,7 @@ no advertising identifiers.
 | Cloudflare (Turnstile) | Bot-challenge token + IP (signup/waitlist forms; no account content) | App functionality — bot/abuse protection (inert until TURNSTILE_SECRET_KEY set) |
 | DeepSeek | Design text (no PII) | App functionality — AI analysis (optional provider) |
 | Vercel (Web Analytics) | Aggregate usage events (no PII; cookieless) | Analytics — usage measurement |
+| Margin | AI-usage telemetry (token counts, latency, model, outcome quality) — no PII | Analytics — cost-per-outcome economics (inert until MARGIN_INGEST_KEY set) |
 
 ### Security practices
 

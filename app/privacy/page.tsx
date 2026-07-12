@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  const updatedDate = "July 4, 2026";
+  const updatedDate = "July 12, 2026";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -121,6 +121,12 @@ export default function PrivacyPage() {
                 <strong className="text-foreground">Vercel Web Analytics</strong> — aggregate,
                 cookieless usage events (screen views, feature use) with no personal or
                 cross-app advertising identifiers.
+              </li>
+              <li>
+                <strong className="text-foreground">Margin</strong> — AI-usage telemetry only
+                (token counts, latency, model name, and a design-outcome quality score per
+                request) to track our cost-per-result economics. No personal data, photos,
+                account identifiers, or prompt content are sent.
               </li>
             </ul>
           </section>
