@@ -6,7 +6,7 @@ vi.mock("@/lib/security/turnstile", () => ({ verifyTurnstile: vi.fn() }));
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { verifyTurnstile } from "@/lib/security/turnstile";
-import { POST } from "@/app/api/auth/signup/route";
+import { POST, maxDuration } from "@/app/api/auth/signup/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockVerify = verifyTurnstile as unknown as Mock;
@@ -41,6 +41,15 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("POST /api/auth/signup", () => {
+  it("bounds the serverless duration on this external-I/O route", () => {
+    // Regression guard: signup does an outbound Turnstile fetch + admin auth,
+    // so it must carry an explicit maxDuration (unbounded => a slow upstream can
+    // hang past the platform budget and 504 mid-signup). Keep it sane (10-30s).
+    expect(typeof maxDuration).toBe("number");
+    expect(maxDuration).toBeGreaterThanOrEqual(10);
+    expect(maxDuration).toBeLessThanOrEqual(30);
+  });
+
   it("creates an auto-confirmed user on a valid request", async () => {
     const res = await POST(signupReq(VALID));
     expect(res.status).toBe(200);
