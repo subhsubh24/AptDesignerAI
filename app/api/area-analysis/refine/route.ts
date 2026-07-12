@@ -5,6 +5,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import type { AIContentBlock } from "@/lib/ai/provider";
@@ -283,6 +284,7 @@ ${JSON.stringify({
         messages: [{ role: "user", content: [{ type: "text", text: interpretPrompt }] }],
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
+        seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
         thinkingConfig: { thinkingLevel: "low" },
       });
@@ -363,6 +365,7 @@ CRITICAL RULES:
       messages: [{ role: "user", content: contentBlocks }],
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
+      seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
       thinkingConfig: { thinkingLevel: "low" },
     });
