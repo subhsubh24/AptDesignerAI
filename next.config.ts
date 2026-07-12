@@ -48,10 +48,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // @margin/meter ships raw TypeScript from src/index.ts (exports point at .ts);
-  // Next must transpile it like first-party code rather than treat it as a
-  // pre-built node_modules package.
-  transpilePackages: ["@margin/meter"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },

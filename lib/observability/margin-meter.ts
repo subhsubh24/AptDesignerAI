@@ -1,8 +1,8 @@
 /**
  * Margin economics meter — emits cost-per-outcome telemetry to Margin.
  *
- * Wraps the dependency-free `@margin/meter` SDK (github.com/subhsubh24/Margin.ai,
- * subdir sdk/ts, vendored under vendor/margin-meter). The SDK POSTs each measured
+ * Wraps the dependency-free `margin-meter` SDK (npm; source at
+ * github.com/subhsubh24/Margin.ai, subdir sdk/ts). The SDK POSTs each measured
  * LLM call + outcome to Margin's ingest API so Margin can compute this app's
  * productivity ÷ AI spend. It sits ALONGSIDE the in-request cost ledger
  * (cost-meter.ts): the ledger answers "what did THIS room cost?" locally; the
@@ -22,7 +22,7 @@
  *   void getMeter()?.recordCall({ ... })?.catch(() => {});
  */
 
-import { MarginMeter } from "@margin/meter";
+import { MarginMeter } from "margin-meter";
 
 // undefined = not yet resolved; null = disabled (no key / offline / error).
 let cached: MarginMeter | null | undefined;
