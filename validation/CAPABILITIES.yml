@@ -46,6 +46,7 @@ non_credential_allowlist:
   - DETERMINISTIC_SEED
   - E2E_RATE_LIMIT_BYPASS        # test-only rate-limit bypass; guarded separately (fail-closed on Vercel)
   - E2E_AUTH_STACK               # CI journeys flag; routes the AI pipeline to the hermetic cassette (fail-closed on Vercel via assertCassetteSafe)
+  - CI                           # generic CI marker; the Margin meter refuses to construct (no network egress) when set
   - NEXT_PUBLIC_APP_URL
   - NEXT_PUBLIC_SITE_URL
   - COMPUTER_USE_MODEL
@@ -199,3 +200,12 @@ capabilities:
     exercised_by: "n/a (optional, off in CI)"
     ci_validatable: true
     owner_secret: false
+
+  - id: margin-meter
+    summary: "Margin economic control layer — emits per-call + per-outcome LLM economics (cost-per-outcome telemetry) to the Margin ingest API at margin-ai-rho.vercel.app"
+    env: [MARGIN_INGEST_URL, MARGIN_INGEST_KEY]
+    validation: dummy            # fire-and-forget, fail-safe, NON-BLOCKING telemetry. The @margin/meter SDK opens NO socket without MARGIN_INGEST_KEY (unset in CI), and lib/observability/margin-meter.ts additionally refuses to construct when CI/E2E_AUTH_STACK is set — so the emit path never egresses in CI. Absence of the key = a clean no-op, which is exactly the CI behavior.
+    exercised_by: "lib/observability/margin-meter.ts guard (disabled in CI/tests; no round-trip)"
+    ci_validatable: true
+    owner_secret: true           # PRODUCTION needs the real MARGIN_INGEST_KEY (issued by the Margin owner) to actually emit
+    note: "Egress-only, best-effort telemetry on a non-critical path — nothing hard-gates on a successful emit. A real ingest round-trip against margin-ai-rho.vercel.app is a tracked follow-up, not required to validate the app's own flows."

@@ -19,6 +19,7 @@ import type {
   GeminiTool,
   FunctionDeclaration,
 } from "./provider";
+import { getMeter } from "@/lib/observability/margin-meter";
 
 const log = createLogger("deepseek");
 
@@ -277,6 +278,8 @@ export const deepseekProvider: AIProvider = {
     const makeRequest = async (): Promise<AIResponse> => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), DEEPSEEK_CALL_TIMEOUT_MS);
+      // Time this attempt for Margin economics (emitted after usage is known).
+      const marginStart = Date.now();
 
       let response: Response;
       try {
@@ -387,6 +390,19 @@ export const deepseekProvider: AIProvider = {
           },
         });
       }
+
+      // Emit this call's economics to Margin (cost-per-outcome telemetry).
+      // Non-blocking + fail-safe: getMeter() is null in CI/tests and without a key.
+      void getMeter()?.recordCall({
+        workflowId: "aptdesigner-search",
+        provider: "deepseek",
+        model: DEEPSEEK_MODELS.text,
+        inputTokens: data.usage?.prompt_tokens || 0,
+        outputTokens: data.usage?.completion_tokens || 0,
+        cacheReadTokens: data.usage?.prompt_cache_hit_tokens || 0,
+        latencyMs: Date.now() - marginStart,
+        status: "ok",
+      })?.catch(() => {});
 
       return {
         content,

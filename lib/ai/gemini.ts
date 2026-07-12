@@ -10,6 +10,7 @@ import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
 import { cassetteProvider } from "./cassette-provider";
+import { getMeter } from "@/lib/observability/margin-meter";
 import type {
   AIProvider,
   AIMessage,
@@ -592,6 +593,8 @@ const realGeminiProvider: AIProvider = {
     // network hiccups without compounding rate-limit retry budgets.
     let response;
     const maxTransportAttempts = 3;
+    // Time the whole call (incl. transport retries) for Margin economics below.
+    const marginStart = Date.now();
     for (let attempt = 1; ; attempt++) {
       try {
         response = await geminiConcurrencyLimit(() => Promise.race([
@@ -778,6 +781,19 @@ const realGeminiProvider: AIProvider = {
     if (thinkingTokens > 0) {
       log.debug("Token usage", { model, tokens: { thinking: thinkingTokens, output: usageMetadata?.candidatesTokenCount || 0 } });
     }
+
+    // Emit this call's economics to Margin (cost-per-outcome telemetry).
+    // Non-blocking + fail-safe: getMeter() is null in CI/tests and without a key.
+    void getMeter()?.recordCall({
+      workflowId: "aptdesigner-search",
+      provider: "google",
+      model,
+      inputTokens: usageMetadata?.promptTokenCount || 0,
+      outputTokens: usageMetadata?.candidatesTokenCount || 0,
+      cacheReadTokens: usageMetadata?.cachedContentTokenCount || 0,
+      latencyMs: Date.now() - marginStart,
+      status: "ok",
+    })?.catch(() => {});
 
     return {
       content,

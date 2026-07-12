@@ -42,6 +42,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vitest coverage output:
     "coverage/**",
+    // Vendored third-party SDK (mirror of @margin/meter); linted at its source of truth.
+    "vendor/**",
   ]),
 ]);
 

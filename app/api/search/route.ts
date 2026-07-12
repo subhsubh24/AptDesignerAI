@@ -13,6 +13,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { getMeter } from "@/lib/observability/margin-meter";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -322,6 +323,16 @@ export async function POST(request: Request) {
   console.log(`[search] Starting agentic search for categories: ${missingCategories.join(", ")}`);
 
   const result = await runAgenticSearch(ctx, missingCategories, undefined, categoryHints);
+
+  // Record the search OUTCOME (the unit of productivity) to Margin so it can
+  // compute cost-per-outcome. Non-blocking + fail-safe: getMeter() is null in
+  // CI/tests and without a key. qualityScore normalizes confidence (0-10) to 0-1.
+  void getMeter()?.recordOutcome({
+    workflowId: "aptdesigner-search",
+    passed: result.data?.validation?.isValid ?? false,
+    qualityScore: (result.data?.validation?.confidence ?? 0) / 10,
+    qualityMethod: "llm_judge",
+  })?.catch(() => {});
 
   if (!result.success || !result.data) {
     console.error("[search] Failed:", result.error);
