@@ -3508,3 +3508,40 @@ The push-event CI on the default tip shows a `migrate prod (auto-apply on push t
 - **G4 remaining** = login lockout/backoff + password-reset/verification enumeration guards; needs a server-side `/api/auth/login` route (there is none today — login is client-side supabase). A larger, coherent feature for a future run.
 - **G1 rate-limiting now covers the last public data route** (#585 shared-design) — a candidate for the readiness gate to confirm-and-tick (maker≠checker; don't self-tick).
 - **Still-deferred low-value:** Stripe env fail-loud guard (billing-sensitive); share-links-tier (#502, owner decision); gallery example-score relabel (subjective). Migrations 019/020/021 remain human-gated in PENDING_OPS (share-link RLS + pro_annual CHECK).
+
+---
+
+## Run 2026-07-12 (Run 83)
+
+### State on entry
+- Default tip `015317a` on entry (a sibling "emit LLM economics to Margin via @margin/meter" feature commit after Run 82's #588 housekeeping). Baseline gate GREEN after a cold `npm ci`: tsc clean, **1994 tests** pass / 11 skip, determinism green, eslint clean. No open PRs.
+- No DEEP AUDIT due (ran Run 80; next ~Run 84). Ran an 8-Haiku-scout sweep + read the QUALITY_SCORECARD (overall C; ship-critical below-A dims unchanged: functional_reality C = in-memory persistence default, design_taste B = seeded-AxeBuilder + F7 screenshots) and GROWTH_STATUS (pre_launch, 0/null funnel, 4 owner blockers open 8+ runs) — both confirmed the known human-gated / CI-bound blockers, neither headlessly buildable.
+
+### Scout sweep (8 Haiku) + what was rejected
+Lenses: web-reliability/correctness, security/RLS, tests/coverage, determinism/cost-contract, mobile, monetization/billing, store/marketing artifact-freshness, a11y/design/perf.
+- **Security CLEAN** (fresh sweep: RLS on every tenant table, IDOR guards on all id-routes, SSRF/spend-cap/rate-limit intact, no secret leak). **Monetization CLEAN** (webhook signature→DB-write→mark-active ordering, no fake-success, no trust-the-client entitlement, tier attribution correct post-#581). **Web-reliability:** only the signup-maxDuration gap was real.
+- **Rejected/verified over-flags:** (1) upload `getPublicUrl()` "missing error check" — FALSE POSITIVE; supabase-js `getPublicUrl` is SYNCHRONOUS and never returns an error. (2) search/route session-insert early-return — deferred; search/route.ts is a 500-line hot path the margin-meter commit just touched, and continuing past a failed AUDIT-session insert is defensible fail-open (weigh vs churn; not obviously a bug). (3) mobile "add Saved tab" — needs a `tabIcons/saved.png` asset (Metro-require would throw, tsc won't catch) + can't verify nav renders headlessly (BUILDS≠WORKS). (4) next/image adoption (32 raw `<img>`) — layout-break risk, not visually verifiable headlessly, perf is non-ship-critical. (5) `<main>` landmark on focus/saved/shared pages — real WCAG 1.3.1 gap but needs the F4 authed axe suite to verify (supabase-local unrunnable here). (6) mobile a11y-label nits — aria-labels/text-children already present. (7) "raise thinking to HIGH" — backwards vs cheapest-by-default (recurring scout error).
+
+### Shipped — 5 file-disjoint value-bar changes
+- **#589 (DETERMINISM)** — `lib/scoring/pairwise-reranker.ts` win/score sort returned 0 on double-ties; added `a.id.localeCompare(b.id)` (id > url: id non-null, url nullable → collapses). Mutation-proven tied-case test (non-id input order distinguishes the fix from V8 stable-sort).
+- **#590 (RELIABILITY/Track A)** — signup route had no `maxDuration` despite an outbound Turnstile fetch; added `= 20` + guard test. Matches #570.
+- **#591 (TESTS/Track F)** — pinned the Margin telemetry egress gate (new 015317a code, sole external-egress path); mutation-proven all three fail-safes.
+- **#592 (TESTS/Track F)** — covered the `accentOnly` budget-suppression branch (under-suppressed, over-still-flags); mutation-proven.
+- **#593 (DOCS/Track D+F5)** — disclosed Margin processor in `app/privacy/page.tsx` + BOTH Apple/Play tables in `docs/app-privacy.md`; copy verified against real payloads.
+
+### Merge outcome
+All 5 opened (#589-#593), auto-merge (squash) enabled, CI TRIGGERED; **all 5 MERGED to default** (tip `ff4007a`). **Base MOVED mid-run** (015317a → 4a952ad, a sibling "consume margin-meter from npm, drop vendored copy" commit touching `lib/observability/margin-meter.ts` — which #591's test depends on) → RE-VERIFIED the whole batch on the NEW base with a fresh `npm ci`: `margin-meter` resolves from npm, #591 passes, tsc clean, **2004 tests**, determinism + lint green. **All 5 both-Sonnet-APPROVED (11 reviews incl. 1 re-review on #593).** No migrations/secrets; no new PENDING_OPS. **No ROADMAP box ticked.**
+
+### Lessons learned
+1. **The default branch can MOVE mid-run from a sibling routine.** After building, before trusting the pre-built gate, re-verify the batch on the CURRENT origin tip with a fresh `npm ci` — ESPECIALLY when a sibling commit touched a file your new test depends on (here 4a952ad rewrote margin-meter.ts's import from `@margin/meter`→`margin-meter` npm; behaviour unchanged so #591 held, but it had to be proven, not assumed).
+2. **`git add -A` after a branch switch can sweep a stray working-tree file into the wrong commit.** A stray copy of the budget test landed in the privacy commit; caught via `git show --stat` before push, stripped it. Prefer `git add <explicit paths>` and always stat the commit pre-push.
+3. **supabase-js `getPublicUrl` is synchronous and never errors** — a scout "unchecked error" flag on it is a false positive; verify the SDK method's actual signature before treating a missing error-check as a bug.
+4. **A determinism id-tiebreak is contract-compliant even though V8 sort is stable** — determinism.md mandates a final tiebreaker at EVERY sort site (defense against non-deterministic input order), and a mutation test using non-id input order distinguishes the fix from mere stable-sort preservation.
+
+### Rotation guide for next run
+- **DEEP AUDIT is DUE ~Run 84 (next run)** — last ran Run 80. Run one before normal scouting: 8-lens Haiku sweep + RUN the journey suite + reconcile against QUALITY_SCORECARD; record a dated 'DEEP AUDIT' summary here.
+- **#1 ship blocker stays functional_reality (in-memory persistence default)** — human-gated (`cutover-to-persistent-data`); NOT headlessly buildable, no busywork.
+- **design_taste B** — extend AUTHED_A11Y_ROUTES to seeded diagnosis/mockups/compare + land F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox). The `<main>` landmark gap on focus/saved/shared (app pages, NOT the marketing pages which already have `<main>`) is a real WCAG 1.3.1 item to fold in when that suite can run.
+- **G4 remaining** = login lockout/backoff + password-reset/verification enumeration guards; still needs a server-side `/api/auth/login` route (login is client-side supabase today). Larger feature for a future run.
+- **margin-meter is now an npm dep** (`margin-meter`, dropped the vendored copy in 4a952ad) — the privacy/app-privacy.md disclosures (#593) now name Margin; keep them in sync if the telemetry payload ever expands (currently tokens/latency/model/outcome-score only, no PII).
+- **Still-deferred low-value:** Stripe env fail-loud guard (billing-sensitive); share-links-tier (#502, owner decision); next/image adoption (needs visual verification); search/route session-insert early-return (hot-path, defensible fail-open). Migrations 019/020/021/025/026/027/029 remain human-gated in PENDING_OPS.
