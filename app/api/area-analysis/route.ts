@@ -1923,6 +1923,7 @@ Use Google Search to verify current pricing and material availability when neede
                     }],
                   }],
                   max_tokens: 8192,
+                  seed: DETERMINISTIC_SEED,
                   thinkingConfig: { thinkingLevel: "low" },
                   tools: [{ googleSearch: {} as Record<string, never> }],
                 });
