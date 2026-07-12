@@ -3426,3 +3426,43 @@ Opened #570-573, auto-merge (squash) on all 4. Integrated gate GREEN in-run (all
 - **G1 appears COMPLETE** (this run's independent enumeration) — a candidate for the readiness gate to confirm and tick; G4 (login lockout/backoff, password-reset enumeration guard) remains the open Track-G auth-hardening work but needs a server-side login route (larger).
 - **Richest remaining buildable growth work stays E7 tail** (E7.6 analytics-aggregates surface, E7.7 experiment engine → migration 030) — pre-launch, 0/null data, still speculative.
 - **Deferred low-value this run:** Stripe env fail-loud guard (borderline, billing-sensitive); the named zero-seeded `chat()` files from Run 79 (analyze-apartment ×2, area-analysis/refine ×2) still open — contract-compliance, weigh vs churn since no test catches it; toast/badge semantic-color→score-token routing (cosmetic); mobile `HintRow` dead code (still there).
+
+---
+
+## Run 2026-07-12 (Run 81)
+
+### State on entry
+- Default tip `47fc4bd` (#574, Run 80 housekeeping). Baseline gate GREEN: tsc clean, **1955 tests** pass / 11 skip, determinism green, eslint clean.
+- No DEEP AUDIT due (ran Run 80; next ~Run 84). Leaned on a fresh 6-Haiku-scout sweep + a HEAD-reconcile of the scorecard (overall C; ship-critical-below-A = functional_reality C [in-memory persistence, human-gated `cutover-to-persistent-data`] + design_taste B [seeded-AxeBuilder + F7 screenshots, CI/auth-stack-bound] — neither headlessly buildable, no busywork).
+
+### RECOVERY — #573 was ledgered as merged in Run 80 but never merged
+- Run 80's housekeeping title said "#570-573"; #570/#571/#572 merged, **#573 did NOT**. `git merge-base --is-ancestor 83068d1 HEAD` → NOT merged; `__tests__/db/diagnosis-examples.test.ts` absent at HEAD. The PR sat OPEN with auto-merge enabled and **`total_count: 0` checks** — CI never triggered for that SHA (stale base). So auto-merge waited forever on checks that never came, while the ledger claimed it merged.
+- Fix: re-cut the test file onto the current tip as **#575**, closed the stale #573. Verified the recovered test still passes (10/10) at HEAD.
+- **Lesson:** auto-merge on a stale base can leave a PR with ZERO CI checks that never fire → verify ACTUAL merge state before ticking, and after opening new PRs confirm their CI actually TRIGGERS (this run's did — CI run #1155 `in_progress`, not the #573 zero-check limbo).
+
+### Scout sweep (6 Haiku) + what was rejected
+Lenses: determinism/correctness, security/RLS, tests/coverage, mobile, web-reliability, growth/marketing.
+- **Security CLEAN** (fresh adversarial sweep: 30+ migrations RLS-covered, 52 id-resolving routes ownership-gated, no secret leak). **Tests scout** confirmed `db/diagnosis-examples` is the SOLE real coverage gap (all other untested modules are re-exports / static data / heavy-mock infra).
+- **Rejected over-flags:** (1) "broken Pro-annual pricing CTA" — `pro_annual` IS fully wired in `stripe.ts`/checkout/webhook; the store-listing omission is a deliberate ASO choice, not a broken checkout. (2) "waitlist coming-soon but app is live" — FALSE; the app is PRE-LAUNCH/pre-submission, coming-soon copy is correct. (3) area-analysis "hardcoded `thinkingLevel:low` → `thinkingFor(HIGH)`" — BACKWARDS vs cheapest-by-default; those subtasks are correctly cheap, raising them increases per-request cost. (4) "wrap `getUser()` on 36 routes" — sprawling + a transient 500 on most is acceptable; picked only the single cleanest OAuth path (#577). (5) gallery hardcoded example scores — framed as "example projects", not testimonials; subjective, deferred. (6) orchestrator logging-only sort tiebreak — logging-only, churn.
+
+### Shipped — 4 file-disjoint value-bar changes
+- **#575 (TESTS, recovers #573)** — `fetchDiagnosisExamples` two-tier query, dedup (mutation-proven), <3-item drop, 6-item cap, slice-then-filter strip (mutation-proven), graceful DB-error→[], XML shape. 10 cases.
+- **#576 (MOBILE, Track B+D)** — removed a leftover "Docs → docs.expo.dev" `ExternalLink` rendered LIVE in the mobile web-build tab bar (`app-tabs.web.tsx`) + now-dead imports (ExternalLink/SymbolView/useColorScheme/Colors) + `externalPressable` style; deleted unused `hint-row.tsx`. Finishes the same-file cleanup #571 began.
+- **#577 (RELIABILITY, Track A)** — wrapped OAuth callback `exchangeCodeForSession` in try/catch (transient throw → graceful `/login?error=auth` instead of uncaught 500). `createClient()` kept OUTSIDE the try (fail-loud misconfig must surface). +5-case test (THROW-degrades fails without the fix).
+- **#578 (SEO, Track E)** — landing `app/page.tsx` had NO metadata → inherited the generic root `<title>`; added keyword-optimized title/description/canonical + OG/Twitter, plus `metadataBase` + sitewide OG/Twitter defaults on the root layout. Grounded copy, no fabricated metrics, no missing-image reference.
+
+### Merge outcome
+Opened #575-578, auto-merge (squash) on all 4; CI confirmed TRIGGERED (run #1155 `in_progress`). Integrated gate GREEN in-run (all 4 on a scratch branch): tsc clean, **1970 tests** (1955 +15: 10 diagnosis-examples + 5 auth-callback), determinism green, eslint clean; mobile tsc + eslint clean. **All 4 both-Sonnet-APPROVED (10 reviews incl. 1 re-review).** **One review round on #577:** Reviewer A caught the try wrapping `createClient()`'s fail-loud throw → narrowed to just the exchange, re-reviewed → APPROVE. **#578 strengthened** per Reviewer A's note (Next replaces, not per-field merges, a page's `openGraph`) by repeating `siteName` on the landing OG. No migrations/secrets; no new PENDING_OPS. **No ROADMAP box ticked.**
+
+### Lessons learned
+1. **A ledgered-merged PR can be un-merged.** #573 was recorded merged in Run 80 but auto-merge stalled on a zero-check stale base. Verify `git merge-base --is-ancestor` / artifact existence before trusting a prior tick; confirm new PRs' CI actually fires.
+2. **Verify the checkout wiring before calling a pricing-copy mismatch a bug.** `pro_annual` is fully wired; the flagged "broken CTA" was a store-listing ASO omission.
+3. **"Use HIGH thinking" findings are usually backwards here.** Cheapest-by-default: a cheap subtask staying cheap is correct; don't "fix" it into a cost increase.
+4. **vitest v4: a `vi.fn()` whose OWN implementation throws mis-surfaces the error across sibling tests** (a client-METHOD throw does not). Test a caught-createClient-throw path via a method that throws, or drop that specific case — I dropped it; the exchange-throw case fully covers the catch.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 84.** Next few runs can lean on scouts/scorecard.
+- **#1 ship blocker stays functional_reality (in-memory persistence)** — human-gated (`cutover-to-persistent-data`); NOT headlessly buildable, do NOT fabricate busywork.
+- **design_taste B** — authed AxeBuilder on seeded diagnosis/mockups/compare + F7 committed screenshots; CI/auth-stack-bound (supabase-local unrunnable in sandbox).
+- **`external-link.tsx` (mobile) is now near-dead** — after #576 its only importer is gone (settings/paywall reimplement inline); a candidate for deletion next run if still unreferenced.
+- **Still-deferred low-value:** Stripe env fail-loud (billing-sensitive); the Run-79 zero-seeded `chat()` files (analyze-apartment ×2, area-analysis/refine ×2) — but note the determinism scout confirmed `resolveSeed(undefined)` already forces the seed under the DETERMINISTIC flag, so these are prod-only reproducibility niceties no test catches (weigh hard vs churn); gallery example-score honesty relabel (subjective).
