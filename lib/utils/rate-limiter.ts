@@ -178,4 +178,11 @@ export const RATE_LIMITS = {
   productCorrect: { maxRequests: 10, windowMs: 60_000 },
   /** Product confirmation (self-learning embedding write-back) — 10 per minute per user */
   productConfirm: { maxRequests: 10, windowMs: 60_000 },
+  /**
+   * Public shared-design lookup — 60 per minute PER IP. This endpoint is
+   * unauthenticated (no user to key on), so it is keyed on the caller IP to slow
+   * share_token enumeration/scraping without impeding a real viewer who follows
+   * a link (each page view is a single request).
+   */
+  sharedDesign: { maxRequests: 60, windowMs: 60_000 },
 } as const;
