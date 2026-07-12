@@ -75,8 +75,10 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           MARGIN_INGEST_URL: ${{ secrets.MARGIN_INGEST_URL }}
           MARGIN_INGEST_KEY: ${{ secrets.MARGIN_INGEST_KEY }}
-          # Cost guardrails (see scripts/margin_eval.ts). Bump on a manual dispatch as needed.
-          MARGIN_EVAL_MAX_CASES: "8"
+          # Cost guardrails (see scripts/margin_eval.ts). MAX_CASES is PER-SUITE; the
+          # default run-all covers search + fit-scoring + diagnosis, bounded by the $ cap.
+          # Bump on a manual dispatch as needed.
+          MARGIN_EVAL_MAX_CASES: "4"
           MARGIN_EVAL_USD_CAP: "5"
           # Neutralize the runner-set CI=true. The runner + meter treat CI as the HERMETIC
           # keyless gate and refuse to run / emit under it. THIS is a deliberate, secrets-

@@ -20,6 +20,8 @@
  * input tokens), and the #images dimension repeats the room's photos.
  */
 
+import { mulberry32, pick, int } from "./prng";
+
 export type BudgetMode = "budget" | "balanced" | "best_possible";
 export type Difficulty = "easy" | "medium" | "hard";
 
@@ -259,10 +261,51 @@ function edgeCases(): MarginEvalCase[] {
 }
 
 /**
- * The full input matrix — ~57 distinct cases spanning the five dimensions,
- * easy→hard and good→bad, with an asserted impossible-budget tail.
+ * Randomized / FUZZ tail — deterministic (seeded) so the matrix is reproducible.
+ * Explores boundary and degenerate inputs the curated cases don't: extreme image
+ * counts (cost stress), single-category and empty-brief degenerate runs, and
+ * random room×style×budget combos. Not asserted (random) — measured for cost.
+ */
+function fuzzCases(seed = 0xa11ce, n = 10): MarginEvalCase[] {
+  const rng = mulberry32(seed);
+  const out: MarginEvalCase[] = [];
+  for (let k = 0; k < n; k++) {
+    const room = pick(rng, ROOMS);
+    const style = pick(rng, STYLES);
+    const budget = pick(rng, BUDGETS);
+    const count = int(rng, 1, 5); // includes extreme 4–5 images (input-token stress)
+    const quality: "high" | "low" = rng() < 0.5 ? "high" : "low";
+    const degenerate = rng() < 0.34;
+    const cats = degenerate ? room.categories.slice(0, 1) : room.categories;
+    out.push({
+      id: `fuzz-${String(k).padStart(2, "0")}-${room.type}-${style}`,
+      roomType: room.type,
+      roomLabel: room.label,
+      budgetMode: budget,
+      // Occasionally a tiny ceiling — measured, NOT asserted (random inputs can
+      // legitimately produce 0 picks, which skips the budget gate).
+      budgetDollars: rng() < 0.25 ? int(rng, 30, 120) : undefined,
+      style,
+      imageUrls: imagesFor(room.type, count, quality),
+      imageQuality: quality,
+      imageCount: count,
+      userContext: degenerate ? "" : `${STYLE_LABEL[style]} ${room.label}.`,
+      keepItems: [],
+      replaceItems: [],
+      priorities: [],
+      missingCategories: cats,
+      difficulty: "hard",
+    });
+  }
+  return out;
+}
+
+/**
+ * The full input matrix — ~67 distinct cases spanning the five dimensions,
+ * easy→hard and good→bad, with an asserted impossible-budget tail and a seeded
+ * fuzz tail (boundary / degenerate / randomized).
  */
 export function buildCaseMatrix(): MarginEvalCase[] {
   const core = Array.from({ length: 45 }, (_, i) => coreCase(i));
-  return [...core, ...edgeCases()];
+  return [...core, ...edgeCases(), ...fuzzCases()];
 }

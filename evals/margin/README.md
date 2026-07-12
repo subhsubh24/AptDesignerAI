@@ -1,22 +1,41 @@
-# Margin eval — statistical cost-per-outcome for `aptdesigner-search`
+# Margin eval — statistical cost-per-outcome per AI workflow
 
-This suite exists so **Margin** gets an accurate, *statistical* cost-per-outcome
-for AptDesignerAI's core workflow — not a single anecdote. It runs a
-representative **input matrix** through the REAL metered search pipeline
-(`runAgenticSearch`, the same orchestrator `/api/search` uses), lets the live
-Gemini/DeepSeek providers emit their per-call economics via the `margin-meter`
-SDK (exactly as in production), grades each run against the genuine success
-signal, and emits the graded outcome. Margin then has real `calls + outcomes`
-to compute productivity ÷ AI-spend and auto-tune on.
+These suites exist so **Margin** gets an accurate, *statistical* cost-per-outcome
+for AptDesignerAI's AI workflows — not a single anecdote. Each suite runs a
+representative **input matrix** through a REAL metered pipeline (the same entry
+the app route uses), lets the live Gemini/DeepSeek providers emit their per-call
+economics via the `margin-meter` SDK (exactly as in production), grades each run
+against that workflow's genuine success signal, and emits the graded outcome.
+Margin then has real `calls + outcomes` per workflow to compute productivity ÷
+AI-spend and auto-tune on.
+
+See **`COVERAGE.md`** for the full workflow census and the ranked frontier of
+what to eval next.
+
+## Suites (`--workflow`)
+
+| Suite | Workflow id | Metered entry | Genuine outcome signal |
+| --- | --- | --- | --- |
+| `search` | `aptdesigner-search` | `runAgenticSearch` | `validation.isValid` + `validation.confidence/10` |
+| `fit-scoring` | `aptdesigner-fit-scoring` | `scoreProduct` | `final_item_score/10` (pass ≥ 6) + `confidence_score` |
+| `diagnosis` | `aptdesigner-diagnosis` | `runRoomDiagnosis` | `success` (room-type gate) + diagnosis completeness |
+
+Each suite is a curated matrix + a seeded fuzz/boundary tail + a genuine grader
+that is never always-pass (good inputs must score well, bad/adversarial inputs
+must score poorly — asserted where a defined outcome exists).
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `evals/margin/cases.ts` | The **input matrix** — ~57 cases varying **room type × budget × #images × image quality × style**, easy→hard, good-fit→bad-fit. Real, fetchable Unsplash room photos (the deep-scorer downloads them for vision). |
-| `evals/margin/grade.ts` | The **grader** — `passed = validation.isValid`, `qualityScore = validation.confidence/10`. Not always-pass; asserts a defined outcome where one exists (impossible budget → must fail) and flags misses. |
-| `scripts/margin_eval.ts` | The **runner** — drives each case through the real metered path, grades it, emits the outcome, cost-capped and CI-guarded. |
-| `__tests__/evals/margin-eval.test.ts` | Pure unit coverage (no network) proving the matrix is varied and the grader genuinely distinguishes good bundles from bad. Runs in the normal `npm test`/CI gate. |
+| `evals/margin/suites.ts` | Suite **registry** — `search`, `fit-scoring`, `diagnosis` (+ `selectSuites`). |
+| `evals/margin/suite.ts` | The `Suite` interface the runner drives generically. |
+| `evals/margin/cases.ts` | Search **input matrix** (~67 cases) — room type × budget × #images × image quality × style, + a seeded fuzz tail. |
+| `evals/margin/search-suite.ts` / `fit-scoring.ts` / `diagnosis.ts` | The three suites: matrix + grader + real-metered-path `runCase`. |
+| `evals/margin/grade.ts` | Shared `Grade` + `summarize` + the search grader. |
+| `evals/margin/prng.ts` | Seeded mulberry32 PRNG for reproducible fuzz cases. |
+| `scripts/margin_eval.ts` | The **runner** — `--workflow <name>` or run-all; cost-capped, CI-guarded. |
+| `__tests__/evals/margin-eval.test.ts` | Pure unit coverage (no network) proving every suite's matrix is varied and its grader distinguishes good from bad. Runs in the normal `npm test`/CI gate. |
 
 ## What the grader measures (the real signal)
 
@@ -38,34 +57,48 @@ Requires real keys and makes real, paid LLM + web-search calls. **Never runs in
 CI** (the runner refuses when `CI` is set or keys are missing — zero calls).
 
 ```bash
-# Minimal Gemini-only run (auto-selects AI_PROVIDER=gemini when no DeepSeek key):
+# Run ALL suites (default). Gemini-only auto-selects when no DeepSeek key.
 MARGIN_INGEST_URL=https://margin-ai-rho.vercel.app \
 MARGIN_INGEST_KEY=mgk_…          \
 GEMINI_API_KEY=…                 \
 TAVILY_API_KEY=…                 \
-MARGIN_EVAL_MAX_CASES=8          \
+MARGIN_EVAL_MAX_CASES=4          \
 MARGIN_EVAL_USD_CAP=5            \
-npx tsx scripts/margin_eval.ts
+npx tsx scripts/margin_eval.ts --workflow all
+
+# Or just one workflow:
+… npx tsx scripts/margin_eval.ts --workflow fit-scoring
+… npx tsx scripts/margin_eval.ts --workflow diagnosis
 ```
+
+`fit-scoring` and `diagnosis` do **not** need `TAVILY_API_KEY` (no product
+search) — but the runner still requires it up front because the default run-all
+includes `search`. Pass `--workflow fit-scoring` and set a dummy `TAVILY_API_KEY`
+if you only want the non-search suites.
 
 ### Config knobs (env)
 
 | Env | Default | Meaning |
 | --- | --- | --- |
+| `--workflow <name>` (CLI arg) | `all` | `search` \| `fit-scoring` \| `diagnosis` \| `all`. |
 | `MARGIN_INGEST_URL` / `MARGIN_INGEST_KEY` | — | Margin ingest endpoint + per-project key. If the key is absent the run still executes and grades **locally** but emits nothing (warned). |
-| `GEMINI_API_KEY` | **required** | Vision deep-scoring (and the whole pipeline under `AI_PROVIDER=gemini`). |
-| `TAVILY_API_KEY` | **required** | Product web search. Without it the pipeline finds 0 candidates. |
+| `GEMINI_API_KEY` | **required** | Vision + pipeline (whole pipeline under `AI_PROVIDER=gemini`). |
+| `TAVILY_API_KEY` | **required** | Product web search (search suite). |
 | `DEEPSEEK_API_KEY` | — | Enables the default DeepSeek text path; without it the runner forces `AI_PROVIDER=gemini`. |
 | `AI_PROVIDER` | `gemini` (auto) | **Candidate/config override** — `gemini` or `deepseek`. Re-run under a different provider to compare cost-per-outcome of a candidate config. |
-| `MARGIN_EVAL_MAX_CASES` | `8` | Hard case cap. |
-| `MARGIN_EVAL_USD_CAP` | `5` | Rough $ cap (conservative local token estimate; stops before the next case once exceeded). Margin computes the *real* cost server-side. |
+| `MARGIN_EVAL_MAX_CASES` | `6` | **Per-suite** case cap. |
+| `MARGIN_EVAL_USD_CAP` | `5` | Rough GLOBAL $ cap (conservative local token estimate; stops before the next case once exceeded). Margin computes the *real* cost server-side. |
 | `MARGIN_EVAL_FILTER` | — | Substring match on case id, or a difficulty (`easy`/`medium`/`hard`), to run a slice. |
 
-### How eval traffic is separated from production
+### How eval traffic is separated + attributed per workflow
 
 The runner sets `MARGIN_SESSION_ID=eval:<runid>` before loading the meter, so
-**every provider call it triggers is tagged** with that batch id
-(`session_id`). Production traffic is untagged. Re-running under a different
+**every provider call it triggers is tagged** with that batch id (`session_id`);
+production traffic is untagged. For run-all, it also sets `MARGIN_WORKFLOW_ID` per
+suite so each suite's calls (which the providers otherwise all emit as
+`aptdesigner-search`) are re-attributed to that suite's workflow id, and the
+outcome is emitted under the same id. Both env vars are eval-only and inert in
+prod/CI (declared in `validation/CAPABILITIES.yml`). Re-running under a different
 `AI_PROVIDER` produces a new `eval:<runid>` batch you can compare in Margin.
 
 ## CI guard

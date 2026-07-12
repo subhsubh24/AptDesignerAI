@@ -49,11 +49,16 @@ function isOffline(): boolean {
  * The process-wide Margin meter, or `null` when telemetry is disabled. Resolved
  * once and cached. Never throws.
  *
- * `MARGIN_SESSION_ID` (set ONLY by the on-demand eval runner, never in prod/CI):
- * when present, every recorded call is tagged with that session id so Margin can
- * separate an eval batch (`eval:<runid>`) from production traffic. Unset — the
- * default everywhere else, including the pinned egress-gate test — returns the
- * raw meter untouched.
+ * EVAL MODE (set ONLY by the on-demand eval runner, never in prod/CI): when
+ * `MARGIN_SESSION_ID` is present the meter is wrapped so every recorded call is
+ * tagged with:
+ *   - that session id (`eval:<runid>`) — separates an eval batch from prod, and
+ *   - `MARGIN_WORKFLOW_ID` when set — overrides the call's workflow so a run-all
+ *     eval can attribute each suite's calls to its own workflow (the provider
+ *     call sites hardcode `aptdesigner-search`). Read LIVE per call so a single
+ *     run can retag across suites.
+ * Unset (the default everywhere else, including the pinned egress-gate test)
+ * returns the raw meter untouched.
  */
 export function getMeter(): Meter | null {
   if (cached !== undefined) return cached;
@@ -67,11 +72,16 @@ export function getMeter(): Meter | null {
       apiKey: process.env.MARGIN_INGEST_KEY,
       timeoutMs: EMIT_TIMEOUT_MS,
     });
-    const sessionId = process.env.MARGIN_SESSION_ID;
-    cached = sessionId
+    const evalMode = Boolean(process.env.MARGIN_SESSION_ID);
+    cached = evalMode
       ? {
-          // Default the session tag; an explicit per-call sessionId still wins.
-          recordCall: (input) => real.recordCall({ sessionId, ...input }),
+          recordCall: (input) =>
+            real.recordCall({
+              ...input,
+              // Explicit per-call values still win over the eval-batch defaults.
+              sessionId: input.sessionId ?? process.env.MARGIN_SESSION_ID,
+              workflowId: process.env.MARGIN_WORKFLOW_ID || input.workflowId,
+            }),
           recordOutcome: (input) => real.recordOutcome(input),
         }
       : real;

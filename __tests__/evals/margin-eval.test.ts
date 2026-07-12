@@ -12,6 +12,9 @@
 import { describe, it, expect } from "vitest";
 import { buildCaseMatrix } from "@/evals/margin/cases";
 import { gradeCase, summarize, type GradableResult } from "@/evals/margin/grade";
+import { buildFitCases, gradeFit } from "@/evals/margin/fit-scoring";
+import { buildDiagnosisCases, gradeDiagnosis } from "@/evals/margin/diagnosis";
+import { SUITES, selectSuites, suiteNames } from "@/evals/margin/suites";
 
 describe("margin eval — input matrix", () => {
   const cases = buildCaseMatrix();
@@ -55,6 +58,16 @@ describe("margin eval — input matrix", () => {
       expect(c.imageUrls.length).toBe(c.imageCount);
       for (const u of c.imageUrls) expect(u).toMatch(/^https:\/\/images\.unsplash\.com\//);
     }
+  });
+
+  it("includes a seeded fuzz/boundary tail (deterministic across builds)", () => {
+    const fuzz = cases.filter((c) => c.id.startsWith("fuzz-"));
+    expect(fuzz.length).toBeGreaterThanOrEqual(8);
+    // Fuzz explores boundary #images (up to 5) and degenerate empty briefs.
+    expect(Math.max(...fuzz.map((c) => c.imageCount))).toBeGreaterThanOrEqual(4);
+    expect(fuzz.some((c) => c.userContext === "")).toBe(true);
+    // Deterministic: a rebuild yields identical ids.
+    expect(buildCaseMatrix().map((c) => c.id)).toEqual(cases.map((c) => c.id));
   });
 });
 
@@ -119,5 +132,99 @@ describe("margin eval — grader (genuine, never always-pass)", () => {
     expect(s.passed).toBe(2);
     expect(s.expectationMisses).toBe(1);
     expect(s.totalTokens).toBeGreaterThan(0);
+  });
+});
+
+describe("margin eval — fit-scoring suite", () => {
+  const cases = buildFitCases();
+
+  it("has curated good-fit AND bad-fit asserted cases, plus a fuzz tail", () => {
+    const good = cases.filter((c) => c.expect?.shouldPass === true);
+    const bad = cases.filter((c) => c.expect?.shouldPass === false);
+    const fuzz = cases.filter((c) => c.id.startsWith("fit-fuzz-"));
+    expect(good.length).toBeGreaterThanOrEqual(2);
+    expect(bad.length).toBeGreaterThanOrEqual(2);
+    expect(fuzz.length).toBeGreaterThanOrEqual(4);
+    const ids = new Set(cases.map((c) => c.id));
+    expect(ids.size).toBe(cases.length);
+  });
+
+  it("grader maps a high fit score to passed and a low score to failed (never always-pass)", () => {
+    const good = cases.find((c) => c.expect?.shouldPass === true)!;
+    const bad = cases.find((c) => c.expect?.shouldPass === false)!;
+    const hi = gradeFit(good, { success: true, data: { final_item_score: 8.4, scores: { confidence_score: 8 } }, tokensUsed: 900 });
+    expect(hi.passed).toBe(true);
+    expect(hi.qualityScore).toBeCloseTo(0.84, 5);
+    expect(hi.expectationMet).toBe(true);
+
+    const lo = gradeFit(bad, { success: true, data: { final_item_score: 2.5, scores: { confidence_score: 7 } }, tokensUsed: 900 });
+    expect(lo.passed).toBe(false);
+    expect(lo.expectationMet).toBe(true); // a bad-fit product SHOULD score low
+  });
+
+  it("FLAGS a miss when a clearly-bad product scores high", () => {
+    const bad = cases.find((c) => c.expect?.shouldPass === false)!;
+    const g = gradeFit(bad, { success: true, data: { final_item_score: 9, scores: { confidence_score: 9 } } });
+    expect(g.passed).toBe(true);
+    expect(g.expectationMet).toBe(false);
+    expect(g.notes.some((n) => n.includes("EXPECTATION MISS"))).toBe(true);
+  });
+
+  it("grades a scorer error as failed, quality 0", () => {
+    const g = gradeFit(cases[0], { success: false, error: "boom" });
+    expect(g.ran).toBe(false);
+    expect(g.qualityScore).toBe(0);
+  });
+});
+
+describe("margin eval — diagnosis suite", () => {
+  const cases = buildDiagnosisCases();
+
+  it("has asserted room-type-mismatch cases (must fail) plus a fuzz tail", () => {
+    const mustFail = cases.filter((c) => c.expect?.shouldPass === false);
+    const fuzz = cases.filter((c) => c.id.startsWith("diag-fuzz-"));
+    expect(mustFail.length).toBeGreaterThanOrEqual(2);
+    expect(fuzz.length).toBeGreaterThanOrEqual(3);
+    for (const c of mustFail) expect(c.roomType).not.toBe(c.photoRoom); // declared ≠ photographed
+  });
+
+  it("grades a complete diagnosis as passed and an empty one as failed", () => {
+    const good = cases.find((c) => c.expect?.shouldPass === true)!;
+    const full = gradeDiagnosis(good, {
+      success: true,
+      data: { diagnosis: {}, design_direction: {}, missing_categories: ["rug"], action_list: [{}, {}, {}] },
+      tokensUsed: 1500,
+    });
+    expect(full.passed).toBe(true);
+    expect(full.qualityScore).toBeCloseTo(1, 5);
+    expect(full.expectationMet).toBe(true);
+
+    const empty = gradeDiagnosis(good, { success: true, data: { diagnosis: {}, design_direction: {}, missing_categories: [], action_list: [] } });
+    expect(empty.passed).toBe(false);
+  });
+
+  it("CONFIRMS the expectation when a room-type mismatch hard-gates to failure", () => {
+    const mismatch = cases.find((c) => c.expect?.shouldPass === false)!;
+    const g = gradeDiagnosis(mismatch, { success: false, error: "Room type mismatch: photos look like bedroom" });
+    expect(g.passed).toBe(false);
+    expect(g.expectationMet).toBe(true);
+  });
+});
+
+describe("margin eval — suite registry", () => {
+  it("registers search, fit-scoring, and diagnosis with distinct workflow_ids", () => {
+    expect(suiteNames()).toEqual(["search", "fit-scoring", "diagnosis"]);
+    const ids = SUITES.map((s) => s.workflowId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain("aptdesigner-search");
+    expect(ids).toContain("aptdesigner-fit-scoring");
+    expect(ids).toContain("aptdesigner-diagnosis");
+  });
+
+  it("selectSuites picks one by slug, all by default, and rejects unknowns", () => {
+    expect(selectSuites("fit-scoring").map((s) => s.workflow)).toEqual(["fit-scoring"]);
+    expect(selectSuites("all").length).toBe(SUITES.length);
+    expect(selectSuites(undefined).length).toBe(SUITES.length);
+    expect(() => selectSuites("nope")).toThrow(/unknown --workflow/);
   });
 });
