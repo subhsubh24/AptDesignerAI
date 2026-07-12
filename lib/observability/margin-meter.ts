@@ -30,8 +30,11 @@
 import { MarginMeter } from "margin-meter";
 import { waitUntil } from "@vercel/functions";
 
+/** The meter surface the app + eval runner use (recordCall / recordOutcome). */
+export type Meter = Pick<MarginMeter, "recordCall" | "recordOutcome">;
+
 // undefined = not yet resolved; null = disabled (no key / offline / error).
-let cached: MarginMeter | null | undefined;
+let cached: Meter | null | undefined;
 
 // Cap a stuck ingest: bounds waitUntil lifetime + any awaited emit (SDK default 10s).
 const EMIT_TIMEOUT_MS = 4000;
@@ -45,19 +48,33 @@ function isOffline(): boolean {
 /**
  * The process-wide Margin meter, or `null` when telemetry is disabled. Resolved
  * once and cached. Never throws.
+ *
+ * `MARGIN_SESSION_ID` (set ONLY by the on-demand eval runner, never in prod/CI):
+ * when present, every recorded call is tagged with that session id so Margin can
+ * separate an eval batch (`eval:<runid>`) from production traffic. Unset — the
+ * default everywhere else, including the pinned egress-gate test — returns the
+ * raw meter untouched.
  */
-export function getMeter(): MarginMeter | null {
+export function getMeter(): Meter | null {
   if (cached !== undefined) return cached;
   try {
     if (isOffline() || !process.env.MARGIN_INGEST_KEY) {
       cached = null;
       return cached;
     }
-    cached = new MarginMeter({
+    const real = new MarginMeter({
       ingestUrl: process.env.MARGIN_INGEST_URL,
       apiKey: process.env.MARGIN_INGEST_KEY,
       timeoutMs: EMIT_TIMEOUT_MS,
     });
+    const sessionId = process.env.MARGIN_SESSION_ID;
+    cached = sessionId
+      ? {
+          // Default the session tag; an explicit per-call sessionId still wins.
+          recordCall: (input) => real.recordCall({ sessionId, ...input }),
+          recordOutcome: (input) => real.recordOutcome(input),
+        }
+      : real;
   } catch {
     cached = null;
   }

@@ -47,6 +47,7 @@ non_credential_allowlist:
   - E2E_RATE_LIMIT_BYPASS        # test-only rate-limit bypass; guarded separately (fail-closed on Vercel)
   - E2E_AUTH_STACK               # CI journeys flag; routes the AI pipeline to the hermetic cassette (fail-closed on Vercel via assertCassetteSafe)
   - CI                           # generic CI marker; the Margin meter refuses to construct (no network egress) when set
+  - MARGIN_SESSION_ID            # eval-runner-only: tags Margin calls with an eval batch id (eval:<runid>); unset in prod/CI (inert)
   - NEXT_PUBLIC_APP_URL
   - NEXT_PUBLIC_SITE_URL
   - COMPUTER_USE_MODEL
