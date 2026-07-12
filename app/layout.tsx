@@ -5,10 +5,27 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "AptDesigner - AI Interior Design Copilot",
   description:
     "A deeply personalized AI-powered interior design assistant for your apartment.",
+  openGraph: {
+    type: "website",
+    siteName: "AptDesigner",
+    url: SITE_URL,
+    title: "AptDesigner - AI Interior Design Copilot",
+    description:
+      "A deeply personalized AI-powered interior design assistant for your apartment.",
+  },
+  twitter: {
+    card: "summary",
+    title: "AptDesigner - AI Interior Design Copilot",
+    description:
+      "A deeply personalized AI-powered interior design assistant for your apartment.",
+  },
 };
 
 export default function RootLayout({

@@ -1,10 +1,36 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Camera, ShoppingBag, Palette, Shield, ArrowRight, CheckCircle2, Zap } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { HeroAnimations } from "@/components/marketing/hero-animations";
+
+// Landing-specific metadata. Without this, the marketing home page inherits the
+// generic root <title> shared by every route — a search engine sees the same
+// title/description sitewide and the highest-traffic page ranks for nothing.
+export const metadata: Metadata = {
+  title: "AI Interior Design for Your Apartment — AptDesigner",
+  description:
+    "Snap a few photos of your room and AptDesigner studies the finishes, light, and layout, then finds furniture that actually fits your space. Personalized AI interior design for renters and homeowners.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    // Next fully REPLACES (not per-field merges) the layout's openGraph on a
+    // page that declares its own, so repeat siteName here to keep it on the
+    // primary acquisition page's OG tags.
+    title: "AI Interior Design for Your Apartment — AptDesigner",
+    description:
+      "Snap a few photos and get furniture and layout ideas tailored to your real space — the light, the finishes, the dimensions.",
+    type: "website",
+    siteName: "AptDesigner",
+  },
+  twitter: {
+    title: "AI Interior Design for Your Apartment — AptDesigner",
+    description:
+      "Snap a few photos and get furniture and layout ideas tailored to your real space.",
+  },
+};
 
 export default function LandingPage() {
   return (
