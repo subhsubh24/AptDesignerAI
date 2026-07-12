@@ -1,0 +1,94 @@
+# Change-triggered Margin eval — refreshes AptDesignerAI's STATISTICAL cost-per-outcome
+# whenever real AI/eval code ships to the trunk. It runs the on-demand runner
+# (scripts/margin_eval.ts) against the live metered search path so Margin gets fresh
+# `calls + graded outcomes` for the `aptdesigner-search` workflow.
+#
+# INERT UNTIL CONFIGURED: the eval job is gated on four repo secrets. With any missing,
+# the `guard` job reports "not ready" and the `eval` job is SKIPPED — the workflow succeeds
+# and never fails CI. It stays a clean no-op until the owner sets the secrets.
+#
+# NOT a required/merge gate: this is a separate, cost-bearing telemetry workflow. A genuine
+# regression is surfaced as a ::warning:: annotation, but the job stays green so it can never
+# block a merge.
+name: margin-eval
+
+on:
+  # Only when AI / eval CODE changes on the trunk — never on docs/bookkeeping churn.
+  push:
+    branches: ["claude/ai-apartment-design-app-iHAdb"]
+    paths:
+      - "lib/ai/**"
+      - "lib/agents/**"
+      - "evals/margin/**"
+  # Allow the owner to trigger a refresh by hand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One eval per trunk ref at a time; a newer push supersedes an in-flight run.
+concurrency:
+  group: margin-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Secrets are NOT available in a job-level `if:`, so a tiny guard job maps them to an
+  # output the eval job gates on. This is the "if: secrets != ''" job guard.
+  guard:
+    name: guard (secrets present?)
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          MARGIN_INGEST_URL: ${{ secrets.MARGIN_INGEST_URL }}
+          MARGIN_INGEST_KEY: ${{ secrets.MARGIN_INGEST_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ] && [ -n "$TAVILY_API_KEY" ] \
+             && [ -n "$MARGIN_INGEST_URL" ] && [ -n "$MARGIN_INGEST_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "margin-eval: all secrets present — eval will run."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::margin-eval skipped — set GEMINI_API_KEY, TAVILY_API_KEY, MARGIN_INGEST_URL, MARGIN_INGEST_KEY repo secrets to enable. Inert until then."
+          fi
+
+  eval:
+    name: eval (cost-per-outcome)
+    needs: guard
+    if: needs.guard.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Margin eval (cost-capped, on-demand)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          MARGIN_INGEST_URL: ${{ secrets.MARGIN_INGEST_URL }}
+          MARGIN_INGEST_KEY: ${{ secrets.MARGIN_INGEST_KEY }}
+          # Cost guardrails (see scripts/margin_eval.ts). Bump on a manual dispatch as needed.
+          MARGIN_EVAL_MAX_CASES: "8"
+          MARGIN_EVAL_USD_CAP: "5"
+          # Neutralize the runner-set CI=true. The runner + meter treat CI as the HERMETIC
+          # keyless gate and refuse to run / emit under it. THIS is a deliberate, secrets-
+          # gated eval run (authorized by the guard job above), so it must construct the
+          # meter and emit — hence CI is blanked here (and ONLY here). The keyless verify
+          # gate keeps CI=true and never invokes this workflow.
+          CI: ""
+        run: |
+          set +e
+          npx tsx scripts/margin_eval.ts
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::margin-eval runner exited $code — possible cost-per-outcome regression (e.g. an impossible-budget case that passed). See the run log. Not failing this non-gate workflow."
+          fi
+          exit 0
