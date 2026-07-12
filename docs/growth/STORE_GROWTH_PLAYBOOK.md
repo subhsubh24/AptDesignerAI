@@ -86,6 +86,28 @@ high-intent searches → revenue → revenue funds more content/creators → mor
 ad dollar works harder. Standalone, ASA is mediocre; behind a real funnel + a live Brand campaign
 it is often the most profitable channel. It pays back exactly as much demand as you drive into it.
 
+## F. Brand identity — logo + app icon (a BOUNDED, one-time asset; NOT a standing focus)
+A logo/icon is brand-defining and made ONCE, then FROZEN — not recurring work. Re-designing it every run is
+churn (§5) + diversity collapse (§37); a mark that keeps changing is a bug. An over-designed AI logo often
+hurts more than a clean wordmark — clarity + distinctiveness beat ornament. And the app ICON drives store
+conversion more than a marketing logo (screenshots + icon sell — §A), so prioritize a crisp icon.
+- **Do it well, ONCE (a store-readiness DoD item).** When the product needs its identity, EXPLORE ≥3
+  genuinely different directions (§21 branch-and-explore — e.g. a clean wordmark, a minimal symbol, a
+  symbol+wordmark lockup), NOT one; each must clear the VISION design bar (§6b — intentional, not generic-AI
+  slop) and pass VISION-VERIFY on the render (§40).
+- **Owner PICKS (human gate).** A logo is brand-defining + irreversible-ish, so STAGE 2–3 finalists — with the
+  icon shown at real store sizes (1024 / 180 / 120 / 60 px; must stay legible + distinctive when tiny) — for
+  the OWNER to choose. Do NOT auto-merge a final brand mark (VISION's "when unsure a visual clears the bar,
+  human-only" rule + the marketing-autonomy gates). Record the chosen mark + source files in brand-kit.md.
+- **Then FREEZE it.** Once picked, the logo + icon are STABLE ANCHORS — do NOT re-design on later runs unless
+  there is a real reason (a genuine rebrand, or it fails the design bar). Deliver the full set (SVG master +
+  PNG exports + all app-icon sizes + light/dark + a favicon) and STOP. Keep every downstream use (store
+  listing, landing, email, screenshots, CPPs) consistent with the frozen mark — a drifted/off-brand asset is
+  the bug to fix, NOT a reason to redesign.
+- **Honesty + taste.** Never ship a placeholder as "done" — a real, committed image file (not 0-byte/
+  placeholder) is the bar (evidence-based done, §7). Simplicity without blandness: a clean wordmark that
+  clears the bar beats a busy emblem that doesn't.
+
 ## Hard boundaries (reaffirmed)
 Real metrics only — never fabricate installs/rankings/ROAS/reviews. Paid only within the owner's
 funded account + approved budget cap (GTM §9). Never create accounts, never auto-submit to the
