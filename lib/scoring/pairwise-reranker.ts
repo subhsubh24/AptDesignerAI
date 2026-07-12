@@ -89,14 +89,17 @@ export async function pairwiseRerank(
     }
   }
 
-  // Sort by win count descending, then original deep score as tiebreaker
+  // Sort by win count descending, then original deep score, then a stable id
+  // tiebreak so equal wins + equal score never depend on input/Map ordering
+  // (determinism contract — matches tiebreakProduct() used elsewhere).
   const ranked = [...candidates].sort((a, b) => {
     const winsA = winCounts.get(a.id) || 0;
     const winsB = winCounts.get(b.id) || 0;
     if (winsB !== winsA) return winsB - winsA;
     const scoreA = evaluations.get(a.id)?.final_item_score || 0;
     const scoreB = evaluations.get(b.id)?.final_item_score || 0;
-    return scoreB - scoreA;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return a.id.localeCompare(b.id);
   });
 
   // Append any products beyond MAX_CANDIDATES that weren't re-ranked
