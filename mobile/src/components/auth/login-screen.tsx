@@ -103,6 +103,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
                   returnKeyType="next"
                   placeholderTextColor={colors.mutedForeground}
                   placeholder="you@example.com"
+                  accessibilityLabel="Email address"
                 />
               </View>
 
@@ -127,6 +128,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
                   onSubmitEditing={handleSignIn}
                   placeholderTextColor={colors.mutedForeground}
                   placeholder="••••••••"
+                  accessibilityLabel="Password"
                 />
               </View>
 
@@ -150,7 +152,12 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
               <ThemedText type="small" style={{ color: colors.textSecondary }}>
                 Don&apos;t have an account?{' '}
               </ThemedText>
-              <Pressable accessibilityRole="button" onPress={onSignup} hitSlop={8}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create an account"
+                onPress={onSignup}
+                hitSlop={8}
+              >
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>
                   Create one
                 </ThemedText>
