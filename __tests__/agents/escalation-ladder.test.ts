@@ -51,7 +51,7 @@ describe("escalate", () => {
     expect(callCount).toBe(1);
   });
 
-  it("returns best candidate when all tiers fail verify", async () => {
+  it("returns the FIRST candidate (tier 0) when all tiers fail verify", async () => {
     const result = await escalate(
       makeConfig<number>({
         tiers: [
@@ -64,6 +64,33 @@ describe("escalate", () => {
 
     expect(result.accepted).toBe(false);
     expect(result.attempts).toBe(2);
+    // When nothing is accepted, `best` is pinned to the first candidate that
+    // produced output (the `!best ||` guard) — so the fallback is tier 0's
+    // output, NOT the last tier tried. A mutation that overwrites `best` on
+    // every iteration (replacing `if (!best || accepted)` with an
+    // unconditional assign) would return 2 / tier 1 instead.
+    expect(result.chosen).toBe(1);
+    expect(result.tierReached).toBe(0);
+  });
+
+  it("falls back to the first NON-NULL candidate when a leading tier returns null and all fail", async () => {
+    // tier 0 yields null (never becomes `best`), tier 1 produces output but
+    // fails verify — the fallback must be tier 1's output, and tierReached must
+    // reflect the tier that actually produced it (1), not the loop index.
+    const result = await escalate(
+      makeConfig<number>({
+        tiers: [
+          { label: "tier0", generate: async () => null },
+          { label: "tier1", generate: async () => 7 },
+          { label: "tier2", generate: async () => 9 },
+        ],
+        verify: () => ({ ok: false, reason: "always fails" }),
+      }),
+    );
+
+    expect(result.accepted).toBe(false);
+    expect(result.chosen).toBe(7);
+    expect(result.tierReached).toBe(1);
   });
 
   it("throws when all tiers return null", async () => {
