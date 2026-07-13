@@ -7,6 +7,87 @@ history behind it.
 
 ---
 
+## 2026-07-13 — SEVENTH INDEPENDENT GRADE (overall HELD at C; per-dimension picture WORSENED — TWO fresh adversarial findings dropped security_rls A+→A and business_case A→B)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link,
+functional_reality C, whose production reality is unchanged). But this cycle the per-dimension picture
+REGRESSED: two fresh adversarial per-dimension graders surfaced real gaps that DROP two ship-critical dims
+that were at/above A. **security_rls A+→A** and **business_case_strength A→B**. THREE ship-critical dims now
+sit below A (functional_reality C, design_taste B, business_case B) — up from two last cycle. These are grade
+CORRECTIONS/regressions from fresh adversarial sweeps, in the same spirit as prior over-grade catches
+(functional_reality A→C on the memory-store; security A+→A on the area-analysis IDOR).
+
+**Per-dimension diff vs 2026-07-11:** functional_reality **C→C** (production reality unchanged) · correctness
+**A→A** · security_rls **A+→A** ⬇ (new mockups IDOR) · design_taste **B→B** (capping gaps byte-for-byte
+unchanged) · store_readiness **A→A** · artifact_integrity **A→A** (F2 tick-precision nit named, held) ·
+business_case **A→B** ⬇ (shippable ARR below floor) · tests_evals **B→B** · performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → clean · `npm run check:determinism` → green.
+- `npm test` → **2051 passed / 11 skipped** (up from 1948; 11 skips RUN_EVALS-gated by design).
+- `npx vitest run --coverage` → **~59.98% stmts / 48.86% branch / 65.61% funcs / 61.01% lines** (up from
+  59.04/47.77/64.75/60.03), above the 40/30/42/40 floor — still NOT CI-gated (verify runs bare `vitest run`).
+- `bash scripts/preflight.sh` → **51 pass / 2 fail**; GATE 5 (all 4 dashboard blocks) GREEN, GATE 6 RLS green
+  (26/26). The 2 fails are the expected environmental/pre-launch ones (functional-journeys cold; DoD
+  9-unchecked) — NOT new regressions.
+
+**Why security_rls regressed A+→A (fresh finding, verified by hand):** a 52-route adversarial sweep found a
+missed ownership guard of the EXACT class last cycle's sweep claimed was clear — falsifying the A+ basis.
+`app/api/mockups/route.ts` POST guards `userOwnsRoom(room_id)` (:174) but then reads client-supplied
+`product_ids` (:552-556, `.in("id", product_ids)` with no `.eq("room_id", room_id)`) and `bundle_id`
+(:546-550, no ownership check) — while the codebase's OWN convention binds exactly these
+(bundles/route.ts:85-92, products/evaluate:79). Under the inert-RLS memory store the app-layer bind is the
+sole cross-tenant boundary, so an authed caller with an owned room_id can read another tenant's products/
+bundle into a mockup render. A not lower: unguessable UUIDs + image output. Everything else stays strong
+(secrets clean, GATE 6 green, area-analysis #530 guard intact, all 14 fan-out LLM routes rate+spend guarded).
+
+**Why business_case regressed A→B (fresh recompute, verified via node):** the shippable-TODAY case does NOT
+clear the $100K floor. Pro Annual is gated off in code (checkout/route.ts:55 refuses it; ANNUAL_BILLING_ENABLED
+default off; migration 021 unapplied). Without annual the honest transactable steady-state ARR is ~$99,926 —
+~$74 BELOW the floor. The floor-clearing $122.9K base requires the gated tier (~38% of MRR) + is steady-state
+(~year 3; floor_met_year1: false, year-1 exit ~$58-60K). Same discipline the auditor applied to
+functional_reality: grade the shippable reality, not the projection. Honesty is EXEMPLARY (fully disclosed at
+BUSINESS_CASE.md:19-35,79-85,384; nothing gamed; levers real code) — which keeps it at B, not lower. The GTM
+auditor independently graded this B for the identical root cause (issue #600), corroborating.
+
+**Why functional_reality HELD at C (unchanged production reality):** DATA_BACKEND still DEFAULTS to memory
+(lib/supabase/server.ts:22-24, docstring still "ships INERT"); the real-Postgres cold-start integration test
+still does NOT exist — data-backend.test.ts:6-9 still defers it to "a human-verified cutover step", and the
+one new persistence test (analyze-apartment-persistence.test.ts) drives a MOCKED client (a per-room-diagnosis
+regression guard, not a cold-start proof). So production is exactly as non-persistent as before → C.
+
+**Why artifact_integrity HELD at A (F2 nit named, not a drop):** a grader flagged ROADMAP F2 ticked [x]
+claiming "a regression below the floor fails the gate" while CI runs bare `vitest run`. Real, but narrow: the
+substance (CI doesn't gate coverage) is ALREADY the tests_evals B gap, the F2 threshold artifact does exist +
+enforce on `npm run test:coverage`, and vitest.config.ts TRANSPARENTLY self-documents the limitation (the
+opposite of a hidden integrity defect). Double-dropping the same root cause across two ship-critical dims
+would itself distort → held A with F2 named as the A→A+ ceiling item. store_readiness held A likewise (D3
+screenshots is a known human device step, not a code defect).
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, PREPARE still inert). UPDATE #204
+(design_taste — still B, capping gaps unchanged). COMMENT on #600 (business_case — Quality Auditor concurs,
+A→B, same root as the GTM auditor's grade). FILE new security issue for the mockups IDOR (security A, still
+ship-bar, but a real cross-tenant read to close → raise to A+). Keep #200 (tests), #385 (perf) open —
+unchanged.
+
+**Lessons for next run:**
+1. **A fresh adversarial sweep beats a prior "comprehensive" claim.** Last cycle's A+ rested on a 52-route
+   sweep that "found no remaining missed guard of this class" — yet a fresh sweep found the mockups
+   product_ids/bundle_id IDOR. Do not inherit a prior all-clear; re-sweep every cycle. The convention to
+   check: any route that binds ONE id (room_id) but then reads OTHER client-supplied ids must bind those too.
+2. **Improved disclosure can lower a grade — and that's correct.** The factory made the business case MORE
+   honest (disclosing Pro Annual is gated off, computing $99.9K without-annual). That honesty REVEALED that
+   the shippable floor is below $100K. Grade the shippable reality; reward the honesty by holding at B (not
+   lower), not by holding at A.
+3. **Don't double-count one root cause across two ship-critical dims.** The coverage-not-in-CI gap is the
+   tests_evals B gap; it also touches artifact_integrity via the F2 tick, but the codebase self-documents it,
+   so it stays a named ceiling on artifact_integrity, not a second drop. Avoid grade-thrash inflation-in-
+   reverse.
+4. Cold-start recipe re-confirmed: npm install first; grade on assertions + CI/preflight status, never a cold
+   local authed suite. Perf N+1 still INERT under the memory store; raw <img> stable at 32 (no regression).
+
+---
+
 ## 2026-07-11 — SIXTH INDEPENDENT GRADE (overall HELD at C; two ship-critical dims RECOVERED — security_rls A→A+, artifact_integrity B→A — but functional_reality still C caps the headline)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C, but the per-dimension picture improved: two of
