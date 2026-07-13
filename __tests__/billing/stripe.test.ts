@@ -4,6 +4,7 @@ import {
   extractBillingInfoFromEvent,
   constructWebhookEvent,
   createCheckoutSession,
+  isAnnualBillingEnabled,
 } from "@/lib/billing/stripe";
 
 // constructWebhookEvent and createCheckoutSession need STRIPE_SECRET_KEY set.
@@ -295,5 +296,35 @@ describe("createCheckoutSession — subscription_data carries tier (revenue attr
     };
     expect(arg.mode).toBe("payment");
     expect(arg.subscription_data).toBeUndefined();
+  });
+});
+
+// ── isAnnualBillingEnabled — the pro_annual kill-switch ──────────────────────
+// Annual billing is a built-but-gated tier: it ships DISABLED until the owner
+// applies migration 021 AND sets ANNUAL_BILLING_ENABLED=true in the SAME deploy.
+// This flag is the charge chokepoint (checkout route refuses pro_annual while
+// off) — a regression that flips it default-on would let a customer be charged
+// for a tier the DB CHECK constraint rejects, leaving them charged with NO
+// entitlement. Pin the exact env contract so that can't silently regress.
+describe("isAnnualBillingEnabled — pro_annual gate", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("is enabled ONLY when ANNUAL_BILLING_ENABLED is exactly 'true'", () => {
+    vi.stubEnv("ANNUAL_BILLING_ENABLED", "true");
+    expect(isAnnualBillingEnabled()).toBe(true);
+  });
+
+  it("stays disabled by default when the env var is unset", () => {
+    vi.stubEnv("ANNUAL_BILLING_ENABLED", "");
+    expect(isAnnualBillingEnabled()).toBe(false);
+  });
+
+  it("stays disabled for any non-'true' value (no truthy coercion)", () => {
+    for (const v of ["false", "1", "TRUE", "yes", "on"]) {
+      vi.stubEnv("ANNUAL_BILLING_ENABLED", v);
+      expect(isAnnualBillingEnabled()).toBe(false);
+    }
   });
 });
