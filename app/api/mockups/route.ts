@@ -541,20 +541,45 @@ RULES:
   }
 
   // ─── Standard Mode: product-based mockup ───────────────────────
-  // Fetch products
+  // Fetch products. bundle_id / product_ids are client-supplied and the
+  // memory-store query is NOT user-scoped, so owning `room_id` is not enough:
+  // without binding these to the room, an owner of room A could pass another
+  // user's bundle_id or product_ids (room B) and have their catalog data
+  // (titles, prices, retailers, image URLs) fetched, rendered into a mockup,
+  // and persisted in selected_products — a cross-tenant read leak (+ paid
+  // render on data they don't own). Mirror the bundles route binding
+  // (app/api/bundles/route.ts:74-95): reject the whole request (404, no
+  // enumeration oracle) before any render if anything isn't owned by this room.
   let products;
   if (bundle_id) {
+    // Verify the bundle belongs to THIS room before reading its items.
+    const { data: ownedBundle, error: bundleOwnErr } = await supabase
+      .from("product_bundles")
+      .select("id")
+      .eq("id", bundle_id)
+      .eq("room_id", room_id)
+      .maybeSingle();
+    if (bundleOwnErr) return apiError("mockups", bundleOwnErr);
+    if (!ownedBundle) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
     const { data } = await supabase
       .from("product_bundle_items")
       .select("candidate_products(*)")
       .eq("bundle_id", bundle_id);
     products = (data || []).map((item: { candidate_products: unknown }) => item.candidate_products);
   } else if (product_ids?.length) {
-    const { data } = await supabase
+    // Bind product_ids to the room; reject if any id isn't a product of it.
+    const { data, error: prodErr } = await supabase
       .from("candidate_products")
       .select("*")
+      .eq("room_id", room_id)
       .in("id", product_ids);
+    if (prodErr) return apiError("mockups", prodErr);
     products = data || [];
+    const ownedIds = new Set((products as Array<{ id: string }>).map((p) => p.id));
+    if ((product_ids as string[]).some((pid) => !ownedIds.has(pid))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
   } else {
     return NextResponse.json({ error: "bundle_id or product_ids required" }, { status: 400 });
   }
