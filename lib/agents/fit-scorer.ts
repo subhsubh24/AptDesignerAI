@@ -1,4 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
+import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
@@ -118,7 +119,14 @@ CRITICAL: Use the FULL range. If a product is just okay, score it 5-6. If it has
  * to halve deep-score token count (~120 fewer calls per run on a 5-cat × 3-tier
  * config). Context, math veto, and calibration anchors are all preserved.
  */
-export async function scoreProduct(
+// Margin: tag every fit-scoring LLM call under the "fit-scoring" supply-chain
+// node (inherits the journey session set by the search route).
+export function scoreProduct(
+  ...args: Parameters<typeof scoreProductImpl>
+): ReturnType<typeof scoreProductImpl> {
+  return withMarginOperation("fit-scoring", () => scoreProductImpl(...args));
+}
+async function scoreProductImpl(
   product: CandidateProduct,
   scoringCtx: ScoringContext
 ): Promise<AgentResult<ProductEvaluationResult & { area_fit_note?: string; apartment_fit_note?: string }>> {
@@ -365,7 +373,12 @@ export async function scoreProduct(
  * confidence grounding are applied per-product after the LLM call,
  * identical to scoreProduct.
  */
-export async function scoreProducts(
+export function scoreProducts(
+  ...args: Parameters<typeof scoreProductsImpl>
+): ReturnType<typeof scoreProductsImpl> {
+  return withMarginOperation("fit-scoring", () => scoreProductsImpl(...args));
+}
+async function scoreProductsImpl(
   products: CandidateProduct[],
   scoringCtx: ScoringContext,
   batchSize: number = 3,
@@ -719,7 +732,12 @@ export interface QuickScoreEntry {
  * Returns a simplified 3-dimension score to filter before deep scoring.
  * Batches 5-8 products per call for efficiency.
  */
-export async function quickScoreProducts(
+export function quickScoreProducts(
+  ...args: Parameters<typeof quickScoreProductsImpl>
+): ReturnType<typeof quickScoreProductsImpl> {
+  return withMarginOperation("fit-scoring", () => quickScoreProductsImpl(...args));
+}
+async function quickScoreProductsImpl(
   products: CandidateProduct[],
   category: string,
   roomType: string,

@@ -29,7 +29,20 @@ import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
+import { runWithMarginSession, withMarginOperation, getMarginContext } from "@/lib/observability/margin-context";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
+
+/**
+ * Resolve the Margin operation label for an internal analysis phase. On the
+ * INITIAL diagnosis (umbrella op "diagnosis") the phases decompose into their
+ * own supply-chain nodes. But when this same pipeline is re-run as a REFINE
+ * TURN (umbrella op "refine-turn"), keep every call under "refine-turn" so the
+ * graph shows the refine LOOP as one node whose call count grows per turn —
+ * rather than blurring the refine calls into the initial diagnosis nodes.
+ */
+function analysisPhaseOp(label: string): string {
+  return getMarginContext().operation === "refine-turn" ? "refine-turn" : label;
+}
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -122,7 +135,12 @@ export async function POST(request: Request) {
   }
 
   const work = withCostLedger(async (summary) => {
-    const res = await runAnalysis(supabase, room_id, project_id);
+    // Margin: open this journey run's SHARED session (room-scoped) and tag the
+    // full multi-pass analysis under the "diagnosis" step. Sub-agents override
+    // the operation via withMarginOperation while inheriting this session.
+    const res = await runWithMarginSession(room_id, "area-analysis", () =>
+      runAnalysis(supabase, room_id, project_id),
+    );
     const s = summary();
     if (s.stageCount > 0) {
       console.log(`[area-analysis] cost: ${s.totalTokens} tokens across ${s.stageCount} stages`, {
@@ -538,7 +556,9 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
 
     const generatePassASample = async (seed: number): Promise<PassASample | null> => {
       try {
-        const response = await geminiProvider.chat({
+        // Margin: Pass A (understand the room) is its own supply-chain node.
+        const response = await withMarginOperation(analysisPhaseOp("analysis-understand"), () =>
+          geminiProvider.chat({
           model,
           system,
           messages: [{ role: "user", content: passAContent }],
@@ -553,7 +573,7 @@ Be extremely specific. Name exact colors, materials, dimensions. Do NOT include 
             { googleSearch: {} as Record<string, never> },
             { codeExecution: {} as Record<string, never> },
           ],
-        });
+        }));
         if (response.truncated) {
           console.warn("[area-analysis] Pass A sample truncated — discarding");
           return null;
@@ -622,7 +642,9 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
         // a hallucinated "warm walnut floors" on a grey-LVP room can win
         // because it reads better. Grounding the judge on the actual photos
         // forces it to prefer accuracy.
-        const resp = await geminiProvider.chat({
+        // Margin: the self-consistency judge is its own supply-chain node.
+        const resp = await withMarginOperation(analysisPhaseOp("analysis-judge"), () =>
+          geminiProvider.chat({
           model,
           system: getSystemPrompt(profile),
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
@@ -636,7 +658,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           tools: [
             { codeExecution: {} as Record<string, never> },
           ],
-        });
+        }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
         const parsed = extractJsonObject<any>(resp.content);
         const idx = typeof parsed?.best_index === "number" ? parsed.best_index : 0;
@@ -758,7 +780,9 @@ Use Google Search to verify current pricing and material availability when neede
   "placement": "Centered in front of the sectional's chaise, 14 inches off the sofa front (reachable from seated position), directly under the ceiling light to anchor the zone. Sits on the 8x10 rug with all legs on."
 }`;
 
-    const passBResponse = await geminiProvider.chat({
+    // Margin: Pass B (furnish the room — the shopping list) is its own node.
+    const passBResponse = await withMarginOperation(analysisPhaseOp("analysis-furnish"), () =>
+      geminiProvider.chat({
       model,
       system,
       messages: [{ role: "user", content: [{ type: "text", text: passBPrompt }] }],
@@ -770,7 +794,7 @@ Use Google Search to verify current pricing and material availability when neede
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
       ],
-    });
+    }));
     if (passBResponse.truncated) {
       throw new Error("AI response was truncated during Pass B (furnishing). The item list was too long.");
     }

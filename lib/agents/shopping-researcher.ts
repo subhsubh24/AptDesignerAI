@@ -1,4 +1,5 @@
 import { geminiProvider } from "@/lib/ai/gemini";
+import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
@@ -344,7 +345,13 @@ const CATEGORY_RETAILERS: Record<string, Record<PriceTier, string[]>> = {
 /**
  * Generate a shopping brief based on room diagnosis — now with 5 diverse queries per tier.
  */
-export async function generateSearchBrief(
+// Margin: the search-brief authoring call is a "product-research" node.
+export function generateSearchBrief(
+  ...args: Parameters<typeof generateSearchBriefImpl>
+): ReturnType<typeof generateSearchBriefImpl> {
+  return withMarginOperation("product-research", () => generateSearchBriefImpl(...args));
+}
+async function generateSearchBriefImpl(
   roomType: string,
   missingCategories: string[],
   budgetMode: string,
@@ -635,7 +642,13 @@ export function prefilterJunkCandidates(
  * Includes design direction context for style filtering.
  * Batches up to 30 candidates per call for efficiency.
  */
-export async function quickScreenCandidates(
+// Margin: the candidate junk-screen LLM call is a "product-research" node.
+export function quickScreenCandidates(
+  ...args: Parameters<typeof quickScreenCandidatesImpl>
+): ReturnType<typeof quickScreenCandidatesImpl> {
+  return withMarginOperation("product-research", () => quickScreenCandidatesImpl(...args));
+}
+async function quickScreenCandidatesImpl(
   candidates: SearchCandidate[],
   category: string,
   tier: PriceTier,

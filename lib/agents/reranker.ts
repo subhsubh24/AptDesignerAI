@@ -18,6 +18,7 @@
  */
 
 import { geminiProvider } from "@/lib/ai/gemini";
+import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -86,7 +87,13 @@ export interface RerankParams {
  * Fails open: on any error, returns all candidates unmodified so the
  * pipeline degrades to pre-reranker behavior instead of crashing.
  */
-export async function rerankCandidates({
+// Margin: tag the rerank LLM call as its own "rerank" supply-chain node.
+export function rerankCandidates(
+  ...args: Parameters<typeof rerankCandidatesImpl>
+): ReturnType<typeof rerankCandidatesImpl> {
+  return withMarginOperation("rerank", () => rerankCandidatesImpl(...args));
+}
+async function rerankCandidatesImpl({
   category,
   tier,
   requirements,

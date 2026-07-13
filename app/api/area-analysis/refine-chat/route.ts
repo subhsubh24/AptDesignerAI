@@ -23,6 +23,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { runAnalysis } from "@/app/api/area-analysis/route";
 import { summarizeRefineChanges } from "@/lib/agents/refine-summarizer";
+import { runWithMarginSession } from "@/lib/observability/margin-context";
 
 // The POST handler re-runs the full area-analysis pipeline (`runAnalysis`) —
 // the same 3–5 min multi-pass LLM job as the area-analysis route. Without an
@@ -182,10 +183,19 @@ export async function POST(request: NextRequest) {
 
     // Re-run the full area analysis with the refinements folded in. This
     // persists a new room_diagnoses row internally.
-    const analysisResponse = await runAnalysis(supabase, room_id, room.project_id, {
-      forceRefresh: true,
-      extraDirection,
-    });
+    //
+    // Margin: this is ONE turn of the refine LOOP. Tag the whole re-analysis
+    // under the SHARED journey session (room-scoped) with operation
+    // "refine-turn" so every turn's calls land on the same supply-chain node —
+    // its call count grows per turn, making the multi-turn loop visible. The
+    // analysis pipeline's internal phase labels defer to "refine-turn" here (see
+    // analysisPhaseOp) instead of decomposing into the initial-diagnosis nodes.
+    const analysisResponse = await runWithMarginSession(room_id, "refine-turn", () =>
+      runAnalysis(supabase, room_id, room.project_id, {
+        forceRefresh: true,
+        extraDirection,
+      }),
+    );
     const analysisData = await analysisResponse.json();
     if (!analysisResponse.ok || analysisData.error || !analysisData.analysis) {
       throw new Error(analysisData.error || "Re-analysis failed");
@@ -198,12 +208,18 @@ export async function POST(request: NextRequest) {
     const profile = buildDesignProfile(
       (await supabase.from("projects").select("*").eq("id", room.project_id).single()).data,
     );
-    const { summary, tokens: summaryTokens } = await summarizeRefineChanges({
-      feedback: content,
-      priorAnalysis,
-      newAnalysis,
-      system: getSystemPrompt(profile),
-    });
+    // Margin: the change-summary LLM call is its own node under this turn.
+    const { summary, tokens: summaryTokens } = await runWithMarginSession(
+      room_id,
+      "refine-summary",
+      () =>
+        summarizeRefineChanges({
+          feedback: content,
+          priorAnalysis,
+          newAnalysis,
+          system: getSystemPrompt(profile),
+        }),
+    );
 
     const { data: assistantMsg, error: assistantMsgError } = await supabase
       .from("refine_messages")

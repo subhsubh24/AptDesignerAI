@@ -11,6 +11,7 @@ import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
 import { cassetteProvider } from "./cassette-provider";
 import { getMeter, emit } from "@/lib/observability/margin-meter";
+import { getMarginContext } from "@/lib/observability/margin-context";
 import type {
   AIProvider,
   AIMessage,
@@ -595,6 +596,9 @@ const realGeminiProvider: AIProvider = {
     const maxTransportAttempts = 3;
     // Time the whole call (incl. transport retries) for Margin economics below.
     const marginStart = Date.now();
+    // Whether this call needed at least one transport-level retry — surfaced to
+    // Margin as `isRetry` so the graph separates a clean call from a retried one.
+    let marginRetried = false;
     for (let attempt = 1; ; attempt++) {
       try {
         response = await geminiConcurrencyLimit(() => Promise.race([
@@ -661,6 +665,7 @@ const realGeminiProvider: AIProvider = {
           delay,
           error: (e.message || (err instanceof Error ? err.message : "unknown")) as string,
         });
+        marginRetried = true;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -786,8 +791,16 @@ const realGeminiProvider: AIProvider = {
     // Fail-safe: getMeter() is null in CI/tests and without a key. emit() hands
     // the promise to Vercel waitUntil so it isn't dropped when the serverless
     // instance freezes on response (a bare floating promise would be lost).
+    // Journey context (set at the route/agent boundary): `operation` names this
+    // call's supply-chain STEP and `sessionId` links it to the rest of the run
+    // so Margin can reconstruct the multi-step chain. Absent (background job) →
+    // both undefined and the emit is exactly as before.
+    const marginCtx = getMarginContext();
     emit(getMeter()?.recordCall({
       workflowId: "aptdesigner-search",
+      operation: marginCtx.operation,
+      sessionId: marginCtx.sessionId,
+      isRetry: marginRetried || marginCtx.isRetry || false,
       provider: "google",
       model,
       inputTokens: usageMetadata?.promptTokenCount || 0,
