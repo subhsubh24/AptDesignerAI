@@ -12,6 +12,21 @@ export const STRIPE_PRICE_IDS = {
 
 export type BillingTier = "apartment" | "pro" | "pro_annual";
 
+/**
+ * Annual (`pro_annual`) billing is GATED OFF until migration 021
+ * (`021_stripe_customers_annual_tier.sql`, which extends the `stripe_customers.tier`
+ * CHECK constraint to accept `'pro_annual'`) is applied to prod — see PENDING_OPS.md
+ * `apply-migration-021`. Until that constraint exists, a completed annual checkout
+ * would CHARGE the customer on Stripe, then the webhook's `stripe_customers` upsert
+ * would fail with a Postgres CHECK violation — leaving them charged with NO entitlement.
+ *
+ * Ships DISABLED. The owner sets `ANNUAL_BILLING_ENABLED=true` in the SAME deploy that
+ * applies migration 021 (go-live billing config is human-applied by contract).
+ */
+export function isAnnualBillingEnabled(): boolean {
+  return process.env.ANNUAL_BILLING_ENABLED === "true";
+}
+
 let _stripe: Stripe | null = null;
 
 function getStripe(): Stripe {

@@ -4,6 +4,7 @@ import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { UpgradeCheckoutButton } from "./upgrade-checkout-button";
 import { UpgradeViewTracker } from "./upgrade-tracker";
+import { isAnnualBillingEnabled } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
   title: "Upgrade — AptDesigner",
@@ -69,6 +70,13 @@ export default async function UpgradePage({ searchParams }: Props) {
   const tier = params.tier;
 
   if (tier !== "apartment" && tier !== "pro" && tier !== "pro_annual") {
+    redirect("/pricing");
+  }
+
+  // Annual is gated until migration 021 is applied (see isAnnualBillingEnabled);
+  // send annual selections back to pricing rather than to a checkout that would
+  // charge without granting entitlement.
+  if (tier === "pro_annual" && !isAnnualBillingEnabled()) {
     redirect("/pricing");
   }
 
