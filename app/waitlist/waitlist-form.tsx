@@ -146,7 +146,7 @@ export function WaitlistForm() {
       {/* Bot-protection challenge — renders only when a site key is configured. */}
       <Turnstile onToken={handleCaptchaToken} className="w-full" />
       {state === "error" && errorMsg && (
-        <p className="text-xs text-destructive w-full mt-1">{errorMsg}</p>
+        <p role="alert" className="text-xs text-destructive w-full mt-1">{errorMsg}</p>
       )}
     </form>
   );
