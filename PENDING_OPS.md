@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-07-10
+  as_of: 2026-07-13
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -157,6 +157,13 @@ OWNER_ACTIONS:
       why: "GET /api/internal/growth-metrics (PR #118) is closed by default (returns 503) until the token is set. The daily Growth Agent needs it to read REAL funnel numbers (waitlist + subscriber counts) into GROWTH_STATUS instead of leaving them 0/null."
       how: "Generate a long random secret (`openssl rand -hex 32`) and set INTERNAL_METRICS_TOKEN on the deployment. Verify per docs/growth/CONNECT.md Step 2 (curl with Authorization: Bearer)."
       blocks: growth-execution
+    - id: set-email-physical-address
+      title: "Set EMAIL_PHYSICAL_ADDRESS so marketing-lifecycle emails carry the CAN-SPAM-required postal address"
+      priority: normal
+      status: open
+      why: "GTM Auditor (docs/growth/GTM_SCORECARD.md, auditor_run 2) named a compliance nit: the activation/win-back/paid-welcome lifecycle templates (lib/email/templates/lifecycle.ts) render an unsubscribe link but no physical mailing address, which CAN-SPAM requires on every commercial email. The loop cannot invent a real business address, so this is owner-core. Growth Agent Run 9 wired the template to render EMAIL_PHYSICAL_ADDRESS when set, and made lib/email/index.ts force dry-run on every marketing-lifecycle stage (not the transactional waitlist_confirm) until the address is set — so a non-compliant email can never actually leave the system even after RESEND_API_KEY goes live."
+      how: "Set EMAIL_PHYSICAL_ADDRESS (e.g. \"123 Main St, Springfield, ST 00000\") on the deployment (Vercel env). No code change needed — the footer renders it automatically and the compliance dry-run gate lifts once both this AND RESEND_API_KEY are set."
+      blocks: marketing-email-compliance
     - id: tune-daily-spend-cap
       title: "(Optional) tune DAILY_PAID_CALL_LIMIT for the paid-API spend ceiling (G7)"
       priority: normal

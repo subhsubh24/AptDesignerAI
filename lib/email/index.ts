@@ -57,6 +57,20 @@ function isValidEmail(email: string): boolean {
 }
 
 /**
+ * CAN-SPAM requires a physical mailing address on every commercial/marketing
+ * email (the lifecycle sequences: activation/habit/upgrade/paid_welcome/
+ * paid_engagement/winback/referral_share). waitlist_confirm is a transactional
+ * double opt-in confirmation, not a marketing message, so it is exempt. The
+ * loop never invents a business address (EMAIL_PHYSICAL_ADDRESS is an owner-set
+ * env var — see lib/email/templates/lifecycle.ts) — until it is set, a
+ * marketing-stage send is forced through the dry-run provider so a
+ * non-compliant email can never actually leave the system.
+ */
+function requiresPhysicalAddress(stage: EmailMessage["stage"]): boolean {
+  return stage !== undefined && stage !== "waitlist_confirm";
+}
+
+/**
  * Send a transactional/lifecycle email through the configured provider.
  * Validates input and never throws — always returns a result the caller can log.
  */
@@ -74,6 +88,13 @@ export async function sendEmail(message: EmailMessage): Promise<EmailSendResult>
   }
   if (!message.html.trim()) {
     return { delivered: false, dryRun: false, error: "Missing body" };
+  }
+  if (
+    requiresPhysicalAddress(message.stage) &&
+    !isEmailDryRun() &&
+    !process.env.EMAIL_PHYSICAL_ADDRESS?.trim()
+  ) {
+    return new DryRunProvider().send(message);
   }
   return getEmailProvider().send(message);
 }

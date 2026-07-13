@@ -58,6 +58,7 @@ non_credential_allowlist:
   - IDENTIFY_PRODUCTS
   - GROWTH_EMAIL_DRY_RUN
   - GROWTH_SOCIAL_DRY_RUN
+  - EMAIL_PHYSICAL_ADDRESS       # CAN-SPAM postal address rendered in lifecycle-email footers; not a credential (no external service), just owner-supplied content. lib/email/index.ts forces dry-run on marketing-lifecycle stages until set (PENDING_OPS set-email-physical-address).
   - DAILY_PAID_CALL_LIMIT
   - DISABLE_SEMANTIC_EXTRACT
   - ENABLE_DESIGN_COORDINATOR

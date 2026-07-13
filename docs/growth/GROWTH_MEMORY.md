@@ -669,3 +669,136 @@ Research-backed candidate swap (if competition validates):
 - Same owner blockers as Runs 1-7? YES — circuit breaker remains FIRED (Run 8, 8th consecutive run,
   ~15 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
+
+---
+
+## Run 9 — 2026-07-13
+
+### What we found
+- All Run 1-8 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` all
+  still `status: open`, as_of 2026-07-10 before this run's own bump). 9th consecutive run, ~16 days
+  since Run 1 first surfaced this set.
+- Re-probed `https://aptdesignerai.com/` a sixth time: still unreachable — `connect_rejected` /
+  gateway 502 to CONNECT, same signature as Runs 6-8, cross-checked against the agent-proxy's own
+  `/__agentproxy/status` `recentRelayFailures` log (two entries, 2026-07-13T05:07:41Z).
+- **The independent GTM Auditor re-graded for the first time since Run 1** (`docs/growth/
+  GTM_SCORECARD.md`, `auditor_run: 2`, `as_of: 2026-07-13`, landed via PR #599 shortly before this
+  run started): `overall` C -> B. Both Run-1 top gaps genuinely fixed: `business_case_honesty`
+  F -> B (the year-1-floor-timing overstatement, fixed pre-Run-9 by the Product Factory's PR #508)
+  and `artifact_freshness` B -> A (the Pro Annual store-listing/press-kit fix from Run 7). **One
+  ship-critical gap remained**: `business_case_honesty` held at B because `BUSINESS_CASE.md`
+  modeled ~37.9% of steady-state MRR ($3,888/mo of $10,240/mo) on the Pro Annual tier while it is
+  currently NON-transactable (migration 021 unapplied, `ANNUAL_BILLING_ENABLED` defaults off, gated
+  by PR #597) — the doc read as if annual billing were live today, with no disclosure it is gated
+  off pre-launch. `GTM_AUDIT_MEMORY.md` Run 2 also named two cheap non-ship-critical raises:
+  `self_validation_honesty` A->A+ (surface `stripe_reporting` as its own distinct owner-facing
+  entry, not just indirectly via the metrics-token path) and `compliance` A->A+ (render a full
+  CAN-SPAM footer — physical postal address — in the staged lifecycle email templates; the opt-out
+  backing already exists via migration 027).
+- Investigated `stripe_reporting` (previously just "unavailable, no credential connected"): grepped
+  the codebase and found there is genuinely NO Stripe Reporting API integration anywhere (zero code
+  hits) — `docs/growth/CONNECT.md` documents trial-start/conversion-RATE metrics as living in
+  "Stripe's reporting API," but that's an unbuilt integration, distinct from `internal_metrics_api`
+  (which reads the app's own DB via `INTERNAL_METRICS_TOKEN` and already covers MRR/active-
+  subscriber/churn once that token is set). This is a Product-Factory build gap, not a pure
+  owner-connect step — so it does NOT belong in `PENDING_OPS.md`/`owner_blockers` (no owner action
+  today would unblock it); surfaced it honestly as a `next_action` instead.
+
+### What we built this run
+- **`docs/BUSINESS_CASE.md`** (the GTM Auditor's #1 named top_gap, per GTM_STANDARD S8 the
+  highest-priority value-bar-clearing work this run): added a disclosure blockquote in the "Pro
+  Annual tier economics" section stating annual billing is gated off pending migration 021 +
+  `ANNUAL_BILLING_ENABLED` (citing `PENDING_OPS.md apply-migration-021` + PR #597), and tightened
+  the "Annual mix stays at 0%" bullet in "What would have to change to NOT reach $100K" from a vague
+  "reverts to ~$100K baseline" to the precisely computed (via a `node` script, never eyeballed —
+  FACTORY_STANDARD S22) **$99,926 ≈ $99.9K**, framed honestly as *at*, not over, the floor. Added a
+  dated changelog entry. **Independent maker != checker review** (fresh reviewer subagent, no
+  context from this run): independently re-derived the same $99,926 figure from the stated
+  assumptions, cross-checked the disclosure against the real `PENDING_OPS.md` item, confirmed no
+  other content was altered — **APPROVED**, no requested changes.
+- **CAN-SPAM compliance code fix** (`lib/email/templates/lifecycle.ts`, `lib/email/index.ts`): the
+  loop cannot invent a real business mailing address, so wired the templates to render
+  `EMAIL_PHYSICAL_ADDRESS` (an owner-set env var) in both the HTML and plain-text footers when
+  present, and made `sendEmail()` force every **marketing-lifecycle** stage (activation/win-back/
+  paid-welcome — NOT the transactional `waitlist_confirm` double opt-in, which CAN-SPAM exempts) to
+  dry-run until the address is set — so a non-compliant marketing email can never actually leave
+  the system even after `RESEND_API_KEY` goes live. Verified the transactional-vs-marketing
+  distinction carefully: an earlier draft of this fix gated `isEmailDryRun()` globally, which would
+  have ALSO blocked the waitlist double-opt-in confirmation (a real regression against the very flow
+  Priority-2 is trying to unblock) — caught this before committing and rescoped the gate to
+  `sendEmail()`'s per-message stage check instead. Added `PENDING_OPS.md` item
+  `set-email-physical-address`. Added 5 new tests across two files (31/31 email tests green);
+  `npx tsc --noEmit` clean; `npx eslint .` clean on touched files.
+- **`validation/CAPABILITIES.yml`**: declaring `EMAIL_PHYSICAL_ADDRESS` was required —
+  `scripts/validate-capabilities.mjs` (a required preflight gate) failed closed on the new env var
+  until declared, exactly as designed (FACTORY_STANDARD S6 "validation capability" contract). Added
+  it to `non_credential_allowlist` (non-secret, no external service). Preflight's
+  `validate-capabilities` gate is green again; ran the full `bash scripts/preflight.sh` afterward —
+  only pre-existing, Product-Factory-owned gaps remain (functional journeys, DoD checkboxes),
+  unrelated to this run's changes.
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-13; refreshed `internal_metrics_api`
+  (6th probe) and `web_research` (re-probed, unchanged) validation reasons; rewrote the
+  `stripe_reporting` entry with the honest "unbuilt integration, not just unconnected" distinction;
+  added a note to `resend_email` about the new marketing-stage dry-run gate; bumped `demand_signal.
+  as_of` with a short Run 9 method-note (re-probed, unchanged, effort went to the Auditor gap
+  instead); rewrote `learnings`/`next_actions`/`owner_blockers` for the 9th consecutive
+  circuit-breaker run, including the GTM_SCORECARD C->B result and both fixes landed this run. Ran
+  `node scripts/validate-gtm.mjs` + `bash scripts/preflight.sh` — GATE 5 (business case / GROWTH_
+  STATUS / OWNER_ACTIONS YAML) and validate-gtm both green.
+- **`PENDING_OPS.md`**: bumped `as_of`; added `set-email-physical-address` (priority normal, blocks
+  `marketing-email-compliance`, matching the existing migration-027 item's blocks value).
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (6th probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD
+  still C, unchanged since Run 8) — both S6 lanes stay hard-off. Zero outreach drafts this run,
+  correct.
+- Did not touch `ROADMAP.md` / `VISION.md`: no new funnel or demand-signal data this run of the kind
+  that would clear the S3 steer bar — the BUSINESS_CASE.md edit was a Auditor-directed honesty fix
+  (a disclosure + a corrected figure), not a steer, and GTM_STANDARD S3 explicitly distinguishes a
+  business-case recompute from a steer.
+- Did not add `stripe_reporting` to `PENDING_OPS.md`/`owner_blockers`: it is a Product-Factory build
+  gap (no Stripe Reporting API integration exists in code), not an owner-actionable connect step —
+  adding it to the owner-facing blocker list would have been dishonest (implying a env-var flip
+  fixes it, when it does not).
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn an independent reviewer for the `GROWTH_STATUS.md`/`GROWTH_MEMORY.md`/`PENDING_OPS.md`
+  bookkeeping edits themselves: consistent with Runs 5-8's precedent (routine S4/S5 dashboard
+  updates don't need a second reviewer); the two SUBSTANTIVE changes this run (the business-case
+  disclosure fix and the email compliance code) each got their own review/verification (maker!=
+  checker subagent for the former, careful manual re-scoping + new tests for the latter).
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4 fail-closed
+  reasoning as Runs 5-8.
+
+### Lessons learned
+- **When the independent Auditor re-grades, its named top_gap is this run's highest-priority work —
+  GTM_STANDARD S8 in practice, not just in principle.** Run 9 spent its primary effort on the
+  business-case disclosure fix rather than new demand-signal research or a fresh ASO attempt,
+  because the Auditor's B-grade gap was concrete, well-specified, and the single thing standing
+  between the GTM side and a fully-met ship gate. Compare: demand-signal research past Run 7 is
+  genuinely diminishing-returns (same two structurally blocked sources); the Auditor gap was not.
+- **A global environment-variable gate can silently break an unrelated flow — check WHICH messages
+  actually need the new constraint before wiring it broadly.** The first draft of the CAN-SPAM fix
+  gated `isEmailDryRun()` (used by every `sendEmail()` call, including the transactional waitlist
+  double-opt-in) — that would have blocked real signups from confirming their waitlist entry the
+  moment `RESEND_API_KEY` is set, directly undermining Priority 2. Scoping the gate to `sendEmail()`
+  itself, keyed on `message.stage`, fixed this without weakening the actual compliance goal.
+  Worth a standing habit: before adding a new fail-closed gate, trace every call site the shared
+  function serves, not just the one you're thinking about.
+- **A scorecard's "cheap raise" nits are worth doing in the SAME run as the ship-critical fix when
+  they're genuinely cheap** — the `stripe_reporting` surfacing and the CAN-SPAM footer both took
+  well under the effort of the business-case fix and each closes a named, real gap rather than
+  padding. Distinguish this from churn: both trace to a specific auditor-named gap, not an invented
+  task.
+- **`scripts/validate-capabilities.mjs` earns its keep immediately** — introducing
+  `EMAIL_PHYSICAL_ADDRESS` without declaring it would have shipped an undeclared-env-var regression
+  straight into the preflight gate; the tool caught it in the same run it was introduced, exactly as
+  designed.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-8? YES — circuit breaker remains FIRED (Run 9, 9th consecutive run,
+  ~16 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). One new (low-effort) blocker: EMAIL_PHYSICAL_ADDRESS.
