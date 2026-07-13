@@ -99,7 +99,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <main className="min-h-screen flex">
       {/* Left: Form */}
       <div className="flex-1 flex items-center justify-center bg-background px-6 py-12">
         <div className="absolute inset-0 bg-gradient-hero pointer-events-none lg:hidden" />
@@ -226,6 +226,6 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
