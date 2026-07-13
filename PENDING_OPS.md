@@ -61,12 +61,19 @@ OWNER_ACTIONS:
       how: "1) Apply ALL pending migrations to the prod Supabase project (`supabase db push`, or run the numbered supabase/migrations/*.sql in order — see the other apply-migration-* items). 2) Confirm NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY (+ SUPABASE_SERVICE_ROLE_KEY) are set on the deployment. 3) Set DATA_BACKEND=supabase on the deployment (Vercel env) and redeploy. 4) VERIFY the money path survives a cold start: create a project/room, run a diagnosis, save a design, then redeploy (or restart) and confirm the saved design is still there and RLS blocks another user from reading it. If creds are missing while DATA_BACKEND=supabase, the app FAILS LOUD by design (no silent fallback to the non-persistent store). Do NOT flip this until the migrations are applied — an un-migrated schema will error on first query."
       blocks: launch
     - id: apply-migration-021
-      title: "Apply migration 021_stripe_customers_annual_tier.sql to prod before enabling annual billing"
+      title: "Apply migration 021_stripe_customers_annual_tier.sql AND set ANNUAL_BILLING_ENABLED=true to enable annual billing"
       priority: normal
       status: open
-      why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail."
-      how: "Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor)."
+      why: "PR #98 added the pro_annual ($399/yr) tier; the tier CHECK constraint must be extended in the DB or annual checkouts will fail. Run 84 (#597) discovered the pricing page + /billing/upgrade were still advertising/serving annual checkout WHILE 021 was unapplied — a completed annual purchase would CHARGE the customer on Stripe, then fail the webhook's stripe_customers upsert with a CHECK violation (charged, no entitlement). #597 gates annual end-to-end behind ANNUAL_BILLING_ENABLED (default OFF): the checkout route refuses pro_annual, the pricing-page annual CTA is hidden, and /billing/upgrade?tier=pro_annual redirects to /pricing. So annual is safely OFF until BOTH the migration is applied AND the flag is set."
+      how: "1) Run `supabase db push` (or paste supabase/migrations/021_stripe_customers_annual_tier.sql into the Supabase SQL Editor). 2) In the SAME deploy, set ANNUAL_BILLING_ENABLED=true on the Vercel deployment and redeploy — this un-gates the checkout route + pricing CTA + upgrade page. 3) Verify a pro_annual checkout in Stripe TEST mode writes tier='pro_annual' to stripe_customers without a CHECK violation and the entitlement unlocks. Do NOT set the flag before the migration is applied."
       blocks: annual-billing
+    - id: ensure-tavily-key-prod
+      title: "Ensure TAVILY_API_KEY is set on the prod deployment (now boot-required)"
+      priority: normal
+      status: open
+      why: "Run 84 (#596) made a missing TAVILY_API_KEY FAIL the production boot (assertProductionEnv) instead of 500-ing 5-30s into the first product search — the search/sourcing pipeline (lib/ai/tavily.ts) throws without it. If the current prod deploy is serving working searches the key is already set (no action). But if it is unset, the NEXT deploy will now hard-fail at boot by design — set TAVILY_API_KEY in Vercel env before redeploying. (The CI journeys boot is exempt via E2E_AUTH_STACK=1; this only affects real prod.)"
+      how: "Confirm TAVILY_API_KEY is present in the Vercel Production env (Settings -> Environment Variables). Get a key at https://app.tavily.com if missing. No code change needed."
+      blocks: none
     - id: enable-stripe-customer-portal
       title: "Activate & configure the Stripe Customer Portal so /account 'Manage subscription' works"
       priority: normal
