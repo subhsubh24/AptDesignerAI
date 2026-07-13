@@ -11,9 +11,19 @@ planning_case: base
 floor_usd: 100000
 floor_met_year1: false
 time_to_floor: "$122.9K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$58-60K because the Pro subscriber pools compound over time; the $100K floor is reached ~year 3 as the monthly and annual Pro pools fill toward steady state"
-as_of: 2026-07-08
+as_of: 2026-07-13
 ```
 
+> **Annual-tier disclosure fix 2026-07-13 (Growth Agent Run 9).** The independent GTM Auditor
+> (`GTM_SCORECARD.md`, `auditor_run: 2`) named a real disclosure gap: the planning case credits
+> ~38% of steady-state MRR to the Pro Annual tier while annual billing is currently gated OFF in
+> prod (migration 021 unapplied, `ANNUAL_BILLING_ENABLED` off) — the doc read as if annual were
+> live today. Added an explicit "gated off, not live" disclosure to the Pro Annual section and
+> tightened the without-annual scenario to the correct, computed **~$99.9K** (AT the $100K floor,
+> not over it — verified via `node`, not eyeballed) rather than the vaguer "~$100K baseline." No
+> number was gamed: the floor claim always relied on the annual tier being live; this makes that
+> dependency explicit instead of implied. ARR magnitude/levers otherwise unchanged.
+>
 > **Floor-timing honesty recompute 2026-07-08 (Run 71).** Corrected an overstatement:
 > the summary previously read `floor_met_year1: true` ("exceeds the $100K floor in year 1"),
 > but the $122.9K base ARR is built entirely from **steady-state** subscriber pools (~171
@@ -65,6 +75,14 @@ as a living artifact; update when pricing, conversion data, or market conditions
 | Pro Annual | $399/year | Same as Pro, billed annually (~$33/mo effective — save 32%) |
 
 Pro Annual was added in PR #98 / migration 021. The annual tier reduces effective price by 32% vs monthly, dramatically improves retention (annual subscribers renew once per year, not monthly), and improves upfront cash flow.
+
+> **Annual billing is currently GATED OFF, not live.** Migration 021 (the `stripe_customers.tier`
+> CHECK constraint extension for `'pro_annual'`) is unapplied to prod and `ANNUAL_BILLING_ENABLED`
+> defaults off (`PENDING_OPS.md apply-migration-021`, `status: open`) — the checkout route refuses
+> `pro_annual`, the pricing-page annual CTA is hidden, and `/billing/upgrade?tier=pro_annual`
+> redirects to `/pricing` (PR #597). The economics below model Pro Annual as a **planned, built-but-
+> not-yet-turned-on lever**, not a currently transactable tier — see the without-annual floor check
+> in "What would have to change to NOT reach $100K" below for the number that holds today.
 
 Distribution: iOS App Store + Google Play (both gated by a 30% platform commission).
 
@@ -363,7 +381,7 @@ reachable ceiling within 12–18 months of a disciplined launch.
 If Scenario B inputs slip:
 - Conversion drops from 4% → 2%: ARR falls to ~$62K. Need to rebuild paywall/onboarding.
 - Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR ~$85K.
-- Annual mix stays at 0% (no one picks annual): ARR reverts to ~$100K baseline — still floor-passing, but $23K lower than the annual-tier model.
+- Annual mix stays at 0% (the current live state — annual billing is gated off, see above): ARR is ~$99.9K, AT the floor rather than over it — $23K lower than the annual-tier model. This is the honest number for TODAY'S transactable product; the $122.9K figure requires shipping the annual-billing cutover (migration 021 + `ANNUAL_BILLING_ENABLED`).
 - Annual renewal churn rises to 40% (→ 4.2%/month effective): Annual pool shrinks ~43%. ARR ~$106K.
 - Installs stall at 2,000/month: ARR ~$46K (conservative scenario). Need growth channel.
 - Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year and net margin flips negative (−$11K) — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
