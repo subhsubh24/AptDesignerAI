@@ -99,7 +99,8 @@ export default function PicksPage() {
   };
 
   return (
-    <PageTransition className="max-w-5xl mx-auto px-4 py-12">
+    <PageTransition>
+      <main className="max-w-5xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
@@ -118,6 +119,7 @@ export default function PicksPage() {
             <div className="flex gap-1.5 flex-wrap">
               <button
                 onClick={() => setRoomFilter("all")}
+                aria-pressed={roomFilter === "all"}
                 className={cn(
                   "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                   roomFilter === "all"
@@ -131,6 +133,7 @@ export default function PicksPage() {
                 <button
                   key={r.id}
                   onClick={() => setRoomFilter(r.id)}
+                  aria-pressed={roomFilter === r.id}
                   className={cn(
                     "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                     roomFilter === r.id
@@ -244,6 +247,7 @@ export default function PicksPage() {
           })}
         </StaggerList>
       )}
+      </main>
     </PageTransition>
   );
 }
