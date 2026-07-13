@@ -45,6 +45,20 @@ export function assertProductionEnv(opts?: { alwaysEnforce?: boolean }): void {
       why: "DeepSeek V4 Flash for text-only agents (default provider)",
     });
   }
+  // Tavily powers the product-sourcing/search pipeline (lib/ai/tavily.ts throws
+  // without the key), so a real prod deploy MUST fail loud without it. The one
+  // exception is the CI journeys boot: it runs in production mode with
+  // E2E_AUTH_STACK="1", whose routes never reach the Tavily-calling code and
+  // which supplies no key — don't fail that boot. Match the exact "1" the
+  // cassette guards use (gemini.ts assertCassetteSafe / cassetteActiveForTest),
+  // which fail-close any real Vercel deploy that sets the flag — so a stray
+  // non-"1" value can never silently exempt Tavily in production.
+  if (process.env.E2E_AUTH_STACK !== "1") {
+    required.push({
+      name: "TAVILY_API_KEY",
+      why: "Tavily web search — the product-sourcing/search pipeline throws without it",
+    });
+  }
 
   const missing = required.filter((r) => !process.env[r.name]);
   if (missing.length > 0) throw new MissingEnvError(missing);
