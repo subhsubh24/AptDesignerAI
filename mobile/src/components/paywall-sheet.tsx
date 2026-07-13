@@ -83,8 +83,14 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   // Fetch RC offerings each time the sheet opens
   useEffect(() => {
     if (!visible || !RC_KEY || offeringLoaded) return;
+    // getOfferings is a network call; the sheet can be dismissed (or the screen
+    // unmounted) before it resolves. Guard against a setState-after-unmount on
+    // this revenue surface — without it the resolve/reject fires state updates
+    // on a gone component (React warning + wasted work).
+    let cancelled = false;
     Purchases.getOfferings()
       .then((offerings) => {
+        if (cancelled) return;
         const current = offerings.current;
         if (current && current.availablePackages.length > 0) {
           setOptions(packagesToOptions(current));
@@ -93,12 +99,16 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         }
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         // Offerings failed to load (network / SDK error). Keep the fallback
         // display, but surface the failure instead of swallowing it so it's
         // observable — and so the CTA can warn rather than silently dismiss
         // (the fallback options carry no purchasable package).
         console.warn('[paywall] getOfferings failed', err);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [visible, offeringLoaded]);
 
   const selectedOption = options[selectedIndex] ?? null;
