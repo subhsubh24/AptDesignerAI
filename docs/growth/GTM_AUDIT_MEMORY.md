@@ -62,3 +62,62 @@ graders, then reconciled.
 - The Factory's Runs 5-6 marketing-consistency self-audit MISSED the store-listing Pro Annual
   advertisement while asserting it had checked — verify the Factory's self-reports against the
   actual files, don't trust the learnings text.
+
+---
+
+## Run 2 — 2026-07-13
+
+**Overall: B · ship_gate_met: false** (was C / false at Run 1 — a real improvement: the outright F is gone)
+
+Graded GROWTH_STATUS (as_of 2026-07-11) + BUSINESS_CASE (as_of 2026-07-08) with four fresh,
+independent, adversarial per-dimension graders on the four ship-critical dimensions (each told to
+REFUTE the Factory's claims and re-derive the math), plus evidence-backed grading of the four
+non-critical dimensions. Read GTM_AUDIT_MEMORY first and diffed against Run 1.
+
+### Grades
+| Dimension | Run 1 | Run 2 | Ship-critical | Δ |
+|---|---|---|---|---|
+| Metric integrity | A | **A+** | ★ | ↑ |
+| Business-case honesty | **F** | **B** | ★ | ↑↑ (F→B) |
+| Experiment validity | A | A | | = |
+| Roadmap-steer justification | A+ | A+ | ★ | = |
+| Self-validation honesty | A | A | ★ | = |
+| PMF read accuracy | A+ | A+ | | = |
+| Compliance | A | A | | = |
+| Artifact freshness | B | **A** | | ↑ (fixed) |
+
+### What changed since Run 1 (both top gaps genuinely fixed)
+1. **Business-case honesty F → B.** Run 1's F (summary `floor_met_year1:true` overstating a
+   steady-state ARR as a year-1 result) is GENUINELY FIXED — re-derived independently: summary now
+   `floor_met_year1:false` with an honest `time_to_floor` (steady-state $122.9K; year-1 exit
+   ~$58–60K; floor ~year 3), body relabels $122.9K steady-state throughout (BUSINESS_CASE.md:242-247,
+   :263-266, :381-386), now agrees with Scenario A's "2–3 years." Math verified: year-1 exit
+   ~$58.6K, 0%-annual steady-state ~$99.9K, summary reconciles to body. Issue #486 closed.
+   **New B-level gap** (why not A): the planning case models ~37.9% of total MRR on the Pro Annual
+   tier while annual is currently NON-transactable (migration 021 unapplied, ANNUAL_BILLING_ENABLED
+   off, gated by #597); line 67 + the annual-economics section imply the tier is live with no
+   "gated off pre-launch" disclosure. NOT F — the floor is disclosed to clear without annual
+   (~$99.9K, :366), so no number is gamed. Filed as the one open top gap.
+2. **Artifact freshness B → A.** store-listing.md:84-92 + press-kit.md:162-165 now carry dated
+   Pro-Annual-omitted notes; pricing advertises only $29/$49; PR #597 additionally gated annual
+   checkout product-side (was a charge-then-fail-webhook risk). The false "Pro Annual omitted /
+   grep clean" learnings are corrected. Issue #487 closed as completed.
+3. **Metric integrity A → A+** (all metrics 0/null, demand-signal citations correctly walled off,
+   confidence honestly held at emerging) and **self-validation** added the `web_research:degraded`
+   structured entry (Run 1's A→A+ nit) — held at A only on a trivial stripe_reporting-surfacing nit.
+   The Run-1 false-self-report pattern is genuinely resolved: every "I verified X" learning
+   spot-checked against the real files this run and ALL held.
+
+### Ship gate
+Fails on ONE ship-critical dimension: business-case honesty = B (annual-tier disclosure gap).
+Every other ship-critical dim is A/A+ and all non-critical dims are A. Closing that single
+disclosure gap → business_case_honesty A → ship gate met.
+
+### Notes for next run
+- Re-check whether the business case discloses that Pro Annual is gated off pre-launch (migration
+  021 + ANNUAL_BILLING_ENABLED) and tightens the 0%-annual line to ~$99.9K (at, not over, the
+  floor). If fixed, business-case honesty → A and the ship gate is met.
+- Watch that the year-1-timing honesty does NOT silently regress (floor_met_year1 back to true, or
+  $122.9K re-presented as year-1). Re-derive the year-1 exit run-rate each run.
+- Cheap raises still on the table: surface stripe_reporting as its own owner action (self-validation
+  A→A+); render a full CAN-SPAM footer in staged email templates (compliance A→A+).
