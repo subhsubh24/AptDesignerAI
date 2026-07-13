@@ -27,11 +27,30 @@
  * the function alive (or block an `await`ed emit).
  */
 
-import { MarginMeter } from "margin-meter";
+import {
+  MarginMeter,
+  FetchTransport,
+  CALLS_PATH,
+  DEFAULT_INGEST_URL,
+  type RecordCallInput,
+  type RecordOutcomeInput,
+  type IngestResult,
+  type Transport,
+} from "margin-meter";
 import { waitUntil } from "@vercel/functions";
 
+/** A recorded call plus `operation` — the supply-chain STEP label (the graph
+ *  NODE). The ingest API accepts it, but the pinned `margin-meter@0.1.0` build's
+ *  `recordCall` predates the field and drops it; {@link getMeter} bridges that
+ *  by injecting it into the outbound payload (see the operation-injecting
+ *  transport below), so callers pass it here exactly like a native field. */
+export type MeterCallInput = RecordCallInput & { operation?: string };
+
 /** The meter surface the app + eval runner use (recordCall / recordOutcome). */
-export type Meter = Pick<MarginMeter, "recordCall" | "recordOutcome">;
+export interface Meter {
+  recordCall(input: MeterCallInput): Promise<IngestResult>;
+  recordOutcome(input: RecordOutcomeInput): Promise<IngestResult>;
+}
 
 // undefined = not yet resolved; null = disabled (no key / offline / error).
 let cached: Meter | null | undefined;
@@ -67,24 +86,63 @@ export function getMeter(): Meter | null {
       cached = null;
       return cached;
     }
+    // OPERATION BRIDGE: the pinned margin-meter@0.1.0 `recordCall` builds a
+    // fixed payload and silently drops unknown fields, so an `operation` passed
+    // to it never reaches the ingest API (which DOES accept it). Rather than
+    // fork the SDK, we stash each call's operation and inject it into the
+    // outbound /api/ingest/calls payload through a wrapping transport. This is
+    // race-free: `recordCall → emit → transport.post` runs synchronously with
+    // no `await` between the stash and the read, so a single slot holds exactly
+    // the current call's operation even under concurrent emits. Injection is
+    // skipped when the payload already carries `operation` (forward-compatible
+    // with a future SDK that forwards it natively).
+    let pendingOperation: string | undefined;
+    const inner = new FetchTransport(
+      process.env.MARGIN_INGEST_URL || DEFAULT_INGEST_URL,
+      EMIT_TIMEOUT_MS,
+    );
+    const transport: Transport = {
+      post: (path, opts) => {
+        const op = pendingOperation;
+        pendingOperation = undefined;
+        if (
+          path === CALLS_PATH &&
+          op !== undefined &&
+          opts.json !== null &&
+          typeof opts.json === "object" &&
+          (opts.json as Record<string, unknown>).operation === undefined
+        ) {
+          return inner.post(path, {
+            ...opts,
+            json: { ...(opts.json as Record<string, unknown>), operation: op },
+          });
+        }
+        return inner.post(path, opts);
+      },
+    };
     const real = new MarginMeter({
-      ingestUrl: process.env.MARGIN_INGEST_URL,
       apiKey: process.env.MARGIN_INGEST_KEY,
-      timeoutMs: EMIT_TIMEOUT_MS,
+      transport,
     });
     const evalMode = Boolean(process.env.MARGIN_SESSION_ID);
-    cached = evalMode
-      ? {
-          recordCall: (input) =>
-            real.recordCall({
+    cached = {
+      recordCall: (input) => {
+        // Stash for the operation-injecting transport (read synchronously below).
+        pendingOperation = input.operation;
+        const base: MeterCallInput = evalMode
+          ? {
               ...input,
               // Explicit per-call values still win over the eval-batch defaults.
               sessionId: input.sessionId ?? process.env.MARGIN_SESSION_ID,
               workflowId: process.env.MARGIN_WORKFLOW_ID || input.workflowId,
-            }),
-          recordOutcome: (input) => real.recordOutcome(input),
-        }
-      : real;
+            }
+          : input;
+        // `operation` is not on RecordCallInput in this SDK build; the cast keeps
+        // it on the runtime object (harmless to the SDK) for the transport bridge.
+        return real.recordCall(base as RecordCallInput);
+      },
+      recordOutcome: (input) => real.recordOutcome(input),
+    };
   } catch {
     cached = null;
   }

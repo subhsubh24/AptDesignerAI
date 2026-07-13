@@ -20,6 +20,7 @@ import type {
   FunctionDeclaration,
 } from "./provider";
 import { getMeter, emit } from "@/lib/observability/margin-meter";
+import { getMarginContext } from "@/lib/observability/margin-context";
 
 const log = createLogger("deepseek");
 
@@ -275,7 +276,11 @@ export const deepseekProvider: AIProvider = {
       body.reasoning = true;
     }
 
+    // Counts attempts across the withRetry wrapper below so the emit can mark a
+    // retried attempt (isRetry) for Margin's supply-chain graph.
+    let marginAttempt = 0;
     const makeRequest = async (): Promise<AIResponse> => {
+      marginAttempt += 1;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), DEEPSEEK_CALL_TIMEOUT_MS);
       // Time this attempt for Margin economics (emitted after usage is known).
@@ -395,8 +400,14 @@ export const deepseekProvider: AIProvider = {
       // Fail-safe: getMeter() is null in CI/tests and without a key. emit() hands
       // the promise to Vercel waitUntil so it isn't dropped when the serverless
       // instance freezes on response (a bare floating promise would be lost).
+      // Journey context (set at the route/agent boundary): `operation` names
+      // this call's supply-chain STEP and `sessionId` links it to the run.
+      const marginCtx = getMarginContext();
       emit(getMeter()?.recordCall({
         workflowId: "aptdesigner-search",
+        operation: marginCtx.operation,
+        sessionId: marginCtx.sessionId,
+        isRetry: marginAttempt > 1 || marginCtx.isRetry || false,
         provider: "deepseek",
         model: DEEPSEEK_MODELS.text,
         inputTokens: data.usage?.prompt_tokens || 0,

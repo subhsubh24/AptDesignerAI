@@ -19,6 +19,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
+import { runWithMarginSession } from "@/lib/observability/margin-context";
 
 /**
  * Canonical JSON stringify — keys sorted recursively. Used for building
@@ -283,7 +284,9 @@ REQUIREMENTS:
       });
     }
 
-    const verificationResult = await generateWithVerification({
+    // Margin: the recommendation product-shot is its own AI feature — tag it
+    // under the shared room session as "recommendation-mockup".
+    const verificationResult = await runWithMarginSession(room_id, "recommendation-mockup", () => generateWithVerification({
       generateFn: async (prompt) => {
         const result = await generateMockupImage(prompt, [], { ...imageOptions, thinkingLevel: "low" }, undefined, undefined);
         if (!result.success || !result.data) return { success: false, error: result.error };
@@ -292,7 +295,7 @@ REQUIREMENTS:
       originalPrompt: recPrompt,
       roomImageUrls: [],
       skipVerification: true,
-    });
+    }));
 
     if (!verificationResult.finalImageData) {
       await completeAgentRun(supabase, agentRun.id, {
@@ -330,12 +333,14 @@ REQUIREMENTS:
   // Run photo orientation analysis and room architecture extraction in parallel.
   // Both are non-fatal — if either fails, the mockup still generates without
   // the extra grounding information.
+  // Margin: the two pre-render vision extractions are their own supply-chain
+  // nodes under the shared room session.
   const [photoOrientations, roomArchitecture] = await Promise.all([
     roomImageUrls.length > 0
-      ? analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions, extractedRoom)
+      ? runWithMarginSession(room_id, "photo-orientation", () => analyzePhotoOrientations(roomImageUrls, room.room_type, thisRoomDimensions, extractedRoom))
       : Promise.resolve([]),
     roomImageUrls.length > 0
-      ? extractRoomArchitecture(roomImageUrls, room.room_type, floorPlanImageUrl)
+      ? runWithMarginSession(room_id, "room-architecture", () => extractRoomArchitecture(roomImageUrls, room.room_type, floorPlanImageUrl))
       : Promise.resolve(null),
   ]);
 
@@ -494,7 +499,9 @@ RULES:
     // reviews the area analysis — it is NOT the final design. Tight wall-clock
     // budget (90s) prevents the browser from dropping the background fetch
     // when the verify→regenerate loop runs long.
-    const verificationResult = await generateWithVerification({
+    // Margin: the design RENDER (image gen + its verify→regenerate loop) is one
+    // supply-chain node under the shared room session.
+    const verificationResult = await runWithMarginSession(room_id, "design-render", () => generateWithVerification({
       generateFn: async (prompt) => {
         const result = await generateMockupImage(prompt, roomImageUrls, imageOptions, photoOrientations, floorPlanImageUrl);
         if (!result.success || !result.data) return { success: false, error: result.error };
@@ -502,7 +509,7 @@ RULES:
       },
       originalPrompt: visionPrompt,
       roomImageUrls,
-    });
+    }));
 
     if (!verificationResult.finalImageData) {
       await completeAgentRun(supabase, agentRun.id, {
@@ -638,7 +645,8 @@ RULES:
     iterationNotes: iteration_notes,
   });
 
-  const promptResult = await generateMockupPrompt(
+  // Margin: mockup prompt authoring is its own supply-chain node.
+  const promptResult = await runWithMarginSession(room_id, "design-prompt", () => generateMockupPrompt(
     room.room_type,
     mockupCtx.diagnosisSummary,
     products,
@@ -649,7 +657,7 @@ RULES:
     roomImageUrls,
     photoOrientations,
     floorPlanImageUrl,
-  );
+  ));
 
   if (!promptResult.success || !promptResult.data) {
     const { error: failUpdateError } = await supabase
@@ -671,13 +679,14 @@ RULES:
   // we feed the revised prompt into the image model instead.
   let finalPrompt = promptResult.data.prompt;
   try {
-    const auditResult = await validateMockupPrompt({
-      prompt: promptResult.data.prompt,
+    // Margin: the LLM prompt-audit (a validator) is its own supply-chain node.
+    const auditResult = await runWithMarginSession(room_id, "design-prompt-audit", () => validateMockupPrompt({
+      prompt: promptResult.data!.prompt,
       products: products as Array<{ category?: string | null; title?: string | null; materials?: string[] | null; colors?: string[] | null; dimensions?: string | Record<string, unknown> | null; description?: string | null }>,
       placementMap: Object.keys(placementMap).length > 0 ? placementMap : undefined,
       roomType: room.room_type,
       designDirection: mockupCtx.designDirection,
-    });
+    }));
     if (auditResult.success && auditResult.data) {
       const audit = auditResult.data;
       console.log(
@@ -734,7 +743,9 @@ RULES:
   // Generate image with self-correction verification loop.
   // finalPrompt is either the original mockup prompt or the audit-revised
   // version when the audit flagged gaps.
-  const verificationResult = await generateWithVerification({
+  // Margin: the design RENDER (image gen + its verify→regenerate loop) is one
+  // supply-chain node under the shared room session.
+  const verificationResult = await runWithMarginSession(room_id, "design-render", () => generateWithVerification({
     generateFn: async (prompt) => {
       const result = await generateMockupImage(prompt, roomImageUrls, stdImageOptions, photoOrientations, floorPlanImageUrl);
       if (!result.success || !result.data) return { success: false, error: result.error };
@@ -742,7 +753,7 @@ RULES:
     },
     originalPrompt: finalPrompt,
     roomImageUrls,
-  });
+  }));
 
   if (!verificationResult.finalImageData) {
     const { error: failGenUpdateError } = await supabase

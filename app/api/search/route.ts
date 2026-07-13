@@ -14,6 +14,7 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { getMeter } from "@/lib/observability/margin-meter";
+import { runWithMarginSession } from "@/lib/observability/margin-context";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -322,7 +323,14 @@ export async function POST(request: Request) {
 
   console.log(`[search] Starting agentic search for categories: ${missingCategories.join(", ")}`);
 
-  const result = await runAgenticSearch(ctx, missingCategories, undefined, categoryHints);
+  // Margin: open this journey run's SHARED session (room-scoped) and tag the
+  // whole agentic search under the "search" step. Sub-agents (fit-scoring,
+  // rerank, product-research, product-verify) override the operation via
+  // withMarginOperation while inheriting this session, so the search workflow
+  // decomposes into its supply-chain nodes.
+  const result = await runWithMarginSession(room_id, "search", () =>
+    runAgenticSearch(ctx, missingCategories, undefined, categoryHints),
+  );
 
   // Record the search OUTCOME (the unit of productivity) to Margin so it can
   // compute cost-per-outcome. AWAITED (not floated) so it completes before this
@@ -351,10 +359,12 @@ export async function POST(request: Request) {
   // we persist. No-op when Browserbase isn't configured, otherwise merges
   // live price / stock / dimensions into the winning rows so the bundle
   // reflects what's actually on the retailer page right now.
-  const verification = await verifyTopSearchCandidates(
-    result.data.candidatesByCategory,
-    result.data.evaluations,
-    session?.id,
+  const verification = await runWithMarginSession(room_id, "product-verify-live", () =>
+    verifyTopSearchCandidates(
+      result.data!.candidatesByCategory,
+      result.data!.evaluations,
+      session?.id,
+    ),
   );
   if (verification.attempted > 0) {
     console.log(

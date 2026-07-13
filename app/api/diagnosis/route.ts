@@ -21,6 +21,7 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
 import { withTrace } from "@/lib/observability/tracing";
+import { runWithMarginSession } from "@/lib/observability/margin-context";
 import type { AgentContext } from "@/lib/agents/types";
 import type {
   ActionItem,
@@ -64,9 +65,19 @@ export async function POST(request: Request) {
 
   // Wrap the rest of the handler so every agent/logger call inherits a
   // shared trace id. OTel export is opt-in via OTEL_EXPORTER_OTLP_ENDPOINT.
+  //
+  // Margin: also open this journey run's SHARED session (room-scoped) so every
+  // LLM call in the diagnosis pipeline links into the same supply-chain, tagged
+  // with the "diagnosis" step. Guarded on a valid room_id (validated again
+  // inside the handler); sub-agents refine the operation via withMarginOperation.
   return withTrace(
     "diagnosis.POST",
-    () => handleDiagnosisPost(supabase, user.id, room_id),
+    () =>
+      typeof room_id === "string"
+        ? runWithMarginSession(room_id, "diagnosis", () =>
+            handleDiagnosisPost(supabase, user.id, room_id),
+          )
+        : handleDiagnosisPost(supabase, user.id, room_id),
     { userId: user.id, route: "diagnosis" }
   );
 }
