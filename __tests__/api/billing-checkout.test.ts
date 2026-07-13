@@ -6,7 +6,11 @@ import { NextRequest } from "next/server";
 // Supabase mocked. The rate limiter is mocked so the 429 branch is deterministic
 // and its module-level counter never leaks between tests.
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/billing/stripe", () => ({ createCheckoutSession: vi.fn() }));
+vi.mock("@/lib/billing/stripe", () => ({
+  createCheckoutSession: vi.fn(),
+  // Mirror the real env gate so the annual-billing branch is exercised faithfully.
+  isAnnualBillingEnabled: () => process.env.ANNUAL_BILLING_ENABLED === "true",
+}));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(),
   RATE_LIMITS: { billingCheckout: { windowMs: 3_600_000, max: 10 } },
@@ -78,7 +82,7 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(400);
   });
 
-  it.each(["apartment", "pro", "pro_annual"])(
+  it.each(["apartment", "pro"])(
     "creates a checkout session for the %s tier and returns sessionId + url",
     async (tier) => {
       mockCreateSession.mockResolvedValue({ sessionId: "cs_123", url: "https://stripe.test/cs_123" });
@@ -95,6 +99,24 @@ describe("POST /api/billing/checkout", () => {
       expect(arg.successUrl).toContain(`tier=${tier}`);
     },
   );
+
+  it("rejects the pro_annual tier with 400 while annual billing is gated (migration 021 unapplied)", async () => {
+    // ANNUAL_BILLING_ENABLED is unset by default → annual checkout must NOT create a
+    // Stripe session (a completed one would charge with no entitlement; see stripe.ts).
+    delete process.env.ANNUAL_BILLING_ENABLED;
+    const res = await POST(checkoutReq(JSON.stringify({ tier: "pro_annual" })));
+    expect(res.status).toBe(400);
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it("creates a pro_annual session once ANNUAL_BILLING_ENABLED=true", async () => {
+    vi.stubEnv("ANNUAL_BILLING_ENABLED", "true");
+    mockCreateSession.mockResolvedValue({ sessionId: "cs_ann", url: "https://stripe.test/cs_ann" });
+    const res = await POST(checkoutReq(JSON.stringify({ tier: "pro_annual" })));
+    expect(res.status).toBe(200);
+    expect(mockCreateSession.mock.calls[0][0].tier).toBe("pro_annual");
+    vi.unstubAllEnvs();
+  });
 
   it("returns a generic 500 (no raw error leak) when Stripe fails", async () => {
     mockCreateSession.mockRejectedValue(new Error("price_xxx is archived in account acct_123"));

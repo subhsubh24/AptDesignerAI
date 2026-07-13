@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createCheckoutSession, type BillingTier } from "@/lib/billing/stripe";
+import { createCheckoutSession, isAnnualBillingEnabled, type BillingTier } from "@/lib/billing/stripe";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 /**
@@ -45,6 +45,16 @@ export async function POST(request: NextRequest) {
   if (tier !== "apartment" && tier !== "pro" && tier !== "pro_annual") {
     return NextResponse.json(
       { error: "tier must be 'apartment', 'pro', or 'pro_annual'" },
+      { status: 400 },
+    );
+  }
+
+  // Refuse annual checkout until migration 021 is applied (see isAnnualBillingEnabled).
+  // Without this gate a completed annual purchase charges the customer but the
+  // webhook write hits a CHECK violation — a charge with no entitlement.
+  if (tier === "pro_annual" && !isAnnualBillingEnabled()) {
+    return NextResponse.json(
+      { error: "Annual billing is not available yet. Please choose the monthly Pro plan." },
       { status: 400 },
     );
   }

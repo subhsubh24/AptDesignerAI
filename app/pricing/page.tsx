@@ -6,6 +6,7 @@ import { Check, Sparkles, ArrowRight } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { cn } from "@/lib/utils/cn";
+import { isAnnualBillingEnabled } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
   title: "Pricing — AptDesigner",
@@ -178,7 +179,10 @@ export default function PricingPage() {
                     {tier.footnote}
                   </p>
                 )}
-                {tier.annualHref && (
+                {/* Annual CTA renders only when annual billing is live (migration 021
+                    applied + ANNUAL_BILLING_ENABLED=true); otherwise the link would
+                    lead to a checkout that charges without granting entitlement. */}
+                {isAnnualBillingEnabled() && tier.annualHref && (
                   <p className="text-xs text-muted-foreground text-center mt-3">
                     Cancel anytime.{" "}
                     <Link href={tier.annualHref} className="font-medium text-accent-warm hover:underline">

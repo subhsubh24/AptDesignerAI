@@ -40,6 +40,7 @@ non_credential_allowlist:
   - NODE_ENV
   - VERCEL
   - DATA_BACKEND                 # data-layer selector: "memory" (default, in-memory store) | "supabase" (real persistent Postgres + runtime RLS). Human-gated cutover (apply migrations, set Supabase env, flip flag, verify cold start).
+  - ANNUAL_BILLING_ENABLED       # feature flag gating pro_annual checkout; OFF until migration 021 is applied to prod (see PENDING_OPS apply-migration-021). Owner flips it in the same deploy.
   - LOG_LEVEL
   - AI_PROVIDER
   - DETERMINISTIC_MODE
