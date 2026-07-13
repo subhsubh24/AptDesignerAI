@@ -13,7 +13,19 @@
 // account + email preferences). When your email platform supports per-user
 // List-Unsubscribe URLs, pass them via the `unsubscribeUrl` parameter instead.
 //
+// Physical postal address: CAN-SPAM also requires a valid physical mailing
+// address in every commercial email. It is NOT hardcoded here (the loop never
+// invents a business address) — set EMAIL_PHYSICAL_ADDRESS on the deployment
+// and the footer renders it; lib/email/index.ts forces dry-run (never a live
+// send) while RESEND_API_KEY is set but this address is missing, so a
+// non-compliant email can never actually leave the system.
+//
 // Keep EmailStage values here in sync with lib/email/types.ts (LIVING ARTIFACTS).
+
+function physicalAddress(): string | null {
+  const addr = process.env.EMAIL_PHYSICAL_ADDRESS?.trim();
+  return addr && addr.length > 0 ? addr : null;
+}
 
 export interface LifecycleEmail {
   subject: string;
@@ -41,10 +53,11 @@ function htmlWrap(body: string, unsubscribeUrl: string): string {
             </tr>
             <tr>
               <td style="padding:20px 36px 32px 36px;border-top:1px solid #ece5db;">
-                <p style="margin:0;font-size:12px;line-height:1.6;color:#a39a8f;">
+                <p style="margin:0 0 8px 0;font-size:12px;line-height:1.6;color:#a39a8f;">
                   You're receiving this because you signed up for AptDesignerAI.
                   <a href="${unsubscribeUrl}" style="color:#a39a8f;">Manage email preferences</a>
                 </p>
+                ${physicalAddress() ? `<p style="margin:0;font-size:12px;line-height:1.6;color:#a39a8f;">${physicalAddress()}</p>` : ""}
               </td>
             </tr>
           </table>
@@ -74,7 +87,8 @@ function p(text: string): string {
 }
 
 function unsubLine(url: string): string {
-  return `\nTo manage email preferences: ${url}`;
+  const addr = physicalAddress();
+  return `\nTo manage email preferences: ${url}` + (addr ? `\n${addr}` : "");
 }
 
 // ---------------------------------------------------------------------------

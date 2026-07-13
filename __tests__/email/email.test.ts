@@ -93,6 +93,47 @@ describe("sendEmail validation", () => {
   });
 });
 
+describe("CAN-SPAM physical-address gating (marketing-stage sends only)", () => {
+  const orig = { ...process.env };
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.GROWTH_EMAIL_DRY_RUN = "0";
+    delete process.env.EMAIL_PHYSICAL_ADDRESS;
+  });
+  afterEach(() => {
+    process.env = { ...orig };
+    vi.unstubAllGlobals();
+  });
+
+  it("forces dry-run on a marketing-stage send when EMAIL_PHYSICAL_ADDRESS is unset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "msg_1" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await sendEmail({ ...VALID, stage: "activation_1" });
+    expect(r.dryRun).toBe(true);
+    expect(r.delivered).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends live once EMAIL_PHYSICAL_ADDRESS is set", async () => {
+    process.env.EMAIL_PHYSICAL_ADDRESS = "123 Main St, Springfield, ST 00000";
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "msg_1" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await sendEmail({ ...VALID, stage: "activation_1" });
+    expect(r.dryRun).toBe(false);
+    expect(r.delivered).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("never gates the transactional waitlist_confirm stage on the missing address", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "msg_1" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await sendEmail({ ...VALID, stage: "waitlist_confirm" });
+    expect(r.dryRun).toBe(false);
+    expect(r.delivered).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
 describe("ResendProvider", () => {
   afterEach(() => vi.unstubAllGlobals());
 
