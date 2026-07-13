@@ -15,6 +15,7 @@ const ALL_PRESENT: Record<string, string> = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
   SUPABASE_SERVICE_ROLE_KEY: "service-key",
   GEMINI_API_KEY: "gemini-key",
+  TAVILY_API_KEY: "tavily-key",
   DEEPSEEK_API_KEY: "deepseek-key",
 };
 
@@ -60,6 +61,32 @@ describe("assertProductionEnv", () => {
     vi.stubEnv("AI_PROVIDER", "gemini");
     stubEnv({ DEEPSEEK_API_KEY: "" }); // gemini path: DeepSeek key not required
     expect(() => assertProductionEnv({ alwaysEnforce: true })).not.toThrow();
+  });
+
+  it("REQUIRES TAVILY_API_KEY in real prod (the search/sourcing pipeline throws without it)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AI_PROVIDER", "gemini");
+    vi.stubEnv("E2E_AUTH_STACK", ""); // real prod is NOT the CI cassette boot
+    stubEnv({ TAVILY_API_KEY: "" });
+    let caught: MissingEnvError | undefined;
+    try {
+      assertProductionEnv();
+    } catch (e) {
+      caught = e as MissingEnvError;
+    }
+    expect(caught).toBeInstanceOf(MissingEnvError);
+    expect(caught!.missing.map((m) => m.name)).toContain("TAVILY_API_KEY");
+  });
+
+  it("EXEMPTS TAVILY_API_KEY under E2E_AUTH_STACK (the CI journeys cassette boot never calls Tavily)", () => {
+    // The journeys CI job boots in production mode with dummy LLM keys but no
+    // TAVILY key; cassette-backed search never calls Tavily, so its boot must
+    // not fail. Every other required var is present here.
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AI_PROVIDER", "gemini");
+    vi.stubEnv("E2E_AUTH_STACK", "1");
+    stubEnv({ TAVILY_API_KEY: "" });
+    expect(() => assertProductionEnv()).not.toThrow();
   });
 
   it("REQUIRES the DeepSeek key on the default (non-gemini) provider", () => {
