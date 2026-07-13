@@ -43,6 +43,7 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
         </div>
       </header>
 
+      <main>
       <PageTransition className="max-w-4xl mx-auto px-4 py-10 space-y-8">
 
         {/* Title block */}
@@ -234,6 +235,7 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
           <p className="text-xs text-muted-foreground">Free on one room. No credit card required.</p>
         </div>
       </PageTransition>
+      </main>
     </div>
   );
 }
