@@ -221,7 +221,7 @@ one-time.
 What the Apartment plan includes:
 - Every room, unlimited analyses
 - Cross-room material and palette coherence tracking
-- AI mockups (in progress — coming to the app this quarter)
+- AI mockups that visualize your room redesigned
 - Your designs, saved and accessible from any device
 
 No subscription. Pay once, yours forever.
