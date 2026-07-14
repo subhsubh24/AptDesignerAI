@@ -14,8 +14,14 @@ something, not merely *away* from generic-AI slop.
    clone a screen.
 3. Build **one surface/component at a time** against its reference, not a whole
    page from a single prompt.
-4. Where a **Mobbin / inspiration-grounding MCP** is available in the run
-   environment, pull live screens for the surface and ground against them too.
+4. **Use the Mobbin MCP as the primary live source** (connected in the factory
+   routines): `mobbin_search_screens` (natural-language pattern for the surface),
+   or `mobbin_quick_search` → `mobbin_get_app_screens` / `mobbin_get_app_flows`
+   for a named reference app; `screen_patterns` / `screen_keywords` to target a
+   taxonomy or OCR match. Study the top results, adapt to our brand tokens (never
+   copy), then **capture** the chosen exemplar (app + Mobbin link + the one
+   pattern to steal) into the sections below so the win compounds. Where Mobbin is
+   absent, the curated set below is the guarantee.
 5. This set is **LIVING**: when the DEEP AUDIT (§10) finds a surface that clears
    the slop-blocklist yet still feels average, the fix **adds the exemplar it
    should have aimed at** here — with a one-line note on the pattern to steal.
