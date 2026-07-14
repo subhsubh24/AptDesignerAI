@@ -3699,3 +3699,49 @@ Lenses: security/RLS, web-reliability/correctness, tests/coverage, perf, mobile,
   - **(b) remaining created_at-only sorts:** reuse the new `pickLatestDiagnosis()` at `lib/agents/diagnosis-expansion-pipeline.ts:118` and `lib/design-context/infer-preferences.ts:178-179,250-251` (the latter feeds an LLM call) — same determinism-contract class as #622, one disjoint fix per change.
 - **Ship blockers unchanged & not headlessly buildable:** functional_reality (in-memory→Supabase cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe + F7 committed screenshots — sandbox-unrunnable), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
 - **G4 remaining** = login lockout/backoff + reset/verification enumeration guards; needs a server-side `/api/auth/login` route. Larger feature. **§34 pre-launch demo (#475) + §11 media-gen adapter (#470)** remain open Track E/F build epics. **Deferred (unchanged):** perf #385 pgvector RPC (post-cutover only); mobile setState hygiene (dev-only); migrations 019/020/021/025/026/027/029 human-gated.
+
+---
+
+## Run 2026-07-14 (Run 88)
+
+### State on entry
+- Default tip `b3331f1` (#626). Reset local branch to origin default tip first. Baseline gate GREEN after cold `npm ci` + `cd mobile && npm ci`: tsc clean, **2069 tests** pass / 11 skip, determinism green, eslint clean, mobile `tsc --noEmit` clean. No open PRs.
+- **DEEP AUDIT was DUE** (last ran Run 84; this is Run 88) — ran it FIRST before normal scouting.
+
+### DEEP AUDIT (8-lens, whole-codebase, Haiku scouts) — 2026-07-14
+Lenses: correctness/dead-code, security/RLS, performance, a11y/design-bar, tests/coverage, mobile+monetization, dep/config-health, artifact/doc-freshness.
+- **SECURITY CLEAN** — zero critical. Independent 52-route-class sweep: RLS on ~29 tenant tables, all `/[id]` routes bound via userOwnsRoom/userOwnsProject, SECURITY DEFINER hardened (empty search_path), SSRF private-IP/metadata blocks, timing-safe internal-token compares, webhook signature-then-write ordering, no hardcoded secrets. Two low-sev notes were **FALSE**: places/photo is ALREADY auth-gated + per-user rate-limited (RATE_LIMITS.placesPhoto) + daily-spend-limited; saved-designs "implicit auth" is a code-clarity note, RLS enforces.
+- **Real findings turned into this run's work:** correctness scout re-confirmed the two pre-flagged `created_at`-only determinism sorts (→ changes 2,3); a11y scout flagged the not-found landmark (→ change 4); artifact scout flagged the stale pre-submission-checklist migrations + the email "mockups coming soon" claim (→ changes 6,7); perf scout flagged the diagnosis sequential awaits (→ change 5). The DIMENSION_REGEX prod no-op (Run 87 follow-up (a)) → change 1.
+- **FALSE POSITIVES caught by verifying against the live tree (NOT shipped):**
+  1. dep/config "mobile TypeScript 6.0.3 doesn't exist → mobile CI fails" — mobile `npm ci` AND `tsc --noEmit` both ran clean; TS 6.x is real as of 2026. Haiku reasoned from a stale cutoff.
+  2. correctness "products/ingest `.single()` null deref" — the code already uses `room?.project_id` / `room?.room_images` optional chaining, and `userOwnsRoom` above guarantees the row exists.
+  3. correctness "product-extractor unguarded JSON.parse (405/410) crashes the pipeline" — the caller (line 652) wraps it in try/catch → the item just resolves `success:false`; graceful, not a crash.
+  4. a11y "account/page missing `<main>`" — `/account` renders inside `AppShell`, which ALREADY provides `<main>` (components/layout/app-shell.tsx:21); adding another would be a nested double-main (worse). Reverted before commit.
+- **Scorecard/growth (DATA):** overall C, ship_gate_met false; three ship_critical below A unchanged & human/CI-gated (functional_reality C = in-memory→Supabase cutover; design_taste B = authed-axe + F7 screenshots; business_case_strength B = without-annual ARR ~$99.9K < $100K floor). GROWTH pre_launch, 0/null funnel, owner-connect blockers open — no headless growth action.
+
+### Shipped — 7 file-disjoint value-bar changes (all both-Sonnet-APPROVED)
+- **(1) VALIDATION/Track F** — `lib/validation/spatial-math.ts` + test: labeled-parse path so `parseDimensions` reads the letter-suffixed retail form (`90"W x 38"D x 32"H`) the pipeline emits (via `formatIdentifiedProductForPrompt` / whatitneeds-enricher). Before, the positional regex stopped at `90"` → mislabeled a 90×90 square → three pairwise furniture-fit rules (nightstand/side_table height, dining depth) silently NO-OP'd in prod. Maps values→axes by W/D/H label, trusts the parse only when both footprint axes present (else positional fallback). +8 tests.
+- **(2) DETERMINISM** — `lib/agents/diagnosis-expansion-pipeline.ts`: sibling-room latest-diagnosis `created_at`-only sort → `pickLatestDiagnosis()` + `id` added to nested select. Feeds the seeded cross-room coherence prompt.
+- **(3) DETERMINISM** — `lib/design-context/infer-preferences.ts`: two `created_at`-only sorts → `pickLatestDiagnosis()` + `id` in select. Feeds the seeded preference-summary prompt.
+- **(4) A11Y/Track F** — `app/not-found.tsx`: `<div>`→`<main>` (root 404, no AppShell, previously no landmark). Verified no parent `<main>` in the root layout chain.
+- **(5) PERF/Track A** — `app/api/diagnosis/route.ts`: parallelize two independent best-effort reads (sibling summaries + budget context) via `Promise.all` on the diagnosis hot path; matches the streaming pipeline's existing pattern; results keyed to named vars → determinism preserved.
+- **(6) DOC/Track D** — `docs/pre-submission-checklist.md`: stale pending-migration refs (017/018 → dir now through 029). Points to supabase/migrations as source-of-truth + PENDING_OPS for apply notes.
+- **(7) DOC/Track E** — `docs/email-lifecycle.md`: "AI mockups (in progress — coming this quarter)" → present tense (mockups shipped + advertised live in store-listing).
+
+### Reviews + merge
+- **16 reviews (7×2 + 2 re-review cycles).** Two REQUEST_CHANGES caught real issues:
+  - **Change 1** Reviewer A found a bug the first tests missed: the initial `(?![A-Za-z])` axis guard ALSO rejected the `x`/`X` separator, so the compact no-space form `90"Wx38"D` silently dropped axes (the exact bug the parser fixes). Fixed to a positive-boundary lookahead `(?=$|[\s,xX×])` + 2 regression tests (compact form ×3, label-before-value fallback); re-reviewed → APPROVE.
+  - **Change 6** Reviewer A: calling PENDING_OPS "authoritative" overstated it (migration 028 had no entry). Softened to name supabase/migrations as source-of-truth; re-reviewed → APPROVE. ALSO added the missing `apply-migration-028` (signup-nonblocking) entry to PENDING_OPS this run.
+- Integrated gate GREEN (tsc, **2077 tests** = 2069 +8 spatial, determinism, eslint, mobile tsc). All 7 committed to the run branch; ONE PR to default (single-branch per this run's git constraint). **No ROADMAP box ticked** — all 7 are hardening; no full Track item completed. **PENDING_OPS:** +apply-migration-028. No secrets, no code migrations.
+
+### Lessons learned
+1. **Verify EVERY scout claim against the live tree.** 4 of the DEEP AUDIT's flagged items were false positives — a "missing rate limit" already triple-limited, a "null deref" already `?.`-guarded, an "unguarded throw" already caught by the caller, a "missing landmark" already supplied by a parent shell. Haiku scouts reason from stale/partial knowledge; a 30-second grep/Read per candidate prevents a bad change (and a nested double-main regression).
+2. **A regex guard that excludes "any letter" also excludes an alphabetic delimiter.** The `x` separator is a letter, so a blanket `(?![A-Za-z])` reintroduced the very bug being fixed on the compact form. When a delimiter is alphabetic, use a positive-boundary lookahead that lists the real separators/terminators. A reviewer re-deriving the regex on adversarial inputs caught it; the original 6 tests didn't.
+3. **Two disjoint files with the identical determinism-sort pattern are two coherent changes, not padding** — each removes an independent contract violation on a seeded-LLM path (both reviewers agreed on both).
+4. **The Run-87 follow-ups were both real and both shipped** — the pairwise-rules-inert-in-prod regex fix (a) and the remaining created_at sorts (b). Recording specific file:line follow-ups in the rotation guide pays off next run.
+
+### Rotation guide for next run
+- **DEEP AUDIT ran Run 88 — next due ~Run 92.** Next few runs can lean on scouts/scorecard.
+- **Ship blockers unchanged & not headlessly buildable:** functional_reality (in-memory→Supabase cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe + F7 committed screenshots — sandbox-unrunnable), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
+- **Pre-existing, untouched bug flagged during change-1 re-review (candidate):** the ORIGINAL positional `DIMENSION_REGEX` mishandles a foot-mark form like `6' x 4'` — the apostrophe isn't in its separator class, so it reads `6'` as a single dim → 72×72 square instead of 72×48. Unrelated to the labeled path; a disjoint one-line fix + test for a future run.
+- **Larger open epics (unchanged):** G4 login lockout/backoff + reset/verification enumeration guards (needs a server-side `/api/auth/login` route); §34 pre-launch demo (#475); §11 media-gen adapter (#470); perf #385 pgvector RPC (post-cutover only); mobile setState hygiene (dev-only). Migrations 021/022-023/024/025/026/027/028/029 + DATA_BACKEND cutover remain human-gated in PENDING_OPS.
