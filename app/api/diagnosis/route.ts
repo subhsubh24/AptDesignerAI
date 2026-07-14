@@ -14,6 +14,7 @@ import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
+import { pickLatestDiagnosis } from "@/lib/diagnosis/latest-diagnosis";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
@@ -570,7 +571,7 @@ async function fetchSiblingRoomSummaries(
   try {
     const { data: siblingRooms } = await supabase
       .from("rooms")
-      .select("id, room_type, room_diagnoses(design_direction_json, action_list, created_at)")
+      .select("id, room_type, room_diagnoses(id, design_direction_json, action_list, created_at)")
       .eq("project_id", projectId)
       .neq("id", currentRoomId)
       .limit(6);
@@ -580,16 +581,18 @@ async function fetchSiblingRoomSummaries(
     const summaries: SiblingRoomSummary[] = [];
     for (const sr of siblingRooms) {
       const diagnoses = (sr.room_diagnoses ?? []) as Array<{
+        id: string;
         design_direction_json: DesignDirection | null;
         action_list: ActionItem[] | null;
         created_at: string;
       }>;
       if (!diagnoses.length) continue;
 
-      // Pick the latest diagnosis for this sibling room
-      const latest = diagnoses
-        .slice()
-        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+      // Pick the latest diagnosis for this sibling room. Deterministic: sorting
+      // on created_at alone is non-reproducible when two diagnoses share a
+      // timestamp (this feeds the seeded LLM prompt), so tiebreak on id.
+      const latest = pickLatestDiagnosis(diagnoses);
+      if (!latest) continue;
       const dd = latest.design_direction_json;
       const items = latest.action_list ?? [];
 
