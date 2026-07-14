@@ -321,12 +321,15 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
 
   if (expandedActionList.length > 0) {
     try {
-      // Best-effort: fetch sibling-room diagnoses in the same project so the
-      // expansion can maintain cross-room palette / material coherence.
-      const siblingRooms = await fetchSiblingRoomSummaries(supabase, room.project_id, room_id);
-
-      // Best-effort: fetch this room's budget dollars for budget-aware expansion.
-      const budget = await buildExpansionBudgetContext(supabase, room_id, room.budget_mode, expandedActionList);
+      // Two independent best-effort reads — sibling-room diagnoses (for
+      // cross-room palette / material coherence) and this room's budget context.
+      // Neither depends on the other, so run them concurrently to shave a serial
+      // DB round-trip off the diagnosis hot path. Results are keyed back to named
+      // vars, so ordering stays deterministic regardless of completion order.
+      const [siblingRooms, budget] = await Promise.all([
+        fetchSiblingRoomSummaries(supabase, room.project_id, room_id),
+        buildExpansionBudgetContext(supabase, room_id, room.budget_mode, expandedActionList),
+      ]);
 
       // Derive adaptive cap context from inferred preferences + this room's
       // priorities + the Pass A style notes. Tightens/loosens the saturation
