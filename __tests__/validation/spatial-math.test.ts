@@ -57,6 +57,56 @@ describe("parseDimensions", () => {
     expect(parseDimensions("10x10")).toEqual({ width: 10, depth: 10 });
     expect(parseDimensions("72x36")).toEqual({ width: 72, depth: 36 });
   });
+
+  // Label-suffixed retail form (`90"W x 38"D x 32"H`) — the shape the pipeline's
+  // `WhatItNeedsItem.specs` actually carries. Before the labeled path this
+  // returned a bogus 90×90 square (the positional regex stopped at `90"`),
+  // silently disabling the nightstand/side_table/dining-depth pairwise rules.
+  it("parses W/D/H letter-suffixed specs with inline inch marks", () => {
+    expect(parseDimensions('90"W x 38"D x 32"H')).toEqual({ width: 90, depth: 38, height: 32 });
+  });
+
+  it("parses letter-suffixed W x D with no height", () => {
+    const d = parseDimensions('48"W x 24"D');
+    expect(d).toEqual({ width: 48, depth: 24 });
+    expect(d?.height).toBeUndefined();
+  });
+
+  it("parses letter-suffixed specs using the × separator", () => {
+    expect(parseDimensions("90in W × 38in D × 32in H")).toEqual({ width: 90, depth: 38, height: 32 });
+  });
+
+  it("maps axes by their W/D/H label regardless of order", () => {
+    expect(parseDimensions('32"H x 90"W x 38"D')).toEqual({ width: 90, depth: 38, height: 32 });
+  });
+
+  it("does not read a bare descriptive word as a W/D/H axis", () => {
+    // "Walnut" / "Deep" must not be mistaken for W/D axes; with no valid pair of
+    // labeled axes it falls back to the positional parser (square-ish).
+    expect(parseDimensions("90 Walnut")).toEqual({ width: 90, depth: 90 });
+    expect(parseDimensions("36 Deep shelf")).toEqual({ width: 36, depth: 36 });
+  });
+
+  it("converts units inside a labeled spec", () => {
+    const d = parseDimensions("6ft W x 4ft D");
+    expect(d).toEqual({ width: 72, depth: 48 });
+  });
+
+  // Regression: the COMPACT form with no space before the `x`/`×` separator
+  // (`90"Wx38"Dx32"H`) is a common retail convention. A naive `(?![A-Za-z])`
+  // axis guard rejects the `x` separator and silently drops width/depth —
+  // reintroducing the exact square-fallback bug this parser fixes.
+  it("parses the compact no-space labeled form (W immediately followed by x)", () => {
+    expect(parseDimensions('90"Wx38"Dx32"H')).toEqual({ width: 90, depth: 38, height: 32 });
+    expect(parseDimensions('90"Wx38"D')).toEqual({ width: 90, depth: 38 });
+    expect(parseDimensions("90Wx38Dx32H")).toEqual({ width: 90, depth: 38, height: 32 });
+  });
+
+  // A label-BEFORE-value form (`W: 90"...`) is not a shape we support; it must
+  // fall back safely (positional square) rather than confidently mislabel axes.
+  it("does not confidently mislabel a label-before-value spec", () => {
+    expect(parseDimensions('W: 90" D: 38" H: 32"')).toEqual({ width: 90, depth: 90 });
+  });
 });
 
 describe("computeSpatialConstraints", () => {

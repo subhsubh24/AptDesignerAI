@@ -38,7 +38,48 @@ function parseInches(value: number, unit?: string): number {
   return value; // inches, in, ", ''
 }
 
+// Label-suffixed retail format where the unit sits INSIDE each token and a
+// W/D/H letter names the axis, e.g. `90"W x 38"D x 32"H` or `90"W × 38"D`.
+// The positional DIMENSION_REGEX can't parse this: after `90` it sees `"` (a
+// unit, not an `x` separator), so it stops at the first number and mislabels
+// the item as a square. Real `WhatItNeedsItem.specs` from the pipeline use this
+// exact letter-suffixed form, so without this path the nightstand/side_table/
+// dining-depth pairwise rules silently NO-OP in production.
+//
+// The trailing lookahead requires the axis letter to be followed by a real
+// axis boundary — end-of-string, whitespace, a comma, or a multiplication
+// separator (`x`/`X`/`×`). This keeps a bare word ("Walnut", "Deep") from being
+// read as an axis, WITHOUT swallowing the compact no-space form `90"Wx38"Dx32"H`
+// (a plain `(?![A-Za-z])` guard wrongly rejects the `x` separator too, dropping
+// axes — the very bug this parser exists to fix).
+const LABELED_DIMENSION_REGEX =
+  /(\d+(?:\.\d+)?)\s*(inches?|in|"|''|ft|feet|foot|cm|mm|')?\s*([WDH])(?=$|[\s,xX×])/gi;
+
+function parseLabeledDimensions(specs: string): Dimensions | null {
+  LABELED_DIMENSION_REGEX.lastIndex = 0;
+  const found: { width?: number; depth?: number; height?: number } = {};
+  let m: RegExpExecArray | null;
+  while ((m = LABELED_DIMENSION_REGEX.exec(specs)) !== null) {
+    const value = parseInches(parseFloat(m[1]), m[2]);
+    const axis = m[3].toUpperCase();
+    if (axis === "W" && found.width === undefined) found.width = value;
+    else if (axis === "D" && found.depth === undefined) found.depth = value;
+    else if (axis === "H" && found.height === undefined) found.height = value;
+  }
+  // A labeled parse is only trustworthy with both footprint axes present; a lone
+  // "W" leaves width/depth ambiguous, so fall back to the positional parser.
+  if (found.width === undefined || found.depth === undefined) return null;
+  const dims: Dimensions = { width: found.width, depth: found.depth };
+  if (found.height !== undefined) dims.height = found.height;
+  return dims;
+}
+
 export function parseDimensions(specs: string): Dimensions | null {
+  // Prefer the explicit W/D/H labeled form (the shape the pipeline emits); fall
+  // back to the positional `72x36x30` form otherwise.
+  const labeled = parseLabeledDimensions(specs);
+  if (labeled) return labeled;
+
   DIMENSION_REGEX.lastIndex = 0;
   const match = DIMENSION_REGEX.exec(specs);
   if (!match) return null;

@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-07-13
+  as_of: 2026-07-14
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -136,6 +136,13 @@ OWNER_ACTIONS:
       why: "Run 44 (PR #227): adds the user_email_preferences tenant table (RLS keyed on auth.uid()=user_id) backing the /account email opt-out. The marketing send paths (win-back webhook, activation cron) read it via the admin client and the /account toggle writes it. Until applied, the toggle's GET/PUT and the send-path checks error. Idempotent."
       how: "Run `supabase db push` (or paste supabase/migrations/027_user_email_preferences.sql into the Supabase SQL Editor)."
       blocks: marketing-email-compliance
+    - id: apply-migration-028
+      title: "Apply migration 028_handle_new_user_nonblocking.sql to prod (signup can never be blocked by profile insert)"
+      priority: normal
+      status: open
+      why: "Run 2026-07-02 outage: the on_auth_user_created trigger's insert into public.profiles threw in prod (RLS/drift), rolling back the auth.users insert — so NEITHER app signup NOR the Supabase dashboard could create ANY account, surfacing only as a generic 'Something went wrong'. 028 wraps the profile insert so a failure is logged (raise warning) and swallowed: the user is still created, the profile can be backfilled. Keeps the 024 hardening (search_path=''). Until applied, prod signup remains exposed to the same hard-block failure mode. Idempotent (create or replace function). NOTE: previously untracked here — added Run 88 after a reviewer flagged the gap (028 existed in supabase/migrations/ with no owner-action entry)."
+      how: "Run `supabase db push` (or paste supabase/migrations/028_handle_new_user_nonblocking.sql into the Supabase SQL Editor). Verify: create a test account via the app AND the dashboard; both succeed even if a profiles-insert warning is logged."
+      blocks: signup-reliability
     - id: apply-migration-029
       title: "Apply migration 029_grant_stripe_customers_access.sql to prod (explicit stripe_customers GRANTs)"
       priority: normal

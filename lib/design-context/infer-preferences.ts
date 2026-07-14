@@ -21,6 +21,7 @@ import type {
   DesignDirection,
   RoomDiagnosis,
 } from "@/lib/types/database";
+import { pickLatestDiagnosis } from "@/lib/diagnosis/latest-diagnosis";
 import { createLogger } from "@/lib/logging/logger";
 
 const log = createLogger("infer-preferences");
@@ -174,11 +175,10 @@ export function aggregatePreferenceSignals(
     }
     budgetModes.push(room.budget_mode ?? null);
 
-    // Use the most recent diagnosis per room
-    const diagnoses = (room.room_diagnoses ?? []).slice().sort((a, b) =>
-      (a.created_at < b.created_at ? 1 : -1),
-    );
-    const latest = diagnoses[0];
+    // Use the most recent diagnosis per room — deterministic pick (created_at
+    // DESC, id DESC tiebreak); a created_at-only sort is non-reproducible on
+    // same-timestamp rows and these signals seed a seeded LLM prompt.
+    const latest = pickLatestDiagnosis(room.room_diagnoses ?? []);
     if (!latest) continue;
 
     const dd = latest.design_direction_json as DesignDirection | null;
@@ -232,7 +232,7 @@ export async function inferUserPreferences(
     const { data: rooms } = await supabase
       .from("rooms")
       .select(
-        "id, room_type, keep_items, replace_items, priorities, user_context, budget_mode, room_diagnoses(design_direction_json, action_list, created_at)",
+        "id, room_type, keep_items, replace_items, priorities, user_context, budget_mode, room_diagnoses(id, design_direction_json, action_list, created_at)",
       )
       .eq("project_id", projectId);
 
@@ -247,10 +247,7 @@ export async function inferUserPreferences(
     try {
       const siblings = (rooms as RoomRow[]).filter((r) => r.id !== currentRoomId);
       const itemCounts = siblings.flatMap((r) => {
-        const diags = (r.room_diagnoses ?? []).slice().sort((a, b) =>
-          (a.created_at < b.created_at ? 1 : -1),
-        );
-        const latest = diags[0];
+        const latest = pickLatestDiagnosis(r.room_diagnoses ?? []);
         const actionList = (latest?.action_list as ActionItem[] | null) ?? [];
         return [actionList.length];
       });

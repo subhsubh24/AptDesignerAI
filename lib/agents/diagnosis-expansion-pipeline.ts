@@ -17,6 +17,7 @@ import {
 import type { AdaptiveCapContext } from "@/lib/validation/saturation-math";
 import type { PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
+import { pickLatestDiagnosis } from "@/lib/diagnosis/latest-diagnosis";
 import { createLogger } from "@/lib/logging/logger";
 import type {
   ActionItem,
@@ -100,7 +101,7 @@ async function fetchSiblingRoomSummaries(
   try {
     const { data: siblingRooms } = await supabase
       .from("rooms")
-      .select("id, room_type, room_diagnoses(design_direction_json, action_list, created_at)")
+      .select("id, room_type, room_diagnoses(id, design_direction_json, action_list, created_at)")
       .eq("project_id", projectId)
       .neq("id", currentRoomId)
       .limit(6);
@@ -110,12 +111,16 @@ async function fetchSiblingRoomSummaries(
     const summaries: SiblingRoomSummary[] = [];
     for (const sr of siblingRooms) {
       const diagnoses = (sr.room_diagnoses ?? []) as Array<{
+        id: string;
         design_direction_json: DesignDirection | null;
         action_list: ActionItem[] | null;
         created_at: string;
       }>;
       if (!diagnoses.length) continue;
-      const latest = diagnoses.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+      // Deterministic latest pick (created_at DESC, id DESC tiebreak) — a
+      // created_at-only sort is non-reproducible on same-timestamp diagnoses and
+      // this feeds the seeded cross-room coherence prompt (determinism contract).
+      const latest = pickLatestDiagnosis(diagnoses)!;
       const dd = latest.design_direction_json;
       const items = latest.action_list ?? [];
       const topCategories = [...new Set(items.map((i) => i.category))].slice(0, 8);
