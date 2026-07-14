@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  */
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <main className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="max-w-md w-full">
         <CardContent className="flex flex-col items-center gap-5 py-12 text-center">
           <div className="h-14 w-14 rounded-2xl bg-accent-warm/10 flex items-center justify-center">
@@ -47,6 +47,6 @@ export default function NotFound() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
