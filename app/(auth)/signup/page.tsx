@@ -104,6 +104,19 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center bg-background px-6 py-12">
         <div className="absolute inset-0 bg-gradient-hero pointer-events-none lg:hidden" />
         <div className="relative w-full max-w-md animate-fade-in-up">
+          {/* Mobile-only condensed value prop — on desktop the full aspirational
+              panel (right) carries this, but it is `hidden lg:flex`, so a mobile
+              logged-out visitor otherwise sees only the bare form (issue #618). */}
+          <div className="lg:hidden mb-6 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              A room that finally{" "}
+              <span className="text-gradient-warm">fits your space</span>
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              Designer-quality furniture picks from your photos — scored for
+              scale, light, and layout.
+            </p>
+          </div>
           <Card className="border-border/60 shadow-lg">
             <CardHeader className="text-center pb-2">
               <div className="flex justify-center mb-4">
