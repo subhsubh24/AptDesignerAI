@@ -55,6 +55,63 @@ describe("computeSpatialGraph", () => {
     expect(result.traffic_flow_score).toBeLessThan(1);
   });
 
+  // ─── Sight-line preservation (previously zero coverage) ──────────────────
+  // A tall item (≥48") in the room center or blocking a window, with seating
+  // present, reduces sight_line_score. Each block subtracts 0.2 (floor 0.4).
+  it("flags a tall item in the room center as a sight-line block", () => {
+    const analysis = {
+      what_it_needs: [
+        { category: "sofa", specs: "85\"W x 38\"D x 32\"H", placement: "north wall" },
+        { category: "bookcase", specs: "36\"W x 12\"D x 72\"H", placement: "in the center of the room" },
+      ],
+    };
+    const result = computeSpatialGraph(analysis, { roomType: "living_room" });
+    expect(result.sight_line_blocks.some((b) => b.blocker.includes("bookcase") && b.target === "focal wall")).toBe(true);
+    expect(result.sight_line_score).toBeLessThan(1);
+  });
+
+  it("flags a tall item on the window wall as blocking natural light", () => {
+    const analysis = {
+      what_it_needs: [
+        { category: "accent_chair", specs: "30\"W x 30\"D x 34\"H", placement: "reading nook" },
+        { category: "armoire", specs: "40\"W x 20\"D x 78\"H", placement: "on the window wall" },
+      ],
+    };
+    const result = computeSpatialGraph(analysis, { roomType: "living_room" });
+    expect(result.sight_line_blocks.some((b) => /window|natural light/.test(b.target))).toBe(true);
+  });
+
+  it("does NOT treat a tall plant near a window as a sight-line block (plant exclusion)", () => {
+    const analysis = {
+      what_it_needs: [
+        { category: "sofa", specs: "85\"W x 38\"D x 32\"H", placement: "north wall" },
+        // Tall enough to clear the isTall gate AND anchored to the window wall, so
+        // ONLY the plant exclusion spares it from a natural-light sight-line block.
+        { category: "plant", specs: "20\"W x 20\"D x 60\"H", placement: "on the window wall" },
+      ],
+    };
+    const result = computeSpatialGraph(analysis, { roomType: "living_room" });
+    expect(result.sight_line_blocks.length).toBe(0);
+    expect(result.sight_line_score).toBe(1);
+  });
+
+  // ─── Adjacency via cardinal-corner pairing (distinct from the shared-zone path) ──
+  // north_wall and east_wall share NO anchor, so this passes ONLY because the
+  // north/east walls border at a corner — exercising isAdjacentZone's cardinal-pair
+  // branch, not the shared-anchor shortcut the other tests hit.
+  it("treats items on corner-adjacent walls (north + east) as a valid pair", () => {
+    const analysis = {
+      what_it_needs: [
+        { category: "sofa", specs: "85\"W x 38\"D x 32\"H", placement: "north wall" },
+        { category: "coffee_table", specs: "48\"W x 24\"D x 18\"H", placement: "east wall" },
+      ],
+    };
+    const result = computeSpatialGraph(analysis, { roomType: "living_room" });
+    const sofaBroken = result.broken_pairs.find((p) => p.item1 === "sofa" || p.item2 === "sofa");
+    expect(sofaBroken).toBeUndefined();
+    expect(result.adjacency_score).toBe(1);
+  });
+
   it("returns neutral scores for empty analysis", () => {
     const result = computeSpatialGraph({ what_it_needs: [] }, { roomType: "living_room" });
     expect(result.overall).toBeGreaterThanOrEqual(0);
