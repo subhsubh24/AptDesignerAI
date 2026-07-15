@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Home } from "lucide-react";
+import { Loader2, Home, Ruler, Lock, Wallet } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
 
 export default function LoginPage() {
@@ -134,19 +134,22 @@ export default function LoginPage() {
             Every piece validated for style, scale, and fit.
           </p>
 
-          {/* Testimonial */}
-          <div className="glass rounded-2xl p-6 max-w-sm border border-border/40 shadow-warm-sm">
-            <p className="text-sm text-foreground leading-relaxed italic mb-4">
-              &ldquo;I was skeptical, but the AI nailed my style. Found a coffee table
-              I never would have discovered on my own, and it fits perfectly.&rdquo;
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-accent-warm/20" />
-              <div className="text-left">
-                <p className="text-xs font-medium">Sarah M.</p>
-                <p className="text-xs text-muted-foreground">Brooklyn, NY</p>
+          {/* Honest capability highlights — verifiable product claims only, no
+              invented testimonials, adoption metrics, or ratings until we have
+              real, sourced numbers to show (mirrors the signup + landing bar). */}
+          <div className="glass rounded-2xl p-6 max-w-sm border border-border/40 shadow-warm-sm text-left space-y-4">
+            {[
+              { Icon: Ruler, label: "Every pick scored for your room's scale, layout, and light" },
+              { Icon: Wallet, label: "Options across every budget — from budget to investment" },
+              { Icon: Lock, label: "Your photos are never used to train AI models" },
+            ].map(({ Icon, label }) => (
+              <div key={label} className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-warm/15">
+                  <Icon className="h-4 w-4 text-accent-warm" aria-hidden="true" />
+                </div>
+                <p className="text-sm text-foreground leading-relaxed">{label}</p>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
