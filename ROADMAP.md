@@ -539,11 +539,15 @@ web app where clean to do so — extract shared modules rather than copy-paste).
   email fires after waitlist double-opt-in confirmation (waitlist_welcome_1). CONVERSION SEND
   wired Run 36 (PR #155): a "welcome to Pro" email (paid_welcome_1) fires from the Stripe
   webhook on a genuine free→paid activation (idempotent: new→active only, renewals suppressed),
-  symmetric to the existing win-back-on-cancellation send. REMAINING before E7 ticks: wire the
-  remaining E4/E6 lifecycle sends (activation after signup, habit after first analysis — careful,
-  touch signup/analysis call sites); add visitor/trial/conversion-rate analytics pulls (need
-  Vercel Analytics + Stripe reporting APIs); per-channel social live API clients. Keep E7
-  unchecked until those land.]**
+  symmetric to the existing win-back-on-cancellation send. WIN-BACK E2/E3 wired Run 90 (PR #634):
+  a daily `app/api/cron/winback-emails` cron sends win-back E2 (day 7) + E3 (day 30) to cancelled
+  subscribers (`stripe_customers status='cancelled'`, `updated_at` proxy), mirroring the activation
+  cron (CRON_SECRET auth, dry-run default, per-(user,stage) idempotency, CAN-SPAM opt-out) and
+  reusing the shipped `buildWinBackEmail2/3` builders — so Sequence 5 (E1 webhook + E2/E3 cron) is
+  now complete. REMAINING before E7 ticks: wire the remaining E4/E6 lifecycle sends (activation
+  after signup, habit after first analysis, upgrade-paywall C1–C3 — careful, touch signup/analysis
+  call sites); add visitor/trial/conversion-rate analytics pulls (need Vercel Analytics + Stripe
+  reporting APIs); per-channel social live API clients. Keep E7 unchecked until those land.]**
 - [x] E8. **Pre-launch SITE GATE (so the public can't see a half-baked app before launch).**
   An env-driven gate the Growth Agent relies on when it starts pre-launch outreach: a middleware
   that PASSWORD-protects the deployed app (reads `SITE_GATE_PASSWORD` from env; gate is ON whenever

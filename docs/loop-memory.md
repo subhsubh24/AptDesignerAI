@@ -3796,3 +3796,42 @@ Lenses: honesty/marketing-claims, web-reliability/correctness, tests/coverage, m
   - **C2 follow-up (tiny):** singular `"inch"` (no `es`) is still absent from `UNIT_ALT` in spatial-math, so `"6inch x 4inch"` mis-parses as a square — PRE-EXISTING, a disjoint one-line + test.
 - **Ship blockers unchanged & not headlessly buildable:** functional_reality (in-memory→Supabase cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe + F7 committed screenshots — sandbox-unrunnable), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
 - **Larger open epics (unchanged):** §34 pre-launch demo (#475); §11 media-gen adapter (#470); perf #385 pgvector RPC (post-cutover only). Migrations 021/022-023/024/025/026/027/028/029 + DATA_BACKEND cutover remain human-gated in PENDING_OPS.
+
+## Run 2026-07-15 (Run 90) — determinism-jitter gate + win-back E2/E3 cron (Track E7) + 2 validator-coverage + core-flow silent-failure fix. ALL 5 MERGED.
+
+### State on entry
+- Cold container. Reset to origin default tip `05dea24` (post Run 89 #632 + Growth Run 10 #631). `npm install` root + `cd mobile && npm install` (mobile node_modules ABSENT — installed first, else mobile `tsc` false-fails on root DOM lib types). Baseline gate GREEN: tsc clean, **2082 tests** pass / 11 skip, determinism clean, eslint 0, mobile tsc clean.
+- **DEEP AUDIT NOT due** — ran Run 88 (2026-07-14); next ~Run 92. Ran a normal 7-Haiku-scout sweep.
+- **QUALITY_SCORECARD (as_of 2026-07-13, overall C, ship_gate false):** three ship_critical below A, all unchanged & human/CI-gated — functional_reality C (DATA_BACKEND defaults to memory → no persistence; owner-gated cutover), design_taste B (authed-axe + F7 screenshots, sandbox-unrunnable), business_case_strength B (without-annual ARR ~$99.9K < $100K floor; needs migration 021 + ANNUAL_BILLING_ENABLED, OR a real conversion-lift feature). The scorecard's `security_rls A+→A` mockups-IDOR finding was **STALE** — already fixed Run 86 #612 (verified live). GROWTH pre_launch 0/null → no lever signal.
+
+### Scouting — 7 Haiku lenses
+- **security/RLS+rate-limit:** CLEAN (no-op) — RLS on all tenant tables, id-routes bound, G1 rate-limits present, G4 auth-enumeration guarded, no secret leak.
+- **AI-pipeline/cost/determinism:** found the one real bug — `lib/ai/gemini.ts:660` ungated `Math.random()` retry jitter (→ #633). All `.chat()` have thinkingConfig+seed; maxDuration present; timeouts present.
+- **web-reliability/side-effects:** focus/page.tsx silent vision + search failures (→ #637). (The scout's 5 sub-findings collapsed to ONE file.)
+- **test/eval coverage:** code-compliance egress+kitchen-outlet (→ #636), outlet-reach hardwired/soft-anchor/vague (→ #635).
+- **growth-E7:** win-back E2/E3 cron cleanly disjoint (builders already exist) (→ #634). Habit/upgrade sends + analytics pulls remain (touch signup/analysis call sites — deferred).
+- **mobile:** "TS strict error in settings.tsx" was a FALSE POSITIVE (baseline mobile tsc clean); other findings defensive-only → skipped mobile (no padding).
+- **a11y/store:** next/image sweep (risky) + iOS-privacy CollectedDataTypes (needs Apple-enum research; empty array is valid) → deferred; landmarks/labels clean.
+
+### Shipped 5 (all file-disjoint; per-change branch → gate → 2 Sonnet reviewers → auto-merge squash)
+- **#633 (DETERMINISM/Track F)** — extracted pure `computeRetryDelay()` (`lib/ai/retry-delay.ts`) gating the Gemini 429-jitter under DETERMINISTIC (mirrors `lib/ai/retry.ts`); +6 mutation-provable tests (RNG never called in deterministic mode). No floor/cost change.
+- **#634 (GROWTH/Track E7)** — new `app/api/cron/winback-emails/route.ts` + `vercel.json`, win-back E2 (day7)/E3 (day30) for `stripe_customers status='cancelled'` (updated_at proxy), mirroring the activation cron (CRON_SECRET auth, dry-run, idempotency, opt-out); reuses `buildWinBackEmail2/3`. Ships INERT. +7 tests.
+- **#635 (TEST/Track F2)** — outlet-reach 3 branches (hardwired chandelier skip, soft-anchor `aSoft||bSoft`, vague-placement benefit-of-doubt). Mutation-provable.
+- **#636 (TEST/Track F2)** — code-compliance IRC R310.2.1 egress (all 3 `&&` terms load-bearing incl. width-fail added in re-review) + NEC 210.52(C) kitchen-outlet (48" divisor, `>=`). +9.
+- **#637 (RELIABILITY/Track A+F4)** — focus/page.tsx: vision-gen failure now toasts; batch-search failure now shows searchError+Retry (always reaches results step where the banner renders) instead of a blank page. SIDE-EFFECT INTEGRITY.
+
+### Outcome / bookkeeping
+- **ALL 5 MERGED** (#633→f06165f, #634→fd8ba44, #635→1166dc4, #636→44193c1, #637→23132af; required checks green; final tip 23132af). Baseline 2082 → **2105** (+23). Merged-result gate re-run GREEN (tsc, 2105 tests, determinism).
+- **No ROADMAP box ticked** — all 5 are determinism/retention/coverage/reliability hardening. E7 advanced (win-back E2/E3) but stays [ ] (activation-habit/upgrade sends + visitor/conversion analytics pulls + per-channel social live clients remain). Updated the E7 inline progress note. No migrations, no secrets, no new PENDING_OPS (winback reuses activation's env).
+
+### Lessons
+1. **The QUALITY_SCORECARD is DATA and can be STALE.** Its `security_rls A+→A` mockups-IDOR finding (as_of 2026-07-13) was already closed by Run 86 #612 — the code binds `bundle_id`/`product_ids` to `room_id`. Verify every named gap against the live tree BEFORE building, or you burn a change re-fixing a solved problem.
+2. **maker≠checker is load-bearing under auto-merge.** BOTH #637 reviewers independently caught a self-introduced regression WORSE than the bug being fixed — my search-error branches set `searchError` but never advanced `step` to `"results"` (the only place the banner renders), so a failed search stranded the user on a blank page. A single self-review would have shipped it. Fixed in one re-review cycle.
+3. **A scout claim that contradicts a green baseline gate is a false positive.** Mobile "TS strict error in settings.tsx" vs a clean `mobile tsc` — trust the gate over static reasoning; don't build against it.
+4. **`&&`-conjunction validators need symmetric failure coverage.** A boundary-pass test proves `>=` vs `>` but NOT that a term is in the conjunction; #636 needed a per-term failure test (height/width/area each failing alone) to be mutation-complete — a reviewer caught the missing width case.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 92** (ran Run 88). Next couple of runs can lean on scouts + scorecard.
+- **Ship blockers unchanged & not headlessly buildable:** functional_reality (DATA_BACKEND cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe on seeded diagnosis/mockups/compare + F7 committed screenshots — needs push-and-watch-CI + seeded LLM), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
+- **E7 follow-ups (disjoint, buildable):** activation-habit sequence (B1–B3 cron — needs habit email builders in lifecycle.ts + a cron querying first-analysis window); upgrade-paywall sequence (C1–C3 — needs a paywall-hit event log to trigger from); design-shared referral email (F1 — trigger after `saved-designs/[id]` PATCH is_public). Each is server-side, dry-run-default; be careful touching signup/analysis call sites.
+- **DO-NOT-RE-FLAG:** mockups IDOR (fixed #612); scorecard `security_rls` finding (stale). next/image sweep + iOS-privacy CollectedDataTypes are borderline (layout risk / needs Apple-enum research). #385 pgvector RPC is INERT until the data-layer cutover.
