@@ -7,6 +7,7 @@ import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
 import { isBaseTier, TEXT_TIERS } from "@/lib/ai/models";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
+import { computeRetryDelay } from "./retry-delay";
 import { getOrCreateSystemCache } from "./system-cache";
 import { getOrCreateCombinedCache } from "./user-cache";
 import { cassetteProvider } from "./cassette-provider";
@@ -651,13 +652,14 @@ const realGeminiProvider: AIProvider = {
           throw err;
         }
         const isServer = isServerError(err);
-        // Full jitter (AWS pattern): random delay in [0, baseDelay] decorrelates
-        // parallel retries. Without this, dozens of concurrent calls all hit 429
-        // and retry at exactly 2s/4s/8s, staying lockstep-synchronized forever.
-        const baseDelay = isRateLimit
-          ? 2000 * Math.pow(2, attempt - 1) // up to 2s, 4s, 8s, 16s, 32s
-          : isServer ? 1000 * Math.pow(2, attempt - 1) : 500 * Math.pow(2, attempt - 1);
-        const delay = isRateLimit ? Math.floor(Math.random() * baseDelay) + 500 : baseDelay;
+        // Full jitter (AWS pattern): random delay decorrelates parallel retries.
+        // Without it, dozens of concurrent calls all hit 429 and retry at exactly
+        // 2s/4s/8s, staying lockstep-synchronized forever. Gated by DETERMINISTIC
+        // (mirrors lib/ai/retry.ts) so reproducible runs are not perturbed by the
+        // RNG — an unguarded Math.random() here silently breaks the determinism
+        // contract on retried calls.
+        const retryKind = isRateLimit ? "rate_limit" : isServer ? "server" : "transport";
+        const delay = computeRetryDelay(attempt, retryKind, DETERMINISTIC);
         const reason = isRateLimit ? "Rate limited (429), retrying" : isServer ? "Server error, retrying" : "Transport error, retrying";
         log.warn(reason, {
           model,
