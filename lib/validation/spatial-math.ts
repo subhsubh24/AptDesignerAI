@@ -26,8 +26,23 @@ interface Dimensions {
   height?: number; // in inches
 }
 
-const DIMENSION_REGEX =
-  /(\d+(?:\.\d+)?)\s*(?:[-–x×]\s*(\d+(?:\.\d+)?))?\s*(?:[-–x×]\s*(\d+(?:\.\d+)?))?\s*(inches?|in|"|ft|feet|foot|cm|mm|'|'')?/gi;
+// Positional `W x D x H` form with an optional unit AFTER EACH value, so a
+// per-token unit mark (`6' x 4'`, `72" x 36"`, `72in x 36in`) parses correctly.
+// The old single-trailing-unit regex stopped at the first token whenever the
+// unit sat between the number and the separator: after `6` it read the foot
+// mark `'` as the trailing unit and never reached the `x`, mislabelling a
+// `6' x 4'` rug as a 72×72 square instead of 72×48 — corrupting room-coverage
+// scoring for any spec that carries feet/inch marks per value (rugs especially).
+// `''` (inch) must precede `'` (foot) in the alternation so `6''` reads as
+// inches, not feet. A value with no unit inherits the last unit seen in the
+// string, preserving the `6x4 ft` → 72×48 (trailing-unit-applies-to-all) form.
+const UNIT_ALT = `(inches?|in|feet|foot|ft|cm|mm|''|"|')`;
+const DIMENSION_REGEX = new RegExp(
+  `(\\d+(?:\\.\\d+)?)\\s*${UNIT_ALT}?` +
+    `(?:\\s*[-–x×]\\s*(\\d+(?:\\.\\d+)?)\\s*${UNIT_ALT}?)?` +
+    `(?:\\s*[-–x×]\\s*(\\d+(?:\\.\\d+)?)\\s*${UNIT_ALT}?)?`,
+  "gi",
+);
 
 function parseInches(value: number, unit?: string): number {
   if (!unit) return value; // Assume inches
@@ -84,29 +99,30 @@ export function parseDimensions(specs: string): Dimensions | null {
   const match = DIMENSION_REGEX.exec(specs);
   if (!match) return null;
 
-  const v1 = parseFloat(match[1]);
-  const v2 = match[2] ? parseFloat(match[2]) : undefined;
-  const v3 = match[3] ? parseFloat(match[3]) : undefined;
-  const unit = match[4];
+  // (value, per-token unit) pairs — group layout is [v1,u1, v2,u2, v3,u3].
+  // Unmatched optional groups are undefined at runtime (the array type lies),
+  // so filter on a real value before parsing.
+  const tokens = [
+    { value: match[1], unit: match[2] },
+    { value: match[3], unit: match[4] },
+    { value: match[5], unit: match[6] },
+  ].filter((t) => t.value !== undefined);
 
-  if (v3 !== undefined && v2 !== undefined) {
+  // A value with no unit inherits the last explicit unit in the string (so
+  // `6x4 ft` applies feet to both, matching the trailing-unit convention).
+  const inheritedUnit = [...tokens].reverse().find((t) => t.unit)?.unit;
+  const inches = tokens.map((t) => parseInches(parseFloat(t.value), t.unit ?? inheritedUnit));
+
+  if (inches.length >= 3) {
     // W x D x H
-    return {
-      width: parseInches(v1, unit),
-      depth: parseInches(v2, unit),
-      height: parseInches(v3, unit),
-    };
+    return { width: inches[0], depth: inches[1], height: inches[2] };
   }
-  if (v2 !== undefined) {
+  if (inches.length === 2) {
     // W x D
-    return {
-      width: parseInches(v1, unit),
-      depth: parseInches(v2, unit),
-    };
+    return { width: inches[0], depth: inches[1] };
   }
   // Single dimension — assume square-ish for area calculation
-  const side = parseInches(v1, unit);
-  return { width: side, depth: side };
+  return { width: inches[0], depth: inches[0] };
 }
 
 // (d) Standard room size ratios for estimation from total sqft

@@ -32,6 +32,36 @@ describe("parseDimensions", () => {
     expect(parseDimensions("6x4 ft")).toEqual({ width: 72, depth: 48 });
   });
 
+  // Per-token unit marks: the unit sits AFTER each value, before the separator.
+  // The old single-trailing-unit regex stopped at the first token (it read the
+  // foot mark as the trailing unit and never reached the `x`), collapsing these
+  // into a bogus square — e.g. a `6' x 4'` rug became 72×72 instead of 72×48,
+  // corrupting room-coverage scoring for any feet/inch-marked spec.
+  it("parses foot marks on EACH value (rug specs: 6' x 4')", () => {
+    expect(parseDimensions("6' x 4'")).toEqual({ width: 72, depth: 48 });
+    expect(parseDimensions("5'x8'")).toEqual({ width: 60, depth: 96 });
+  });
+
+  it("parses inch marks on each value (72\" x 36\")", () => {
+    expect(parseDimensions('72" x 36"')).toEqual({ width: 72, depth: 36 });
+    // double-apostrophe inch mark must NOT be read as a foot mark
+    expect(parseDimensions("6'' x 4''")).toEqual({ width: 6, depth: 4 });
+  });
+
+  it("parses a spelled unit on each value (72in x 36in x 30in)", () => {
+    expect(parseDimensions("72in x 36in x 30in")).toEqual({ width: 72, depth: 36, height: 30 });
+  });
+
+  it("mixes explicit per-token units (6ft x 72in)", () => {
+    expect(parseDimensions("6ft x 72in")).toEqual({ width: 72, depth: 72 });
+  });
+
+  // A unit on a NON-last token must be inherited by the later unit-less tokens
+  // (the fallback scans back for the last explicit unit, not just the final one).
+  it("inherits a unit from a non-adjacent earlier token (6ft x 4 x 8)", () => {
+    expect(parseDimensions("6ft x 4 x 8")).toEqual({ width: 72, depth: 48, height: 96 });
+  });
+
   it("converts centimetres to inches", () => {
     const d = parseDimensions("100cm");
     expect(d?.width).toBeCloseTo(39.37, 1);
