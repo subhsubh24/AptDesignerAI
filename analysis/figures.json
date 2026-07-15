@@ -1,3 +1,33 @@
 {
-  "figures": []
+  "figures": [
+    {
+      "id": "business_case_scenario_a_arr",
+      "script": "analysis/business_case_scenario_a_arr.mjs",
+      "value": 46109,
+      "tolerance": 200,
+      "cites": "docs/BUSINESS_CASE.md Scenario A (conservative), 'ARR: ~$46,200/year' and BUSINESS_CASE_SUMMARY.arr_year1.conservative (46200) -- tolerance covers the doc's nearest-hundred prose rounding"
+    },
+    {
+      "id": "business_case_scenario_b_arr",
+      "script": "analysis/business_case_scenario_b_arr.mjs",
+      "value": 122956,
+      "tolerance": 200,
+      "cites": "docs/BUSINESS_CASE.md Scenario B / planning case (base), 'ARR: ~$122,900/year' and BUSINESS_CASE_SUMMARY.arr_year1.base (122900) -- tolerance covers the doc's nearest-hundred prose rounding"
+    },
+    {
+      "id": "business_case_scenario_c_arr",
+      "script": "analysis/business_case_scenario_c_arr.mjs",
+      "value": 276652,
+      "tolerance": 200,
+      "cites": "docs/BUSINESS_CASE.md Scenario C (optimistic), 'ARR: ~$276,800/year' and BUSINESS_CASE_SUMMARY.arr_year1.optimistic (276800) -- tolerance covers the doc's nearest-hundred prose rounding"
+    },
+    {
+      "id": "business_case_without_annual_arr",
+      "script": "analysis/business_case_without_annual_arr.mjs",
+      "value": 99926,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual mix stays at 0%: ARR is ~$99.9K' -- the shippable-TODAY figure both GTM_SCORECARD.md and QUALITY_SCORECARD.md (business_case_strength) cite precisely as $99,926, ~$74 below the $100K floor. Tight tolerance: this is the figure under active auditor scrutiny."
+    }
+  ]
 }
+

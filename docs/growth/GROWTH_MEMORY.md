@@ -802,3 +802,157 @@ Research-backed candidate swap (if competition validates):
 - Same owner blockers as Runs 1-8? YES — circuit breaker remains FIRED (Run 9, 9th consecutive run,
   ~16 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). One new (low-effort) blocker: EMAIL_PHYSICAL_ADDRESS.
+
+---
+
+## Run 10 — 2026-07-15
+
+### What we found
+- All Run 1-9 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`as_of: 2026-07-14`; `set-site-gate-password` / `connect-email-resend` / `set-metrics-token` /
+  `set-cron-secret` / `set-email-physical-address` all still `status: open`). 10th consecutive run,
+  ~18 days since Run 1 first surfaced the core 4. `git log` shows 25 Product-Factory commits landed
+  between Run 9 and this run (through PR #630) — DEEP AUDIT work, a11y/security/determinism fixes,
+  FACTORY_STANDARD updates (§44 live-prod re-probe, §6b Mobbin grounding, §49 orchestration) — none
+  of them a growth-channel connection.
+- Re-probed `https://aptdesignerai.com/` a SEVENTH time, this run via TWO independent tools:
+  `curl` through the agent-proxy still gives `connect_rejected` / gateway 502 to CONNECT (identical
+  signature to Runs 6-9, cross-checked against `/__agentproxy/status` `recentRelayFailures`, two
+  entries timestamped 2026-07-15T05:08:37Z); the `WebFetch` tool, tested directly against the same
+  URL, returned a DIFFERENT, new failure signature — `getaddrinfo ENOTFOUND aptdesignerai.com` (a
+  DNS-resolution failure, not a proxy-CONNECT failure) — suggesting WebFetch may resolve/route
+  differently than the curl-via-agent-proxy path this loop has been citing. Practical conclusion is
+  identical either way: no reachable path to production from this runtime.
+- `docs/growth/GTM_SCORECARD.md` is UNCHANGED since Run 9 (still `auditor_run: 2`,
+  `as_of: 2026-07-13`, `business_case_honesty` held at `B`, PR #599). Checked
+  `docs/autonomous-loop/ROUTINES.md` — the GTM Auditor runs on a **weekly** cron (Mondays 03:30
+  UTC), so it has genuinely not had a chance to re-grade against Run 9's 2026-07-13 disclosure fix
+  (PR #601, landed the same day the scorecard was cut) or anything from this run; its next
+  scheduled pass is ~2026-07-20. Not a stall — a cadence mismatch, now understood and worth noting
+  so a future run doesn't misread "unchanged scorecard" as "fix didn't work."
+- `docs/quality/QUALITY_SCORECARD.md` (the independent **Product** Quality Auditor — a different
+  routine, consumed as DATA only, never GTM-owned) moved since Run 9: `as_of: 2026-07-13`,
+  `overall` held at `C`, but the per-dimension picture worsened — `business_case_strength`
+  regressed `A -> B` (a fresh, independent recompute found the same root cause the GTM Auditor
+  named: with Pro Annual gated off in code, the shippable-TODAY steady-state ARR is **$99,926**,
+  ~$74 *below* the $100K floor) and `security_rls` regressed `A+ -> A` (a missed ownership guard on
+  the mockups route — a Product-Factory security matter, no GTM lever). Read as reinforcing this
+  run's posture (pre_launch correct, outreach hard-off), not changing it.
+- **Investigated FACTORY_STANDARD §22 (computation integrity) against the business case for the
+  first time.** §22 requires every quantitative claim to be produced by "executed, reproducible
+  code... never mental arithmetic," committed under `scripts/`/an analysis dir, and re-verified by
+  the independent reviewer. Checked whether the `$99,926` without-annual figure — now cited by name
+  in BOTH `GTM_SCORECARD.md` (rounded, `~$99.9K`) and `QUALITY_SCORECARD.md` (precise,
+  `$99,926`) — had any such backing: it did not. Run 9's `learnings` said it was "computed via a
+  node script, not eyeballed," but that script was never committed — a real, closeable gap, and a
+  boundary-sensitive one (the number sits within $74 of the $100K floor, so the exact computation
+  method matters to the conclusion). Also found the repo already ships the sanctioned infrastructure
+  for this — `scripts/validate-computation.mjs` (a required preflight gate) + the
+  `analysis/figures.json` manifest contract (`analysis/README.md`) — built by the Product Factory
+  but sitting **vacuous** (`figures.json: {"figures": []}`), so the gate always passed trivially
+  with nothing registered to check.
+
+### What we built this run
+- **`analysis/business-case-model.mjs`**: the shared revenue-model core, reproducing
+  `docs/BUSINESS_CASE.md`'s "The revenue model" formula section verbatim (same prices, 30% store
+  commission, 25% Day-30 retention, 60/40 apartment/Pro mix, 75/25 monthly/annual Pro split, 7%
+  monthly churn, the doc's own rounded 2.4%/month annual-effective churn) as one `computeScenario()`
+  function taking `installsPerMonth`, `conversionRate`, `annualShareOfPro`.
+- **Four registered figures** (`analysis/business_case_scenario_{a,b,c}_arr.mjs`,
+  `analysis/business_case_without_annual_arr.mjs`), each a thin script calling `computeScenario()`
+  with one scenario's inputs and printing `{"value": N}` — Scenario A conservative, Scenario B
+  base/planning-case, Scenario C optimistic, and the without-annual (Pro-Annual-gated-off) case
+  using Scenario B's installs/conversion with `annualShareOfPro=0`.
+- **`analysis/figures.json`**: registered all 4, wiring them into `scripts/validate-computation.mjs`
+  for the first time — the gate now genuinely checks something on every PR instead of passing
+  vacuously. Tolerances: 200 (~0.1-0.4%) on the three headline ARRs, covering the doc's own
+  nearest-hundred prose rounding without being loose enough to mask a real constant error; 1 (exact)
+  on the without-annual figure, since it is under active scrutiny by both independent auditors.
+- **Ran + verified**: `node analysis/business_case_scenario_a_arr.mjs` → `46109`; `_b_arr.mjs` →
+  `122956`; `_c_arr.mjs` → `276652`; `business_case_without_annual_arr.mjs` → **`99926`** — an EXACT
+  match to the figure both scorecards cite, confirming (not gaming) the "$74 below the floor"
+  reading. `node scripts/validate-computation.mjs` → `4 figure(s) verified against their scripts.
+  PASS.` Also ran the full existing gate suite against the change: `node scripts/validate-gtm.mjs`
+  OK, `node scripts/validate-capabilities.mjs` OK (0 unmet), `npx tsc --noEmit` clean, `npx eslint
+  analysis/` clean.
+- **`docs/BUSINESS_CASE.md`**: added a dated changelog note describing the verification (what was
+  added, the 4 independently-reproduced values, and an explicit "no figure or number in this
+  document changed" statement) — zero edits to the existing scenario prose/headline numbers, which
+  stay accurate "~" approximations.
+- **Independent maker != checker review** (fresh subagent, no context from this run): read
+  `analysis/business-case-model.mjs` against `docs/BUSINESS_CASE.md`'s stated formula
+  constant-by-constant (prices, commission, retention, mix, churn rates — all matched exactly,
+  including the annual-price-divided-by-12 and the doc's own rounded 2.4% churn reused verbatim);
+  independently re-ran all 4 scripts AND separately hand-reimplemented the formula from the doc's
+  prose in a standalone snippet (not importing the module) as a second, fully independent
+  cross-check — both methods agreed on all 4 values; re-ran `validate-computation.mjs` twice to
+  confirm determinism; verified the without-annual script reuses Scenario B's exact installs/
+  conversion and only zeroes `annualShareOfPro` (not silently swapping in more favorable inputs);
+  checked the tolerances weren't loose enough to mask a real error. **Verdict: APPROVE**, with one
+  wording nit (fixed before merge): the changelog/script comments had claimed GTM_SCORECARD.md
+  cites the without-annual figure as `$99,926` precisely — it only cites the rounded `~$99.9K`;
+  only QUALITY_SCORECARD.md cites the exact dollar figure. Corrected in both the script comment and
+  the BUSINESS_CASE.md note.
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-15; refreshed `internal_metrics_api`
+  (7th probe, both tools/signatures) and `web_research` (re-probed, unchanged, 4th consecutive) 
+  validation reasons; bumped `demand_signal.as_of` with a Run 10 method-note (re-probed, unchanged,
+  effort went to the S22 gap instead); rewrote `learnings`/`next_actions`/`owner_blockers` for the
+  10th consecutive circuit-breaker run, including the GTM_SCORECARD cadence finding, the
+  QUALITY_SCORECARD business_case_strength/security_rls regressions, and the new verification
+  script — and elevated migration 021 + `ANNUAL_BILLING_ENABLED` to the single highest-leverage
+  owner action (it is now the sole remaining GTM_SCORECARD ship-critical gap AND the named cause of
+  the QUALITY_SCORECARD regression).
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (7th probe, two
+  tools, two different failure signatures, same practical conclusion). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD
+  still C) — both S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md`: no new funnel or demand-signal data this run of the
+  kind that would clear the S3 steer bar. The business-case work this run was a computation-
+  integrity/verification fix (confirming existing figures are correctly computed and reproducible),
+  explicitly NOT a new finding, a business-case number change, or a steer.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not re-attempt Reddit/Trustpilot fetches beyond the standard re-probe: both tested this run
+  per S10's every-run requirement, both failed identically to Runs 6-9 — 4th consecutive re-probe
+  with the same result; re-running without a new angle would not add evidence (established Run 8).
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4 fail-closed
+  reasoning as Runs 5-9.
+- Did not edit `PENDING_OPS.md`: no new owner-actionable item surfaced this run beyond what's
+  already listed (migration 021 + ANNUAL_BILLING_ENABLED already exists there as
+  `apply-migration-021`; this run only re-prioritized it in `GROWTH_STATUS.owner_blockers`, which
+  is this loop's own file).
+
+### Lessons learned
+- **A gate that "always passes" is worth checking whether it's checking anything.**
+  `scripts/validate-computation.mjs` existed, was wired into preflight, and reported PASS every run
+  — but it was vacuously passing on an empty manifest. The lesson generalizes beyond this one gate:
+  a green check is only meaningful once something real is registered against it; a required gate
+  with zero registered assertions is a silent gap, not a guarantee, and it is worth a periodic
+  "is this gate checking anything real yet?" pass.
+- **A boundary-sensitive figure (here, $99,926 vs. the $100,000 floor — $74 apart) is exactly where
+  computation-method ambiguity matters most.** Working through the reconciliation this run surfaced
+  a real methodology subtlety: the doc's "Three scenarios" prose ROUNDS subscriber-pool counts to
+  whole numbers for readability ("~171 subs"), but the actual published MRR/ARR figures were
+  computed from the CONTINUOUS (unrounded) steady-state values — rounding intermediate subscriber
+  counts before multiplying gives a measurably different answer (in one reconciliation this run,
+  the choice flipped whether the without-annual case cleared the $100K floor or not). Committing
+  the exact methodology as code removes this ambiguity permanently; before this run it existed only
+  as an implicit, undocumented convention a human would have to reverse-engineer from the prose.
+- **When two independent auditors (GTM + Quality) converge on the same root-cause finding from
+  different angles, that convergence is itself a strong signal the finding is real** — worth
+  treating as higher-priority than either alone, and worth cross-referencing in `learnings` so a
+  future run doesn't fix it twice for two different reasons.
+- **Before assuming a scorecard "hasn't moved" means work isn't landing, check its cadence.** The
+  GTM Auditor is a weekly routine, not a daily one like this loop — `GTM_SCORECARD.md` being
+  unchanged since Run 9 is expected, not a sign Run 9's fix failed or was ignored. Recording this
+  explicitly prevents a future run from re-doing already-landed work out of a false "it didn't take
+  effect" read.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-9? YES — circuit breaker remains FIRED (Run 10, 10th consecutive
+  run, ~18 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; migration 021 +
+  ANNUAL_BILLING_ENABLED (already tracked) was re-prioritized to the top of `owner_blockers` given
+  it is now corroborated by two independent auditors as the single highest-leverage lever.
