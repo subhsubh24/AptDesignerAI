@@ -32,6 +32,30 @@ describe("parseDimensions", () => {
     expect(parseDimensions("6x4 ft")).toEqual({ width: 72, depth: 48 });
   });
 
+  it("parses inline foot marks between each number and the separator (rug specs)", () => {
+    // `6' x 4'` puts the foot mark BEFORE the `x` separator — the old regex read
+    // only `6'` and returned a 72×72 square. Rugs are almost always specced this
+    // way (e.g. `6' x 9'`), so this must yield distinct width/depth.
+    expect(parseDimensions("6' x 4'")).toEqual({ width: 72, depth: 48 });
+    expect(parseDimensions("6' x 9'")).toEqual({ width: 72, depth: 108 });
+    expect(parseDimensions("5'x8'")).toEqual({ width: 60, depth: 96 });
+  });
+
+  it("parses inline inch marks between each number and the separator", () => {
+    expect(parseDimensions('72" x 36"')).toEqual({ width: 72, depth: 36 });
+    expect(parseDimensions('84" x 60" x 30"')).toEqual({ width: 84, depth: 60, height: 30 });
+  });
+
+  it("applies a single trailing unit to every unlabeled axis", () => {
+    // Only the last token carries the unit; it must apply to all three axes.
+    expect(parseDimensions("6 x 4 x 3 ft")).toEqual({ width: 72, depth: 48, height: 36 });
+  });
+
+  it("carries a unit stated on the first axis over to an unmarked second axis", () => {
+    // `6' x 4` states feet once (on the first token); both axes are feet.
+    expect(parseDimensions("6' x 4")).toEqual({ width: 72, depth: 48 });
+  });
+
   it("converts centimetres to inches", () => {
     const d = parseDimensions("100cm");
     expect(d?.width).toBeCloseTo(39.37, 1);
