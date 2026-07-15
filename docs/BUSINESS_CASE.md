@@ -14,6 +14,28 @@ time_to_floor: "$122.9K is the STEADY-STATE base ARR; the year-1 exit run-rate i
 as_of: 2026-07-13
 ```
 
+> **Computation-integrity verification 2026-07-15 (Growth Agent Run 10).** No committed,
+> reproducible script backed any of this doc's ARR figures until now (FACTORY_STANDARD §22 —
+> "every quantitative claim... produced by executed, reproducible code, never mental
+> arithmetic" — was previously unmet here; both `GTM_SCORECARD.md` and
+> `QUALITY_SCORECARD.md`'s `business_case_strength` dimension independently cite the
+> without-annual **$99,926** figure, which until now existed only as a one-off, uncommitted
+> `node` calculation). Added `analysis/business-case-model.mjs` (the shared revenue-model core,
+> reproducing "The revenue model" section below verbatim) plus four registered figures —
+> `analysis/business_case_scenario_{a,b,c}_arr.mjs` and
+> `analysis/business_case_without_annual_arr.mjs` — wired into `analysis/figures.json` so
+> `scripts/validate-computation.mjs` (a required preflight gate, previously vacuous) now
+> mechanically re-runs and verifies all four ARR figures on every PR. Independently re-derived
+> (maker≠checker, fresh subagent, re-ran all 4 scripts + the gate + a from-scratch hand
+> reimplementation of the formula): Scenario A **$46,109** (doc: ~$46,200), Scenario B
+> (planning case) **$122,956** (doc: ~$122,900), Scenario C **$276,652** (doc: ~$276,800), and
+> the without-annual shippable-today figure **$99,926 exactly** — confirming, not gaming, the
+> Quality Auditor's precise "$99,926, $74 below the floor" reading (`QUALITY_SCORECARD.md`,
+> `business_case_strength`) and the GTM Auditor's rounded "~$99.9K" reading
+> (`GTM_SCORECARD.md`). No figure or number in this document changed; this
+> makes the existing figures independently re-derivable by anyone, permanently, instead of
+> resting on an unrepeatable one-off calculation.
+>
 > **Annual-tier disclosure fix 2026-07-13 (Growth Agent Run 9).** The independent GTM Auditor
 > (`GTM_SCORECARD.md`, `auditor_run: 2`) named a real disclosure gap: the planning case credits
 > ~38% of steady-state MRR to the Pro Annual tier while annual billing is currently gated OFF in
