@@ -42,7 +42,12 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
   const [success, setSuccess] = useState(false);
 
   async function handleSignUp() {
-    if (!email.trim() || !password || !confirm) return;
+    if (!email.trim() || !password || !confirm) {
+      // Explicit feedback instead of a silent no-op — the button is only
+      // disabled while loading, so an empty-field tap would otherwise do nothing.
+      setError('Fill in every field to create your account.');
+      return;
+    }
     if (password !== confirm) {
       setError('Passwords do not match');
       return;
