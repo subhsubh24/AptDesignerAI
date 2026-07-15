@@ -173,6 +173,34 @@ describe("aggregatePreferenceSignals", () => {
     expect(result.recurring_categories).toContain("new_stuff");
     expect(result.recurring_categories).not.toContain("old_stuff");
   });
+
+  it("breaks frequency ties alphabetically so the top-N slice is reproducible", () => {
+    // Ten distinct palette colours, each appearing exactly once, fed in a
+    // deliberately non-alphabetical order. The n=8 slice must be the eight
+    // alphabetically-first colours IN alphabetical order — NOT the first eight
+    // in input order. This pins the determinism-contract tiebreaker: a
+    // count-only sort would leave the truncation to input/engine ordering.
+    const rooms = [
+      makeRoom({ id: "current" }),
+      makeRoom({
+        id: "bedroom",
+        diagnoses: [
+          {
+            design_direction_json: {
+              recommended_palette: [
+                "zinc", "yellow", "amber", "teal", "blue",
+                "green", "red", "orange", "violet", "brown",
+              ],
+            },
+          },
+        ],
+      }),
+    ];
+    const result = aggregatePreferenceSignals(rooms, "current");
+    expect(result.preferred_palette).toEqual([
+      "amber", "blue", "brown", "green", "orange", "red", "teal", "violet",
+    ]);
+  });
 });
 
 describe("formatPreferencesForPrompt", () => {
