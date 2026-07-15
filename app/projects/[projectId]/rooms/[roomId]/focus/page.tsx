@@ -387,23 +387,32 @@ export default function FocusPage() {
     // Build description from area analysis — use search_title for specificity
     const items = areaAnalysis?.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
 
-    const res = await fetch("/api/mockups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        room_id: roomId,
-        vision_mode: true,
-        design_direction: areaAnalysis?.design_direction || "",
-        items_description: items,
-      }),
-    });
+    try {
+      const res = await fetch("/api/mockups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room_id: roomId,
+          vision_mode: true,
+          design_direction: areaAnalysis?.design_direction || "",
+          items_description: items,
+        }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      setVisionUrl(data.image_url);
-      setShowVisionOverlay(true);
+      if (res.ok) {
+        const data = await res.json();
+        setVisionUrl(data.image_url);
+        setShowVisionOverlay(true);
+      } else {
+        // Surface the failure instead of silently dropping the spinner — a blank
+        // vision step with no feedback reads as a broken core flow.
+        toast.error("Couldn't generate the vision", "Please try again in a moment.");
+      }
+    } catch {
+      toast.error("Couldn't generate the vision", "Check your connection and try again.");
+    } finally {
+      setGeneratingVision(false);
     }
-    setGeneratingVision(false);
   };
 
   // Per-recommendation mockup generation — generates a focused mockup for
@@ -557,11 +566,20 @@ export default function FocusPage() {
           body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
         });
         if (batchRes.ok) {
-          const data = await batchRes.json();
+          const data = await batchRes.json().catch(() => ({}));
           if (data.stats) setSearchStats(data.stats);
           if (data.validation) setValidationInfo(data.validation);
           const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-          if (prodRes.ok) setProducts(await prodRes.json());
+          const prods = prodRes.ok ? await prodRes.json().catch(() => null) : null;
+          if (Array.isArray(prods)) {
+            setProducts(prods);
+          } else {
+            // Surface the failure on the results step (the only place searchError
+            // renders), not a blank sourcing page — mirrors the SSE-catch path.
+            setSearchError("We found matches but couldn't load them. Please try again.");
+          }
+        } else {
+          setSearchError("Product search failed. Please try again.");
         }
         setSearching(false);
         setStep("results");
