@@ -3745,3 +3745,54 @@ Lenses: correctness/dead-code, security/RLS, performance, a11y/design-bar, tests
 - **Ship blockers unchanged & not headlessly buildable:** functional_reality (in-memory→Supabase cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe + F7 committed screenshots — sandbox-unrunnable), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
 - **Pre-existing, untouched bug flagged during change-1 re-review (candidate):** the ORIGINAL positional `DIMENSION_REGEX` mishandles a foot-mark form like `6' x 4'` — the apostrophe isn't in its separator class, so it reads `6'` as a single dim → 72×72 square instead of 72×48. Unrelated to the labeled path; a disjoint one-line fix + test for a future run.
 - **Larger open epics (unchanged):** G4 login lockout/backoff + reset/verification enumeration guards (needs a server-side `/api/auth/login` route); §34 pre-launch demo (#475); §11 media-gen adapter (#470); perf #385 pgvector RPC (post-cutover only); mobile setState hygiene (dev-only). Migrations 021/022-023/024/025/026/027/028/029 + DATA_BACKEND cutover remain human-gated in PENDING_OPS.
+
+---
+
+## Run 2026-07-15 (Run 89)
+
+### State on entry
+- Default tip `12009a7` (#631); working branch `claude/sleepy-goldberg-zkpp8p` already AT the default tip (0 ahead/0 behind) — no rebase needed. Baseline gate GREEN after cold `npm ci` + `cd mobile && npm ci`: tsc clean, **2077 tests** pass / 11 skip, determinism green, eslint clean, mobile `tsc --noEmit` clean. No open PRs.
+- **DEEP AUDIT NOT due** (ran Run 88; next ~Run 92) — ran a normal 7-Haiku-scout sweep, no full audit.
+
+### Scout sweep (7 Haiku) + verification
+Lenses: honesty/marketing-claims, web-reliability/correctness, tests/coverage, mobile, perf+determinism, store-readiness/a11y, G4-auth-feasibility.
+- **Honesty scout → the run's #1 finding:** a FABRICATED testimonial on `app/(auth)/login/page.tsx` ("Sarah M., Brooklyn NY" + invented quote). Signup + landing pages already explicitly avoid fabrication (verified) — login was the lone violator. Became change **C1**.
+- **Store-readiness scout → a real store blocker:** `mobile/app.json` had NO iOS privacy manifest (ITMS-91053 rejection vector). Became **C6**. (The scout's suggested JSON shape was partly wrong — `NSPrivacyAttributeUsageDescription` isn't a real key — so I researched the exact Expo `ios.privacyManifests` schema + Apple reason codes myself.)
+- **Perf/determinism scout → C3:** `topFrequent()` count-only sort feeding a seeded LLM prompt from an UNORDERED Supabase select. (Also flagged a search-route parallelization = C5, deferred; and a scene-reconciliation tiebreaker = FALSE POSITIVE.)
+- **Mobile scout → C7 + C8:** silent empty-field auth submit (real UX no-op); empty Palette/Materials card shells on the results screen. (Also flagged a11y-labels on photo/results buttons = FALSE POSITIVE.)
+- **My own confirmed candidate → C2:** the Run-88 rotation-guide follow-up — the positional `DIMENSION_REGEX` mishandles inline-unit forms (`6' x 4'`, `72" x 36"`) → mis-scores rugs (`6' x 9'`) as squares.
+
+### FALSE POSITIVES caught by reading the live tree (NOT shipped)
+1. **scene-reconciliation.ts:257 "broken tiebreaker" `(a[0]<b[0]?-1:1)`** — the preceding `seen` Map dedups to UNIQUE keys, so `a[0]===b[0]` is unreachable; the `:1`-on-equal branch is dead → changing it is behavior-neutral churn.
+2. **mobile a11y-labels on ~9 photo/results Pressables** — every one has a visible `<ThemedText>` child, which RN announces as the accessible name; adding an identical `accessibilityLabel` is redundant → churn.
+
+### DEFERRED (real value, but not safely shippable headlessly this run)
+- **G4 login lockout/backoff** — feasible (scout mapped the server-route pattern), BUT it requires converting the critical CLIENT-SIDE login (`supabase.auth.signInWithPassword` in the browser) to a server `/api/auth/login` route + cookie handling. Cannot e2e-verify the auth flow headlessly (journey suite needs Supabase creds), and a subtly-broken login auto-merged = catastrophic. Defer to a run that can add/execute a login-flow test. Password-reset/verification enumeration guards remain N/A (no email pipeline pre-launch; verification intentionally OFF).
+- **C5 search-route parallelization** (`app/api/search/route.ts`) — real ~300ms win (3 independent serialized fetches: userFeedbackContext, otherRooms, recRuns; otherDiagnoses correctly depends on otherRooms). BUT there is NO route-level test covering the handler orchestration and search can't be runtime-verified headlessly → a subtle regression would land uncaught under auto-merge. Defer to a run that adds a route-orchestration test first.
+- **callback maxDuration** (reliability scout) — modest hardening (every other external call has a timeout; `exchangeCodeForSession` doesn't); cut to keep the run tight (try/catch already prevents a 500).
+
+### Shipped — 6 file-disjoint value-bar changes (all both-Sonnet-APPROVED, 12 reviews, zero re-review cycles)
+- **C1 (HONESTY/Track A)** `app/(auth)/login/page.tsx` — removed the fabricated testimonial; replaced with 3 verifiable capability highlights (icon+label, `aria-hidden` icons) reusing claims already live on signup/landing/privacy. No new invented claim (reviewers confirmed verbatim reuse).
+- **C2 (VALIDATION/Track F)** `lib/validation/spatial-math.ts` +5 tests — rebuilt `DIMENSION_REGEX` (now non-global, single call site) to capture a per-token optional unit for up to 3 axes + a single-trailing-unit fallback, so `6' x 4'`/`72" x 36"`/`6' x 9'` parse as distinct W×D instead of a square. Reviewer A reverted the code and empirically confirmed 3/4 new tests fail pre-fix.
+- **C3 (DETERMINISM/Track F)** `lib/design-context/infer-preferences.ts` +1 test — added `|| a.original.toLowerCase().localeCompare(...)` tiebreaker to `topFrequent()` (same idiom as `scripts/check-determinism.ts`). Mutation-verified (10 single-count colours, non-alpha input → alpha top-8). Reviewer nit on the comment ("normalized key" → actually the lowercased surface form) fixed + autosquashed.
+- **C6 (STORE/Track D)** `mobile/app.json` — added `ios.privacyManifests` (NSPrivacyTracking:false + UserDefaults CA92.1 / FileTimestamp C617.1 / SystemBootTime 35F9.1 / DiskSpace E174.1). Reviewers verified each reason code against BOTH Apple's table AND the actual `PrivacyInfo.xcprivacy` files in node_modules (RN core, async-storage, expo-device, expo-file-system), and that `app.config.ts`'s `...config` spread preserves it.
+- **C7 (MOBILE-UX/Track B)** `mobile/src/components/auth/login-screen.tsx` + `signup-screen.tsx` — empty-field submit now `setError(...)` instead of a silent `return` (button was only disabled while loading). Reuses the existing alert box.
+- **C8 (MOBILE-DESIGN/Track B)** `mobile/src/app/results.tsx` — guarded the always-rendered Palette + Materials cards behind `.length>0`, matching the file's What-Works/What-Should-Go pattern (no more empty titled shells).
+
+### Merge outcome + gate
+- Integrated gate GREEN: tsc, **2082 tests** (2077 +5), determinism, eslint (web touched files + mobile touched files), mobile `tsc --noEmit`. Six clean commits on the working branch; **single-branch per this run's git constraint → ONE PR to default**. **No ROADMAP box ticked** — all 6 are honesty/correctness/determinism/store/UX hardening; no full Track item completed.
+- **PENDING_OPS:** added the App Store Connect privacy "nutrition label" owner note (the manifest is code; the ASC data-collection questionnaire is a human submission step). **No code migrations, no secrets.**
+
+### Lessons learned
+1. **Verify EVERY scout claim against the live tree — again.** 2 of this run's candidates were false positives: an "unstable tiebreaker" on a Map that guarantees unique keys (dead branch), and "missing a11y labels" on Pressables that already carry text children RN announces. A 30-second read per candidate prevented two churn changes.
+2. **Under unattended auto-merge, "unverifiable headlessly" downgrades a real win to a deferral.** Both G4 (server-login conversion) and C5 (search parallelization) are genuinely valuable, but neither can be runtime-verified this run and neither has a route-level test — a subtle regression would land uncaught. Ship the safe wins; defer the ones that need a test harness first, and NAME the missing harness.
+3. **A fabricated testimonial is shippable value, not cosmetics.** It's an FTC-endorsement / App-Store-rejection risk and violates the project's own honesty rule; removing it clears the value bar. The honest replacement must reuse only claims already sourced elsewhere in the app (no NEW marketing claim), or the fix defeats itself.
+
+### Rotation guide for next run
+- **DEEP AUDIT next due ~Run 92** (ran Run 88). Next couple of runs can lean on scouts + scorecard.
+- **Top named build candidates (file-disjoint, value-bar-clearing) for a run that can add a test/verify harness:**
+  - **G4 login lockout** — build `/api/auth/login` (mirror `app/api/auth/signup/route.ts`: per-IP rate limit + Turnstile + enumeration-safe neutral error + SSR cookie via `createServerClient`), switch `app/(auth)/login/page.tsx` to POST it, and add a route unit test. Ticks the "login lockout/backoff" half of G4. Needs care: it touches the #1 auth path — verify the session cookie establishes exactly as the client flow does.
+  - **C5 search-route parallelization** — `app/api/search/route.ts`: wrap the otherRooms→otherDiagnoses→otherRoomsContext and recRuns→recommendationMockups blocks in helper closures and `Promise.all` them with `userFeedbackContext`; ADD a route-orchestration test first (there is none today).
+  - **C2 follow-up (tiny):** singular `"inch"` (no `es`) is still absent from `UNIT_ALT` in spatial-math, so `"6inch x 4inch"` mis-parses as a square — PRE-EXISTING, a disjoint one-line + test.
+- **Ship blockers unchanged & not headlessly buildable:** functional_reality (in-memory→Supabase cutover, PENDING_OPS `cutover-to-persistent-data`), design_taste (authed-axe + F7 committed screenshots — sandbox-unrunnable), business_case_strength (without-annual ARR ~$99.9K < $100K floor — human-gated migration 021 + `ANNUAL_BILLING_ENABLED=true`, OR a real conversion-lift feature).
+- **Larger open epics (unchanged):** §34 pre-launch demo (#475); §11 media-gen adapter (#470); perf #385 pgvector RPC (post-cutover only). Migrations 021/022-023/024/025/026/027/028/029 + DATA_BACKEND cutover remain human-gated in PENDING_OPS.

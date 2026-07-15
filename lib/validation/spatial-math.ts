@@ -26,8 +26,22 @@ interface Dimensions {
   height?: number; // in inches
 }
 
-const DIMENSION_REGEX =
-  /(\d+(?:\.\d+)?)\s*(?:[-–x×]\s*(\d+(?:\.\d+)?))?\s*(?:[-–x×]\s*(\d+(?:\.\d+)?))?\s*(inches?|in|"|ft|feet|foot|cm|mm|'|'')?/gi;
+// Positional dimension form (`72x36x30 inches`, `6' x 4'`, `72" x 36"`).
+// Each number carries its OWN optional inline unit, because retail specs put the
+// unit BETWEEN the number and the separator (e.g. `6' x 4'` — the foot mark sits
+// after `6`, before the `x`). The previous single-trailing-unit regex required
+// the `x`/`×`/`-` separator to immediately follow the digits, so `6' x 4'` fell
+// into the single-dimension branch and was mislabeled as a 6ft SQUARE (72×72)
+// instead of 72×48 — a real bug for rugs, which are almost always specced with
+// inline foot marks (`6' x 9'`). Units are ordered longest-first (`inches?`
+// before `in`, `''` before `'`) so a longer unit is never partially matched.
+const UNIT_ALT = `inches?|in|feet|foot|ft|cm|mm|''|"|'`;
+const DIMENSION_REGEX = new RegExp(
+  `(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})?` +
+    `\\s*(?:[-–x×]\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})?)?` +
+    `\\s*(?:[-–x×]\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})?)?`,
+  "i",
+);
 
 function parseInches(value: number, unit?: string): number {
   if (!unit) return value; // Assume inches
@@ -80,32 +94,36 @@ export function parseDimensions(specs: string): Dimensions | null {
   const labeled = parseLabeledDimensions(specs);
   if (labeled) return labeled;
 
-  DIMENSION_REGEX.lastIndex = 0;
   const match = DIMENSION_REGEX.exec(specs);
   if (!match) return null;
 
   const v1 = parseFloat(match[1]);
-  const v2 = match[2] ? parseFloat(match[2]) : undefined;
-  const v3 = match[3] ? parseFloat(match[3]) : undefined;
-  const unit = match[4];
+  const v2 = match[3] ? parseFloat(match[3]) : undefined;
+  const v3 = match[5] ? parseFloat(match[5]) : undefined;
+  // Per-token units; when a token omits its unit, fall back to the single unit
+  // stated once for the whole spec (e.g. `72 x 36 inches` labels only the last).
+  const u1 = match[2];
+  const u2 = match[4];
+  const u3 = match[6];
+  const sharedUnit = u1 || u2 || u3;
 
   if (v3 !== undefined && v2 !== undefined) {
     // W x D x H
     return {
-      width: parseInches(v1, unit),
-      depth: parseInches(v2, unit),
-      height: parseInches(v3, unit),
+      width: parseInches(v1, u1 || sharedUnit),
+      depth: parseInches(v2, u2 || sharedUnit),
+      height: parseInches(v3, u3 || sharedUnit),
     };
   }
   if (v2 !== undefined) {
     // W x D
     return {
-      width: parseInches(v1, unit),
-      depth: parseInches(v2, unit),
+      width: parseInches(v1, u1 || sharedUnit),
+      depth: parseInches(v2, u2 || sharedUnit),
     };
   }
   // Single dimension — assume square-ish for area calculation
-  const side = parseInches(v1, unit);
+  const side = parseInches(v1, u1 || sharedUnit);
   return { width: side, depth: side };
 }
 

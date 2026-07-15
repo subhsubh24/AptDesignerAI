@@ -30,7 +30,12 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleSignIn() {
-    if (!email.trim() || !password) return;
+    if (!email.trim() || !password) {
+      // Give explicit feedback instead of a silent no-op — the button is only
+      // disabled while loading, so an empty-field tap would otherwise do nothing.
+      setError('Enter your email and password to sign in.');
+      return;
+    }
     setLoading(true);
     setError(null);
 

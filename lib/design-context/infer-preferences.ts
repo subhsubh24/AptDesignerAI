@@ -97,7 +97,16 @@ function topFrequent(entries: string[], n: number): string[] {
     else freq.set(key, { count: 1, original: s });
   }
   return Array.from(freq.values())
-    .sort((a, b) => b.count - a.count)
+    // Count DESC, then a stable alphabetical tiebreaker on the lowercased surface
+    // form so equally-frequent tokens (very common here — most tokens appear once)
+    // resolve to the SAME top-N slice regardless of input ordering. This feeds a
+    // seeded LLM preference prompt, so the ordering must be reproducible
+    // (determinism contract); a count-only sort leaves ties to input/engine order.
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        a.original.toLowerCase().localeCompare(b.original.toLowerCase()),
+    )
     .slice(0, n)
     .map((v) => v.original);
 }

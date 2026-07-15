@@ -489,6 +489,17 @@ so no Apple creds are committed): `EXPO_APPLE_ID`, `EXPO_ASC_APP_ID` (App Store 
 key via EAS (`serviceAccountKeyPath` or the EAS-stored credential). The actual `eas build` +
 `eas submit` + TestFlight remain human steps (require the Apple/Google accounts + signing).
 
+**App Store Connect privacy "nutrition label" (owner, at submission — added Run 89):** the iOS
+privacy MANIFEST (`ios.privacyManifests` in `mobile/app.json`) is now in code — it declares
+required-reason API usage (UserDefaults CA92.1, FileTimestamp C617.1, SystemBootTime 35F9.1,
+DiskSpace E174.1) and `NSPrivacyTracking:false`, closing the ITMS-91053 rejection vector. This is
+NECESSARY but NOT sufficient: App Store Connect ALSO requires the app's own data-collection
+disclosure (the privacy "nutrition label" questionnaire) to be completed in the ASC UI at
+submission — the app collects room PHOTOS and account data (email) via Supabase, used for app
+functionality, not linked to identity for tracking, not used for tracking. `NSPrivacyCollectedDataTypes`
+is intentionally left `[]` in the manifest (that field is for third-party-SDK self-declaration; the
+app's first-party collection is declared in the ASC questionnaire). Fill this in when submitting.
+
 ### Future: server-side push token storage (added 2026-06-24, PR #56 — implement when re-engagement sends are needed)
 
 PR #56 stores the Expo push token in AsyncStorage only. For server-initiated re-engagement sends (e.g., "your design is ready" notifications), the token needs to be synced to Supabase.

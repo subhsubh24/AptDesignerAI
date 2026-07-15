@@ -425,39 +425,45 @@ export default function ResultsScreen() {
                 </ThemedText>
               </ThemedView>
 
-              {/* Palette */}
-              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
-                <ThemedText type="subtitle" style={styles.cardTitle}>
-                  Colour Palette
-                </ThemedText>
-                <ThemedView style={styles.chipRow}>
-                  {(analysis.recommended_palette ?? []).map((color) => (
-                    <ThemedView
-                      key={color}
-                      style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
-                    >
-                      <ThemedText type="small">{color}</ThemedText>
-                    </ThemedView>
-                  ))}
+              {/* Palette — only when there are colours to show; an empty card
+                  shell (title + blank chip row) reads as broken/unfinished. */}
+              {(analysis.recommended_palette ?? []).length > 0 && (
+                <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                  <ThemedText type="subtitle" style={styles.cardTitle}>
+                    Colour Palette
+                  </ThemedText>
+                  <ThemedView style={styles.chipRow}>
+                    {(analysis.recommended_palette ?? []).map((color) => (
+                      <ThemedView
+                        key={color}
+                        style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+                      >
+                        <ThemedText type="small">{color}</ThemedText>
+                      </ThemedView>
+                    ))}
+                  </ThemedView>
                 </ThemedView>
-              </ThemedView>
+              )}
 
-              {/* Materials + Textures */}
-              <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
-                <ThemedText type="subtitle" style={styles.cardTitle}>
-                  Materials &amp; Textures
-                </ThemedText>
-                <ThemedView style={styles.chipRow}>
-                  {[...(analysis.recommended_materials ?? []), ...(analysis.recommended_textures ?? [])].map((item) => (
-                    <ThemedView
-                      key={item}
-                      style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
-                    >
-                      <ThemedText type="small">{item}</ThemedText>
-                    </ThemedView>
-                  ))}
+              {/* Materials + Textures — same guard: skip the card entirely when
+                  both lists are empty rather than render a titled empty row. */}
+              {[...(analysis.recommended_materials ?? []), ...(analysis.recommended_textures ?? [])].length > 0 && (
+                <ThemedView style={[styles.analysisCard, { borderColor: colors.border }]}>
+                  <ThemedText type="subtitle" style={styles.cardTitle}>
+                    Materials &amp; Textures
+                  </ThemedText>
+                  <ThemedView style={styles.chipRow}>
+                    {[...(analysis.recommended_materials ?? []), ...(analysis.recommended_textures ?? [])].map((item) => (
+                      <ThemedView
+                        key={item}
+                        style={[styles.chip, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+                      >
+                        <ThemedText type="small">{item}</ThemedText>
+                      </ThemedView>
+                    ))}
+                  </ThemedView>
                 </ThemedView>
-              </ThemedView>
+              )}
 
               {/* What Works */}
               {(analysis.what_works ?? []).length > 0 && (
