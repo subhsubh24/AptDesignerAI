@@ -133,6 +133,35 @@ describe("computeCodeCompliance", () => {
     expect(result.checks.find((c) => c.code.includes("R310.2.1"))).toBeUndefined();
   });
 
+  // Partial window data: the check runs (at least one dimension present), and the
+  // ABSENT dimensions get benefit-of-the-doubt via the `winX === null ||` guards.
+  // The all-present cases above never exercise those null guards. Together these
+  // two cases pin all three: dropping `winWidth === null ||` or `winOpenable ===
+  // null ||` fails the only-height case; dropping `winHeight === null ||` fails
+  // the only-width case. (They also pin the outer `||` guard — a mutant making it
+  // `&&` would skip the check entirely on single-dimension data, so `check` would
+  // be undefined rather than passing.)
+  it("passes a window with only height present (width + area absent are not held against it)", () => {
+    // Removing `winWidth === null ||` OR `winOpenable === null ||` makes this fail.
+    const result = computeCodeCompliance(
+      {},
+      { roomType: "bedroom", floorPlan: { window_height: 30 } },
+    );
+    const check = result.checks.find((c) => c.code.includes("R310.2.1"));
+    expect(check?.passed).toBe(true);
+    expect(result.violations.find((v) => v.code === "IRC R310.2.1")).toBeUndefined();
+  });
+
+  it("passes a window with only width present (height + area absent are not held against it)", () => {
+    // Removing `winHeight === null ||` OR `winOpenable === null ||` makes this fail.
+    const result = computeCodeCompliance(
+      {},
+      { roomType: "bedroom", floorPlan: { window_width: 24 } },
+    );
+    const check = result.checks.find((c) => c.code.includes("R310.2.1"));
+    expect(check?.passed).toBe(true);
+  });
+
   // ── Kitchen counter outlet spacing (NEC 210.52(C)): outlets every ≤48" ──
   it("flags a kitchen counter with too few outlets for its length", () => {
     // 100" counter → ceil(100/48) = 3 required; only 2 present → fail. The

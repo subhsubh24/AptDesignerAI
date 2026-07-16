@@ -226,6 +226,152 @@ export function buildActivationEmail3(siteUrl: string): LifecycleEmail {
 }
 
 // ---------------------------------------------------------------------------
+// Sequence 2 — Habit formation (ran first analysis, has NOT upgraded; days 1–7)
+// ---------------------------------------------------------------------------
+
+/**
+ * B1 — Day 1 after the user's first room analysis (still on the free tier).
+ * Stage: habit_1. Copy: docs/email-lifecycle.md Sequence 2.
+ */
+export function buildHabitEmail1(siteUrl: string): LifecycleEmail {
+  const appUrl = `${siteUrl}/dashboard`;
+  const accountUrl = `${siteUrl}/account`;
+  const subject = "What the analysis found in your room";
+
+  const body = `
+    ${h1("What the analysis found in your room")}
+    ${p("You ran your first analysis. Hope it said something useful about the room.")}
+    ${p("A few things to look for in your results:")}
+    ${p("<strong>The design direction.</strong> This is the AI's read of where the room wants to go — not what it currently is, but what it's trying to be. The palette and material recommendations follow from this.")}
+    ${p("<strong>The “What to Keep” list.</strong> These are the things already working in your room. Before you change anything, make sure you're building on these, not painting over them.")}
+    ${p("<strong>The “What to Remove” list.</strong> The items flagging here are the ones creating conflict — with the palette, the material story, or the proportion of the room. Not everything on the list needs to go; it depends on budget and attachment.")}
+    ${p("Next: if you have more rooms to work on, the Apartment plan covers all of them — $29 one-time. Or keep the single-room free tier as long as you need.")}
+    ${ctaButton("View your analysis →", appUrl)}`;
+
+  const text = [
+    "What the analysis found in your room",
+    "",
+    "You ran your first analysis. Hope it said something useful about the room.",
+    "",
+    "A few things to look for in your results:",
+    "",
+    "The design direction. This is the AI's read of where the room wants to go — not",
+    "what it currently is, but what it's trying to be. The palette and material",
+    "recommendations follow from this.",
+    "",
+    'The "What to Keep" list. These are the things already working in your room. Before',
+    "you change anything, make sure you're building on these, not painting over them.",
+    "",
+    'The "What to Remove" list. The items flagging here are the ones creating conflict —',
+    "with the palette, the material story, or the proportion of the room. Not everything",
+    "on the list needs to go; it depends on budget and attachment.",
+    "",
+    "Next: if you have more rooms to work on, the Apartment plan covers all of them —",
+    "$29 one-time. Or keep the single-room free tier as long as you need.",
+    "",
+    appUrl,
+    "",
+    "— AptDesigner",
+    unsubLine(accountUrl),
+  ].join("\n");
+
+  return { subject, html: htmlWrap(body, accountUrl), text };
+}
+
+/**
+ * B2 — Day 3 after the first analysis, still on the free tier.
+ * Stage: habit_2. Copy: docs/email-lifecycle.md Sequence 2.
+ */
+export function buildHabitEmail2(siteUrl: string): LifecycleEmail {
+  const appUrl = `${siteUrl}/dashboard`;
+  const accountUrl = `${siteUrl}/account`;
+  const subject = "Your room has a material story";
+
+  const body = `
+    ${h1("Your room has a material story")}
+    ${p("One thing that trips up most apartment redesigns: the material story.")}
+    ${p("In your analysis, you'll see a list of <strong>Recommended Materials</strong> — these aren't just textures, they're the material families that belong together. Warm woods (oak, walnut) pair with warm metals (brass, copper). Cool woods (ash, maple) pair with cool metals (chrome, steel).")}
+    ${p("Mixing warm and cool metals in one apartment is one of the most common mistakes the AI catches. Not fatal — but it's why spaces feel unresolved even when the individual pieces are beautiful.")}
+    ${p("If your analysis flagged material conflicts, that's the place to start.")}
+    ${p("If you want to run the same analysis on your other rooms — to see whether the material story stays consistent across the apartment — the Apartment plan is $29 one-time.")}
+    ${ctaButton("See what's consistent across your rooms →", appUrl)}`;
+
+  const text = [
+    "Your room has a material story",
+    "",
+    "One thing that trips up most apartment redesigns: the material story.",
+    "",
+    "In your analysis, you'll see a list of Recommended Materials — these aren't just",
+    "textures, they're the material families that belong together. Warm woods (oak,",
+    "walnut) pair with warm metals (brass, copper). Cool woods (ash, maple) pair with",
+    "cool metals (chrome, steel).",
+    "",
+    "Mixing warm and cool metals in one apartment is one of the most common mistakes the",
+    "AI catches. Not fatal — but it's why spaces feel unresolved even when the individual",
+    "pieces are beautiful.",
+    "",
+    "If your analysis flagged material conflicts, that's the place to start.",
+    "",
+    "If you want to run the same analysis on your other rooms — to see whether the",
+    "material story stays consistent across the apartment — the Apartment plan is $29",
+    "one-time.",
+    "",
+    appUrl,
+    "",
+    "— AptDesigner",
+    unsubLine(accountUrl),
+  ].join("\n");
+
+  return { subject, html: htmlWrap(body, accountUrl), text };
+}
+
+/**
+ * B3 — Day 7 after the first analysis, still on the free tier.
+ * Stage: habit_3. Copy: docs/email-lifecycle.md Sequence 2.
+ */
+export function buildHabitEmail3(siteUrl: string): LifecycleEmail {
+  const appUrl = `${siteUrl}/pricing`;
+  const accountUrl = `${siteUrl}/account`;
+  const subject = "The cross-room problem most apartments have";
+
+  const body = `
+    ${h1("The cross-room problem most apartments have")}
+    ${p("The most common issue AptDesigner finds when it runs across an entire apartment: rooms that don't share a style thread.")}
+    ${p("One wood species in the living room, a different one in the bedroom. Warm metals in the kitchen, cool metals everywhere else. A minimalist bedroom adjacent to a maximalist living room.")}
+    ${p("Individual rooms can each “work” and still make the apartment feel incoherent — because coherence only exists across rooms, not within a single one.")}
+    ${p("The Apartment plan ($29, one-time) analyses every room in your apartment as part of one space. The AI tracks your wood species, metal finish, and soft material choices and flags conflicts before you've bought anything.")}
+    ${p("If you're designing more than one room, that's where the real value is.")}
+    ${ctaButton("Unlock the Apartment plan →", appUrl)}`;
+
+  const text = [
+    "The cross-room problem most apartments have",
+    "",
+    "The most common issue AptDesigner finds when it runs across an entire apartment:",
+    "rooms that don't share a style thread.",
+    "",
+    "One wood species in the living room, a different one in the bedroom. Warm metals in",
+    "the kitchen, cool metals everywhere else. A minimalist bedroom adjacent to a",
+    "maximalist living room.",
+    "",
+    'Individual rooms can each "work" and still make the apartment feel incoherent —',
+    "because coherence only exists across rooms, not within a single one.",
+    "",
+    "The Apartment plan ($29, one-time) analyses every room in your apartment as part of",
+    "one space. The AI tracks your wood species, metal finish, and soft material choices",
+    "and flags conflicts before you've bought anything.",
+    "",
+    "If you're designing more than one room, that's where the real value is.",
+    "",
+    appUrl,
+    "",
+    "— AptDesigner",
+    unsubLine(accountUrl),
+  ].join("\n");
+
+  return { subject, html: htmlWrap(body, accountUrl), text };
+}
+
+// ---------------------------------------------------------------------------
 // Sequence 5 — Win-back (churned Pro/Pro Annual subscribers)
 // ---------------------------------------------------------------------------
 

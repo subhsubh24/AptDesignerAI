@@ -299,7 +299,7 @@ export default function ProductsPage() {
       {products.length > 0 && (
         <div className="flex flex-wrap gap-3 items-center">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] h-9 text-xs">
+            <SelectTrigger className="w-[140px] h-9 text-xs" aria-label="Filter by status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -313,7 +313,7 @@ export default function ProductsPage() {
 
           {categories.length > 1 && (
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[160px] h-9 text-xs">
+              <SelectTrigger className="w-[160px] h-9 text-xs" aria-label="Filter by category">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
@@ -328,7 +328,7 @@ export default function ProductsPage() {
           )}
 
           <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[140px] h-9 text-xs">
+            <SelectTrigger className="w-[140px] h-9 text-xs" aria-label="Sort products">
               <ArrowUpDown className="h-3 w-3 mr-1" />
               <SelectValue />
             </SelectTrigger>

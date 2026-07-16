@@ -31,10 +31,12 @@ interface SourcingModeSelectorProps {
 
 export function SourcingModeSelector({ value, onChange }: SourcingModeSelectorProps) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div role="group" aria-label="Product sourcing mode" className="grid grid-cols-3 gap-3">
       {MODES.map((mode) => (
         <button
           key={mode.value}
+          type="button"
+          aria-pressed={value === mode.value}
           onClick={() => onChange(mode.value)}
           className={cn(
             "flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors",

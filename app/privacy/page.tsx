@@ -154,7 +154,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold mb-3">Your rights</h2>
             <ul className="space-y-2 text-muted-foreground list-disc pl-5">
               <li>Access and export your data at any time.</li>
-              <li>Delete your account — we remove all your content within 30 days.</li>
+              <li>Delete your account — this immediately and permanently removes all your content.</li>
               <li>Opt out of product emails (we only send transactional + critical messages by default).</li>
             </ul>
           </section>

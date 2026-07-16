@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Purchases from 'react-native-purchases';
 import type { CustomerInfo } from 'react-native-purchases';
 
@@ -34,11 +34,32 @@ export function useEntitlements(userId: string | undefined): EntitlementsState {
   const [isPro, setIsPro] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
 
+  // A refresh carries a bounded retry (up to ~1.5s of backoff), so it can outlive
+  // its own relevance: the component may unmount, or `userId` may change and a
+  // newer refresh supersede it. These refs let every state write below bail out
+  // in that case, so a slow stale refresh can neither update an unmounted
+  // component nor clobber a fresh user's entitlement state (a resolved-out-of-
+  // order getCustomerInfo() for the previous user).
+  const mountedRef = useRef(true);
+  const activeUserRef = useRef(userId);
+  useEffect(() => {
+    activeUserRef.current = userId;
+  }, [userId]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const refresh = useCallback(async (): Promise<boolean> => {
     if (!RC_KEY || !userId) return false;
     for (let attempt = 1; attempt <= REFRESH_ATTEMPTS; attempt++) {
       try {
         const info = await Purchases.getCustomerInfo();
+        // Drop the result if this refresh was superseded while it was in flight
+        // (component unmounted, or the active user changed under it).
+        if (!mountedRef.current || activeUserRef.current !== userId) return false;
         setCustomerInfo(info);
         setIsPro(info.entitlements.active[ENTITLEMENT_ID]?.isActive === true);
         return true;
@@ -63,7 +84,11 @@ export function useEntitlements(userId: string | undefined): EntitlementsState {
     }
     initRC();
     setIsLoading(true);
-    void refresh().finally(() => setIsLoading(false));
+    void refresh().finally(() => {
+      // Same guard as refresh's own writes: don't flip loading on an unmounted
+      // component or after userId moved on to a newer refresh.
+      if (mountedRef.current && activeUserRef.current === userId) setIsLoading(false);
+    });
   }, [userId, refresh]);
 
   return { isLoading, isPro, customerInfo, refresh };
