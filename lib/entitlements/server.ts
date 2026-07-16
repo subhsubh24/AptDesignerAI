@@ -83,7 +83,16 @@ export async function hasProEntitlement(rcAppUserId: string): Promise<boolean> {
     return true;
   }
 
-  const entitlement = data.subscriber.entitlements[ENTITLEMENT_ID];
+  // A 200 whose body parsed but lacks the expected shape (missing `subscriber`
+  // or `entitlements`) is an RC glitch, not a definitive "no subscription" —
+  // treat it like the parse-error and 5xx paths above and fail OPEN so a paying
+  // subscriber is never blocked by a malformed response. Reading
+  // `data.subscriber.entitlements` unguarded would instead throw an uncaught
+  // TypeError on the entitlement critical path (e.g. on `{}` or `{subscriber:null}`).
+  const entitlements = data.subscriber?.entitlements;
+  if (!entitlements || typeof entitlements !== "object") return true;
+
+  const entitlement = entitlements[ENTITLEMENT_ID];
   if (!entitlement) return false;
 
   // expires_date is null for lifetime purchases; non-null for subscriptions.

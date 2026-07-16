@@ -152,6 +152,43 @@ describe("hasProEntitlement — no entitlement", () => {
   });
 });
 
+// ── Malformed response shape (fail-open, never throw) ─────────────────────────
+// A 200 that parses but lacks the expected `subscriber`/`entitlements` shape is an
+// RC glitch. It must NOT throw an uncaught TypeError on the entitlement critical
+// path (the pre-fix `data.subscriber.entitlements[...]` did) — it should fail OPEN,
+// consistent with the parse-error and 5xx paths, so a paying user is never blocked.
+
+describe("hasProEntitlement — malformed response shape", () => {
+  beforeEach(() => {
+    vi.stubEnv("REVENUECAT_SECRET_KEY", "rc_test_key");
+  });
+
+  async function withBody(body: unknown): Promise<boolean> {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue(body) }),
+    );
+    const { hasProEntitlement } = await importModule();
+    return hasProEntitlement("user-1");
+  }
+
+  it("fails open (returns true) when subscriber is missing entirely ({})", async () => {
+    await expect(withBody({})).resolves.toBe(true);
+  });
+
+  it("fails open (returns true) when subscriber is null", async () => {
+    await expect(withBody({ subscriber: null })).resolves.toBe(true);
+  });
+
+  it("fails open (returns true) when entitlements is missing", async () => {
+    await expect(withBody({ subscriber: {} })).resolves.toBe(true);
+  });
+
+  it("fails open (returns true) when entitlements is null", async () => {
+    await expect(withBody({ subscriber: { entitlements: null } })).resolves.toBe(true);
+  });
+});
+
 // ── Active entitlement ────────────────────────────────────────────────────────
 
 describe("hasProEntitlement — active entitlement", () => {
