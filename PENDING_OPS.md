@@ -151,12 +151,12 @@ OWNER_ACTIONS:
       how: "Run `supabase db push` (or paste supabase/migrations/029_grant_stripe_customers_access.sql into the Supabase SQL Editor). Verify: SELECT grantee, privilege_type FROM information_schema.role_table_grants WHERE table_name='stripe_customers' — expect authenticated=SELECT, service_role=SELECT/INSERT/UPDATE/DELETE, no anon."
       blocks: none
     - id: set-cron-secret
-      title: "Set CRON_SECRET to activate the activation email cron job"
+      title: "Set CRON_SECRET to activate the lifecycle email cron jobs"
       priority: normal
       status: open
-      why: "The daily cron at /api/cron/activation-emails (vercel.json, 10:00 UTC) sends A1/A2/A3 activation emails to new users who have not started an analysis. It returns 503 until CRON_SECRET is set. Vercel automatically includes Authorization: Bearer {CRON_SECRET} on cron invocations."
+      why: "Three daily crons share CRON_SECRET (vercel.json): /api/cron/activation-emails (10:00 UTC, A1/A2/A3 to signed-up users who have not started an analysis), /api/cron/winback-emails (11:00 UTC, E2/E3 to cancelled subscribers), and /api/cron/habit-emails (12:00 UTC, B1/B2/B3 to users who ran their first analysis but have not upgraded — Run 92). Each returns 503 until CRON_SECRET is set. Vercel automatically includes Authorization: Bearer {CRON_SECRET} on cron invocations. (Even once set, all three stay in dry-run until RESEND_API_KEY + EMAIL_PHYSICAL_ADDRESS are also set — see connect-email-resend / set-email-physical-address.)"
       how: "Generate: `openssl rand -hex 32`. Set CRON_SECRET in Vercel environment variables (Production + Preview). No code change needed."
-      blocks: activation-emails
+      blocks: activation-emails, winback-emails, habit-emails
     - id: set-metrics-token
       title: "Set INTERNAL_METRICS_TOKEN to open the growth-metrics pull API (E7.4)"
       priority: high
