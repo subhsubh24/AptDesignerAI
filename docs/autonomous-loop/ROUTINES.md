@@ -65,6 +65,18 @@ credentials are provisioned in the cloud routine env** (owner-confirmed), so §4
 Layer-B (drive live prod via Playwright → screenshot → multimodal review) can now
 run — no browser MCP connector required.
 
+## Cadence + spend decisions (owner, 2026-07-16)
+- **Product build factories → target every 6h** (from 8h): 4 runs/day/product, ~50%
+  more shipping velocity. `PENDING APPLICATION` — the build-factory triggers aren't
+  returned by the `list` API (still `UNRECONCILED`), so this needs the owner to paste
+  their trigger IDs (then the loop/owner re-crons to `0 */6 * * *`-style) or flip the
+  cron in claude.ai. GTM factories stay **weekly**.
+- **Autonomous spend cap → $500/mo fleet-wide** (all 5 apps: paid APIs + tools + ads +
+  infra). This is the §50 "owner's cap" made concrete. POLICY the loop respects (route
+  any over-$500/mo commitment to the owner); the HARD backstop is the owner-set
+  **provider / billing spend caps** (Anthropic / Gemini / Vercel dashboards) summing to
+  ~$500 — an OWNER_ACTION, since only the owner can set them (credential boundary, §50).
+
 ## Reconcile checklist (run each cycle — §49)
 - [ ] Every routine above still exists in the runner with matching cron / env / mcps.
 - [ ] The **build factory's** real config (id/cron/env) is captured (remove `UNRECONCILED`).
