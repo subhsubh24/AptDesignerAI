@@ -26,19 +26,19 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-10
-  last_run: 76                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 76            # 8-lens sweep ran Run 76; next due ~Run 80
+  as_of: 2026-07-16
+  last_run: 93                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 91            # 8-lens sweep ran Run 91 (2026-07-16); next due ~Run 95
   this_run:
-    changes_shipped: 5           # #540-544 all opened + auto-merge enabled (integrated gate green, 2 Sonnet approvals each): #540 correctness (harmony chunk-merge) + #541 security/IDOR (bundles product↔room binding) + #542 a11y (warm-variant contrast) + #543 monetization (Stripe customer portal) + #544 side-effect-integrity (checkout-success entitlement gate)
-    changes_abandoned: 0         # 2 scout findings VERIFIED-DOWN as false positives before any code (proxy.ts=correct Next-16 convention; search INSERT…RETURNING preserves order); lower-value items (E7 email tail, app-tabs "Expo Starter", muted-on-amber a11y nits) correctly NOT selected, not abandoned mid-build
-    abandoned_reasons: []        # none started-then-dropped this run
-    verify_cycle_failures: 0     # LOOP-2 clean for all 5 (tsc/eslint/test/determinism); baseline 1908 → integrated 1920 (+12)
-    review_rejections: 0         # LOOP-3: 10/10 first-pass APPROVE, ZERO REQUEST_CHANGES (unusually clean; reviewers reverted #540/#541 to prove tests fail without the fix, hand-computed #542 ratios, adversarially checked #543 for IDOR/secret-leak)
+    changes_shipped: 3           # #647 (one PR, squash 59afc19, required checks green): (1) F4.1 saved-designs fail-loud on full-stage read errors + test; (2) F4 products-page surface add-product failures; (3) entitlements/server fail-open (never throw) on a malformed RC response + test. All 3 both-Sonnet-APPROVED first-pass.
+    changes_abandoned: 0         # ~6 scout findings VERIFIED-DOWN before any code (bundle-math + spatial-math "bugs" = intentional tolerance/defensive design; LABELED_DIMENSION_REGEX inches? = dead path; site-gate + cors "coverage gaps" = already-caught/no-op-cast; mobile use-free-quota unmount = React-18 no-op). E7 deferred (no clean disjoint headless-safe change). None started-then-dropped mid-build.
+    abandoned_reasons: []        # none started-then-dropped this run (all drops were pre-code verification, not abandoned builds)
+    verify_cycle_failures: 0     # LOOP-2 clean for all 3 (tsc/eslint/test/determinism); baseline 2119 → integrated 2126 (+7)
+    review_rejections: 0         # LOOP-3: 6/6 first-pass APPROVE, ZERO REQUEST_CHANGES (reviewers reverted change-A to reproduce the 500→200 mutation; change-C security reviewer confirmed rcAppUserId is server-derived — no client-triggerable entitlement bypass)
     circuit_breaker_trips: 0
-    ci_flake: "awaiting required CI (verify/build/mobile) on #540-544 at bookkeeping time; none observed."
+    ci_flake: "none observed; #647 registered no legacy commit-statuses (Actions check-runs only) but merged cleanly ~19min after push once the verify/build/mobile queue cleared."
   rolling_7d:
-    merged_prs: 50               # all routines' merged PRs over the last 7d, from `git log --since=7d | grep -cE '\(#N\)'`
+    merged_prs: 49               # all routines' merged PRs over the last 7d (git log --since=7d origin/default | grep -cE '\(#N\)'), incl. #647
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)
