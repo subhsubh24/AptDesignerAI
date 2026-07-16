@@ -173,6 +173,33 @@ describe("escalate", () => {
     expect(onTier).toHaveBeenCalledWith(1, "mid", true);
   });
 
+  it("notifies onTier with accepted=false when a tier throws", async () => {
+    // The catch branch fires `onTier(i, label, false)` so a caller's
+    // oscillation/velocity counter still advances on a thrown tier (not just a
+    // rejected one). Without it, a throwing tier would be invisible to the
+    // deterministic escalation triggers.
+    const onTier = vi.fn();
+    const result = await escalate(
+      makeConfig<string>({
+        tiers: [
+          {
+            label: "flaky",
+            generate: async () => {
+              throw new Error("boom");
+            },
+          },
+          { label: "stable", generate: async () => "recovered" },
+        ],
+        verify: () => ({ ok: true }),
+        onTier,
+      }),
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(onTier).toHaveBeenCalledWith(0, "flaky", false);
+    expect(onTier).toHaveBeenCalledWith(1, "stable", true);
+  });
+
   it("verify is never called with an LLM (contract test)", async () => {
     const verify = vi.fn(() => ({ ok: true }));
     await escalate(
