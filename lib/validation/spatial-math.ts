@@ -33,9 +33,9 @@ interface Dimensions {
 // the `x`/`×`/`-` separator to immediately follow the digits, so `6' x 4'` fell
 // into the single-dimension branch and was mislabeled as a 6ft SQUARE (72×72)
 // instead of 72×48 — a real bug for rugs, which are almost always specced with
-// inline foot marks (`6' x 9'`). Units are ordered longest-first (`inches?`
+// inline foot marks (`6' x 9'`). Units are ordered longest-first (`inch(?:es)?`
 // before `in`, `''` before `'`) so a longer unit is never partially matched.
-const UNIT_ALT = `inches?|in|feet|foot|ft|cm|mm|''|"|'`;
+const UNIT_ALT = `inch(?:es)?|in|feet|foot|ft|cm|mm|''|"|'`;
 const DIMENSION_REGEX = new RegExp(
   `(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})?` +
     `\\s*(?:[-–x×]\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})?)?` +

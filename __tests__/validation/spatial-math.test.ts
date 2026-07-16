@@ -46,6 +46,17 @@ describe("parseDimensions", () => {
     expect(parseDimensions('84" x 60" x 30"')).toEqual({ width: 84, depth: 60, height: 30 });
   });
 
+  it("parses a spelled-out inch unit attached to each number", () => {
+    // Regression: `UNIT_ALT` used `inches?` which matches "inche"/"inches" but
+    // NOT bare "inch", so `6inch x 4inch` matched only "6in", failed to find the
+    // separator, and fell into the single-dimension branch as a 6x6 SQUARE. With
+    // `inch(?:es)?` the "inch" token is consumed and both axes parse.
+    expect(parseDimensions("6inch x 4inch")).toEqual({ width: 6, depth: 4 });
+    expect(parseDimensions("6inches x 4inches")).toEqual({ width: 6, depth: 4 });
+    // A single spelled-out unit on the trailing axis still applies to both.
+    expect(parseDimensions("72 x 36 inch")).toEqual({ width: 72, depth: 36 });
+  });
+
   it("applies a single trailing unit to every unlabeled axis", () => {
     // Only the last token carries the unit; it must apply to all three axes.
     expect(parseDimensions("6 x 4 x 3 ft")).toEqual({ width: 72, depth: 48, height: 36 });

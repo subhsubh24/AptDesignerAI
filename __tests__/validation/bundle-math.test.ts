@@ -259,6 +259,28 @@ describe("computeBundleMathScores — scale_balance", () => {
     // 213cm ≈ 83.9" sofa, 140cm ≈ 55.1" table → 55.1/83.9 ≈ 0.66 → in range
     expect(result.scale_balance).toBeGreaterThanOrEqual(0.8);
   });
+
+  it("auto-passes a height-based relational rule when a height is missing", () => {
+    // The side_table↔sofa rule reads height (`st.h`, `sofa.h`) and returns true
+    // when EITHER is undefined, so a bundle that simply omits height data is not
+    // penalized on a check it can't evaluate. A pair with BOTH heights present but
+    // mismatched (side table 30" vs sofa arm 30"×0.85 ≈ 25.5" → |30−25.5| = 4.5 > 4)
+    // fails the check. Dropping the undefined guard would make the missing-height
+    // case fail too (NaN comparison → false), collapsing the two scores.
+    const missingHeight = [
+      makeProduct({ title: "Sofa", category: "sofa", dimensions: { width: 84, depth: 36, unit: "in" } }),
+      makeProduct({ title: "Side Table", category: "side_table", dimensions: { width: 20, depth: 20, unit: "in" } }),
+    ];
+    const mismatchedHeight = [
+      makeProduct({ title: "Sofa", category: "sofa", dimensions: { width: 84, depth: 36, height: 30, unit: "in" } }),
+      makeProduct({ title: "Side Table", category: "side_table", dimensions: { width: 20, depth: 20, height: 30, unit: "in" } }),
+    ];
+    const missingResult = computeBundleMathScores(missingHeight, CTX_LIVING_ROOM);
+    const mismatchResult = computeBundleMathScores(mismatchedHeight, CTX_LIVING_ROOM);
+    // Missing height sidesteps the check (auto-pass) and must score strictly higher
+    // than the concrete height mismatch that fails it.
+    expect(missingResult.scale_balance).toBeGreaterThan(mismatchResult.scale_balance);
+  });
 });
 
 // ---------------------------------------------------------------------------
