@@ -137,10 +137,15 @@ export default function ProductsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId, url: ingestUrl.trim() }),
       });
-      if (res.ok) {
-        setIngestUrl("");
-        loadProducts();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error("Couldn't add product", body?.error || `Could not add this product (HTTP ${res.status}).`);
+        return;
       }
+      setIngestUrl("");
+      loadProducts();
+    } catch {
+      toast.error("Couldn't add product", "Network error — could not reach the product service.");
     } finally {
       setIngesting(false);
     }

@@ -106,16 +106,27 @@ export async function POST(request: NextRequest) {
 
   // If stage is "full", include product search results
   if (stage === "full") {
-    const { data: products } = await supabase
+    const { data: products, error: productsError } = await supabase
       .from("candidate_products")
       .select("*, product_evaluations(*)")
       .eq("room_id", room_id)
       .eq("status", "selected");
 
-    const { data: bundles } = await supabase
+    const { data: bundles, error: bundlesError } = await supabase
       .from("product_bundles")
       .select("*, product_bundle_items(*), bundle_evaluations(*)")
       .eq("room_id", room_id);
+
+    // Fail loud instead of persisting a silently-empty "full" snapshot: if either
+    // read errors, `data` is null and `?? []` would save a design the user
+    // believes holds their shortlist but that reloads with zero products/bundles
+    // (silent data loss on a retention-critical save). Surface the failure so the
+    // client can retry rather than returning a hollow 200. See F4.1 SIDE-EFFECT
+    // INTEGRITY — a "saved" success must be downstream of the read actually
+    // succeeding.
+    if (productsError || bundlesError) {
+      return apiError("saved-designs", productsError ?? bundlesError);
+    }
 
     snapshot.products = {
       bundles: bundles ?? [],
