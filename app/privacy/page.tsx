@@ -151,6 +151,29 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-xl font-semibold mb-3">How long we keep it</h2>
+            <ul className="space-y-2 text-muted-foreground list-disc pl-5">
+              <li>
+                <strong className="text-foreground">Account data</strong> (email, profile) —
+                retained until you delete your account.
+              </li>
+              <li>
+                <strong className="text-foreground">Room photos</strong> — retained until you
+                delete your account, or until you remove them individually.
+              </li>
+              <li>
+                <strong className="text-foreground">Design history</strong> — retained until you
+                delete your account.
+              </li>
+              <li>
+                <strong className="text-foreground">Server logs</strong> — 30-day rolling
+                retention, with no user-identifying information beyond IP address; IP addresses
+                are not retained beyond 7 days.
+              </li>
+            </ul>
+          </section>
+
+          <section>
             <h2 className="text-xl font-semibold mb-3">Your rights</h2>
             <ul className="space-y-2 text-muted-foreground list-disc pl-5">
               <li>Access and export your data at any time.</li>

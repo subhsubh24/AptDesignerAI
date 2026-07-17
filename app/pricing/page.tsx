@@ -78,6 +78,7 @@ const TIERS: Tier[] = [
       "Early access to new features",
       "Dedicated support channel",
     ],
+    footnote: "Billed monthly. Renews automatically until you cancel.",
     annualHref: "/billing/upgrade?tier=pro_annual",
   },
 ];

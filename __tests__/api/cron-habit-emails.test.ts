@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: vi.fn() }));
 vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false, dryRun: true })),
+  isEmailDryRun: vi.fn(() => true),
 }));
 vi.mock("@/lib/email/preferences", () => ({ isMarketingOptedOut: vi.fn(async () => false) }));
 vi.mock("@/lib/entitlements/web", () => ({ hasProEntitlementWeb: vi.fn(async () => false) }));
@@ -30,18 +31,30 @@ const SECRET = "test-cron-secret";
 // the route's de-dup is exercised; no prior email-stage rows unless specified; a
 // real email on file.
 function fakeAdmin(
-  opts: { userIds?: string[]; duplicateRows?: boolean; alreadySentStages?: string[] } = {},
+  opts: {
+    userIds?: string[];
+    duplicateRows?: boolean;
+    alreadySentStages?: string[];
+    // Force the claim INSERT on user_email_stages to fail (e.g. duplicate key).
+    claimError?: string;
+    // Records every stage whose claim row was DELETEd (released on send failure).
+    releasedStages?: string[];
+  } = {},
 ) {
   const userIds = opts.userIds ?? ["user-1"];
   const alreadySent = new Set(opts.alreadySentStages ?? []);
+  const released = opts.releasedStages;
   return {
     from(table: string) {
       const builder: Record<string, unknown> = {};
-      const state: { table: string; stage?: string } = { table };
+      const state: { table: string; stage?: string; op?: string } = { table };
       Object.assign(builder, {
         select: () => builder,
         eq: (col: string, val: string) => {
-          if (col === "stage") state.stage = val;
+          if (col === "stage") {
+            state.stage = val;
+            if (state.op === "delete" && released) released.push(val);
+          }
           return builder;
         },
         gte: () => builder,
@@ -61,7 +74,13 @@ function fakeAdmin(
           data: state.stage && alreadySent.has(state.stage) ? { id: "x" } : null,
           error: null,
         }),
-        insert: async () => ({ error: null }),
+        // Claim-before-send INSERT: fail with claimError when configured.
+        insert: async () =>
+          opts.claimError ? { error: { message: opts.claimError } } : { error: null },
+        delete: () => {
+          state.op = "delete";
+          return builder;
+        },
       });
       return builder;
     },
@@ -162,5 +181,34 @@ describe("GET /api/cron/habit-emails", () => {
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("does NOT send when the stage claim loses to a concurrent run (duplicate key)", async () => {
+    // Claim-before-send: the INSERT into user_email_stages fails on the unique
+    // (user_id, stage) constraint because another run already claimed it → skip,
+    // never send. This is what prevents the double-send on an at-least-once retry.
+    mockGetAdmin.mockReturnValue(
+      fakeAdmin({ userIds: ["user-1"], claimError: "duplicate key value violates unique constraint" }),
+    );
+    const res = await GET(req(`Bearer ${SECRET}`));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(body.results.every((r: { sent: number }) => r.sent === 0)).toBe(true);
+  });
+
+  it("releases the claim (DELETE) when the send fails so a later run can retry", async () => {
+    // Send fails AFTER the claim was written → the marker must be removed,
+    // otherwise the stage would be stuck as "sent" forever and never retried.
+    mockSendEmail.mockResolvedValue({ error: "resend 500" });
+    const releasedStages: string[] = [];
+    mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"], releasedStages }));
+    const res = await GET(req(`Bearer ${SECRET}`));
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalled();
+    expect(releasedStages).toEqual(["habit_1", "habit_2", "habit_3"]);
+    const body = await res.json();
+    expect(body.results.every((r: { sent: number; errors: number }) => r.sent === 0 && r.errors > 0)).toBe(true);
   });
 });
