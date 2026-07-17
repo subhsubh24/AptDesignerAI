@@ -99,6 +99,34 @@ describe("extractBillingInfoFromEvent — checkout.session.completed", () => {
     };
     expect(extractBillingInfoFromEvent(makeEvent("checkout.session.completed", session))).toBeNull();
   });
+
+  it("returns null (safe no-op, no DB CHECK 500) and LOGS LOUD when tier is present but unrecognized", () => {
+    // A replayed/typo'd tier must NOT be cast straight through to the upsert — that
+    // would 500 on the stripe_customers CHECK constraint and stick the webhook in a
+    // Stripe retry loop. An invalid tier fails the guard → null → unhandled no-op.
+    // Because that no-op is silent (no entitlement, no retry) on a possibly-CHARGED
+    // customer, a present-but-invalid tier must be logged loud for discoverability.
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const session = {
+      metadata: { user_id: "user-1", tier: "enterprise" },
+      customer: "cus_abc",
+      subscription: "sub_1",
+    };
+    expect(extractBillingInfoFromEvent(makeEvent("checkout.session.completed", session))).toBeNull();
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(errSpy.mock.calls[0][0]).toMatch(/unrecognized tier "enterprise"/);
+    errSpy.mockRestore();
+  });
+
+  it("does NOT log for an absent tier (a routine unhandled no-op, not an error)", () => {
+    // Distinguish present-but-invalid (loud) from absent (quiet) — an absent tier is
+    // an ordinary event we don't grant on, not a charged-customer divergence.
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const session = { metadata: { user_id: "user-1" }, customer: "cus_abc", subscription: null };
+    expect(extractBillingInfoFromEvent(makeEvent("checkout.session.completed", session))).toBeNull();
+    expect(errSpy).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
 });
 
 describe("extractBillingInfoFromEvent — customer.subscription.updated", () => {
@@ -146,6 +174,25 @@ describe("extractBillingInfoFromEvent — customer.subscription.updated", () => 
     const sub = makeSub("active", { metadata: { user_id: "user-1" } });
     const result = extractBillingInfoFromEvent(makeEvent("customer.subscription.updated", sub));
     expect(result!.tier).toBe("pro");
+  });
+
+  it("defaults tier to pro (and warns) when metadata.tier is an unrecognized string", () => {
+    // Same DB-CHECK / stuck-webhook hazard as the checkout case, but here the
+    // subscription event has a sane fallback: an unknown tier degrades to "pro"
+    // (a valid paid tier) instead of a 500. It still WRITES a row, so it warns
+    // (not errors) for discoverability. Valid tiers still pass through unchanged.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sub = makeSub("active", { metadata: { user_id: "user-1", tier: "gold-tier-typo" } });
+    const result = extractBillingInfoFromEvent(makeEvent("customer.subscription.updated", sub));
+    expect(result!.tier).toBe("pro");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toMatch(/unrecognized tier "gold-tier-typo"/);
+    warnSpy.mockRestore();
+
+    const annual = makeSub("active", { metadata: { user_id: "user-1", tier: "pro_annual" } });
+    expect(
+      extractBillingInfoFromEvent(makeEvent("customer.subscription.updated", annual))!.tier,
+    ).toBe("pro_annual");
   });
 
   it("returns null when user_id is missing", () => {
