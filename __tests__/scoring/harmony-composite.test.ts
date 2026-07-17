@@ -126,6 +126,26 @@ describe("computePairwisePenalty", () => {
     expect(worstConflict!.compatibility).toBe(3);
     expect(factor).toBeLessThan(0.6);
   });
+
+  it("matches a conflict by the product TITLE when the category name does not appear in it", () => {
+    // Conflicts are keyed on the specific product title (e.g. "velvet chesterfield"),
+    // not just the generic category — so a sofa product must still pick up a conflict
+    // that names its title even though "sofa" appears nowhere in the pair. Guards the
+    // `titleLower` branch, which is never exercised without the 3rd argument.
+    const conflicts: PairwiseConflict[] = [
+      { item_a: "velvet chesterfield", item_b: "brass floor lamp", compatibility: 3, conflict_type: "style_clash", reason: "ornate vs industrial" },
+    ];
+
+    // Without the title, "sofa" matches nothing in the pair → no penalty.
+    expect(computePairwisePenalty("sofa", conflicts).factor).toBe(1.0);
+    expect(computePairwisePenalty("sofa", conflicts).worstConflict).toBeUndefined();
+
+    // With the title, the conflict is found and penalizes the score.
+    const { factor, worstConflict } = computePairwisePenalty("sofa", conflicts, "velvet chesterfield");
+    expect(worstConflict).toBeDefined();
+    expect(worstConflict!.conflict_type).toBe("style_clash");
+    expect(factor).toBeLessThan(1.0);
+  });
 });
 
 describe("computeFinalHarmonyScore", () => {
