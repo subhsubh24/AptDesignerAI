@@ -956,3 +956,110 @@ Research-backed candidate swap (if competition validates):
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; migration 021 +
   ANNUAL_BILLING_ENABLED (already tracked) was re-prioritized to the top of `owner_blockers` given
   it is now corroborated by two independent auditors as the single highest-leverage lever.
+
+---
+
+## Run 11 — 2026-07-17
+
+### What we found
+- All Run 1-10 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`as_of` still `2026-07-14`, unchanged since Run 10; `set-site-gate-password` /
+  `connect-email-resend` / `set-metrics-token` / `set-cron-secret` / `set-email-physical-address`
+  all still `status: open`). 11th consecutive run, ~20 days since Run 1 first surfaced the core 4.
+  `git log` shows 10 further Product-Factory commits landed between Run 10 and this run (through
+  PR #649, Runs 91-94): a DEEP AUDIT pass, reliability/read-integrity fixes (F4.1 saved-designs +
+  products/bundles), Stripe-webhook tier validation (Track C/G), a fabricated-testimonial honesty
+  fix on the login page (PR #632 — verified via `git show` this never touched any GTM-owned doc:
+  store-listing/press-kit/social-drafts/content-calendar/email docs/OUTREACH.md all clean), and
+  several `FACTORY_STANDARD.md` sections (§44 bug-hunter mode, §50/§51 autonomy + build-order) —
+  none of it a growth-channel connection.
+- Re-probed `https://aptdesignerai.com/` and the metrics API an EIGHTH time via curl through the
+  agent-proxy: still `connect_rejected` / gateway 502 to CONNECT, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (two entries, `2026-07-17T05:07:16Z`) — identical
+  signature to Runs 6-10. No new information; conclusion unchanged across all 8 probes.
+- `docs/growth/GTM_SCORECARD.md` unchanged since Run 9/10 (`auditor_run: 2`, `as_of: 2026-07-13`,
+  `business_case_honesty` held at `B`). Confirmed this is expected, not a stall — the GTM Auditor
+  runs weekly (Mondays 03:30 UTC per `docs/autonomous-loop/ROUTINES.md`); this run (2026-07-17,
+  a Friday) is still before the next scheduled pass (~2026-07-20), which should grade against Run
+  9's 2026-07-13 disclosure fix and Run 10's `analysis/` verification scripts.
+- `docs/quality/QUALITY_SCORECARD.md` (independent Product Quality Auditor, consumed as DATA only)
+  unchanged since Run 10 (`as_of: 2026-07-13`, `overall: C`, `business_case_strength: B`,
+  `security_rls: A`) — re-read directly, no new grading cycle yet. Reinforces, does not change,
+  this run's posture.
+- **Demand-signal research is NOT purely diminishing-returns, contrary to the Run 8-10 framing.**
+  Re-probed the two known structural gaps (Reddit tool-block, Trustpilot site-block) per S10's
+  every-run requirement — both unchanged, 5th consecutive re-probe with the same result. But this
+  run additionally tried ONE fresh WebSearch query with a genuinely new angle (not a re-probe of a
+  known-blocked domain) and found a real, dated, independent, verbatim-verifiable source: MONA's
+  blog (`monaverse.com/blog/ai-interior-design-tools`, Justin Melillo, published 2026-06-10).
+  Fetched directly via WebFetch — confirmed real quotes on "styling drift" (an AI room tool's
+  furniture mutates between renders of the same design because most tools regenerate the image
+  from scratch each time, with no persistent model of the space) and floorplan-blind renders
+  (placing "a window where your client has a party wall"). This corroborates and sharpens theme 2
+  ("AI room-render tools generate furniture that isn't real or buyable") with a THIRD independent
+  named publisher and a genuinely new angle (persistence/spatial-grounding, not just buyability).
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-17; refreshed `internal_metrics_api`
+  (8th probe) and `web_research` (5th re-probe of the two structural gaps, unchanged, plus the new
+  MONA citation noted) validation reasons; added the MONA citation to `demand_signal` theme 2's
+  `sources`/`solved_by_product`/`recency` fields, bumped `demand_signal.as_of` with a Run 11
+  method-note explaining the new-angle search and why `confidence` stays at `emerging` (the
+  strengthening is concentrated in one of four themes; S10's "strong" bar is source count +
+  independence PER THEME); updated `positioning_implication` to name the newly-evidenced
+  persistence/spatial-grounding differentiation angle alongside "real/buyable" and
+  "multi-retailer" (still research-only, no copy change, still below the S3 steer bar); rewrote
+  `learnings`/`next_actions`/`owner_blockers` for the 11th consecutive circuit-breaker run,
+  including the GTM Auditor cadence note and a new `next_action` suggesting future demand-signal
+  effort target themes 1/3/4 (thinner on independent sources than theme 2) rather than only
+  re-probing the two known-blocked domains. Ran `npm install` (materializes `js-yaml` into a fresh
+  `node_modules`, no `package.json` change) then `node scripts/validate-gtm.mjs` (OK) and the full
+  `bash scripts/preflight.sh` — GATE 5 (GROWTH_STATUS/OWNER_ACTIONS/BUSINESS_CASE/QUALITY_SCORECARD
+  YAML) green; the only 2 failures are the same pre-existing Product-Factory-owned gaps (functional
+  journeys, DoD checkboxes) seen every prior run.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (8th probe, same
+  connect_rejected/502 signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD
+  still C) — both S6 lanes stay hard-off. Re-confirmed no `docs/growth/MARKETING_HOLD` or
+  `docs/growth/MARKETING_APPROVED` exists. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: the new MONA citation is
+  qualitative demand-signal research held at `confidence: emerging` — nowhere near the S3 bar
+  (real quantified data, sufficient N, causal revenue link) for a steer or a business-case number
+  change. Recorded as RECOMMEND-tier research, exactly per the standard's instruction.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer for the `GROWTH_STATUS.md` edit: this was a
+  routine S4/S5 dashboard-and-research update (a new demand-signal citation with its own verbatim
+  verification, re-probes, bookkeeping) — no landing/email/ASO copy, campaign, pricing/positioning
+  claim, outreach draft, or roadmap/vision/business-case steer shipped, matching Runs 5-10's
+  precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner-actionable item surfaced this run beyond what's
+  already listed there; all items already tracked with correct `status`.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4
+  fail-closed reasoning as Runs 5-10.
+
+### Lessons learned
+- **"Diminishing returns on re-probing the same two blocked domains" is not the same claim as
+  "diminishing returns on demand-signal research generally."** Runs 8-10 correctly declined to
+  re-describe the same Reddit/Trustpilot blocks as if they were new work, but that led to skipping
+  fresh search angles entirely for three runs. This run's MONA find shows a different query angle
+  can still surface genuine, citable, verbatim-verifiable evidence even when the two known-hardest
+  sources stay blocked — worth trying ONE fresh angle most runs, distinct from re-probing the known
+  gaps, rather than treating "the usual two sources are still blocked" as license to stop searching.
+- **A convergent finding from a THIRD independent source is stronger evidence than a second
+  citation from an already-cited publisher would be.** The MONA citation is valuable specifically
+  because it names a different, previously-uncited publisher making a related-but-distinct claim
+  (spatial/persistence failure, not just "furniture isn't buyable") — that is closer to what S10's
+  "strong" bar actually asks for (source count + independence per theme) than re-verifying an
+  existing citation would have been.
+- **Before declaring a scorecard "hasn't moved" a stall, check its cadence first, every time** —
+  this is now a standing habit from Run 10, applied again cleanly this run: the GTM Auditor is
+  weekly, so an unchanged `GTM_SCORECARD.md` two days after Run 9's fix is exactly expected, not a
+  sign of ignored work.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-10? YES — circuit breaker remains FIRED (Run 11, 11th consecutive
+  run, ~20 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
