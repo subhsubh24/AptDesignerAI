@@ -62,6 +62,17 @@ describe("expandScore", () => {
   it("should be identity when expansion factor is 1.0", () => {
     expect(expandScore(7.5, 6.5, 1.0)).toBe(7.5);
   });
+
+  it("should return the score unchanged when the mean is out of range or NaN", () => {
+    // The mean is fed from the drift monitor's observed distribution; a degenerate
+    // sample (empty window → NaN, or a corrupt out-of-[0,10] value) must NOT be
+    // applied as an expansion centre, or the calibrated score would be NaN /
+    // wildly wrong. The guard returns the raw score untouched. Without it these
+    // would compute mean + factor*(score - mean) around an invalid centre.
+    expect(expandScore(7.0, NaN, 1.2)).toBe(7.0);
+    expect(expandScore(7.0, -1, 1.2)).toBe(7.0);
+    expect(expandScore(7.0, 11, 1.2)).toBe(7.0);
+  });
 });
 
 describe("correctInflation", () => {

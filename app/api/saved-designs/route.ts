@@ -112,16 +112,26 @@ export async function POST(request: NextRequest) {
 
   // If stage is "full", include product search results
   if (stage === "full") {
-    const { data: products, error: productsError } = await supabase
-      .from("candidate_products")
-      .select("*, product_evaluations(*)")
-      .eq("room_id", room_id)
-      .eq("status", "selected");
-
-    const { data: bundles, error: bundlesError } = await supabase
-      .from("product_bundles")
-      .select("*, product_bundle_items(*), bundle_evaluations(*)")
-      .eq("room_id", room_id);
+    // These two reads are independent (both key only on room_id, neither
+    // depends on the other), so run them concurrently — on this retention-
+    // critical save path the user waits on ONE round-trip instead of two.
+    // Results are destructured by position, so ordering/determinism is
+    // unchanged and BOTH .error fields are still checked before anything is
+    // persisted.
+    const [
+      { data: products, error: productsError },
+      { data: bundles, error: bundlesError },
+    ] = await Promise.all([
+      supabase
+        .from("candidate_products")
+        .select("*, product_evaluations(*)")
+        .eq("room_id", room_id)
+        .eq("status", "selected"),
+      supabase
+        .from("product_bundles")
+        .select("*, product_bundle_items(*), bundle_evaluations(*)")
+        .eq("room_id", room_id),
+    ]);
 
     // Fail loud instead of persisting a silently-empty "full" snapshot: if either
     // read errors, `data` is null and `?? []` would save a design the user
