@@ -65,12 +65,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Fetch room details
-  const { data: room } = await supabase
+  // Fetch room details. Fail loud on a read error: the ownership guard above
+  // already proved this room exists and is owned, so an error here is a transient
+  // DB failure — persisting a snapshot titled "Untitled Room" with a null
+  // room_type would be a silently-degraded save the user can't tell apart from a
+  // good one. Surface it so the client can retry (F4.1 SIDE-EFFECT INTEGRITY).
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("name, room_type")
     .eq("id", room_id)
     .single();
+
+  if (roomError) return apiError("saved-designs", roomError);
 
   // Fetch latest diagnosis (area_analysis)
   const { data: diagnosis } = await supabase
@@ -149,13 +155,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Upsert: if a saved design for this room already exists, update it
-  const { data: existing } = await supabase
+  // Upsert: if a saved design for this room already exists, update it.
+  // Fail loud on a read error rather than treating an errored existence check as
+  // "no existing design": falling through to the INSERT branch below would create
+  // a DUPLICATE saved_designs row for a room that already has one (defeating the
+  // upsert and corrupting the user's saved list). A transient read error must
+  // return 500 so the client retries, never a silent second row.
+  const { data: existing, error: existingError } = await supabase
     .from("saved_designs")
     .select("id")
     .eq("user_id", userId)
     .eq("room_id", room_id)
     .maybeSingle();
+
+  if (existingError) return apiError("saved-designs", existingError);
 
   // Gate new saves for free-tier users. Re-saving an already-saved room (UPDATE path) is always allowed.
   // Soft/best-effort limit: a count+insert race at the boundary could allow one extra save (same

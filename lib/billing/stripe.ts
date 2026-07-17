@@ -12,6 +12,26 @@ export const STRIPE_PRICE_IDS = {
 
 export type BillingTier = "apartment" | "pro" | "pro_annual";
 
+/** Canonical set of accepted billing tiers — mirrors the `stripe_customers.tier`
+ *  CHECK constraint (migrations 018 + 021). Used to validate tier strings that
+ *  arrive in (untrusted) Stripe webhook metadata before they reach the DB upsert. */
+const VALID_BILLING_TIERS: readonly BillingTier[] = ["apartment", "pro", "pro_annual"];
+
+/**
+ * Validate a raw tier string from Stripe webhook metadata against the canonical set.
+ * An unexpected value — a replay of an old event, a typo, or a tier the DB CHECK
+ * constraint would reject — must NOT be cast straight through: passing it to the
+ * `stripe_customers` upsert triggers a Postgres CHECK violation, the webhook route
+ * 500s, and Stripe retries the event indefinitely (a stuck webhook that leaves the
+ * subscription state diverged from Stripe's truth, breaking entitlement gating).
+ * Returns the tier if valid, else null so the caller can fall back safely.
+ */
+export function normalizeBillingTier(raw: string | undefined | null): BillingTier | null {
+  return raw != null && (VALID_BILLING_TIERS as readonly string[]).includes(raw)
+    ? (raw as BillingTier)
+    : null;
+}
+
 /**
  * Annual (`pro_annual`) billing is GATED OFF until migration 021
  * (`021_stripe_customers_annual_tier.sql`, which extends the `stripe_customers.tier`
@@ -163,7 +183,21 @@ export function extractBillingInfoFromEvent(event: Stripe.Event): {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.user_id;
-      const tier = session.metadata?.tier as BillingTier | undefined;
+      // Validate rather than blind-cast: an invalid tier string here would flow to
+      // the stripe_customers upsert and 500 on the CHECK constraint. A null tier
+      // (missing OR unrecognized) fails the guard below → safe no-op, no stuck retry.
+      const rawTier = session.metadata?.tier;
+      const tier = normalizeBillingTier(rawTier);
+      // A PRESENT-but-unrecognized tier on a real paid checkout must not vanish: the
+      // null below yields a 200 no-op (no entitlement, no Stripe retry), which is
+      // strictly harder to detect than the CHECK-violation 500 it replaces. Log it
+      // LOUD so an invalid tier on a CHARGED customer surfaces in webhook monitoring
+      // (distinct from a routine absent-tier / unhandled event, which stays quiet).
+      if (rawTier && !tier) {
+        console.error(
+          `[billing] checkout.session.completed for user ${userId ?? "unknown"} carried an unrecognized tier "${rawTier}" — refusing to grant entitlement (would violate the stripe_customers CHECK constraint). The customer may have been charged; investigate.`,
+        );
+      }
 
       if (!userId || !tier || !session.customer) return null;
 
@@ -190,7 +224,21 @@ export function extractBillingInfoFromEvent(event: Stripe.Event): {
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
       const userId = sub.metadata?.user_id;
-      const tier = (sub.metadata?.tier as BillingTier | undefined) ?? "pro";
+      // Missing OR unrecognized tier → fall back to "pro" (a known-valid paid tier)
+      // rather than casting a garbage string through to the DB CHECK constraint,
+      // which would 500 the webhook and trigger an indefinite Stripe retry loop.
+      const rawSubTier = sub.metadata?.tier;
+      const normalizedSubTier = normalizeBillingTier(rawSubTier);
+      const tier = normalizedSubTier ?? "pro";
+      // Unlike checkout this still WRITES a row (fallback "pro"), so it's not a silent
+      // drop — but a present-but-unrecognized tier means we're mis-attributing an
+      // existing subscriber's plan, so warn for discoverability (absent tier is the
+      // normal Stripe case for subscription events → stays quiet).
+      if (rawSubTier && normalizedSubTier === null) {
+        console.warn(
+          `[billing] ${event.type} for user ${userId ?? "unknown"} carried an unrecognized tier "${rawSubTier}" — falling back to "pro" (plan attribution may be wrong).`,
+        );
+      }
 
       if (!userId || !sub.customer) return null;
 

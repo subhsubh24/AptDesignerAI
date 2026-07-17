@@ -61,6 +61,37 @@ describe("resolveLifestyleFlags", () => {
     expect(flags.high_traffic).toBe(false);
     expect(flags.works_from_home).toBe(false);
   });
+
+  it("infers high_traffic from durability signals in free-text notes", () => {
+    // The notes field is scanned for wear-relevant keywords even when no explicit
+    // pets/kids/hosting flag is set — a user who writes "the dog is always shedding"
+    // should get durability-biased recommendations. Mutation guard on the notes regex.
+    const shedding = resolveLifestyleFlags({ notes: "our dog is always shedding" });
+    expect(shedding.high_traffic).toBe(true);
+    // pets/kids/entertains stay false — only the derived high_traffic flips.
+    expect(shedding.has_pets).toBe(false);
+
+    const scratch = resolveLifestyleFlags({ notes: "the cat likes to scratch the couch" });
+    expect(scratch.high_traffic).toBe(true);
+
+    const calm = resolveLifestyleFlags({ notes: "a quiet minimalist home" });
+    expect(calm.high_traffic).toBe(false);
+  });
+
+  it("treats work-from-home as high_traffic (daily wear)", () => {
+    const flags = resolveLifestyleFlags({ work_from_home: true });
+    expect(flags.works_from_home).toBe(true);
+    expect(flags.high_traffic).toBe(true);
+  });
+
+  it("detects entertaining from a positive hosting string and ignores negatives", () => {
+    const hosts = resolveLifestyleFlags({ hosting: "dinner parties monthly" });
+    expect(hosts.entertains).toBe(true);
+    expect(hosts.high_traffic).toBe(true);
+
+    const rarely = resolveLifestyleFlags({ hosting: "never" });
+    expect(rarely.entertains).toBe(false);
+  });
 });
 
 describe("scoreLifestyleFit", () => {
