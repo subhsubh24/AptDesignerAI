@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, isEmailDryRun } from "@/lib/email";
 import { isMarketingOptedOut } from "@/lib/email/preferences";
 import {
   buildActivationEmail1,
@@ -166,11 +166,49 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // CLAIM the stage BEFORE sending. The unique (user_id, stage) constraint
+      // means exactly one run wins the claim; a crash AFTER the claim leaves the
+      // marker, so a retry SKIPS instead of double-sending (at-most-once, not the
+      // at-least-once a send-then-record ordering would give). dry_run starts as a
+      // pre-send guess (isEmailDryRun) and is reconciled to the send's actual
+      // provider below — sendEmail can still dry-run for other reasons (e.g. a
+      // marketing stage with no physical mailing address configured).
+      const claimedDryRun = isEmailDryRun();
+      const { error: claimErr } = await admin
+        .from("user_email_stages")
+        .insert({ user_id: userId, stage, dry_run: claimedDryRun });
+      if (claimErr) {
+        // Duplicate → a concurrent or prior run already claimed/sent this stage.
+        if (claimErr.message.includes("duplicate")) {
+          skipped++;
+          continue;
+        }
+        // Any other insert failure → cannot safely claim, so do not send.
+        console.error(
+          `[activation-cron] failed to claim ${stage} for ${userId}:`,
+          claimErr.message,
+        );
+        errors++;
+        continue;
+      }
+
       // Build and send.
       const { subject, html, text } = builder(siteUrl);
       const result = await sendEmail({ to: email, subject, html, text, stage });
 
       if (result.error) {
+        // Send failed → RELEASE the claim so a future run can retry this stage.
+        const { error: releaseErr } = await admin
+          .from("user_email_stages")
+          .delete()
+          .eq("user_id", userId)
+          .eq("stage", stage);
+        if (releaseErr) {
+          console.error(
+            `[activation-cron] failed to release claim after send error for ${userId} (${stage}):`,
+            releaseErr.message,
+          );
+        }
         console.error(
           `[activation-cron] send failed for ${userId} (${stage}):`,
           result.error,
@@ -179,16 +217,21 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Record the send. ON CONFLICT the unique (user_id, stage) constraint
-      // safely ignores a duplicate (race-safe).
-      const { error: insertErr } = await admin
-        .from("user_email_stages")
-        .insert({ user_id: userId, stage, dry_run: result.dryRun });
-      if (insertErr && !insertErr.message.includes("duplicate")) {
-        console.error(
-          `[activation-cron] failed to record send for ${userId} (${stage}):`,
-          insertErr.message,
-        );
+      // Reconcile the claim's dry_run with what sendEmail ACTUALLY did — the
+      // authoritative signal — so the record isn't wrong when the send routed to
+      // the dry-run provider despite a live key (only writes on a mismatch).
+      if (result.dryRun !== claimedDryRun) {
+        const { error: reconcileErr } = await admin
+          .from("user_email_stages")
+          .update({ dry_run: result.dryRun })
+          .eq("user_id", userId)
+          .eq("stage", stage);
+        if (reconcileErr) {
+          console.error(
+            `[activation-cron] failed to reconcile dry_run for ${userId} (${stage}):`,
+            reconcileErr.message,
+          );
+        }
       }
 
       sent++;

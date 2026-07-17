@@ -36,9 +36,17 @@ function okResponse(message: Record<string, unknown> = { content: "hello", finis
 const fetchMock = vi.fn();
 const ORIGINAL_KEY = process.env.DEEPSEEK_API_KEY;
 
-/** The JSON body the provider POSTed to DeepSeek on the most recent call. */
+/**
+ * The JSON body the provider POSTed to the DeepSeek chat-completions endpoint on
+ * the most recent call. Selected by URL rather than `.at(-1)` because a `.chat()`
+ * can fire a *trailing* fetch to the Margin telemetry ingest endpoint (whenever
+ * the meter is live — MARGIN_INGEST_KEY set and not in the offline CI context);
+ * that emit must not be mistaken for the model request.
+ */
 function lastRequestBody(): Record<string, unknown> {
-  const call = fetchMock.mock.calls.at(-1);
+  const call = fetchMock.mock.calls
+    .filter((c) => typeof c[0] === "string" && c[0].startsWith("https://api.deepseek.com"))
+    .at(-1);
   return JSON.parse((call![1] as { body: string }).body);
 }
 

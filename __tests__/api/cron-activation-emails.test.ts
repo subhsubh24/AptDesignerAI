@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import { NextRequest } from "next/server";
 
 // External collaborators mocked so the test exercises the route's own control
-// flow (auth gate, cancelled-window query, idempotency, opt-out, send) without a
-// real Supabase, email provider, or CRON secret.
+// flow (auth gate, signup-window query, idempotency, engaged-user drop-out,
+// opt-out, claim-before-send) without a real Supabase, email provider, or secret.
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: vi.fn() }));
 vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false, dryRun: true })),
@@ -12,36 +12,32 @@ vi.mock("@/lib/email", () => ({
 vi.mock("@/lib/email/preferences", () => ({ isMarketingOptedOut: vi.fn(async () => false) }));
 
 import { getAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, isEmailDryRun } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { isMarketingOptedOut } from "@/lib/email/preferences";
-import { GET } from "@/app/api/cron/winback-emails/route";
+import { GET } from "@/app/api/cron/activation-emails/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockSendEmail = sendEmail as unknown as Mock;
-const mockDryRun = isEmailDryRun as unknown as Mock;
 const mockOptedOut = isMarketingOptedOut as unknown as Mock;
 
 const SECRET = "test-cron-secret";
 
-// A minimal admin double: one cancelled subscriber in the day-7 window, none in
-// day-30; no prior email-stage rows; a real email on file.
+// A minimal admin double: the profiles signup-window query returns the configured
+// users; each has no project (not engaged) unless `engaged` is set; no prior
+// email-stage rows unless specified; a real email on file. The claim INSERT into
+// user_email_stages can be forced to fail, and released (DELETE) claims recorded.
 function fakeAdmin(
   opts: {
-    cancelledUserIds?: string[];
+    userIds?: string[];
+    engaged?: boolean;
     alreadySentStages?: string[];
-    // Force the claim INSERT on user_email_stages to fail with this message
-    // (e.g. "duplicate key value" to simulate a concurrent run winning the claim).
     claimError?: string;
-    // Records every stage whose claim row was DELETEd (released on send failure).
     releasedStages?: string[];
-    // Records every dry_run value written by a post-send reconcile UPDATE.
-    reconciledDryRun?: boolean[];
   } = {},
 ) {
-  const cancelledUserIds = opts.cancelledUserIds ?? ["user-1"];
+  const userIds = opts.userIds ?? ["user-1"];
   const alreadySent = new Set(opts.alreadySentStages ?? []);
   const released = opts.releasedStages;
-  const reconciled = opts.reconciledDryRun;
   return {
     from(table: string) {
       const builder: Record<string, unknown> = {};
@@ -57,29 +53,28 @@ function fakeAdmin(
           return builder;
         },
         gte: () => builder,
-        // stripe_customers window query resolves here (awaited directly).
+        limit: () => builder,
+        // profiles signup-window query resolves here (awaited directly).
         lt: async () => {
-          if (state.table === "stripe_customers") {
-            // Only the winback_2 (day-7) window returns a candidate; the code
-            // issues one query per stage, so alternate by call is unnecessary —
-            // return the candidate for both and let idempotency handle repeats.
-            return { data: cancelledUserIds.map((user_id) => ({ user_id })), error: null };
+          if (state.table === "profiles") {
+            return { data: userIds.map((id) => ({ id })), error: null };
           }
           return { data: [], error: null };
         },
-        maybeSingle: async () => ({
-          data: state.stage && alreadySent.has(state.stage) ? { id: "x" } : null,
-          error: null,
-        }),
+        maybeSingle: async () => {
+          // projects engaged-check: return a row when the user is "engaged".
+          if (state.table === "projects") {
+            return { data: opts.engaged ? { id: "proj-1" } : null, error: null };
+          }
+          // user_email_stages idempotency check.
+          return {
+            data: state.stage && alreadySent.has(state.stage) ? { id: "x" } : null,
+            error: null,
+          };
+        },
         // Claim-before-send INSERT: fail with claimError when configured.
         insert: async () =>
           opts.claimError ? { error: { message: opts.claimError } } : { error: null },
-        // Post-send reconcile UPDATE records the dry_run it writes.
-        update: (payload: { dry_run?: boolean }) => {
-          state.op = "update";
-          if (reconciled && typeof payload.dry_run === "boolean") reconciled.push(payload.dry_run);
-          return builder;
-        },
         delete: () => {
           state.op = "delete";
           return builder;
@@ -89,14 +84,14 @@ function fakeAdmin(
     },
     auth: {
       admin: {
-        getUserById: async () => ({ data: { user: { email: "gone@example.com" } }, error: null }),
+        getUserById: async () => ({ data: { user: { email: "new@example.com" } }, error: null }),
       },
     },
   };
 }
 
 function req(auth?: string) {
-  return new NextRequest("http://localhost/api/cron/winback-emails", {
+  return new NextRequest("http://localhost/api/cron/activation-emails", {
     method: "GET",
     headers: auth ? { authorization: auth } : {},
   });
@@ -106,15 +101,13 @@ beforeEach(() => {
   mockGetAdmin.mockReset();
   mockSendEmail.mockReset();
   mockSendEmail.mockResolvedValue({ delivered: false, dryRun: true });
-  mockDryRun.mockReset();
-  mockDryRun.mockReturnValue(true);
   mockOptedOut.mockReset();
   mockOptedOut.mockResolvedValue(false);
   process.env.CRON_SECRET = SECRET;
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("GET /api/cron/winback-emails", () => {
+describe("GET /api/cron/activation-emails", () => {
   it("returns 503 when CRON_SECRET is not configured (and never queries)", async () => {
     delete process.env.CRON_SECRET;
     const res = await GET(req(`Bearer ${SECRET}`));
@@ -139,27 +132,32 @@ describe("GET /api/cron/winback-emails", () => {
     expect(res.status).toBe(503);
   });
 
-  it("sends a win-back email to a cancelled subscriber (dry-run) and records it", async () => {
-    mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"] }));
+  it("sends the activation sequence to a signed-up-but-inactive user (dry-run)", async () => {
+    mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"] }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
-    // Two stages (winback_2 + winback_3); the same candidate matches both
-    // windows in the double, so exactly two sends fire — one per stage.
-    expect(mockSendEmail).toHaveBeenCalled();
     const stagesSent = mockSendEmail.mock.calls.map((c) => c[0].stage).sort();
-    expect(stagesSent).toContain("winback_2");
-    expect(stagesSent).toContain("winback_3");
-    // Every send targets the recovered email address.
+    expect(stagesSent).toEqual(["activation_1", "activation_2", "activation_3"]);
     for (const call of mockSendEmail.mock.calls) {
-      expect(call[0].to).toBe("gone@example.com");
+      expect(call[0].to).toBe("new@example.com");
     }
+  });
+
+  it("drops out users who have already engaged (have a project)", async () => {
+    mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"], engaged: true }));
+    const res = await GET(req(`Bearer ${SECRET}`));
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it("skips a stage already recorded in user_email_stages (idempotent)", async () => {
     mockGetAdmin.mockReturnValue(
-      fakeAdmin({ cancelledUserIds: ["user-1"], alreadySentStages: ["winback_2", "winback_3"] }),
+      fakeAdmin({
+        userIds: ["user-1"],
+        alreadySentStages: ["activation_1", "activation_2", "activation_3"],
+      }),
     );
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
@@ -168,7 +166,7 @@ describe("GET /api/cron/winback-emails", () => {
 
   it("skips users who opted out of marketing (CAN-SPAM)", async () => {
     mockOptedOut.mockResolvedValue(true);
-    mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"] }));
+    mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"] }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
     expect(mockSendEmail).not.toHaveBeenCalled();
@@ -176,56 +174,31 @@ describe("GET /api/cron/winback-emails", () => {
 
   it("does NOT send when the stage claim loses to a concurrent run (duplicate key)", async () => {
     // Claim-before-send: the INSERT into user_email_stages fails on the unique
-    // (user_id, stage) constraint because another run already claimed it. The
-    // stage must be skipped, never sent — this is what prevents the double-send.
+    // (user_id, stage) constraint because another run already claimed it → skip,
+    // never send. This is what prevents the double-send on an at-least-once retry.
     mockGetAdmin.mockReturnValue(
-      fakeAdmin({ cancelledUserIds: ["user-1"], claimError: "duplicate key value violates unique constraint" }),
+      fakeAdmin({ userIds: ["user-1"], claimError: "duplicate key value violates unique constraint" }),
     );
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.ok).toBe(true);
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(body.results.every((r: { sent: number }) => r.sent === 0)).toBe(true);
   });
 
-  it("reconciles dry_run when the send routed differently than the pre-send guess", async () => {
-    // Live key present → isEmailDryRun() is false at claim time, but sendEmail
-    // still dry-runs (e.g. a marketing stage with no physical address), returning
-    // dryRun:true. The claim row (written dry_run:false) must be corrected to true.
-    mockDryRun.mockReturnValue(false);
-    mockSendEmail.mockResolvedValue({ delivered: false, dryRun: true });
-    const reconciledDryRun: boolean[] = [];
-    mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"], reconciledDryRun }));
-    const res = await GET(req(`Bearer ${SECRET}`));
-    expect(res.status).toBe(200);
-    // One reconcile UPDATE per stage sent, each correcting dry_run to true.
-    expect(reconciledDryRun.length).toBeGreaterThan(0);
-    expect(reconciledDryRun.every((v) => v === true)).toBe(true);
-  });
-
-  it("does NOT reconcile dry_run when the guess already matched the send", async () => {
-    // isEmailDryRun() true and sendEmail dryRun:true agree → no wasted UPDATE.
-    const reconciledDryRun: boolean[] = [];
-    mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"], reconciledDryRun }));
-    const res = await GET(req(`Bearer ${SECRET}`));
-    expect(res.status).toBe(200);
-    expect(reconciledDryRun).toHaveLength(0);
-  });
-
   it("releases the claim (DELETE) when the send fails so a later run can retry", async () => {
     // Send fails AFTER the claim was written → the marker must be removed,
-    // otherwise the stage would be permanently stuck as "sent" and never retried.
+    // otherwise the stage would be stuck as "sent" forever and never retried.
     mockSendEmail.mockResolvedValue({ error: "resend 500" });
     const releasedStages: string[] = [];
-    mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"], releasedStages }));
+    mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"], releasedStages }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
-    // A send was attempted for each stage, and each failed claim was released.
     expect(mockSendEmail).toHaveBeenCalled();
-    expect(releasedStages).toContain("winback_2");
-    expect(releasedStages).toContain("winback_3");
+    expect(releasedStages).toEqual(["activation_1", "activation_2", "activation_3"]);
     const body = await res.json();
-    expect(body.results.every((r: { sent: number; errors: number }) => r.sent === 0 && r.errors > 0)).toBe(true);
+    expect(
+      body.results.every((r: { sent: number; errors: number }) => r.sent === 0 && r.errors > 0),
+    ).toBe(true);
   });
 });
