@@ -144,6 +144,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Analysis failed — incomplete AI response" }, { status: 500 });
       }
 
+      // style_name and design_direction are rendered verbatim, each in its own
+      // card, on the mobile results screen. A partial LLM response that omits
+      // (or empties) either one would leave the user staring at a blank card
+      // with no error and no retry — a "done" state not backed by real content.
+      // Fail loud here, mirroring the summary guard, so the client's non-200
+      // path surfaces the retryable error instead. (F4.1 SIDE-EFFECT INTEGRITY:
+      // never render a success state the data doesn't support.)
+      if (
+        typeof raw.style_name !== "string" || !raw.style_name ||
+        typeof raw.design_direction !== "string" || !raw.design_direction
+      ) {
+        return NextResponse.json({ error: "Analysis failed — incomplete AI response" }, { status: 500 });
+      }
+
       // Guard array fields so a malformed AI response does not crash the mobile client
       const arrayFields = [
         "recommended_palette", "recommended_materials", "recommended_textures",
