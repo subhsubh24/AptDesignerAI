@@ -39,9 +39,10 @@ function authedAs(user: { id: string } | null) {
 function fakeAdmin(
   deleteResult: { error: unknown },
   billing: { stripe_subscription_id: string | null; status: string } | null = null,
+  billingError: unknown = null,
 ) {
   const deleteUser = vi.fn(async () => deleteResult);
-  const maybeSingle = vi.fn(async () => ({ data: billing, error: null }));
+  const maybeSingle = vi.fn(async () => ({ data: billingError ? null : billing, error: billingError }));
   const eq = vi.fn(() => ({ maybeSingle }));
   const select = vi.fn(() => ({ eq }));
   const from = vi.fn(() => ({ select }));
@@ -157,6 +158,23 @@ describe("DELETE /api/user/delete", () => {
     expect(from).not.toHaveBeenCalled();
     expect(mockCancelSub).not.toHaveBeenCalled();
     expect(deleteUser).toHaveBeenCalledWith("u1");
+  });
+
+  it("returns 502 and does NOT delete when the billing lookup itself fails (fail closed)", async () => {
+    mockStripeConfigured.mockReturnValue(true);
+    const { admin, deleteUser } = fakeAdmin(
+      { error: null },
+      null,
+      { message: "stripe_customers connection reset" },
+    );
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(502);
+    // Can't confirm there's no live subscription → must not delete + orphan it.
+    expect(mockCancelSub).not.toHaveBeenCalled();
+    expect(deleteUser).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(JSON.stringify(body)).not.toContain("connection reset");
   });
 
   it("returns 502 and does NOT delete when subscription cancellation fails", async () => {

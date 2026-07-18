@@ -35,11 +35,21 @@ export async function DELETE() {
   // Guarded on our own stored status so an already-cancelled sub is a no-op, and
   // skipped entirely pre-launch (Stripe unconfigured → no live subscriptions).
   if (isStripeConfigured()) {
-    const { data: billing } = await admin
+    const { data: billing, error: billingError } = await admin
       .from("stripe_customers")
       .select("stripe_subscription_id, status")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (billingError) {
+      // We couldn't determine whether a live subscription exists. Fail CLOSED:
+      // proceeding to delete would drop the mapping and could orphan a charging
+      // subscription we simply failed to read. Preserve the account, log, retry.
+      logServerError("user-delete:billing-lookup", billingError);
+      return NextResponse.json(
+        { error: "We couldn't complete your deletion right now. Please try again or contact support." },
+        { status: 502 },
+      );
+    }
     const subscriptionId = billing?.stripe_subscription_id;
     const isLive =
       billing?.status === "active" ||
