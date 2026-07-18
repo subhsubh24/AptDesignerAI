@@ -47,6 +47,34 @@ export function isAnnualBillingEnabled(): boolean {
   return process.env.ANNUAL_BILLING_ENABLED === "true";
 }
 
+/**
+ * True when a Stripe secret key is configured. Callers that only need to act
+ * when billing is live (e.g. cancelling a subscription during account deletion)
+ * check this first so the code is a safe no-op pre-launch (key unset) instead of
+ * throwing from getStripe().
+ */
+export function isStripeConfigured(): boolean {
+  return Boolean(STRIPE_SECRET_KEY);
+}
+
+/**
+ * Cancel a Stripe subscription immediately.
+ *
+ * Called before deleting a user's account so a deleted account is never billed
+ * again. Apple Guideline 5.1.1(v) and Google Play require in-app account
+ * deletion to be complete and binding — leaving a live subscription that keeps
+ * charging a user who deleted their account is both a store-review rejection and
+ * a real consumer-harm bug. Deleting the auth user cascade-drops the
+ * stripe_customers mapping row, so this MUST run first, while we still know the
+ * subscription id. Throws (StripeConnectionError / StripeInvalidRequestError) on
+ * failure so the caller can preserve the mapping and surface a retryable error
+ * rather than silently orphaning a billing subscription.
+ */
+export async function cancelSubscription(subscriptionId: string): Promise<void> {
+  const stripe = getStripe();
+  await stripe.subscriptions.cancel(subscriptionId);
+}
+
 let _stripe: Stripe | null = null;
 
 function getStripe(): Stripe {

@@ -10,15 +10,22 @@ vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(),
   RATE_LIMITS: { userDelete: { windowMs: 86_400_000, max: 3 } },
 }));
+vi.mock("@/lib/billing/stripe", () => ({
+  isStripeConfigured: vi.fn(),
+  cancelSubscription: vi.fn(),
+}));
 
 import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
+import { isStripeConfigured, cancelSubscription } from "@/lib/billing/stripe";
 import { DELETE } from "@/app/api/user/delete/route";
 
 const mockCreateClient = createClient as unknown as Mock;
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockRateLimit = checkRateLimit as unknown as Mock;
+const mockStripeConfigured = isStripeConfigured as unknown as Mock;
+const mockCancelSub = cancelSubscription as unknown as Mock;
 
 function authedAs(user: { id: string } | null) {
   mockCreateClient.mockResolvedValue({
@@ -26,17 +33,32 @@ function authedAs(user: { id: string } | null) {
   });
 }
 
-function fakeAdmin(deleteResult: { error: unknown }) {
+// Build a fake admin client. `billing` (when provided) is the stripe_customers
+// row the deletion path reads before cancelling; omit it (default null) to model
+// a user with no billing record.
+function fakeAdmin(
+  deleteResult: { error: unknown },
+  billing: { stripe_subscription_id: string | null; status: string } | null = null,
+) {
   const deleteUser = vi.fn(async () => deleteResult);
-  return { admin: { auth: { admin: { deleteUser } } }, deleteUser };
+  const maybeSingle = vi.fn(async () => ({ data: billing, error: null }));
+  const eq = vi.fn(() => ({ maybeSingle }));
+  const select = vi.fn(() => ({ eq }));
+  const from = vi.fn(() => ({ select }));
+  return { admin: { auth: { admin: { deleteUser } }, from }, deleteUser, from };
 }
 
 beforeEach(() => {
   mockCreateClient.mockReset();
   mockGetAdmin.mockReset();
   mockRateLimit.mockReset();
+  mockStripeConfigured.mockReset();
+  mockCancelSub.mockReset();
   authedAs({ id: "u1" });
   mockRateLimit.mockReturnValue({ allowed: true });
+  // Default: Stripe not configured (pre-launch) — the billing branch is a no-op,
+  // so the base-case tests below exercise the pre-existing control flow unchanged.
+  mockStripeConfigured.mockReturnValue(false);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -81,5 +103,76 @@ describe("DELETE /api/user/delete", () => {
     const body = await res.json();
     expect(body.error).toBe("Failed to delete account. Please try again or contact support.");
     expect(JSON.stringify(body)).not.toContain("profiles");
+  });
+
+  it("cancels a LIVE Stripe subscription before deleting the account", async () => {
+    mockStripeConfigured.mockReturnValue(true);
+    const { admin, deleteUser } = fakeAdmin(
+      { error: null },
+      { stripe_subscription_id: "sub_123", status: "active" },
+    );
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(mockCancelSub).toHaveBeenCalledWith("sub_123");
+    expect(deleteUser).toHaveBeenCalledWith("u1");
+    // Cancellation must precede deletion — never orphan a charging subscription.
+    expect(mockCancelSub.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteUser.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does NOT call Stripe when there is no billing record", async () => {
+    mockStripeConfigured.mockReturnValue(true);
+    const { admin, deleteUser } = fakeAdmin({ error: null }, null);
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(mockCancelSub).not.toHaveBeenCalled();
+    expect(deleteUser).toHaveBeenCalledWith("u1");
+  });
+
+  it("skips cancellation for an already-cancelled subscription (no-op), still deletes", async () => {
+    mockStripeConfigured.mockReturnValue(true);
+    const { admin, deleteUser } = fakeAdmin(
+      { error: null },
+      { stripe_subscription_id: "sub_123", status: "cancelled" },
+    );
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(mockCancelSub).not.toHaveBeenCalled();
+    expect(deleteUser).toHaveBeenCalledWith("u1");
+  });
+
+  it("skips the billing lookup entirely when Stripe is unconfigured (pre-launch)", async () => {
+    mockStripeConfigured.mockReturnValue(false);
+    const { admin, from, deleteUser } = fakeAdmin(
+      { error: null },
+      { stripe_subscription_id: "sub_123", status: "active" },
+    );
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(from).not.toHaveBeenCalled();
+    expect(mockCancelSub).not.toHaveBeenCalled();
+    expect(deleteUser).toHaveBeenCalledWith("u1");
+  });
+
+  it("returns 502 and does NOT delete when subscription cancellation fails", async () => {
+    mockStripeConfigured.mockReturnValue(true);
+    mockCancelSub.mockRejectedValue(new Error("stripe timeout"));
+    const { admin, deleteUser } = fakeAdmin(
+      { error: null },
+      { stripe_subscription_id: "sub_123", status: "active" },
+    );
+    mockGetAdmin.mockReturnValue(admin);
+    const res = await DELETE();
+    expect(res.status).toBe(502);
+    // The account (and its billing mapping) is preserved so the user can retry —
+    // never orphan a live subscription by deleting after a failed cancel.
+    expect(deleteUser).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(JSON.stringify(body)).not.toContain("stripe timeout");
   });
 });
