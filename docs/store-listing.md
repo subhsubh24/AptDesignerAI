@@ -72,13 +72,13 @@ Explore for free — analyze one room end-to-end at no cost, no credit card requ
 
 **Apartment ($29, one-time)** — every room in your apartment: unlimited room analyses, cross-room style coherence, AI mockups, and the full product catalog.
 
-**Pro ($49/month)** — unlimited apartments and projects, client-ready share links, and priority support. For designers and property managers.
+**Pro ($49/month)** — unlimited apartments and projects, client-ready share links, and priority support. For designers and property managers. Auto-renews monthly until you cancel; manage or cancel anytime in your device's subscription settings (Settings → your name → Subscriptions).
 
 Pricing details shown at checkout. 30-day money-back guarantee on paid plans.
 
 PRIVACY
 
-Room photos are processed by AI to generate your design plan. Photos are stored in your account and deleted when you delete your account. We do not sell your data. See our full privacy policy at aptdesignerai.com/privacy.
+Room photos are processed by AI to generate your design plan. Photos are stored in your account and deleted when you delete your account — which you can do anytime in the app under Settings. We do not sell your data. See our full privacy policy at aptdesignerai.com/privacy.
 ```
 
 > **Pro Annual ($399/year) intentionally omitted (2026-07-09).** The `pro_annual` tier exists in
@@ -156,13 +156,13 @@ PRICING
 
 Free: analyze one room, no credit card needed.
 Apartment ($29, one-time): every room in your apartment — unlimited analyses, cross-room coherence, AI mockups.
-Pro ($49/month): unlimited apartments and projects for designers and property managers.
+Pro ($49/month): unlimited apartments and projects for designers and property managers. Auto-renews monthly until you cancel; manage or cancel anytime in Google Play (Play Store → Payments & subscriptions).
 
 Pricing details shown at checkout. 30-day money-back guarantee.
 
 PRIVACY
 
-Photos are processed to generate your design plan and stored in your account. Deleted when you delete your account. No data sold. Privacy policy: aptdesignerai.com/privacy.
+Photos are processed to generate your design plan and stored in your account. Deleted when you delete your account, which you can do anytime in the app under Settings. No data sold. Privacy policy: aptdesignerai.com/privacy.
 ```
 
 ### Tags (Play Store tags — select up to 5)

@@ -336,12 +336,16 @@ function computeTierDifferentiation(products: SetProduct[]): { score: number; is
 
     if (lowerMedian && upperMedian) {
       const separation = (upperMedian - lowerMedian) / lowerMedian;
-      if (separation < 0.2) {
-        score -= 0.2;
-        issues.push(`Weak price separation between ${lowerTier} ($${Math.round(lowerMedian)}) and ${upperTier} ($${Math.round(upperMedian)}) — only ${Math.round(separation * 100)}% difference`);
-      } else if (separation < 0) {
+      // Inverted pricing (upper tier CHEAPER than lower) is the worse fault and
+      // must be checked first: a negative separation is also < 0.2, so ordering
+      // the weak-separation branch first would swallow every inverted case,
+      // mislabelling it and under-penalising it (-0.2 instead of -0.3).
+      if (separation < 0) {
         score -= 0.3;
         issues.push(`${upperTier} tier ($${Math.round(upperMedian)}) is CHEAPER than ${lowerTier} ($${Math.round(lowerMedian)}) — inverted pricing`);
+      } else if (separation < 0.2) {
+        score -= 0.2;
+        issues.push(`Weak price separation between ${lowerTier} ($${Math.round(lowerMedian)}) and ${upperTier} ($${Math.round(upperMedian)}) — only ${Math.round(separation * 100)}% difference`);
       }
     }
   }

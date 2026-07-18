@@ -45,6 +45,30 @@ describe("compareDesignDirections", () => {
     // palette raw ΔE should be meaningful between warm/cool neutrals
     expect(d.raw.palette_mean_deltaE).toBeGreaterThan(5);
   });
+
+  it("flags style vocabularies that barely overlap", () => {
+    // Two directions whose style tokens (notes + textures + furniture) are
+    // entirely disjoint → Jaccard 0 < 0.10 → the "barely overlap" issue fires.
+    const brutalistLoft: DesignDirection = {
+      recommended_palette: ["concrete gray", "rust"],
+      recommended_materials: ["concrete", "blackened steel"],
+      recommended_textures: ["raw", "rough"],
+      recommended_furniture_types: ["workbench", "locker"],
+      style_notes: "brutalist concrete warehouse loft",
+    };
+    const coastalCottage: DesignDirection = {
+      recommended_palette: ["seafoam", "sand"],
+      recommended_materials: ["rattan", "driftwood"],
+      recommended_textures: ["gauzy", "breezy"],
+      recommended_furniture_types: ["daybed", "hammock"],
+      style_notes: "delicate coastal cottage",
+    };
+    const d = compareDesignDirections(brutalistLoft, coastalCottage);
+    expect(d.raw.style_jaccard).toBeLessThan(0.1);
+    expect(
+      d.issues.some((i) => /barely overlap/i.test(i)),
+    ).toBe(true);
+  });
 });
 
 describe("computeApartmentCoherence", () => {
