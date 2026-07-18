@@ -24,13 +24,21 @@ export default function RootLayout() {
     initRC();
   }, []);
 
-  // Keep RC identity in sync with Supabase auth state
+  // Keep RC identity in sync with Supabase auth state. A failure here desyncs the
+  // RevenueCat app-user id from the Supabase user, which can misattribute a
+  // purchase/restore — server-side entitlement checks keep it from granting the
+  // wrong access, but the failure must be observable, not swallowed, so a
+  // recurring desync is diagnosable rather than invisible.
   useEffect(() => {
     if (!RC_KEY || loading) return;
     if (session?.user.id) {
-      Purchases.logIn(session.user.id).catch(() => {});
+      Purchases.logIn(session.user.id).catch((err: unknown) => {
+        console.warn('[rc] Purchases.logIn failed — entitlements may be out of sync', err);
+      });
     } else {
-      Purchases.logOut().catch(() => {});
+      Purchases.logOut().catch((err: unknown) => {
+        console.warn('[rc] Purchases.logOut failed', err);
+      });
     }
   }, [session?.user.id, loading]);
 
