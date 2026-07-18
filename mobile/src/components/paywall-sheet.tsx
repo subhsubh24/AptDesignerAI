@@ -291,8 +291,13 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             type="small"
             style={[styles.legal, { color: colors.mutedForeground }]}
           >
-            Payment is charged when your free trial ends. Cancel anytime before then to avoid
-            charges. By subscribing you agree to our{' '}
+            {/* Disclose the recurring price + period at the point of purchase
+                (Apple App Store 3.1.2 / Google Play subscription policy).
+                selectedOption.price already reads e.g. "$49 / month". */}
+            {selectedOption?.price
+              ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. `
+              : 'Payment is charged when your free trial ends. Cancel anytime before then to avoid charges. '}
+            By subscribing you agree to our{' '}
             <ThemedText
               type="small"
               style={[styles.legalLink, { color: colors.textSecondary }]}

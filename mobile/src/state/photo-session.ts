@@ -24,3 +24,13 @@ export function setPendingRoomType(roomType: string | null): void {
 export function peekPendingRoomType(): string | null {
   return _pendingRoomType;
 }
+
+// Wipe the in-memory pending photo/room-type. This module state outlives an
+// auth session (it lives at module scope, not in a React tree), so it MUST be
+// cleared on sign-out / account deletion — otherwise on a shared device the
+// next user who opens the photo flow would see the previous user's pending
+// room photo and selected room type (cross-user data leak).
+export function clearPendingSession(): void {
+  _pendingImageUri = null;
+  _pendingRoomType = null;
+}

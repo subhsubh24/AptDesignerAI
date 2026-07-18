@@ -12,6 +12,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
 import { RC_KEY } from '@/lib/rc-init';
 import { supabase } from '@/lib/supabase';
+import { clearPendingSession } from '@/state/photo-session';
 
 const PRIVACY_URL = 'https://aptdesignerai.com/privacy';
 const TERMS_URL = 'https://aptdesignerai.com/terms';
@@ -118,6 +119,9 @@ export default function SettingsScreen() {
       if (resp.ok) {
         // Account is gone — sign out clears the local session and returns to login.
         await supabase.auth.signOut();
+        // Also wipe the in-memory pending photo/room-type so it can't leak to
+        // the next user on a shared device.
+        clearPendingSession();
       } else {
         const body = (await resp.json().catch(() => ({}))) as { error?: string };
         Alert.alert(
@@ -151,6 +155,9 @@ export default function SettingsScreen() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      // Wipe the in-memory pending photo/room-type on sign-out so the next user
+      // on a shared device can't see the previous user's pending room photo.
+      clearPendingSession();
     } catch {
       // supabase-js returns the error in-band (and can also throw on a network
       // failure). A silently-failed sign-out leaves the session live — the user

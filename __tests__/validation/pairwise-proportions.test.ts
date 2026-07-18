@@ -134,6 +134,27 @@ describe("computePairwiseProportions", () => {
     expect(rule?.passed).toBe(false);
   });
 
+  it("fails a 5-chair table below the odd-seat-count minimum length", () => {
+    // 5 chairs → perSideCount = ceil((5-2)/2) = ceil(1.5) = 2 → minLen 48; a 40"
+    // table must fail. This is the odd count the 6-chair cases can't reach:
+    // ceil((6-2)/2) = ceil((6-3)/2) = 2, so a (chairs-2)→(chairs-3) off-by-one
+    // survives every even-count test; at 5 chairs the mutant drops to minLen 24
+    // and would wrongly PASS this 40" table — so this test kills that mutation.
+    const analysis = {
+      what_it_needs: [
+        { category: "dining_table", dimensions: { width: 40, depth: 36, height: 30 } },
+        ...Array.from({ length: 5 }, () => ({
+          category: "dining_chair",
+          dimensions: { width: 18, depth: 20, height: 34 },
+        })),
+      ],
+    };
+    const result = computePairwiseProportions(analysis);
+    const rule = result.rule_results.find((r) => r.rule.includes("dining_table.length"));
+    expect(rule?.passed).toBe(false);
+    expect(result.issues.some((i) => i.primary === "dining_table")).toBe(true);
+  });
+
   // ─── nightstand.height ≈ bed top (bed.height − 3, tolerance ±4") ───────────
   it("passes a nightstand exactly at the ±4\" height tolerance from the bed top", () => {
     // bed height 36 → bedTop 33; nightstand 29 → deviation |29-33| = 4 = boundary.
