@@ -198,6 +198,23 @@ describe("computeSetMathScores — duplicate_score", () => {
     const noDupeResult = computeSetMathScores(withoutDupes, CTX_LIVING_ROOM);
     expect(dupeResult.duplicate_score).toBeLessThanOrEqual(noDupeResult.duplicate_score);
   });
+
+  it("flags a pair only because the mid-band (10–20% apart) price proximity tips it over", () => {
+    // Base similarity = title Jaccard 0.5×0.4 (0.20) + material Jaccard 2/3×0.3 (0.20)
+    // = 0.40, which is NOT > 0.5 on its own (no flag). Prices 200 vs 172 are 14%
+    // apart → the 0.1 ≤ diff < 0.2 band adds 0.15 → 0.55 (> 0.5) → "similar" penalty
+    // (0.05) → duplicate_score 0.95. The existing near-dupe test only exercises the
+    // < 0.1 band (+0.3); this covers the middle band and its 0.2 upper bound.
+    const products = [
+      makeProduct({ title: "Brass Table Lamp", category: "table_lamp", tier: "balanced", price: 200, materials: ["brass", "linen", "steel"] }),
+      makeProduct({ title: "Brass Desk Lamp", category: "table_lamp", tier: "balanced", price: 172, materials: ["brass", "linen"] }),
+    ];
+    const result = computeSetMathScores(products, CTX_LIVING_ROOM);
+    // Without the mid-band contribution the pair sits at 0.40 and stays unflagged
+    // (duplicate_score 1.0); removing the band or lowering the 0.2 bound regresses this.
+    expect(result.duplicate_score).toBeLessThan(1);
+    expect(result.duplicate_score).toBeCloseTo(0.95, 2);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,9 @@ const TIER_COPY = {
     name: "Pro",
     price: "$49",
     period: "/month",
+    // Auto-renewal disclosure required at the point of purchase (Apple App
+    // Store 3.1.2 / Google Play subscription policy). Mirrors the pricing page.
+    renewalNote: "Billed monthly. Renews automatically until you cancel.",
     tagline: "For designers and property managers working across many spaces.",
     features: [
       "Everything in Apartment",
@@ -47,6 +50,7 @@ const TIER_COPY = {
     name: "Pro Annual",
     price: "$399",
     period: "/year",
+    renewalNote: "Billed annually. Renews automatically until you cancel.",
     tagline: "Everything in Pro — billed annually. Save $189 vs monthly.",
     features: [
       "Everything in Pro",
@@ -97,9 +101,14 @@ export default async function UpgradePage({ searchParams }: Props) {
             <p className="text-muted-foreground">{copy.tagline}</p>
           </div>
 
-          <div className="flex items-baseline gap-1.5 mb-8 pb-8 border-b">
-            <span className="text-5xl font-bold tracking-tight">{copy.price}</span>
-            <span className="text-sm text-muted-foreground">{copy.period}</span>
+          <div className="mb-8 pb-8 border-b">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-5xl font-bold tracking-tight">{copy.price}</span>
+              <span className="text-sm text-muted-foreground">{copy.period}</span>
+            </div>
+            {"renewalNote" in copy && copy.renewalNote ? (
+              <p className="text-sm text-muted-foreground mt-2">{copy.renewalNote}</p>
+            ) : null}
           </div>
 
           <ul className="space-y-3 mb-10">
