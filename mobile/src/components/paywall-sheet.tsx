@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
-import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
+import type { PurchasesOffering, PurchasesPackage, PurchasesStoreProduct } from 'react-native-purchases';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -26,23 +26,49 @@ type DisplayOption = {
   price: string;
   subline: string;
   badge: string | null;
+  /** True only when the store product carries a real free-trial intro offer. */
+  hasTrial: boolean;
 };
 
-// Shown when RC offerings haven't loaded yet or RC is not configured
+/**
+ * A RevenueCat free trial surfaces as an introductory offer priced at 0. The
+ * paywall may only say "free trial" when a loaded product actually has one —
+ * hardcoding trial copy for a product configured without a trial is a false
+ * subscription-terms disclosure (Apple Guideline 3.1.2 / Google Play / FTC).
+ * Returns e.g. "7-day free trial", or null when there is no free trial.
+ */
+function freeTrialLabel(product: PurchasesStoreProduct): string | null {
+  const intro = product.introPrice;
+  if (!intro || intro.price !== 0 || intro.periodNumberOfUnits <= 0) return null;
+  const unit = intro.periodUnit?.toLowerCase() ?? '';
+  const noun =
+    unit === 'day' ? 'day'
+      : unit === 'week' ? 'week'
+        : unit === 'month' ? 'month'
+          : unit === 'year' ? 'year'
+            : '';
+  return noun ? `${intro.periodNumberOfUnits}-${noun} free trial` : 'free trial';
+}
+
+// Shown when RC offerings haven't loaded yet or RC is not configured. With no
+// loaded product we cannot know whether a trial is configured, so we never
+// claim one here (honest default; real trial terms appear once RC loads).
 const FALLBACK_OPTIONS: DisplayOption[] = [
   {
     pkg: null,
     label: 'Annual',
     price: '$399 / year',
-    subline: '$33.25 per month · free trial included',
+    subline: 'Billed annually',
     badge: 'Best value',
+    hasTrial: false,
   },
   {
     pkg: null,
     label: 'Monthly',
     price: '$49 / month',
-    subline: 'Free trial included',
+    subline: 'Billed monthly',
     badge: null,
+    hasTrial: false,
   },
 ];
 
@@ -51,16 +77,17 @@ function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
     const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
     const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
     const priceStr = pkg.product.priceString;
+    const trial = freeTrialLabel(pkg.product);
+    const base = isAnnual ? 'Billed annually' : isMonthly ? 'Billed monthly' : pkg.product.description;
+    // Append the trial only when the store product actually offers one.
+    const subline = trial ? `${base} · ${trial}` : base;
     return {
       pkg,
       label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
       price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
-      subline: isAnnual
-        ? 'Free trial included · best value'
-        : isMonthly
-          ? 'Free trial included'
-          : pkg.product.description,
+      subline,
       badge: isAnnual ? 'Best value' : null,
+      hasTrial: trial !== null,
     };
   });
 }
@@ -78,6 +105,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const [options, setOptions] = useState<DisplayOption[]>(FALLBACK_OPTIONS);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [offeringLoaded, setOfferingLoaded] = useState(false);
 
   // Fetch RC offerings each time the sheet opens
@@ -112,6 +140,11 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   }, [visible, offeringLoaded]);
 
   const selectedOption = options[selectedIndex] ?? null;
+  const selectedHasTrial = selectedOption?.hasTrial ?? false;
+  // Either action in flight disables both buttons (mutual exclusion), but each
+  // button's own loading LABEL/busy state must reflect only its own operation —
+  // otherwise the restore button would read "Restoring…" during a normal purchase.
+  const busy = purchasing || restoring;
 
   const handleStartTrial = useCallback(async () => {
     const pkg = selectedOption?.pkg;
@@ -150,7 +183,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
 
   const handleRestore = useCallback(async () => {
     if (!RC_KEY) return;
-    setPurchasing(true);
+    setRestoring(true);
     try {
       const info = await Purchases.restorePurchases();
       const restoredPro = info.entitlements.active[ENTITLEMENT_ID]?.isActive === true;
@@ -176,7 +209,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         );
       }
     } finally {
-      setPurchasing(false);
+      setRestoring(false);
     }
   }, [onDismiss, onPurchaseSuccess]);
 
@@ -192,7 +225,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
           style={styles.closeButton}
           onPress={onDismiss}
           hitSlop={12}
-          disabled={purchasing}
+          disabled={busy}
           accessibilityRole="button"
           accessibilityLabel="Close"
         >
@@ -260,17 +293,17 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
               styles.ctaButton,
               {
                 backgroundColor: colors.accent,
-                opacity: pressed || purchasing ? 0.8 : 1,
+                opacity: pressed || busy ? 0.8 : 1,
               },
             ]}
             onPress={handleStartTrial}
-            disabled={purchasing}
+            disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel="Start free trial"
-            accessibilityState={{ disabled: purchasing, busy: purchasing }}
+            accessibilityLabel={selectedHasTrial ? 'Start free trial' : 'Subscribe'}
+            accessibilityState={{ disabled: busy, busy: purchasing }}
           >
             <ThemedText style={[styles.ctaText, { color: colors.accentForeground }]}>
-              {purchasing ? 'Processing…' : 'Start Free Trial'}
+              {purchasing ? 'Processing…' : selectedHasTrial ? 'Start Free Trial' : 'Subscribe'}
             </ThemedText>
           </Pressable>
 
@@ -278,12 +311,13 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             style={styles.restoreButton}
             onPress={handleRestore}
             hitSlop={8}
-            disabled={purchasing}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="Restore purchases"
+            accessibilityState={{ disabled: busy, busy: restoring }}
           >
             <ThemedText type="small" style={{ color: colors.textSecondary }}>
-              Restore Purchases
+              {restoring ? 'Restoring…' : 'Restore Purchases'}
             </ThemedText>
           </Pressable>
 
@@ -291,8 +325,10 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             type="small"
             style={[styles.legal, { color: colors.mutedForeground }]}
           >
-            Payment is charged when your free trial ends. Cancel anytime before then to avoid
-            charges. By subscribing you agree to our{' '}
+            {selectedHasTrial
+              ? 'Payment is charged when your free trial ends. Cancel anytime before then to avoid charges. '
+              : 'Your subscription starts immediately and renews automatically until you cancel. '}
+            By subscribing you agree to our{' '}
             <ThemedText
               type="small"
               style={[styles.legalLink, { color: colors.textSecondary }]}
