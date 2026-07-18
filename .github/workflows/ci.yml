@@ -10,6 +10,12 @@ on:
     branches: ["claude/ai-apartment-design-app-iHAdb", main, develop]
   pull_request:
 
+# Cancel superseded in-progress runs for the same PR — the autonomous loop pushes commits in rapid
+# succession; without this every intermediate push ran full CI to completion. Only PR runs cancel.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   verify:
     name: verify
