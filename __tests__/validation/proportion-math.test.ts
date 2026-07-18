@@ -123,6 +123,19 @@ describe("computeProportionScores — height relationships", () => {
     expect(bad.issues.some((i) => i.item === "side table")).toBe(true);
   });
 
+  it("does not flag a height sitting exactly on the tolerance boundary", () => {
+    // side_table target 26 ±2; actual 28 → deviation is exactly 2 == tolerance.
+    // The guard is `deviation > tolerance` (strict), so the boundary is in-spec:
+    // no issue, full marks. (A `>=` mutant would emit a spurious issue here —
+    // the score is unchanged because the penalty at deviation==tolerance is 0.)
+    const r = computeProportionScores(
+      analysis([{ category: "side_table", specs: "20x20x28 inches" }]),
+      {},
+    );
+    expect(r.height_relationships).toBe(1);
+    expect(r.issues.some((i) => i.item === "side_table")).toBe(false);
+  });
+
   it("falls back to 0.8 when an item has a rule but no parseable height", () => {
     const r = computeProportionScores(
       analysis([{ category: "coffee_table", specs: "40x20 inches" }]), // width/depth only, no height

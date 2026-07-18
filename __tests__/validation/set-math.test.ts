@@ -244,6 +244,20 @@ describe("computeSetMathScores — tier_differentiation", () => {
     )).toBe(true);
   });
 
+  it("flags inverted pricing when an upper tier is cheaper than a lower tier", () => {
+    // budget $600, high_end $300 → separation -50%. This is worse than merely
+    // weak separation: it must emit the "inverted pricing" issue (−0.3), not be
+    // swallowed by the weak-separation branch (which also matches negatives).
+    const inverted = [
+      makeProduct({ title: "Pricey Budget Chair", category: "accent_chair", tier: "budget", price: 600 }),
+      makeProduct({ title: "Cheap Luxury Chair", category: "accent_chair", tier: "high_end", price: 300 }),
+    ];
+    const result = computeSetMathScores(inverted, CTX_LIVING_ROOM);
+    expect(result.issues.some(i => i.toLowerCase().includes("inverted pricing"))).toBe(true);
+    // −0.3 penalty (not −0.2): 1.0 − 0.3 = 0.7.
+    expect(result.tier_differentiation).toBeCloseTo(0.7, 5);
+  });
+
   it("returns 0.7 base score when only one tier present (no comparison possible)", () => {
     const singleTier = [
       makeProduct({ title: "Chair A", category: "accent_chair", tier: "balanced", price: 400 }),
