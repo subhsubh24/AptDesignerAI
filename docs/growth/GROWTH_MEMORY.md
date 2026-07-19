@@ -1063,3 +1063,128 @@ Research-backed candidate swap (if competition validates):
 - Same owner blockers as Runs 1-10? YES — circuit breaker remains FIRED (Run 11, 11th consecutive
   run, ~20 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
+
+---
+
+## Run 12 — 2026-07-19
+
+### What we found
+- All Run 1-11 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`as_of` still `2026-07-14`, unchanged since Run 10; `set-site-gate-password` /
+  `connect-email-resend` / `set-metrics-token` / `set-cron-secret` / `set-email-physical-address`
+  all still `status: open`). 12th consecutive run, ~22 days since Run 1 first surfaced the core 4.
+  `git log` shows only 2 further Product-Factory commits landed between Run 11 and this run
+  (#659–#663, Runs 97-98): a FACTORY_STANDARD "graph of loops" section, a vendored design-audit
+  skill (Impeccable), and Run 98's 4 disjoint value-bar fixes — a validation-math dead-branch fix,
+  two test-coverage additions, and a `store-listing.md` compliance addition (subscription
+  auto-renewal + in-app account-deletion disclosure language for Apple/Google Play). Verified via
+  `grep` that Run 98's `store-listing.md` edit only ADDED the compliance disclosure and did not
+  touch or reintroduce the Pro Annual omission note (still present, still correct). None of this
+  is a growth-channel connection.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a NINTH time via curl through the
+  agent-proxy: still `connect_rejected` / gateway 502 to CONNECT ("CONNECT tunnel failed"),
+  cross-checked directly against `/__agentproxy/status` `recentRelayFailures` (one entry,
+  `2026-07-19T05:07:14.771Z`) — identical signature to Runs 6-11. No new information; conclusion
+  unchanged across all 9 probes.
+- `docs/growth/GTM_SCORECARD.md` unchanged since Run 9/10 (`auditor_run: 2`, `as_of: 2026-07-13`,
+  `business_case_honesty` held at `B`). Re-verified this run (not just assumed) that the B grade's
+  named gap — the planning case implying Pro Annual is live without disclosing it is gated off —
+  is ALREADY FIXED in `docs/BUSINESS_CASE.md`: read the file directly and found Run 9's same-day
+  (2026-07-13) fix in place — an explicit "gated off, not live" disclosure at the Pro Annual tier
+  section (lines ~99-106) plus the without-annual scenario correctly stating ~$99.9K (at, not
+  over, the floor). The scorecard's `B` grade evidently predates or is same-day as that fix and
+  has not yet been re-graded against it. The GTM Auditor runs weekly (Mondays 03:30 UTC); its next
+  scheduled pass (~2026-07-20) is TOMORROW relative to this run — correctly nothing further to do
+  here but wait for the re-grade, which should raise `business_case_honesty` to A and meet the GTM
+  ship gate (all other ship-critical GTM dimensions already A/A+).
+- `docs/quality/QUALITY_SCORECARD.md` (independent Product Quality Auditor, consumed as DATA only)
+  unchanged since Run 10 (`as_of: 2026-07-13`, `overall: C`, `business_case_strength: B`,
+  `security_rls: A`) — re-read directly, no new grading cycle yet. Reinforces, does not change,
+  this run's posture.
+- **Demand-signal research surfaced a second consecutive genuinely new citation, this time from a
+  new SOURCE TYPE.** Re-probed the two known structural gaps (Reddit tool-block, Trustpilot
+  site-block) per S10's every-run requirement — both unchanged, 6th consecutive re-probe with the
+  same result. Tried two fresh WebSearch angles beyond the known-blocked re-probes: one targeting
+  theme 1 (furniture-shopping decision-fatigue surveys) surfaced only WebSearch-synthesized
+  aggregate stats (3D Cloud, SpeakWise, First Chair blog posts already effectively covered) — no
+  new independently-fetchable verbatim source, so nothing added to theme 1 (correct: did not add
+  an unverified citation just to show progress). The second, targeting theme 2 with App-Store
+  review language ("waste of money" / "not worth it"), surfaced a genuinely new, directly-fetched,
+  verbatim-verified source: the Interium ("AI Interior Design") App Store review page
+  (`apps.apple.com/us/app/ai-interior-design-interium/id6499216812`), fetched cleanly via
+  WebFetch. Three 1-star reviews quoted verbatim, the most relevant: "The app advertises that you
+  can take a photo of a room and have it rearrange the furniture and items into a new design.
+  Unfortunately, that is not how the app actually works" and "it still gives me an image of whole
+  new furnitures and it restructures my whole house, nothing like i asked for." This is a
+  materially different EVIDENTIARY CLASS than the blog/press citations used so far — unmediated,
+  real paying-customer language, not a third-party publisher's framing — and surfaces a THIRD
+  distinct differentiation angle for theme 2 (now 4 independent sources, 3 verbatim-verified)
+  beyond "furniture isn't buyable" (First Chair) and "styling drift/spatial-blindness" (MONA): AI
+  tools substitute a generic redesign instead of honoring the user's actual room and stated
+  request — directly validating this product's design commitment to grounding mockups in the
+  user's real photographed room and intent.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-19; refreshed `internal_metrics_api`
+  (9th probe) and `web_research` (6th re-probe of the two structural gaps, unchanged, plus the new
+  Interium citation noted) validation reasons; added the Interium App Store review citation to
+  `demand_signal` theme 2's `sources`/`solved_by_product`/`recency` fields with the new
+  "source-type-diversifying" framing; bumped `demand_signal.as_of` and added a Run 12 `method_note`
+  (kept prior runs' history intact under a `prior_notes` key, not overwritten) explaining both the
+  theme-1 attempt that found nothing new and the theme-2 Interium find, and why `confidence` stays
+  at `emerging` (strengthening concentrated in one of four themes, same reasoning as Run 11);
+  rewrote `learnings`/`next_actions`/`owner_blockers` for the 12th consecutive circuit-breaker run,
+  including the GTM_SCORECARD re-verification (gap already fixed in-repo, awaiting the Auditor's
+  next weekly pass) and the reframed migration-021 owner-blocker (no longer claims it's the "sole
+  remaining GTM_SCORECARD gap" since that gap is now independently confirmed already fixed
+  in-repo — migration 021 is still needed for `business_case_strength` and to make the $122.9K
+  base actually transactable, but the wording no longer conflates the two). Ran `npm install`
+  (materializes `js-yaml` into a fresh `node_modules`, no `package.json` change) then
+  `node scripts/validate-gtm.mjs` — parses clean.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (9th probe, same
+  connect_rejected/502 signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD
+  still C) — both S6 lanes stay hard-off. Re-confirmed no `docs/growth/MARKETING_HOLD` or
+  `docs/growth/MARKETING_APPROVED` exists. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: the new Interium citation is
+  qualitative demand-signal research held at `confidence: emerging` — nowhere near the S3 bar
+  (real quantified data, sufficient N, causal revenue link) for a steer or a business-case number
+  change. `docs/BUSINESS_CASE.md` itself needed no edit — its GTM_SCORECARD-named disclosure gap
+  was already fixed by Run 9, re-verified (not re-fixed) this run.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer for the `GROWTH_STATUS.md` edit: this was a
+  routine S4/S5 dashboard-and-research update (a new demand-signal citation with its own verbatim
+  verification, re-probes, bookkeeping) — no landing/email/ASO copy, campaign, pricing/positioning
+  claim, outreach draft, or roadmap/vision/business-case steer shipped, matching Runs 5-11's
+  precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner-actionable item surfaced this run beyond what's
+  already listed there; all items already tracked with correct `status`.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4
+  fail-closed reasoning as Runs 5-11.
+
+### Lessons learned
+- **A ship-critical scorecard gap can already be fixed in-repo while the scorecard itself hasn't
+  caught up — verify the ACTUAL current file state before repeating a scorecard's stale gap as if
+  it were still open.** Run 9 fixed the GTM_SCORECARD's named business-case disclosure gap the
+  same day the scorecard was dated; Runs 10 and 11 correctly deferred to the scorecard's cadence
+  without re-checking the underlying file. This run closed the loop by re-reading
+  `docs/BUSINESS_CASE.md` directly and confirming the fix holds — worth doing at least once before
+  a scorecard's next scheduled pass, so `owner_blockers`/`next_actions` don't overstate a gap that
+  is mechanically already closed pending re-grade.
+- **Source TYPE diversity matters as much as source COUNT for demand-signal rigor.** Run 12's
+  Interium find is valuable less because it's a fourth citation and more because it comes from an
+  entirely different evidentiary class (unmediated paying-customer App Store reviews) than the
+  blog/press citations used in every prior run — worth actively varying source TYPE, not just
+  search query wording, when hunting for genuinely new demand-signal evidence.
+- **A negative research result (theme 1's fresh angle finding nothing new) is worth recording
+  explicitly, not silently dropped.** Correctly declining to cite WebSearch-synthesized aggregate
+  stats as if they were verbatim-verified evidence — consistent with every prior run's citation
+  discipline — is itself part of the honest record, not a gap in this run's work.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-11? YES — circuit breaker remains FIRED (Run 12, 12th consecutive
+  run, ~22 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
