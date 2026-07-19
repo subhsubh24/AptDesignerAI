@@ -303,8 +303,14 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
      */
     const synthInput = rooms
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase rows are untyped
-      .map((r: any) => {
-        const a = analysisRooms[r.room_type];
+      .map((r: any, i: number) => {
+        // Index-align with roomResults (Promise.all preserves input order), NOT
+        // the room_type-keyed analysisRooms map — that map collapses duplicate
+        // room types (e.g. two bedrooms), so all but the LAST same-type room
+        // would feed the wrong room's summary into the apartment narrative,
+        // corrupting the cross-room coherence synthesis. Mirrors the persistence
+        // loop below, which is already index-aligned for the same reason.
+        const a = roomResults[i]?.analysis;
         if (!a) return `## ${r.name} (${r.room_type})\n(no analysis)`;
         return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${(a.keep || []).join("; ")}\nReplace: ${(a.replace || []).join("; ")}\nAdd: ${(a.add || []).join("; ")}`;
       })
