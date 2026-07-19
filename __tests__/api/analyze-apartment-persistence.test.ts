@@ -110,4 +110,61 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
     expect(byRoom["room-a"]).toBe("ROOM_A_ANALYSIS");
     expect(byRoom["room-b"]).toBe("ROOM_B_ANALYSIS");
   });
+
+  it("coerces a non-array LLM shape for add/replace to [] instead of persisting it verbatim", async () => {
+    mockUserOwnsProject.mockResolvedValue(true);
+
+    // The LLM shape is not guaranteed. Here it returns `.add` as a STRING and
+    // `.replace` as an OBJECT (a plausible hallucination), with no array fallback.
+    // The old `x || y || []` would store the string/object verbatim into the JSONB
+    // columns; downstream code (e.g. correction-planner's missing_categories.join())
+    // then breaks. The guard must persist [] for a non-array shape.
+    const usage = { input_tokens: 1, output_tokens: 1 };
+    mockChat.mockImplementation(async (args: { messages: unknown }) => {
+      const text = JSON.stringify(args.messages);
+      if (text.includes("synthesize")) {
+        return { content: JSON.stringify({ overall: "apartment narrative" }), usage };
+      }
+      return {
+        content: JSON.stringify({ summary: "ROOM_A_ANALYSIS", score: 7, add: "sofa, rug", replace: { note: "swap" } }),
+        usage,
+      };
+    });
+
+    const inserts: Array<{ missing_categories: unknown; action_list: unknown }> = [];
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: (table: string) => {
+        if (table === "projects") {
+          return {
+            select: () => ({ eq: () => ({ single: async () => ({ data: { id: "proj-1" }, error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "rooms") {
+          return {
+            select: () => ({ eq: () => ({ order: async () => ({ data: [roomA], error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "room_diagnoses") {
+          return {
+            insert: async (payload: { missing_categories: unknown; action_list: unknown }) => {
+              inserts.push(payload);
+              return { error: null };
+            },
+          };
+        }
+        return {};
+      },
+    });
+
+    const res = await analyzeApartmentPost(jsonReq({ project_id: "proj-1" }));
+    expect(res.status).toBe(200);
+
+    expect(inserts).toHaveLength(1);
+    // A non-array `.add`/`.replace` must NOT be persisted verbatim — coerced to [].
+    expect(inserts[0].missing_categories).toEqual([]);
+    expect(inserts[0].action_list).toEqual([]);
+  });
 });

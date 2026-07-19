@@ -26,19 +26,19 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-16
-  last_run: 93                   # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 91            # 8-lens sweep ran Run 91 (2026-07-16); next due ~Run 95
+  as_of: 2026-07-19
+  last_run: 99                   # the Run N this reflects (null until first bookkeeping update)
+  last_deep_audit: 99            # 8-lens sweep ran Run 99 (2026-07-19); next due ~Run 103
   this_run:
-    changes_shipped: 3           # #647 (one PR, squash 59afc19, required checks green): (1) F4.1 saved-designs fail-loud on full-stage read errors + test; (2) F4 products-page surface add-product failures; (3) entitlements/server fail-open (never throw) on a malformed RC response + test. All 3 both-Sonnet-APPROVED first-pass.
-    changes_abandoned: 0         # ~6 scout findings VERIFIED-DOWN before any code (bundle-math + spatial-math "bugs" = intentional tolerance/defensive design; LABELED_DIMENSION_REGEX inches? = dead path; site-gate + cors "coverage gaps" = already-caught/no-op-cast; mobile use-free-quota unmount = React-18 no-op). E7 deferred (no clean disjoint headless-safe change). None started-then-dropped mid-build.
-    abandoned_reasons: []        # none started-then-dropped this run (all drops were pre-code verification, not abandoned builds)
-    verify_cycle_failures: 0     # LOOP-2 clean for all 3 (tsc/eslint/test/determinism); baseline 2119 → integrated 2126 (+7)
-    review_rejections: 0         # LOOP-3: 6/6 first-pass APPROVE, ZERO REQUEST_CHANGES (reviewers reverted change-A to reproduce the 500→200 mutation; change-C security reviewer confirmed rcAppUserId is server-derived — no client-triggerable entitlement bypass)
+    changes_shipped: 6           # one PR (single-branch git constraint): (1) correctness — bundles/evaluate null candidate_products guard (crash + stuck-bundle) + test; (2) reliability/F4.1 — analyze-apartment firstArray() guards on two LLM-output consumers (synthesis 500 + JSONB corruption) + test; (3)(4)(5) F2 — 3 validation default-score (checks===0→0.9) coverage tests (access-constraints, outlet-reach, code-compliance); (6) F5 — .env.example documents NEXT_PUBLIC_APP_URL + EMAIL_PHYSICAL_ADDRESS (prod footguns). All 6 both-Sonnet-APPROVED first-pass.
+    changes_abandoned: 0         # DEEP AUDIT (8-lens) surfaced these 6 + several verified-DOWN drops (perf CLEAN, security/RLS CLEAN, a11y/design CLEAN, monetization/store/mobile CLEAN; BUSINESS_CASE annual-disclosure nit and 2 low-value candidates held below-bar). None started-then-dropped mid-build.
+    abandoned_reasons: []        # none started-then-dropped this run (all non-selections were pre-code value-bar/verification drops, not abandoned builds)
+    verify_cycle_failures: 0     # LOOP-2 clean (tsc/eslint/test/determinism); baseline 2166 → integrated 2172 (+6). The C6 test caught a SIBLING unguarded consumer (route.ts:320 synthesis .join) the audit missed → guarded both sites.
+    review_rejections: 0         # LOOP-3: 8/8 first-pass APPROVE, ZERO REQUEST_CHANGES; both C6 reviewers flagged one non-blocking comment-accuracy nit (downstream-consumer citation) → comment corrected, no code/behavior change. Reviewers empirically mutation-verified C1/C6/COV.
     circuit_breaker_trips: 0
-    ci_flake: "none observed; #647 registered no legacy commit-statuses (Actions check-runs only) but merged cleanly ~19min after push once the verify/build/mobile queue cleared."
+    ci_flake: "n/a at bookkeeping time — PR pending required checks (verify/build/mobile)."
   rolling_7d:
-    merged_prs: 49               # all routines' merged PRs over the last 7d (git log --since=7d origin/default | grep -cE '\(#N\)'), incl. #647
+    merged_prs: 50               # all routines' merged PRs over the last 7d (git log --since=7d origin/default | grep -cE '\(#N\)')
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal
     readiness_attempts: 0        # times the readiness gate was attempted
     readiness_rejected: 0        # times it was rejected (auditor/preflight found a real gap)

@@ -3,6 +3,7 @@ import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
+import type { CandidateProduct } from "@/lib/types/database";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
@@ -60,9 +61,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const products = (bundle.product_bundle_items || []).map(
-    (item: { candidate_products: unknown }) => item.candidate_products
-  );
+  // candidate_products comes from a nested Supabase join; a bundle_item whose
+  // product row was deleted (or a broken FK) yields a null here. An unfiltered
+  // null flows into evaluateBundle → p.id/p.category deref → an uncaught 500 that
+  // leaves the bundle stuck at "pending" and orphans the just-created agent run.
+  // Drop nulls so only resolvable products are evaluated.
+  const products = ((bundle.product_bundle_items || []) as Array<{ candidate_products: unknown }>)
+    .map((item) => item.candidate_products)
+    .filter((p): p is CandidateProduct => p != null);
+
+  // A bundle with no resolvable products can't be meaningfully evaluated — reject
+  // it before the paid LLM call rather than sending an empty product list (which
+  // would burn a model call to score nothing and return a nonsense verdict).
+  if (products.length === 0) {
+    return NextResponse.json({ error: "Bundle has no valid products to evaluate" }, { status: 400 });
+  }
 
   // Room (with images) and the latest diagnosis both key only on bundle.room_id
   // and are independent of each other — fetch them together. Fixed-position

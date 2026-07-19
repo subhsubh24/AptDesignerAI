@@ -105,4 +105,22 @@ describe("computeOutletReach", () => {
     expect(item?.reason).toMatch(/vague/i);
     expect(result.issues.length).toBe(0);
   });
+
+  it("returns the neutral 0.9 default score when no powered items are checkable", () => {
+    // With outlet positions known but NO powered items among the needs (only a sofa
+    // and a rug), zero reach checks run and the score falls to the neutral 0.9
+    // default. This feeds harmony-math's composite; the existing non-powered test
+    // asserts per_item absence but never pins the score — pin it so a mutation of
+    // the 0.9 constant is caught.
+    const analysis = {
+      outlet_positions: "outlets on north and east walls",
+      what_it_needs: [
+        { category: "sofa", placement: "south wall" },
+        { category: "rug", placement: "center" },
+      ],
+    };
+    const result = computeOutletReach(analysis);
+    expect(result.per_item.length).toBe(0);
+    expect(result.score).toBe(0.9);
+  });
 });

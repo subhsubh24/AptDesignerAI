@@ -123,4 +123,22 @@ describe("computeAccessConstraints", () => {
     });
     expect(result.issues.some((i) => /diagonally|elevator cab/.test(i.issue))).toBe(false);
   });
+
+  it("returns the neutral 0.9 default score when no large items are checkable", () => {
+    // A room whose needs are all SMALL accents (none in LARGE_ITEM_CATEGORIES) runs
+    // zero delivery-fit checks, so the score falls to the neutral 0.9 default. This
+    // is a common real input (styling passes, no furniture) and the default feeds
+    // harmony-math's composite — pin it so a mutation of the 0.9 constant is caught.
+    const analysis = {
+      what_it_needs: [
+        { category: "table_lamp", specs: "18 inches tall" },
+        { category: "rug", specs: "60 x 96 inches" },
+      ],
+    };
+    const result = computeAccessConstraints(analysis, {
+      buildingResearch: { entry_door_width: 32 },
+    });
+    expect(result.per_item.length).toBe(0);
+    expect(result.score).toBe(0.9);
+  });
 });

@@ -21,6 +21,17 @@ import { userOwnsProject } from "@/lib/auth/ownership";
 // the Vercel Pro ceiling and covers the documented worst-case pipeline latency.
 export const maxDuration = 300;
 
+// Return the first argument that is genuinely an array, else []. Used to sanitize
+// LLM-produced fields (`.add`/`.replace`/…) before they are persisted to JSONB
+// columns that downstream code treats as arrays — a hallucinated string/object
+// must not be stored verbatim.
+function firstArray(...vals: unknown[]): unknown[] {
+  for (const v of vals) {
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -306,7 +317,10 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
       .map((r: any) => {
         const a = analysisRooms[r.room_type];
         if (!a) return `## ${r.name} (${r.room_type})\n(no analysis)`;
-        return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${(a.keep || []).join("; ")}\nReplace: ${(a.replace || []).join("; ")}\nAdd: ${(a.add || []).join("; ")}`;
+        // keep/replace/add come straight from the LLM and are not guaranteed to be
+        // arrays; a hallucinated string/object would make `.join` throw and 500 the
+        // whole synthesis on the core path. firstArray() coerces non-arrays to [].
+        return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${firstArray(a.keep).join("; ")}\nReplace: ${firstArray(a.replace).join("; ")}\nAdd: ${firstArray(a.add).join("; ")}`;
       })
       .join("\n\n");
 
@@ -388,10 +402,18 @@ ${synthInput}
         room_id: room.id,
         diagnosis_json: roomAnalysis,
         design_direction_json: { overall: analysis.overall },
+        // The LLM's shape is not guaranteed: `.add`/`.replace` can come back as a
+        // string or object instead of an array. `x || y || []` would persist that
+        // non-array verbatim into the JSONB columns, and downstream consumers read
+        // these columns as arrays (e.g. infer-preferences.ts does `for (const item
+        // of action_list)` and diagnosis-expansion iterates `action_list.map(...)`,
+        // both throwing on a non-array object — `?? []` only guards null), so a
+        // malformed shape corrupts the diagnosis and breaks product sourcing. Pick
+        // the first field that is genuinely an array; otherwise store [].
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
+        missing_categories: firstArray((roomAnalysis as any).add, (roomAnalysis as any).needs),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
+        action_list: firstArray((roomAnalysis as any).replace, (roomAnalysis as any).weaknesses),
         model_used: model,
       });
       if (diagInsertError) {

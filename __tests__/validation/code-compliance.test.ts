@@ -194,4 +194,15 @@ describe("computeCodeCompliance", () => {
     );
     expect(result.checks.find((c) => c.code.includes("210.52"))).toBeUndefined();
   });
+
+  it("returns the neutral 0.9 default score when no code-checkable data is supplied", () => {
+    // With no floor-plan/building-research fields, zero code checks run — the most
+    // common real input, since most users never supply building research. The
+    // existing "warns when no checkable data" test pins the warning but not the
+    // score; the 0.9 default feeds harmony-math's composite, so pin it too and a
+    // mutation of the 0.9 constant is caught.
+    const result = computeCodeCompliance({}, { roomType: "living_room" });
+    expect(result.checks.length).toBe(0);
+    expect(result.score).toBe(0.9);
+  });
 });
