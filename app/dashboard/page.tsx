@@ -1223,7 +1223,7 @@ function RoomUploadSection({
               uploading && "pointer-events-none opacity-50"
             )}
           >
-            <input {...getInputProps()} capture="environment" aria-label="Upload room photos" />
+            <input {...getInputProps()} capture="environment" aria-label={`Upload photos for ${section.label}`} />
             {uploading ? (
               <Loader2 className="h-5 w-5 animate-spin text-accent-warm" />
             ) : (
