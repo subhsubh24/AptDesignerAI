@@ -320,6 +320,27 @@ describe("cross-room material constraints", () => {
     ).toBe(true);
   });
 
+  it("adds an apartment-wide metal conflict in the REVERSE direction (cool apartment, warm room)", () => {
+    // Other rooms: only chrome (cool). This room introduces brass (warm).
+    // Exercises the second arm of the OR in material-math (apartmentCool &&
+    // !apartmentWarm && thisRoomWarm && !thisRoomCool) — the mirror of the case
+    // above, previously uncovered so a mutation dropping that arm went unnoticed.
+    const result = computeMaterialBalance(
+      { recommended_materials: ["brass"] },
+      {
+        roomType: "bedroom",
+        otherRooms: [{ materials: ["chrome"] }],
+      },
+    );
+    expect(
+      result.conflicts.some((c) => /apartment-wide.*metal.*inconsistent/i.test(c.issue)),
+    ).toBe(true);
+    // The offending metal message names this room as the warm one.
+    expect(
+      result.conflicts.some((c) => /this room uses warm metals/i.test(c.issue)),
+    ).toBe(true);
+  });
+
   it("does NOT add a cross-room conflict when metal temperatures are consistent", () => {
     // Other rooms: only brass (warm). This room: copper (warm) — same temperature
     const result = computeMaterialBalance(

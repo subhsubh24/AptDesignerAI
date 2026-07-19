@@ -518,7 +518,8 @@ export default function ResultsScreen() {
                 disabled={quotaLoading || saveState === 'saving' || saveState === 'saved'}
               >
                 <ThemedText style={[styles.buttonText, { color: saveState === 'saved' ? colors.text : colors.accentForeground }]}>
-                  {saveState === 'idle' ? 'Save Design' :
+                  {quotaLoading && saveState === 'idle' ? 'Checking…' :
+                   saveState === 'idle' ? 'Save Design' :
                    saveState === 'saving' ? 'Saving…' :
                    saveState === 'saved' ? 'Saved' : 'Retry Save'}
                 </ThemedText>

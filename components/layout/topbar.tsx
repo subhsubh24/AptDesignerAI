@@ -168,7 +168,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <div className="hidden md:block">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full" aria-label="Open account menu">
                   <Avatar className="h-8 w-8 ring-2 ring-border">
                     <AvatarImage src={user?.user_metadata?.avatar_url} alt={name} />
                     <AvatarFallback className="text-xs bg-secondary text-secondary-foreground font-medium">

@@ -12,10 +12,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 import { buildWaitlistWelcomeEmail } from "@/lib/email/templates/waitlist-welcome";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 // Tokens are exactly 64 hex chars (randomBytes(32)). Match that exactly so a
 // junk query string can't trigger a wide scan or odd Postgres behaviour.
 const TOKEN_RE = /^[a-f0-9]{64}$/;
+
+function clientIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
 
 function redirectTo(req: NextRequest, status: "confirmed" | "invalid"): NextResponse {
   const url = req.nextUrl.clone();
@@ -25,6 +34,17 @@ function redirectTo(req: NextRequest, status: "confirmed" | "invalid"): NextResp
 }
 
 export async function GET(req: NextRequest) {
+  // Throttle per IP: this public, unauthenticated endpoint writes the DB and can
+  // fire a welcome email on each pending-token match, so an unthrottled burst is
+  // a write-load + email-quota abuse surface. A real subscriber follows the link
+  // once, so 10/15min per IP never impedes legitimate use. Over the limit we
+  // redirect to the same friendly "invalid/try again" page rather than exposing
+  // a raw 429, keeping the inbox-clicker's experience coherent.
+  const rate = checkRateLimit(`waitlist-confirm:${clientIp(req)}`, RATE_LIMITS.waitlistConfirm);
+  if (!rate.allowed) {
+    return redirectTo(req, "invalid");
+  }
+
   const token = req.nextUrl.searchParams.get("token") ?? "";
   if (!TOKEN_RE.test(token)) {
     return redirectTo(req, "invalid");

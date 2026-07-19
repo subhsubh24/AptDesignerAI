@@ -137,8 +137,10 @@ describe("POST /api/waitlist (double opt-in)", () => {
   });
 });
 
-function confirmReq(token: string) {
-  return new NextRequest(`http://localhost/api/waitlist/confirm?token=${token}`);
+function confirmReq(token: string, ip?: string) {
+  return new NextRequest(`http://localhost/api/waitlist/confirm?token=${token}`, {
+    headers: ip ? { "x-forwarded-for": ip } : undefined,
+  });
 }
 
 describe("buildWaitlistWelcomeEmail", () => {
@@ -194,6 +196,31 @@ describe("GET /api/waitlist/confirm", () => {
     const res = await CONFIRM(confirmReq(token));
     expect(res.headers.get("location")).toContain("status=invalid");
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits a burst from one IP (11th request is blocked before the DB/email)", async () => {
+    // Valid pending token so every allowed request would otherwise write + send.
+    const token = "c".repeat(64);
+    mockGetAdmin.mockReturnValue(
+      fakeAdmin({ updateResult: () => ({ data: [{ id: "row-4", email: "burst@example.com" }], error: null }) }),
+    );
+    const ip = "203.0.113.7"; // dedicated IP so the limiter bucket is isolated
+
+    // First 10 are within the 10/15min window and confirm successfully.
+    for (let i = 0; i < 10; i++) {
+      const ok = await CONFIRM(confirmReq(token, ip));
+      expect(ok.headers.get("location")).not.toContain("status=invalid");
+    }
+    expect(mockSendEmail).toHaveBeenCalledTimes(10);
+
+    // The 11th is throttled: redirected to the friendly page WITHOUT another
+    // DB write or email send, proving the limiter short-circuits before the
+    // expensive work.
+    mockGetAdmin.mockClear();
+    const blocked = await CONFIRM(confirmReq(token, ip));
+    expect(blocked.headers.get("location")).toContain("status=invalid");
+    expect(mockGetAdmin).not.toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalledTimes(10); // unchanged — no 11th send
   });
 });
 

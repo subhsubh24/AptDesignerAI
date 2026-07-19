@@ -185,4 +185,13 @@ export const RATE_LIMITS = {
    * a link (each page view is a single request).
    */
   sharedDesign: { maxRequests: 60, windowMs: 60_000 },
+  /**
+   * Public waitlist double-opt-in confirmation — 10 per 15 minutes PER IP. This
+   * GET is unauthenticated (the unguessable token is the only auth) and, on a
+   * matching pending row, writes the DB and fires a welcome email. Keying on the
+   * caller IP slows burst abuse (DB write-query load + email-provider quota
+   * drain) without impeding a real subscriber, who follows the link once. Mirrors
+   * the per-IP limiter on the waitlist POST endpoint.
+   */
+  waitlistConfirm: { maxRequests: 10, windowMs: 15 * 60_000 },
 } as const;
