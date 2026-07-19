@@ -291,12 +291,15 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             type="small"
             style={[styles.legal, { color: colors.mutedForeground }]}
           >
-            {/* Disclose the recurring price + period at the point of purchase
-                (Apple App Store 3.1.2 / Google Play subscription policy).
-                selectedOption.price already reads e.g. "$49 / month". */}
+            {/* Disclose the recurring price + period AND the cancellation
+                method at the point of purchase (Apple App Store 3.1.2(v) /
+                Google Play subscription policy — both require telling the user
+                HOW to cancel, not just that they can). selectedOption.price
+                already reads e.g. "$49 / month"; the store-native path mirrors
+                the guidance shown in Settings (settings.tsx). */}
             {selectedOption?.price
-              ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. `
-              : 'Payment is charged when your free trial ends. Cancel anytime before then to avoid charges. '}
+              ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. Manage or cancel anytime in your App Store or Google Play subscription settings. `
+              : 'Payment is charged when your free trial ends. Manage or cancel anytime in your App Store or Google Play subscription settings. '}
             By subscribing you agree to our{' '}
             <ThemedText
               type="small"
