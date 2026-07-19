@@ -245,6 +245,7 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder="What should change? (Cmd/Ctrl+Enter to send)"
+              aria-label="Describe what to change"
               rows={2}
               disabled={sending}
               className="resize-none text-sm"
