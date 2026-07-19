@@ -109,5 +109,19 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
     const byRoom = Object.fromEntries(diagnosesInserts.map((d) => [d.room_id, d.diagnosis_json.summary]));
     expect(byRoom["room-a"]).toBe("ROOM_A_ANALYSIS");
     expect(byRoom["room-b"]).toBe("ROOM_B_ANALYSIS");
+
+    // The apartment SYNTHESIS narrative must also receive BOTH rooms' own
+    // analyses. The synthesis input was built from the same room_type-keyed map
+    // that collapsed duplicate types, so the pre-fix prompt carried the LAST
+    // same-type room's summary twice (ROOM_B_ANALYSIS x2) and never
+    // ROOM_A_ANALYSIS — feeding wrong per-room data into the cross-room
+    // coherence pass. Assert the synth prompt now contains each distinct summary.
+    const synthCall = mockChat.mock.calls
+      .map((c) => c[0] as { messages: unknown })
+      .find((args) => JSON.stringify(args.messages).includes("synthesize"));
+    expect(synthCall).toBeDefined();
+    const synthText = JSON.stringify(synthCall!.messages);
+    expect(synthText).toContain("ROOM_A_ANALYSIS");
+    expect(synthText).toContain("ROOM_B_ANALYSIS");
   });
 });

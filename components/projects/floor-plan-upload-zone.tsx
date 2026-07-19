@@ -242,7 +242,7 @@ export function FloorPlanUploadZone({
           isProcessing && "pointer-events-none opacity-60",
         )}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} aria-label="Upload floor plan image or PDF" />
 
         {isProcessing ? (
           <>
