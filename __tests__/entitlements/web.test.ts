@@ -115,8 +115,52 @@ describe("getWebBillingStatus — pro tier (subscription)", () => {
     expect(result!.hasPaid).toBe(false);
   });
 
-  it("returns hasPaid:false for past_due pro subscription", async () => {
-    const chain = makeSupabaseChain({ tier: "pro", status: "past_due", current_period_end: null });
+  it("grants grace for past_due pro anchored on updated_at when period end is unknown", async () => {
+    // current_period_end is always null for Pro (the webhook leaves it null), so
+    // the grace anchors on updated_at — here the row entered past_due 2 days ago,
+    // well inside the 14-day window. Revoking instantly would violate the stores'
+    // uninterrupted-access expectation.
+    const recentUpdate = new Date(Date.now() - 2 * 86400_000).toISOString();
+    const chain = makeSupabaseChain({
+      tier: "pro",
+      status: "past_due",
+      current_period_end: null,
+      updated_at: recentUpdate,
+    });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const result = await getWebBillingStatus("user-1");
+    expect(result!.hasPaid).toBe(true);
+  });
+
+  it("revokes past_due pro once the updated_at-anchored grace window has elapsed", async () => {
+    // The row entered past_due 20 days ago and Stripe never sent a follow-up
+    // canceled/unpaid event (dropped webhook / stale row). The bound is REAL and
+    // self-contained: access lapses at updated_at + 14d rather than staying free
+    // forever waiting on an event that never came.
+    const staleUpdate = new Date(Date.now() - 20 * 86400_000).toISOString();
+    const chain = makeSupabaseChain({
+      tier: "pro",
+      status: "past_due",
+      current_period_end: null,
+      updated_at: staleUpdate,
+    });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const result = await getWebBillingStatus("user-1");
+    expect(result!.hasPaid).toBe(false);
+  });
+
+  it("prefers current_period_end over updated_at as the grace anchor when present", async () => {
+    // If a period end IS known, cap the grace at period_end + 14d even when
+    // updated_at is more recent — period_end 20 days ago lapses despite a fresh
+    // updated_at, so a re-stamped row can't extend a genuinely-expired period.
+    const oldPeriodEnd = new Date(Date.now() - 20 * 86400_000).toISOString();
+    const freshUpdate = new Date(Date.now() - 1 * 86400_000).toISOString();
+    const chain = makeSupabaseChain({
+      tier: "pro",
+      status: "past_due",
+      current_period_end: oldPeriodEnd,
+      updated_at: freshUpdate,
+    });
     mockGetAdminClient.mockReturnValue(chain as never);
     const result = await getWebBillingStatus("user-1");
     expect(result!.hasPaid).toBe(false);
