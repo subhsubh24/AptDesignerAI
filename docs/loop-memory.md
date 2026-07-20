@@ -4,6 +4,33 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-20 (Run 102) — 2 a11y keyboard + mobile side-effect integrity + 2 F2 coverage. 1 a11y candidate DROPPED on review (anti-pattern). PR #670 auto-merge queued.
+
+### State on entry
+- Cold container. Working branch `claude/sleepy-goldberg-58mbe5` == origin default tip `3aae750` (GTM Auditor Run 3 #669 had just merged; my STALE local `origin/...iHAdb` ref showed 1c09a72 and made the branch look +1 — `git fetch` before comparing, per LOOP 4). `npm install` root + mobile. Baseline GREEN: web+mobile tsc, **2179 tests**, determinism, eslint 0 errors (19 warnings all in vendored `.agents/skills/impeccable/**` — out of scope, do not touch).
+- **DEEP AUDIT NOT due** (last ran Run 99; next ~Run 103).
+- **Scorecard (as_of 2026-07-13) is partly STALE:** its headline `security_rls A+→A` IDOR (mockups POST `product_ids`/`bundle_id` room-binding) is **ALREADY FIXED** at `app/api/mockups/route.ts:554-593` — verify scorecard findings against HEAD before acting, they lag the code. The three human/CI-gated ship-critical dims (functional_reality C, design_taste B, business_case_strength B) are unchanged and NOT loop-buildable.
+
+### Scouting — 6 Haiku lenses
+- security/RLS **CLEAN** (54 routes guarded; 20+ tables ENABLE RLS; no secrets), artifact/store-compliance **CLEAN** (pricing/privacy/deletion/permissions/annual-gating consistent), perf **CLEAN** (no non-inert hot-path win; N+1 still inert under memory store). Real finds: 3 keyboard-a11y gaps, 1 mobile partial-payload gap, F2 branch gaps.
+- Correctness `BuildingPhoto` res.ok gap = BORDERLINE (decorative photo, `.catch` guards, no fake success) → DEFERRED. F2 candidates VERIFIED before selecting — several scout claims were WRONG (entitlements/web null-period-end ALREADY tested at web.test.ts:88; access-constraints elevator-diagonal boundary ALREADY tested at 105-124). Always grep the test file to confirm a branch is genuinely uncovered before writing a coverage test.
+
+### Shipped (all 2/2-Sonnet-APPROVED) — PR #670
+- **A11y (2):** `mockups/page.tsx` lightbox-open + `focus/page.tsx` vision-preview-reopen — both mouse-only `<div onClick>` and the SOLE trigger for their action → `role=button`/`tabIndex`/`aria-label`/`onKeyDown` Enter+Space+preventDefault + `focus-visible:ring-ring`.
+- **Mobile F4.1:** `results.tsx` `analyzeRoom()` field-validates the 3 rendered strings + 5 arrays (was object-shape only) → partial 200 now surfaces the existing retryable error instead of blank cards. Same-contract as the server producer → cannot over-reject.
+- **F2 (2):** `bundle-math.test.ts` completeness excess penalty (−0.005/item, clamp −0.05; base 0.50 via essential-only coverage + duplicate padding → 0.5/0.48/0.45); `complexity-router.test.ts` classifier SUCCESS path + VERDICT_TO_TIER mapping (the pre-existing "standard" test secretly hit the CATCH fallback — old mock `content:[]` → JSON.parse throws).
+
+### Lessons
+1. **An a11y "fix" that duplicates an existing accessible control is a REGRESSION, not a fix.** The dropped ManualScorecardView change added `role=button` to a row that ALREADY had a dedicated keyboard chevron `<button>` (aria-expanded, focus ring) — wrapping that button + a product `<a>` in an outer `role=button` is an ARIA-invalid nested-interactive anti-pattern (extra tab stop, duplicate labels). Before converting a mouse-only clickable div, CHECK whether the action already has a keyboard-accessible control inside/near it; only fix when the div is the SOLE trigger (mockups/focus were). Both reviewers flagged it → reverted even though both APPROVED the batch.
+2. **Reviewers can APPROVE and still surface a valid flag** — read the flags, don't just tally verdicts. Acting on the nested-interactive flag was the right call.
+3. **Verify scout claims against HEAD.** Scorecard security findings and F2 "untested branch" claims both lagged reality this run; a 2-line grep saved shipping a no-op test or re-fixing a fixed IDOR.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 103** (last ran Run 99) — run the 8-lens sweep BEFORE selecting next run.
+- **The three ship-critical dims stay human/CI-gated** (functional_reality C = owner DATA_BACKEND cutover; design_taste B = CI-bound authed axe on diagnosis/mockups/compare + F7 committed screenshots; business_case_strength B = owner annual-billing flip / migration 021). Do NOT re-attempt blind.
+- **DEFERRED real items (disjoint, next run):** `BuildingPhoto` res.ok in `app/dashboard/page.tsx` (borderline); more F2 coverage — product-scorer category-calibration branch, calibration.ts computeDynamicBaseline, extract-json unmatched-brace fallback, spend-limiter day-boundary reset (all VERIFY-untested-first). Mobile results palette/materials cards render an empty header on empty payload (minor UX).
+- **DO-NOT-RE-FLAG (carry):** mockups IDOR is FIXED; pgvector/N+1 inert under memory store; `--score-*` token swap is churn; ManualScorecardView row already keyboard-accessible via its chevron button (do NOT re-add role=button).
+
 ## Run 2026-07-09 (Run 74) — SCORECARD-DRIVEN: data-layer persistence PREPARE (the new #1 ship blocker) + 2 IDOR/security + side-effect-integrity + mobile null-guard. ALL 4 MERGED.
 
 ### State on entry
