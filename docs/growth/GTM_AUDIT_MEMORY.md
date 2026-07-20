@@ -121,3 +121,74 @@ disclosure gap → business_case_honesty A → ship gate met.
   $122.9K re-presented as year-1). Re-derive the year-1 exit run-rate each run.
 - Cheap raises still on the table: surface stripe_reporting as its own owner action (self-validation
   A→A+); render a full CAN-SPAM footer in staged email templates (compliance A→A+).
+
+---
+
+## Run 3 — 2026-07-20
+
+**Overall: A · ship_gate_met: TRUE** (was B / false at Run 2 — the ship gate is MET for the first time)
+
+Graded GROWTH_STATUS (as_of 2026-07-19, Growth Agent Run 12) + BUSINESS_CASE (summary as_of
+2026-07-13, body notes through 2026-07-15) with four fresh, independent, adversarial per-dimension
+graders (each told to REFUTE the Factory's claims and re-derive the math), cross-checked against my
+own direct git/file/PENDING_OPS verification. Read GTM_AUDIT_MEMORY first and diffed against Run 2.
+
+### Grades
+| Dimension | Run 1 | Run 2 | Run 3 | Ship-critical | Δ vs Run 2 |
+|---|---|---|---|---|---|
+| Metric integrity | A | A+ | A+ | ★ | = |
+| Business-case honesty | **F** | **B** | **A** | ★ | ↑ (B→A, gate-opening) |
+| Experiment validity | A | A | A | | = |
+| Roadmap-steer justification | A+ | A+ | A+ | ★ | = |
+| Self-validation honesty | A | A | **A+** | ★ | ↑ |
+| PMF read accuracy | A+ | A+ | A+ | | = |
+| Compliance | A | A | **A+** | | ↑ |
+| Artifact freshness | B | A | **A+** | | ↑ |
+
+### What changed since Run 2 (the one gate-blocking gap is fixed; three cheap raises landed)
+1. **Business-case honesty B → A (opens the ship gate).** Run 2's sole open gap — the planning case
+   modeling ~38% of MRR on the non-transactable Pro Annual tier as if live (issue #600) — is
+   GENUINELY FIXED. docs/BUSINESS_CASE.md now carries an explicit "Annual billing is currently GATED
+   OFF, not live" disclosure at the Pro Annual section (:101-107) AND at the without-$100K section
+   (:406), both citing PENDING_OPS.md apply-migration-021 (confirmed status:open — the claim is true).
+   The without-annual figure is tightened to the correct $99,926 ($74 below the floor). Independently
+   re-derived via node: Scenario A $46,109 / B $122,956 / C $276,652 / without-annual $99,926 exactly;
+   year-1 exit ~$58.6K; summary YAML reconciles to the body on every field; anti-gaming holds (Apple
+   15% SBP excluded, year-1 timing honestly false/~year-3). Figures now mechanically reproducible
+   (analysis/*.mjs + figures.json, #631). Issue #600 closed as resolved.
+2. **Self-validation A → A+.** Run-2 stripe_reporting nit closed — now its own next_action (:246) with
+   honest reasoning for why it is NOT an owner_blocker (a Product-Factory build gap). Every named
+   self-report spot-checked against the actual files and ALL hold (GTM_SCORECARD unchanged claim,
+   annual-disclosure-fixed claim, "Run 98 store-listing edit didn't reintroduce Pro Annual" via
+   git show 88a7e6f, all PENDING_OPS status:open claims). Zero findings.
+3. **Compliance A → A+.** Run-2 CAN-SPAM footer nit fixed fail-closed: lib/email/templates/lifecycle.ts
+   renders EMAIL_PHYSICAL_ADDRESS (footer :60 + plaintext :89-91, never invented); lib/email/index.ts
+   force-dry-runs every marketing stage (requiresPhysicalAddress, :69-71,:92-98) until the address is
+   set — a non-compliant marketing email cannot leave the system even after RESEND_API_KEY lands.
+4. **Artifact freshness A → A+.** Annual tier cleanly quarantined in store-listing.md/press-kit.md
+   (every $399 mention inside the dated omission note; advertised pricing only $29 + $49/mo); domain
+   uniformly aptdesignerai.com in customer-facing assets.
+
+### Ship gate
+MET. Every ship-critical dimension is A/A+ (metric A+, business-case A, roadmap A+, self-validation
+A+) and every non-critical dimension is A/A+. Overall held at A (not A+) because business-case
+honesty and experiment validity carry real-but-trivial nits below exemplary.
+
+### Two things NOT wrong (verified, do not re-litigate unless they change)
+- No GTM steer ever reached ROADMAP.md/VISION.md (git-confirmed); BUSINESS_CASE edits are honesty
+  recomputes that made the case MORE conservative. Demand signal held recommend-only, "not actioned".
+- Metric integrity pristine: all funnel/pmf/acquisition/email/content/outreach 0/null; the new
+  Interium App Store citation is correctly attributed + verbatim-fenced (an evidence improvement).
+
+### Notes for next run
+- Watch for SILENT REGRESSION now that the gate is met: re-derive the year-1 exit run-rate and the
+  without-annual $99,926 each run; confirm floor_met_year1 stays false and the gated-off disclosure
+  stays present. The gate being met is not a reason to grade on trust — re-verify the math cold.
+- Remaining paths to overall A+ are purely cosmetic: (a) business-case — tighten :406 "AT the floor"
+  to "$74 BELOW the floor" (the doc already says "$74 below" at :32-34, so this is a wording fix);
+  (b) experiment validity — pair each confirmation-seeking demand-signal query with a disconfirming
+  one (Run-12's "waste of money" angle selects for competitor-negative signal). Neither blocks the gate.
+- Bump summary as_of on BUSINESS_CASE the next time the body changes (currently 2026-07-13 vs a
+  2026-07-15 no-number-change note — benign, but keep an eye on it).
+- The real launch constraint is owner env-connect blockers (site gate / Resend / metrics token /
+  migrations), not GTM quality — those are owner actions the GTM Factory correctly cannot resolve.

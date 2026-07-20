@@ -8,188 +8,192 @@ The dashboard reads the fenced `GTM_SCORECARD` block below.
 ```yaml
 GTM_SCORECARD:
   project: AptDesignerAI
-  as_of: 2026-07-13
-  auditor_run: 2
-  overall: B
-  ship_gate_met: false          # requires A/A+ on every ship_critical dim AND >= B elsewhere
+  as_of: 2026-07-20
+  auditor_run: 3
+  overall: A
+  ship_gate_met: true           # requires A/A+ on every ship_critical dim AND >= B elsewhere
   ship_critical_dimensions: [metric_integrity, business_case_honesty, roadmap_steer_justification, self_validation_honesty]
   dimensions:
     metric_integrity:
       grade: A+
       ship_critical: true
       evidence: >-
-        Went line by line: channels_connected [] (GROWTH_STATUS.md:26), awaiting_connect true (:27),
-        every external source unavailable/degraded (validation: block :30-47). With NO connected
-        source, every product metric is 0/null and every one is -- funnel visitors/waitlist/trial/
-        paid/subs/mrr all 0, rates null (:49-59); acquisition all null (:60-64); pmf all null,
-        signal none (:65-71); email list_size 0 (:152-157); content 0 (:158-161); outreach 0,
-        signal none (:162-166). Zero fabricated or unsourced non-zero metrics. Every demand_signal
-        external number passes the two-part test -- named-source attributed AND framed as
-        qualitative pain-signal, never laundered into funnel/pmf/acquisition: eMarketer "9hrs/13
-        tabs" (:115), Baymard 87% (:127), the 2.8/5-on-3-reviews and $511-vs-$265 both explicitly
-        fenced as "WebSearch-synthesized only" (:119,:123). Confidence held at "emerging" (:107)
-        rather than raised to "strong" despite going 2-of-4 -> 4-of-4 verbatim-verified, on the
-        honest gate of per-theme source COUNT -- genuine self-restraint, the opposite of flattery.
-      gap: null
+        Verified line by line, independently: channels_connected [] (GROWTH_STATUS.md:26) +
+        awaiting_connect true (:27), all six validation sources unavailable/degraded (:30-47) -- so NO
+        connected source exists, and correctly EVERY product metric is 0/null: funnel visitors/waitlist/
+        trial/paid/subs/mrr 0, rates null (:49-59); acquisition all null (:60-64); pmf all null,
+        signal none (:65-71); email list_size 0 (:210-215); content 0 (:216-219); outreach 0, signal
+        none (:220-224). Zero fabricated/unsourced non-zero business metrics -- the only non-zero value,
+        engine_pct 100, is an explicitly preflight-verified CODE-completion metric, not a laundered
+        funnel number. Every demand_signal external number passes the two-part test (named-source +
+        URL AND framed qualitative): eMarketer "9hrs/13 tabs" (:171), Baymard 87% (:183), the softer
+        "$511-vs-$265" and "2.8/5 on 3 reviews" both explicitly fenced as "WebSearch-synthesized only,
+        trustpilot 403s" (:175,:179). This run's ONE new citation (Interium App Store reviews, :175) is
+        a new source TYPE (real paying-customer reviews) and is correctly attributed + verbatim-fenced --
+        an evidence improvement, not a fabrication. confidence held at emerging, NOT raised to strong,
+        on the honest per-theme source-count gate (:92-97,:163-168) -- self-restraint, not flattery.
+      gap: >-
+        Trivial nit only (does not lower the grade; held A+ matching Run 2 as there is no regression and
+        no actual violation): the same hard-looking external numbers (87%, 9hrs/13tabs, $511/$265, 2.8/5)
+        are re-cited across themes/disconfirming/positioning prose -- a laundering RISK if a reader skims,
+        though every instance is correctly attributed and fenced, so there is no violation.
     business_case_honesty:
-      grade: B
+      grade: A
       ship_critical: true
       evidence: >-
-        The Run-1 F (floor_met_year1:true overstating a steady-state ARR as a year-1 result) is
-        GENUINELY FIXED and re-derived independently: summary now floor_met_year1:false with an
-        honest time_to_floor naming $122.9K as STEADY-STATE, year-1 exit ~$58-60K, floor ~year 3
-        (BUSINESS_CASE.md:12-13); the body relabels $122.9K as steady-state at every load-bearing
-        spot (:242-247, :263-266, :381-386) and now AGREES with Scenario A's "2-3 years to compound
-        to $100K" (:214) instead of contradicting it. Math checks: base steady-state 4,000 x 0.25 x
-        0.04 = 40 paid -> MRR $10,247 -> ARR $122,966 (:230-239); accumulating the pools over 12
-        months (monthly 12/mo @ 7% churn -> ~99.7 subs; annual 4/mo @ 2.4% -> ~42.1 subs) gives
-        month-12 MRR $4,887 -> ARR $58,644, matching "~$58-60K"; 0%-annual steady-state 16/0.07 x
-        $34.30 + $487 = ~$99.9K, matching "~$100K baseline" (:366). Summary YAML reconciles to the
-        body on all fields (floor_met_year1, time_to_floor, arr tiers, planning_case, floor_usd).
-        Benchmarks sit within cited ranges; the 15% Apple SBP upside is correctly excluded from the
-        headline (:298, anti-gaming).
+        Run 2's B gap (the planning case modeling ~38% of MRR on the non-transactable Pro Annual tier as
+        if live) is GENUINELY FIXED and independently re-derived via node. Disclosure fix is real and
+        complete: an explicit "Annual billing is currently GATED OFF, not live" block at the Pro Annual
+        section (BUSINESS_CASE.md:101-107) AND at the without-$100K section (:406), both citing
+        PENDING_OPS.md apply-migration-021 -- which I confirmed is status:open, so the "gated off" claim
+        is TRUE. Every number reconciles: Scenario A $46,109 (doc ~$46,200), B $122,956 (doc ~$122,900),
+        C $276,652 (doc ~$276,800), without-annual $99,926 EXACTLY ($74 below the $100K floor). Year-1
+        exit run-rate re-derived from month-12 pool accumulation new*(1-(1-churn)^12)/churn = ~99.7
+        monthly + 42.1 annual Pro subs -> MRR ~$4,887 -> ~$58.6K ARR, matching the doc's "~$58-60K"
+        (:53-54,:283-286). Summary YAML (floor_met_year1 false, time_to_floor, arr tiers, floor_usd
+        100000, planning_case base) reconciles to the body on every field. Anti-gaming holds: Apple 15%
+        SBP excluded from the headline (:331-338), year-1 timing honestly false/~year-3 (not regressed),
+        organic anchored at 40% (top-not-above the benchmark). Figures now mechanically reproducible via
+        analysis/*.mjs + figures.json (Run 10 computation-integrity commit #631).
       gap: >-
-        Real named gap (why B, not A): the planning case attributes ~$3,880/mo = 37.9% of total MRR
-        to the Pro Annual tier, which is CURRENTLY NON-TRANSACTABLE -- migration 021 is unapplied
-        and ANNUAL_BILLING_ENABLED defaults OFF (PENDING_OPS.md:63-69 apply-migration-021 status:open;
-        checkout route refuses pro_annual per #597). Line 67 ("Pro Annual was added in PR #98 /
-        migration 021") and the whole "Pro Annual tier economics" section (:71-84) read as if annual
-        is LIVE, with no disclosure that it is gated off pre-launch -- the same defect already fixed
-        for store-listing.md under artifact_freshness, still present in the business case. Not F
-        because the anti-gaming test passes: :366 discloses the floor essentially clears WITHOUT
-        annual (~$99.9K, at the floor), so no number is gamed to clear the floor. Fix to reach A:
-        add one sentence at line 67 / in the annual-economics section disclosing annual billing is
-        gated OFF pending migration 021 + ANNUAL_BILLING_ENABLED (per PENDING_OPS.md), and tighten
-        :366 to state the without-annual steady-state is ~$99.9K (at, not over, the floor). That
-        converts the load-bearing annual assumption from "implied live" to "disclosed future lever,"
-        matching the honesty already applied to the year-1 timing claim.
+        Trivial nits only (why A not A+; neither is a finding): (1) :406 phrases the $99,926 figure as
+        "AT the floor rather than over it" when it is precisely $74 BELOW -- slightly generous wording,
+        though the same doc's verification note (:32-34) states "$74 below the floor" plainly, so no
+        deception. (2) summary as_of 2026-07-13 predates the 2026-07-15 Run-10 note, but that note added
+        only reproducible scripts and changed no number ("No figure or number in this document changed",
+        re-verified) -- benign staleness. Cosmetic; every load-bearing number is honest and reconciled.
     experiment_validity:
       grade: A
       ship_critical: false
       evidence: >-
-        experiments: [] is correct pre-launch with no funnel; learnings state it plainly ("Funnel
-        remains 0/null ... no fabrication", :174). No experiment claims a lift with zero N.
-        demand_signal is handled to spec: explicitly qualitative, respects correlation != causation,
-        carries a real disconfirming[] section (:130-134) including the free-substitute ChatGPT
-        threat and category-fatigue signal, and self-corrected a mis-cited Hacker News item id
-        across runs. This run all 4 themes reached verbatim-verified (2->4 of 4) yet confidence was
-        HELD at emerging rather than raised -- addressing Run 1's nit about a confidence bump leaning
-        on unverified carried-over themes.
+        experiments: [] (GROWTH_STATUS.md:209) is empty and honestly justified -- the whole funnel is
+        0/null pre-launch (:49-59) with the learning "no fabrication" (:232). The demand_signal
+        disconfirming[] block (:186-190) is genuinely adversarial, not decorative: it carries the
+        free-substitute ChatGPT threat (:188), category fatigue / "no clear winner, lightly scammy cash
+        grabs" (:187), the AR-avoidance "visualization alone is insufficient" counter (:189), and
+        honestly flags Reddit as an unreachable TOOLING gap "not read as disconfirming" (:190) rather
+        than laundering absence into a positive. No lift/effect claimed with zero N; per-theme source
+        counts honestly characterized as thin (1-3/theme), which is exactly why confidence is held at
+        emerging not strong (:163-168).
       gap: >-
-        Nit (why A not A+): per-theme independent source COUNT is still thin (1-3/theme, mostly one
-        per publisher); Reddit + Trustpilot remain structurally unreachable, so two themes still
-        rest partly on WebSearch-synthesized (not independently re-fetched) citations.
+        Nit (why A not A+): the Run-12 demand-signal search angle deliberately targeted "AI app reviews
+        using words like 'waste of money'" (:82) -- a confirmation-seeking sampling frame that selects
+        for competitor-negative signal favoring the product's own positioning. Mitigated (confidence held
+        flat, disconfirming section intact, thinness disclosed) so the inference stays honest, but the
+        sampling method itself is biased. Fix toward A+: pair each confirmation-seeking angle with a
+        disconfirming query (e.g. "people who love [competitor]" / "AI redesign that worked great").
     roadmap_steer_justification:
       grade: A+
       ship_critical: true
       evidence: >-
-        Git-confirmed no GTM/Growth steer ever reached the guarded files: git log -- ROADMAP.md
-        VISION.md docs/BUSINESS_CASE.md shows only Product-Factory / doc-loop commits; the only
-        growth-prefixed commit in history touches STORE_GROWTH, not ROADMAP/VISION/BUSINESS_CASE.
-        The recent BUSINESS_CASE edits (floor-timing recompute -> false, organic-share 50%->40%,
-        lever crediting) are honesty CORRECTIONS making the case MORE conservative, landed by the
-        Product Factory (PR #508 per GROWTH_MEMORY.md), not GTM steers. demand_signal.positioning_
-        implication states outright it is "NOWHERE NEAR the S3 bar ... stays qualitative pain-signal
-        ... not actioned now" (:135-149); the multi-retailer angle is reserved for a FUTURE copy
-        pass. Emerging, qualitative signal correctly held recommend-only -- the exemplary no-steer
-        outcome.
+        Git-confirmed no GTM/Growth steer ever reached the guarded files. git log -- ROADMAP.md
+        VISION.md docs/BUSINESS_CASE.md: ROADMAP.md touched only by #615 (initial doc) and #638 (a
+        Product-Factory "Run 90" housekeeping ledger whose diff only updates an inline E7 status note and
+        states "No ROADMAP box ticked"); VISION.md only by #615. The single growth-authored guarded-file
+        commit is #631 (Growth Agent Run 10), a pure computation-integrity verification adding
+        reproducible scripts and stating verbatim "No figure or number in this document changed" -- an
+        honesty recompute, not a steer; the other BUSINESS_CASE annotations (Run 9 annual disclosure,
+        Run 71 floor-timing) made claims MORE conservative (floor_met_year1 true->false), "No number was
+        gamed." demand_signal.positioning_implication holds the signal recommend-only: "confidence held
+        at emerging, NOWHERE NEAR the S3 bar for a business-case number change or a roadmap steer ...
+        stays qualitative pain-signal ... worth surfacing in a FUTURE ASO/copy pass ... still not
+        actioned now" (:191-207). The exemplary no-steer outcome.
       gap: null
     self_validation_honesty:
-      grade: A
+      grade: A+
       ship_critical: true
       evidence: >-
-        The validation: block declares all six sources with status + a concrete fail-closed reason
-        (:30-47); channels_connected [] is truthful; none is claimed connected. The Run-1-ADJACENT
-        false-self-report pattern is GENUINELY RESOLVED -- the prior run had falsely claimed "Pro
-        Annual omitted / grep clean" while store-listing.md still advertised it; this run's learnings
-        claims ("store-listing.md/press-kit.md still carry the dated Pro-Annual-omitted notes,
-        re-grepped"; "BUSINESS_CASE.md still reads floor_met_year1:false"; "no out-of-schema
-        priority:low in PENDING_OPS.md") were each spot-checked against the actual files and ALL
-        hold. The web_research:degraded structured entry was added (:45-47), addressing Run 1's A->A+
-        nit. Fail-closed sandbox posture is honest: the site_gate/metrics reasons note the agent's
-        own sandbox carries SITE_GATE_PASSWORD/CRON_SECRET-named values but refuse to infer prod
-        config ("not used, not inferred as connected", :41,:177). Every unavailable source
-        cross-checks to an open PENDING_OPS item + next_actions/owner_blockers.
-      gap: >-
-        Trivial nit (why A not A+): stripe_reporting (:36-38) is honestly marked unavailable but,
-        unlike the other five, is not surfaced as its own dedicated owner action / PENDING_OPS item
-        in next_actions/owner_blockers (only indirectly via the metrics-token path). No dishonesty --
-        an incompletely-surfaced source.
+        Every named self-report spot-checked against the actual artifacts and ALL hold -- adversarial
+        refutation failed on every axis. "GTM_SCORECARD unchanged since Run 9/10 (auditor_run 2, as_of
+        2026-07-13, business_case_honesty B)" TRUE. "the B-grade gap is ALREADY FIXED in BUSINESS_CASE.md"
+        TRUE (gated-off block :101-107, without-annual ~$99.9K :406). "Run 98's store-listing.md edit did
+        not reintroduce the Pro Annual note" TRUE (git show 88a7e6f: edit only ADDED auto-renewal +
+        account-deletion compliance language; the "$399" that remains is inside the intact omission note).
+        "PENDING_OPS.md items still status:open" TRUE (set-site-gate-password/connect-email-resend/
+        set-metrics-token/set-cron-secret/set-email-physical-address/apply-migration-021 all open, file
+        as_of 2026-07-14). The six validation sources are each unavailable/degraded with concrete
+        fail-closed reasons (:30-47); none claimed connected. site_gate reasoning honestly fail-closed --
+        notes the agent's own sandbox carries a SITE_GATE_PASSWORD-named value but refuses to infer prod
+        config (:41). The Run-2 stripe_reporting nit is CLOSED: now surfaced as its own next_action (:246)
+        with honest reasoning for why it is NOT an owner_blocker (a Product-Factory build gap, no owner
+        action unblocks it). Zero findings.
+      gap: null
     pmf_read_accuracy:
       grade: A+
       ship_critical: false
       evidence: >-
-        pmf block all null, signal none (:65-71) -- accurate (no real users pre-launch).
-        Recommendation is correctly product/retention-focused, not acquisition. phase correctly held
-        pre_launch; the run even reads the independent QUALITY_SCORECARD B->C drop (data layer is a
-        non-persistent in-memory mock) as reinforcing pre_launch and HARDENING the outreach bar, not
-        loosening it (:170). demand_signal is labeled "leading indicator, NOT PMF" and kept
-        rigorously distinct from pmf.signal -- no "PMF confirmed" claimed from demand signal.
+        pmf block entirely null (activation, retention d1/d7/d30, organic_share) with signal none
+        (:65-71) -- accurate pre-launch (no real users). phase pre_launch (:23). demand_signal is
+        explicitly and repeatedly firewalled from PMF: block header "pre-launch demand validation
+        (leading indicator, NOT PMF)" (:72), confidence note "still qualitative signal, never PMF
+        (S1/S10)" (:168). No "PMF confirmed" claimed anywhere from demand signal. Recommendation is
+        correctly product-oriented, not acquisition -- inline gate "pre-PMF => prioritize PRODUCT, not
+        acquisition" (:71). Exemplary.
       gap: null
     compliance:
-      grade: A
+      grade: A+
       ship_critical: false
       evidence: >-
-        Outreach is genuinely draft-only with honest zeros (outreach drafted/sent/replies 0,
-        signal none, :162-166); no drafts queued this run, correct. Outbound hard-off: site_gate_up
-        false, awaiting_connect true, channels_connected [], both S6 lanes gated (:175). No
-        MARKETING_HOLD kill-switch and no MARKETING_APPROVED record -- consistent with PREPARE-only.
-        No fabricated live metrics/social proof (all funnel 0/null). No fake accounts/reviews/
-        engagement/auto-send anywhere.
-      gap: >-
-        Nit (carried from Run 1, why A not A+): staged email bodies carry reply-to opt-out language
-        but the templates do not render a full CAN-SPAM footer (physical postal address + one-click
-        unsubscribe); the backing exists in code (migration 027 / /account opt-out) but the block
-        should be visible in the template. Draft-only + hard-off means zero live exposure today.
+        Outbound provably hard-off, no metric fabricated. outreach block all zeros (drafted/sent/replies
+        0, signal none, :220-224); channels_connected [] (:26), awaiting_connect true (:27), site_gate_up
+        false (:28); whole funnel 0/null (:49-59). No docs/growth/MARKETING_HOLD and no MARKETING_APPROVED
+        record exist -- consistent with PREPARE-only. The Run-2 CAN-SPAM nit is FIXED and fail-closed:
+        lib/email/templates/lifecycle.ts renders EMAIL_PHYSICAL_ADDRESS in both the HTML footer (:60) and
+        the plaintext unsub line (:89-91) and never invents an address (:25-28); lib/email/index.ts forces
+        the DryRunProvider whenever a marketing stage would send live without the address set
+        (requiresPhysicalAddress + !isEmailDryRun + missing env -> DryRunProvider, :92-98), and
+        requiresPhysicalAddress (:69-71) covers every stage except the transactional waitlist_confirm --
+        broader (more fail-closed) than strictly required. A non-compliant marketing email cannot leave
+        the system even once RESEND_API_KEY lands.
+      gap: null
     artifact_freshness:
-      grade: A
+      grade: A+
       ship_critical: false
       evidence: >-
-        Run 1's B gap is FIXED. store-listing.md:84-92 and press-kit.md:162-165 now carry dated
-        (2026-07-09) "Pro Annual ($399/yr) intentionally omitted" notes; the actual PRICING blocks
-        advertise ONLY Apartment $29 + Pro $49/mo -- the only "$399" is inside the omission note
-        describing what to re-add once migration 021 lands, NOT an advertised plan (verified via
-        grep). PR #597 additionally closed the product-side risk (annual checkout was serving while
-        021 was unapplied -> would charge then fail the webhook upsert; now gated behind
-        ANNUAL_BILLING_ENABLED, default OFF). The false "Pro Annual omitted / grep clean" learnings
-        are corrected. Core pricing ($29 one-time / $49-mo Pro) consistent across all GTM assets;
-        domain clean (aptdesignerai.com throughout).
-      gap: >-
-        Nit (why A not A+): the docs/BUSINESS_CASE.md annual-tier wording still implies annual is
-        live -- that finding is graded under business_case_honesty (top gap) to avoid
-        double-counting; the customer-facing marketing assets themselves are clean.
-  top_gaps:
-    - dimension: business_case_honesty
-      grade: B
-      severity: 1
-      summary: >-
-        The planning case models ~37.9% of total MRR on the Pro Annual tier while annual is
-        currently NON-transactable (migration 021 unapplied, ANNUAL_BILLING_ENABLED off); line 67
-        + the annual-economics section imply the tier is live with no "gated off pre-launch"
-        disclosure. Not F (the floor is disclosed to clear ~$99.9K WITHOUT annual, so no number is
-        gamed), but a real disclosure gap on a ship-critical dimension -- the only thing keeping the
-        ship gate closed. Fix: disclose annual is gated off pending 021 + the flag, and state the
-        without-annual steady-state is ~$99.9K (at, not over, the floor).
+        The non-transactable annual tier is correctly quarantined in the customer-facing assets. In both
+        store-listing.md (:84-92) and press-kit.md (:162-165) every "399"/"Pro Annual"/"annual"
+        occurrence sits inside a dated "intentionally omitted (2026-07-09)" blockquote citing the
+        unapplied migration 021 -- none is an advertised plan. Advertised pricing is only Apartment $29
+        one-time + Pro $49/month (store-listing :73-75,:158-159; press-kit :129-130,:159-160), consistent
+        across both. Canonical domain uniformly aptdesignerai.com (store-listing :67,:81,:107,:113,:118,
+        :153,:165; press-kit :136,:171); the only aptdesigner.ai hit under docs/ is in loop-memory.md:1113
+        (an internal memory note about domain-drift, not a customer-facing asset). Zero findings in the
+        GTM assets. (The BUSINESS_CASE annual wording is graded under business_case_honesty to avoid
+        double-counting.)
+      gap: null
+  top_gaps: []
   notes: >-
-    Run 2 (2026-07-13). Major improvement over Run 1's overall C: both Run-1 top gaps are genuinely
-    fixed -- business-case honesty's year-1 floor-timing violation (was F, issue #486 closed) and
-    artifact freshness's non-transactable Pro Annual store listing + false self-report (was B, issue
-    #487 -> now A). Graded by four fresh, independent, adversarial per-dimension graders on the
-    ship-critical dimensions (each told to REFUTE the Factory's claims and re-derive the math), plus
-    evidence-backed grading of the four non-critical dimensions. 7 of 8 dimensions are now A/A+.
-    Ship gate still fails on ONE ship-critical dimension: business-case honesty holds at B because
-    the business case models ~38% of planning-case MRR on the currently-gated Pro Annual tier and
-    implies it is live -- a disclosure gap (NOT a gamed number; the floor clears without annual).
-    Closing that single disclosure gap raises business_case_honesty to A and, with every other
-    ship-critical dim at A/A+ and all non-critical dims >= A, would meet the ship gate.
+    Run 3 (2026-07-20). SHIP GATE MET for the first time -- every ship-critical dimension is A/A+
+    (metric_integrity A+, business_case_honesty A, roadmap_steer_justification A+, self_validation_honesty
+    A+) and every non-critical dimension is A/A+. Overall A (not A+: business_case_honesty and
+    experiment_validity carry real-but-trivial nits below exemplary). The single gap that kept the gate
+    closed at Run 2 -- business_case_honesty B, the annual-tier disclosure gap (issue #600) -- is
+    GENUINELY FIXED: docs/BUSINESS_CASE.md now carries an explicit "annual billing is GATED OFF, not
+    live" disclosure at both the Pro Annual section (:101-107) and the without-$100K section (:406), and
+    the without-annual figure is tightened to the correct $99,926 ($74 below the floor). Independently
+    re-derived every ARR figure via node; all reconcile and are now mechanically reproducible
+    (analysis/*.mjs, #631). Two non-critical dimensions ALSO rose to A+ this cycle: compliance (the Run-2
+    CAN-SPAM footer nit is fixed fail-closed -- EMAIL_PHYSICAL_ADDRESS renders + marketing stages are
+    force-dry-run until it is set) and artifact_freshness (annual tier cleanly quarantined, domain
+    consistent). Graded by four fresh, independent, adversarial per-dimension graders (each told to
+    REFUTE the Factory's claims and re-derive the math), cross-checked against direct git/file/PENDING_OPS
+    verification. Issue #600 closed as resolved. No ship-critical dimension is below A, no fabricated
+    metric / gamed number / speculative steer was found, so NO new gap issues are filed this run. The
+    remaining paths to overall A+ are purely cosmetic (see per-dimension gap notes): tighten the "at the
+    floor" wording to "$74 below", and pair confirmation-seeking demand-signal queries with disconfirming
+    ones. Owner env-connect blockers (site gate / Resend / metrics token / migrations) remain the real
+    launch constraint -- those are owner actions, not GTM-quality gaps.
 ```
 
 ## How to read it (owner)
 
-- `overall` + `ship_gate_met` are the headline; `ship_gate_met:false` means at least one
-  ship-critical dimension is below A (here: business-case honesty = B, the annual-tier disclosure
-  gap).
-- `top_gaps` is ordered by severity — the GTM Factory should fix #1 (business-case honesty)
-  before new GTM work, exactly as the Product Factory drives a sub-A quality dimension to A.
-- Each dimension's `evidence` cites what the Auditor actually checked; `gap` names the
-  specific fix to raise it to A.
+- `overall` + `ship_gate_met` are the headline; `ship_gate_met:true` means every ship-critical
+  dimension is A/A+ and everything else is ≥ B. As of Run 3 the GTM work clears the ship gate for
+  the first time — the business-case annual-tier disclosure gap that held it closed at Run 2 is fixed.
+- `top_gaps` is empty this run: no ship-critical dimension is below A and no fabricated/gamed/
+  speculative finding survived adversarial verification. The only remaining improvements are the
+  cosmetic A→A+ nits named in each dimension's `gap`.
+- Each dimension's `evidence` cites what the Auditor actually checked; a `gap` (where present) names
+  the specific trivial fix to reach A+.
+- The real launch constraint is not GTM quality but the owner env-connect blockers (site gate,
+  Resend, metrics token, migrations) tracked in `PENDING_OPS.md` / `GROWTH_STATUS` owner_blockers.
