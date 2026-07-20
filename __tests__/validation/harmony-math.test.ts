@@ -109,6 +109,44 @@ describe("computeHarmonyScores — lighting adequacy", () => {
     expect(result.lighting.has_ambient).toBe(true);
     expect(result.lighting.light_source_count).toBeGreaterThanOrEqual(1);
   });
+
+  it("awards the extra-coverage bonus once light sources exceed the room minimum", () => {
+    // Kitchen minimum is 2 sources. The `lightSourceCount >= minSources + 1` bonus
+    // (+0.05) is a whole branch no test exercised. Isolate it: hold the ambient/
+    // task/accent flags fixed and cross the count from exactly 2 (no bonus) to 3
+    // via a SPEC-detected third source (a category in no lighting set, so it bumps
+    // only the count, not a flag) — the sole score delta must be the +0.05 bonus.
+    const atMinimum = computeHarmonyScores(
+      {
+        what_it_needs: [
+          { category: "pendant_light", specs: "ceiling pendant" }, // ambient
+          { category: "floor_lamp", specs: "floor lamp" }, // task
+        ],
+      },
+      { roomType: "kitchen" },
+    );
+    expect(atMinimum.lighting.light_source_count).toBe(2);
+    expect(atMinimum.lighting.has_ambient).toBe(true);
+    expect(atMinimum.lighting.has_task).toBe(true);
+    expect(atMinimum.lighting.has_accent).toBe(false);
+    expect(atMinimum.lighting.adequacy_score).toBe(0.95); // no extra-coverage bonus
+
+    const overMinimum = computeHarmonyScores(
+      {
+        what_it_needs: [
+          { category: "pendant_light", specs: "ceiling pendant" }, // ambient
+          { category: "floor_lamp", specs: "floor lamp" }, // task
+          { category: "open_shelf", specs: "integrated LED under-shelf light" }, // spec-only source, no flag
+        ],
+      },
+      { roomType: "kitchen" },
+    );
+    expect(overMinimum.lighting.light_source_count).toBe(3);
+    // The third source toggled NO flag (accent still false) — so the only change is the bonus.
+    expect(overMinimum.lighting.has_accent).toBe(false);
+    expect(overMinimum.lighting.adequacy_score).toBe(1.0);
+    expect(overMinimum.lighting.adequacy_score - atMinimum.lighting.adequacy_score).toBeCloseTo(0.05, 5);
+  });
 });
 
 describe("computeHarmonyScores — cross-room direction gating", () => {

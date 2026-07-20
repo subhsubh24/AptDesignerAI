@@ -63,8 +63,12 @@ function makeClient(opts: {
   ownedProductIds?: string[];
   bundleBelongsToRoom?: boolean;
   jobInsertSpy: Mock;
+  // Raw product_bundle_items rows for the bundle branch. When set, overrides the
+  // rows derived from ownedProductIds — lets a test inject a null candidate_products
+  // (a deleted-FK nested join) to exercise the null-filter guard.
+  bundleItemsRaw?: Array<{ candidate_products: unknown }>;
 }) {
-  const { user, ownedProductIds = [], bundleBelongsToRoom = false, jobInsertSpy } = opts;
+  const { user, ownedProductIds = [], bundleBelongsToRoom = false, jobInsertSpy, bundleItemsRaw } = opts;
   const from = vi.fn((table: string) => {
     if (table === "rooms") {
       const chain: Record<string, unknown> = {};
@@ -106,7 +110,7 @@ function makeClient(opts: {
       const chain: Record<string, unknown> = {};
       chain.select = vi.fn().mockReturnValue(chain);
       chain.eq = vi.fn().mockResolvedValue({
-        data: ownedProductIds.map((id) => ({ candidate_products: { id } })),
+        data: bundleItemsRaw ?? ownedProductIds.map((id) => ({ candidate_products: { id } })),
         error: null,
       });
       return chain;
@@ -184,5 +188,36 @@ describe("standard mockup product<->room binding", () => {
     const res = await mockupsPost(req({ room_id: "room-1", bundle_id: "bundle-1" }));
     expect(res.status).not.toBe(404);
     expect(jobInsertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression guard: a bundle item whose candidate_products FK was deleted comes
+  // back as a null nested join. Before the fix `products.map((p) => p.id)` derefed
+  // that null and 500'd this paid render path (crash BEFORE the mockup_jobs insert).
+  it("filters a deleted-FK null product and still reaches the render", async () => {
+    const jobInsertSpy = vi.fn().mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "job-1" }, error: null }) }) });
+    makeClient({
+      user: { id: "owner-1" },
+      bundleBelongsToRoom: true,
+      // one live product + one deleted-FK null → must not crash on the null.
+      bundleItemsRaw: [{ candidate_products: { id: "prod-A" } }, { candidate_products: null }],
+      jobInsertSpy,
+    });
+    const res = await mockupsPost(req({ room_id: "room-1", bundle_id: "bundle-1" }));
+    // Got past the null-deref (line was BEFORE the job insert) into the render.
+    expect(res.status).not.toBe(404);
+    expect(jobInsertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects with 400 and starts NO render when every bundle product was deleted", async () => {
+    const jobInsertSpy = vi.fn().mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "job-1" }, error: null }) }) });
+    makeClient({
+      user: { id: "owner-1" },
+      bundleBelongsToRoom: true,
+      bundleItemsRaw: [{ candidate_products: null }, { candidate_products: null }],
+      jobInsertSpy,
+    });
+    const res = await mockupsPost(req({ room_id: "room-1", bundle_id: "bundle-1" }));
+    expect(res.status).toBe(400);
+    expect(jobInsertSpy).not.toHaveBeenCalled();
   });
 });

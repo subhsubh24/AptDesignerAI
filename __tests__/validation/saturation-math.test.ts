@@ -147,6 +147,22 @@ describe("updateSaturation", () => {
     const updated = updateSaturation(profile, makeItem("wall_art"));
     expect(updated.focal_points.current).toBe(1);
   });
+
+  it("increments an EXISTING category's count without re-deriving its caps", () => {
+    // Every prior updateSaturation test starts from an empty profile, so only the
+    // new-category branch (the `if (!updatedPerCat[cat])` initializer) is exercised.
+    // Seed a profile that already has the category so the else path runs: current
+    // must go 1 -> 2 while soft_cap / hard_cap are preserved (not recomputed).
+    const profile = initializeSaturation([makeItem("plant")], { sqft: 250 }, null);
+    expect(profile.per_category["plant"]?.current).toBe(1);
+    const softBefore = profile.per_category["plant"]?.soft_cap;
+    const hardBefore = profile.per_category["plant"]?.hard_cap;
+
+    const updated = updateSaturation(profile, makeItem("plant"));
+    expect(updated.per_category["plant"]?.current).toBe(2);
+    expect(updated.per_category["plant"]?.soft_cap).toBe(softBefore);
+    expect(updated.per_category["plant"]?.hard_cap).toBe(hardBefore);
+  });
 });
 
 describe("formatSaturationForPrompt", () => {

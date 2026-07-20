@@ -566,7 +566,19 @@ RULES:
       .from("product_bundle_items")
       .select("candidate_products(*)")
       .eq("bundle_id", bundle_id);
-    products = (data || []).map((item: { candidate_products: unknown }) => item.candidate_products);
+    // A nested-join row whose candidate_products FK was deleted comes back as
+    // null; unfiltered it derefs below (`products.map((p) => p.id)`) → an
+    // uncaught 500 on a paid render path. Filter the nulls, and if the bundle
+    // lost ALL its products, reject before starting a (paid) product-less render.
+    products = (data || [])
+      .map((item: { candidate_products: unknown }) => item.candidate_products)
+      .filter((p: unknown) => p != null);
+    if (products.length === 0) {
+      return NextResponse.json(
+        { error: "Bundle has no products to render" },
+        { status: 400 },
+      );
+    }
   } else if (product_ids?.length) {
     // Bind product_ids to the room; reject if any id isn't a product of it.
     const { data, error: prodErr } = await supabase

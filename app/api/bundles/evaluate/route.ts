@@ -60,9 +60,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const products = (bundle.product_bundle_items || []).map(
-    (item: { candidate_products: unknown }) => item.candidate_products
-  );
+  // A nested-join row whose candidate_products FK was deleted comes back as
+  // null. Left unfiltered, that null flows into evaluateBundle and derefs
+  // (bundle-optimizer.ts `[${p.category}]`) → an uncaught 500 on a paid path,
+  // leaving the bundle stuck "pending" and orphaning the agent run. Filter the
+  // nulls, and if a bundle lost ALL its products, reject BEFORE the paid LLM
+  // call rather than scoring an empty bundle.
+  const products = (bundle.product_bundle_items || [])
+    .map((item: { candidate_products: unknown }) => item.candidate_products)
+    .filter((p: unknown) => p != null);
+  if (products.length === 0) {
+    return NextResponse.json(
+      { error: "Bundle has no products to evaluate" },
+      { status: 400 },
+    );
+  }
 
   // Room (with images) and the latest diagnosis both key only on bundle.room_id
   // and are independent of each other — fetch them together. Fixed-position
