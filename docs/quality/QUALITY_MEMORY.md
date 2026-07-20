@@ -7,6 +7,92 @@ history behind it.
 
 ---
 
+## 2026-07-20 — EIGHTH INDEPENDENT GRADE (overall HELD at C; per-dimension picture STABLE — mockups IDOR FIXED but a fresh sweep found a NEW same-class residual, so security_rls stays A not A+)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link,
+functional_reality C, whose production reality is UNCHANGED). Every dimension held its 2026-07-13 letter. The
+one notable movement is WITHIN security_rls: the mockups IDOR that dropped it A+→A last cycle is genuinely FIXED
+(#610 fix landed), but a fresh 55-route adversarial sweep found a NEW missed guard of the EXACT same class
+(saved-designs POST reads client-supplied project_id unbound), so security_rls HOLDS at A rather than recovering
+to A+ — the third consecutive cycle a fresh sweep beat a prior "no remaining missed guard" claim. THREE
+ship-critical dims remain below A: functional_reality C, design_taste B, business_case_strength B — unchanged.
+
+**Per-dimension diff vs 2026-07-13:** functional_reality **C→C** (production reality unchanged) · correctness
+**A→A** · security_rls **A→A** (mockups IDOR fixed ↔ new saved-designs residual — net hold) · design_taste
+**B→B** (capping gaps byte-for-byte unchanged) · store_readiness **A→A** · artifact_integrity **A→A** (F2 nit
+held; NEW F1 "zero new warnings" nit named) · business_case **B→B** (shippable ARR still below floor) ·
+tests_evals **B→B** · performance **B→B**.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npm run check:determinism` → green.
+- `npx eslint .` → **0 errors, 19 warnings** (NEW: unused check* fns in the vendored Apache-2.0
+  `.agents/skills/impeccable/scripts/detector/detect-antipatterns-browser.js`, commit e93fe56 — last cycle was
+  "clean"; CI lint has no `--max-warnings 0` so they pass silently).
+- `npm test` → **2185 passed / 11 skipped** (up from 2051; 11 skips RUN_EVALS-gated by design).
+- `npx vitest run --coverage` → **~61.15% stmts / 50.33% branch / 66.35% funcs / 62.22% lines** (up from
+  59.98/48.86/65.61/61.01), above the 40/30/42/40 floor — still NOT CI-gated (verify runs bare `vitest run`).
+- `bash scripts/preflight.sh` → **51 pass / 2 fail**; GATE 5 (all 4 dashboard blocks) GREEN, GATE 6 RLS green
+  (26/26). The 2 fails are the expected environmental/pre-launch ones (functional-journeys cold; DoD
+  9-unchecked) — NOT new regressions.
+
+**Why security_rls HELD at A (fix landed, new same-class miss found):** the #610 mockups fix is real —
+mockups/route.ts now binds bundle_id (`.eq("id",bundle_id).eq("room_id",room_id)`, :556-563) and product_ids
+(`.eq("room_id",room_id).in("id",product_ids)` + reject-all-if-any-unowned, :584-594). But a fresh sweep found
+`app/api/saved-designs/route.ts` POST reads a SEPARATE client-supplied `project_id` via
+`.eq("id",project_id).single()` (:156-160) with NO `.eq("user_id",userId)` — leaking another tenant's project
+name + building_name into the caller's saved_designs.metadata (readable via GET /api/saved-designs/[id]). The
+route's own comment (:59) claims it's guarded "below" but the guard was never implemented. A not lower:
+read-only, two string fields, no cross-tenant write; but under the inert-RLS memory store the app-layer bind is
+the sole boundary. RAISE to A+: bind project_id with `.eq("user_id",userId)` + IDOR regression test.
+
+**Why functional_reality HELD at C (unchanged production reality):** DATA_BACKEND still DEFAULTS to memory
+(lib/supabase/server.ts:23, docstring still "ships INERT"); `git log -S DATA_BACKEND` shows only test-file
+ledger commits since 07-13, never the default line. The real-Postgres cold-start integration test still does
+NOT exist — data-backend.test.ts:6-9 defers it; the two persistence tests
+(saved-designs-full-persistence.test.ts, analyze-apartment-persistence.test.ts) drive a MOCKED client (real
+regression guards for a hollow-snapshot 500 + a duplicate-room-type clobber, but NOT a cold-start proof). So
+production is exactly as non-persistent as before → C.
+
+**Why business_case HELD at B (honesty≠strength):** the only change since 07-13 is commit 3aae750 ("business-case
+honesty B→A", #669/#600) which touched ONLY the GTM docs — zero economics, no annual enablement. Re-derived via
+the committed scripts: `node analysis/business_case_without_annual_arr.mjs` → $99,926 (shippable-TODAY, ~$74
+below floor); scenario B base $122,956 is steady-state (~year 3) and ~38% of MRR is the gated-off Pro Annual
+tier; `node scripts/validate-computation.mjs` → PASS 4/4. Same discipline as functional_reality: grade the
+shippable reality, not the projection. Honesty is exemplary → held B, not lower.
+
+**Why artifact_integrity HELD at A (F1 nit named, not a drop):** a fresh grader flagged F1 ticked [x] promising
+"zero new warnings" while eslint now emits 19 — but they're localized to VENDORED tooling
+(.agents/skills/impeccable detector), not shipping app code, and not a false shipping artifact. Named as the
+A→A+ ceiling item alongside the standing F2 CI-coverage overclaim; not double-dropped. store_readiness held A
+likewise (D3 screenshots is a known human device step).
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, PREPARE still inert). UPDATE #204 (design_taste
+— still B, capping gaps unchanged). UPDATE #610 (security_rls — mockups FIXED, but retarget to the NEW
+saved-designs project_id residual to raise back to A+). FILE new #~ (business_case_strength — ship_critical B,
+shippable ARR below floor; #600 was the GTM honesty lens and is closed/fixed, this is the distinct STRENGTH
+lens). UPDATE #200 (tests — coverage up, CI gap unchanged). Keep #385 (perf) open — unchanged.
+
+**Lessons for next run:**
+1. **A fresh adversarial sweep STILL beats a prior all-clear — for the THIRD cycle running.** Last cycle's A→A
+   named the mockups IDOR; the factory fixed it; this cycle a fresh sweep found saved-designs project_id, the
+   same class again. Never inherit a prior "no remaining missed guard" — re-sweep every cycle. The convention:
+   ANY route that binds ONE client-supplied id (room_id) but reads OTHER client-supplied ids (project_id,
+   product_ids, bundle_id) must bind those too.
+2. **The persistence blocker has now held C for FIVE consecutive cycles.** The PREPARE is done; the factory keeps
+   shipping other value (a11y, coverage, IDOR fixes) but has not made the human-gated cutover (DATA_BACKEND
+   default flip + cold-start proof test). This is the single highest-leverage move for the ship gate — watch that
+   the factory doesn't keep picking easier wins while the binding blocker sits.
+3. **Honesty improvements don't move the STRENGTH grade.** The GTM auditor raised business-case HONESTY B→A by
+   improving disclosure; the shippable ARR is still $99,926 < floor. Grade the shippable reality; the two lenses
+   are distinct and a closed honesty issue (#600) does NOT close the strength gap.
+4. **Vendoring tooling can regress a ticked quality box.** Vendoring the Impeccable design skill (e93fe56) added
+   19 eslint warnings, silently violating F1's "zero new warnings" — CI lint has no `--max-warnings 0`. Watch
+   that vendored `.agents/**` code is either eslint-ignored or clean before a "clean lint" box stays ticked.
+5. Cold-start recipe re-confirmed: npm install first; grade on assertions + CI/preflight status, never a cold
+   local authed suite. Perf N+1 still INERT under the memory store; raw <img> stable at 32 (no regression).
+
+---
+
 ## 2026-07-13 — SEVENTH INDEPENDENT GRADE (overall HELD at C; per-dimension picture WORSENED — TWO fresh adversarial findings dropped security_rls A+→A and business_case A→B)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link,
