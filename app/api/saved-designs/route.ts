@@ -56,11 +56,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "room_id required" }, { status: 400 });
   }
 
-  // Ownership guard: room_id (and the optional project_id below) are
-  // client-supplied and the memory-store reads are not user-scoped, so without
-  // this check any authenticated caller could snapshot another user's private
-  // diagnosis + sourced products + bundles into their OWN saved_designs, then
-  // read them back — a cross-tenant data-exposure IDOR.
+  // Ownership guard: room_id is client-supplied and the memory-store reads are
+  // not user-scoped, so without this check any authenticated caller could
+  // snapshot another user's private diagnosis + sourced products + bundles into
+  // their OWN saved_designs, then read them back — a cross-tenant data-exposure
+  // IDOR. The optional project_id is bound to the user separately at its own
+  // fetch below (it feeds only the metadata name/building_name).
   if (!(await userOwnsRoom(supabase, room_id, userId))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -151,13 +152,20 @@ export async function POST(request: NextRequest) {
     };
   }
 
-  // Fetch project name for metadata
+  // Fetch project name for metadata. Bind project_id to the authenticated user
+  // (.eq("user_id", userId)) — it is client-supplied and the memory-store reads
+  // are not user-scoped, so an unbound select would copy ANY tenant's project
+  // name + building_name into the caller's saved_designs.metadata, readable back
+  // via GET /api/saved-designs/[id] (cross-tenant read IDOR). Mirrors the
+  // userOwnsProject convention; a non-owned/absent project simply yields no
+  // metadata (maybeSingle → null) rather than leaking or erroring.
   if (project_id) {
     const { data: project } = await supabase
       .from("projects")
       .select("name, building_name")
       .eq("id", project_id)
-      .single();
+      .eq("user_id", userId)
+      .maybeSingle();
 
     if (project) {
       (snapshot.metadata as Record<string, unknown>).project_name = project.name;
