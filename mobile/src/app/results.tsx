@@ -300,8 +300,18 @@ export default function ResultsScreen() {
         }
         throw new Error(body.error ?? `Save failed (${resp.status})`);
       }
-      await markSaved();
+      // The server save succeeded (resp.ok) and is the source of truth — the
+      // design IS persisted. Mark the UI saved BEFORE touching the local quota
+      // hint so a failure in the on-device AsyncStorage bookkeeping (markSaved)
+      // can never flip a real success into a false "Couldn't save" alert that
+      // pushes the user to re-POST an already-saved design (F4.1 SIDE-EFFECT
+      // INTEGRITY). The quota is only a client UX hint; the server enforces the
+      // real free-save limit independently, so a dropped increment at worst
+      // offers one extra local save the server still gates.
       setSaveState('saved');
+      await markSaved().catch((quotaErr) => {
+        console.warn('[results/saveDesign] quota hint update failed', quotaErr);
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[results/saveDesign]', message);
