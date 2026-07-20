@@ -19,6 +19,28 @@ import { getAdminClient } from "@/lib/supabase/admin";
 export const FREE_SAVE_LIMIT_WEB = 3;
 
 /**
+ * Days a Pro subscription retains access after entering `past_due`.
+ *
+ * When a renewal charge fails, Stripe moves the subscription to `past_due` and
+ * retries payment (Smart Retries run up to ~3 weeks) before finally moving it
+ * to `canceled`/`unpaid`. Revoking access the instant a charge fails would
+ * violate the uninterrupted-access expectation of the App Store / Google Play
+ * (and is hostile to a subscriber whose card merely expired). So Pro keeps
+ * access through a bounded grace window measured from the row's grace anchor
+ * (see getWebBillingStatus).
+ *
+ * The bound is REAL, not dependent on Stripe delivering a later `canceled`
+ * event: the anchor is `current_period_end` when known, else the webhook's
+ * `updated_at` (stamped every upsert, so it marks when the row entered
+ * past_due). A subscription abandoned in past_due — webhook downtime, a dropped
+ * event, misconfigured dunning — therefore still lapses `PAST_DUE_GRACE_DAYS`
+ * after its last write rather than staying free forever. An actively-retrying
+ * subscription keeps re-stamping updated_at and stays in grace until Stripe
+ * resolves it to active (success) or canceled/unpaid (retries exhausted).
+ */
+export const PAST_DUE_GRACE_DAYS = 14;
+
+/**
  * True when Supabase service-role credentials are absent — a deploy-time
  * misconfiguration (distinct from a runtime query failure). Kept separate so
  * entitlement checks can fail CLOSED on misconfiguration in production without
@@ -78,7 +100,7 @@ export async function getWebBillingStatus(userId: string): Promise<WebBillingSta
 
   const { data, error } = await admin
     .from("stripe_customers")
-    .select("tier, status, current_period_end")
+    .select("tier, status, current_period_end, updated_at")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -108,6 +130,25 @@ export async function getWebBillingStatus(userId: string): Promise<WebBillingSta
       return { hasPaid: periodEnd > now, tier, status };
     }
     return { hasPaid: true, tier, status };
+  }
+
+  // Payment-retry grace: a subscription whose renewal charge just failed enters
+  // `past_due` while Stripe retries. Keep access for a bounded grace window so a
+  // transient failed charge doesn't instantly revoke a paying subscriber (the
+  // uninterrupted-access expectation of both app stores). The grace is anchored
+  // on current_period_end when known, else the webhook's updated_at (stamped on
+  // every upsert, so it marks when the row entered past_due) — making the bound
+  // REAL and self-contained rather than dependent on Stripe delivering a later
+  // canceled/unpaid event. `unpaid` and `cancelled` never get grace; they fall
+  // through to hasPaid:false below.
+  if (status === "past_due") {
+    const anchor = data.current_period_end ?? data.updated_at;
+    // No anchor at all (updated_at is NOT NULL in schema, so this is defensive):
+    // can't prove we're inside the window, so deny rather than grant unbounded.
+    if (!anchor) return { hasPaid: false, tier, status };
+    const graceEnd = new Date(anchor);
+    graceEnd.setDate(graceEnd.getDate() + PAST_DUE_GRACE_DAYS);
+    return { hasPaid: graceEnd > new Date(), tier, status };
   }
 
   return { hasPaid: false, tier, status };
