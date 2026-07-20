@@ -4330,3 +4330,34 @@ Lenses: honesty/marketing-claims, web-reliability/correctness, tests/coverage, m
 - **NAMED buildable follow-ups NOT yet built (pick up deliberately, not batched):** (a) The monetization levers (7-day trial; free-tier single public-share gate; paywall-trigger-timing) — DEDICATED owner-approved monetization run w/ runtime validation; the free-share-gate is strongest (aligns to marketed Pro-only claim) but removes a free feature → needs owner intent. (b) E7 paid-engagement D1/D2 re-engagement cron — needs a defensible active-subscriber inactivity timestamp; a FOCUSED run. (c) G4 login lockout/backoff — needs a server login route. (d) F2 coverage remaining 2 of 4 named: direction-distance middle-band + outlet-reach vague-position — real, pick standalone next coverage run (saturation-math else + harmony bonus-tier now SHIPPED). (e) analyze-apartment STORED `analysis.rooms` overview map collapse (completeness only, consumers stringify whole — do when next touching that route).
 - **HOUSEKEEPING SIGNAL for a future run:** stale open PR #664 (`claude/sleepy-goldberg-5ajok0`) duplicates already-merged work and would conflict — a human/owner could close it; the loop should NOT stack on it.
 - **DO-NOT-RE-FLAG (carry prior lists +):** bundles/evaluate + mockups deleted-FK null-product crash (SHIPPED this run — the real fix, on default now; the #664 "FIXED" note was stale); saturation-math existing-category else + harmony-math lighting bonus-tier coverage (SHIPPED); "Perfect scale fit" landing superlative (DROPPED, below bar); free-tier share-gate + 7-day trial (DEFERRED, owner-gated); + ALL prior carried non-issues (waitlist/confirm rate-limit SHIPPED; material-math reverse-metal SHIPPED; topbar/RefineChat/floor-plan/dashboard aria-labels SHIPPED; mobile results.tsx Save quotaLoading label SHIPPED; analyze-apartment synthesis index-alignment FIXED + stored-map collapse low-value defer; `.single()`-error speculative under memory backend — do NOT batch-sweep; set-math inverted-pricing FIXED; mockup-agent.ts:504 HIGH intentional IMAGE modality; createAgentRun framework-caught 500; store-listing web-sync claim conditional-not-overclaim; permission-string/doc-clarity churn; hardcoded-color→token batch churn; mobile paywall packagesToOptions else only if RC catalog grows).
+
+## Run 2026-07-20 (Run 103) — DEEP AUDIT (8-lens, due) + 4 file-disjoint value-bar changes. ALL 4 both-Sonnet-APPROVED (C3 needed 1 re-review cycle — a REAL catch, within cap). All 4 MERGED (#673 mobile, #674 coverage, #675 security, #676 billing).
+
+### State on entry
+- Cold container. Working branch reset to origin default tip `5a1027a` (#671 quality grade). Baseline gate GREEN: web tsc clean, **2185 tests** / 11 skip, determinism green, `eslint .` 0 errors (19 warnings — vendored `.agents/skills/impeccable/scripts/detector/` only, expected/untouchable).
+- DEEP AUDIT was DUE (last ran Run 99; Runs 100-102 leaned on scouts). Ran the full 8-Haiku-scout holistic sweep this run.
+
+### DEEP AUDIT (8 lenses, whole-codebase, Haiku scouts):
+- **SECURITY & RLS:** scout CLEAN across 30 migrations + 50+ routes (RLS, IDOR helpers, webhook sig, SSRF, spend gates all sound). The one real hole was the scorecard-flagged saved-designs POST `project_id` unbound read → FIXED (#675). No new RLS gaps.
+- **CORRECTNESS:** 1 finding — orchestrator.ts:~465 quick-score `qs === undefined || qs >= 4.0` → **REJECTED as intentional fail-open** to deep-scoring (the real gate). The scout's proposed `qs !== undefined && qs >= 4.0` would DROP all re-searched products on a transient quick-score failure = data-loss regression. DO-NOT-RE-FLAG.
+- **TEST COVERAGE:** 7 untested `format*ForPrompt` fns surfaced; shipped access-constraints (#674). Remaining (ergonomics, outlet-reach, code-compliance, budget-allocation, direction-distance) available standalone next runs — not padded in.
+- **MOBILE:** results.tsx false-failure FIXED (#673); _layout.tsx RC logIn/logOut silent `.catch(()=>{})` → DEFERRED (marginal: adds a warn, no behavior change).
+- **MONETIZATION/COMPLIANCE:** `past_due` grace FIXED (#676). Rest are PENDING_OPS human-config already recorded (Stripe portal activation, migration 021 + ANNUAL_BILLING_ENABLED, EMAIL_PHYSICAL_ADDRESS, REVENUECAT_SECRET_KEY) — no code work.
+- **PERF/A11Y:** CLEAN (Promise.all parallelization done; a11y hardened Runs 99-102; no emoji/template drift).
+- **ARTIFACT/MARKETING:** CLEAN — pricing $29 / $49-mo / $399-yr consistent across code+docs; annual gating disclosed; no invented metrics/testimonials.
+- **FUNCTIONAL-REALITY/CONFIG:** persistence cold-start test still human-gated (DATA_BACKEND memory default) — DEFERRED (testcontainers/Docker, infra-heavy); dep MAJOR bumps (@google/genai 1.46→2.12, @supabase/ssr, supabase-js, react-dropzone) DEFERRED as **too risky for unattended auto-merge** (unit tests don't prove the vision pipeline under a genai major); `inferUserPreferences(supabase: any)` tighten DEFERRED (cascade risk, low value).
+
+### Net: mature loop — DEEP AUDIT largely CONFIRMS clean. 3 real fixes (IDOR, mobile false-failure, past_due grace) + 1 coverage. Next DEEP AUDIT ~Run 107.
+
+### Lessons:
+- **C3 shipped with a REAL Reviewer-A catch (why maker≠checker matters):** the original `past_due` grace anchored on `current_period_end`, which the webhook ALWAYS writes null for Pro (lib/billing/stripe.ts:218,264 — "dahlia API removed current_period_end"). That made the bound dead code and the grace effectively UNBOUNDED. Fix: anchor on `current_period_end ?? updated_at` (NOT NULL, stamped every upsert at app/api/billing/webhook/route.ts:129). **LESSON: when a new entitlement-duration rule reads a stripe_customers field, verify the WEBHOOK actually populates it — `current_period_end` is a null column here; use `updated_at` as the reliable time anchor.**
+- Reviewer A (C1) non-blocking follow-up: `saved_designs.project_id` still stores the raw client UUID even when unowned; nothing downstream joins it today (checked [id], shared/[token], mobile, billing/status) → not exploitable, but a future feature joining on it would reopen a leak. Follow-up ticket candidate.
+
+### DO-NOT-RE-FLAG additions:
+- orchestrator quick-score fail-open (INTENTIONAL — deep-score is the real gate; scout's fix is data-loss).
+- `current_period_end` null column is BY DESIGN (dahlia API); web entitlement gating keys on `status` + `updated_at`, never `current_period_end`.
+- mobile _layout.tsx RC logIn/logOut silent catch (marginal, deferred).
+- dep MAJOR bumps (@google/genai etc.) deferred — risky unattended, tests don't prove the vision pipeline.
+- persistence cold-start integration test — human-gated cutover, infra-heavy (do not build headlessly).
+
+- **DEEP AUDIT ran Run 103 (2026-07-20) — next due ~Run 107** (>24h/~4 runs). Runs 104-106 can lean on scouts + scorecard.
