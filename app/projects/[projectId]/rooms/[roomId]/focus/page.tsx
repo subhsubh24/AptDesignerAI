@@ -971,8 +971,17 @@ export default function FocusPage() {
                 {visionUrl ? (
                   <div className="space-y-3">
                     <div
-                      className="relative rounded-xl overflow-hidden border cursor-pointer group"
+                      role="button"
+                      tabIndex={0}
+                      aria-label="View design vision full size"
+                      className="relative rounded-xl overflow-hidden border cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => setShowVisionOverlay(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setShowVisionOverlay(true);
+                        }
+                      }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={visionUrl} alt="Design vision preview" className="w-full h-auto" />
