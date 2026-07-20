@@ -512,3 +512,42 @@ describe("formatBundleMathForPrompt", () => {
     expect(text).toContain("⚠");
   });
 });
+
+// ---------------------------------------------------------------------------
+// completeness — diminishing-returns excess penalty (−0.005/item, clamp −0.05)
+// ---------------------------------------------------------------------------
+// The excess penalty (bundle-math.ts computeCompleteness) fires only when the
+// item count exceeds optimalRange[1]. Previously no test exercised it, so the
+// per-item factor (0.005) and the −0.05 clamp could regress silently. To ISOLATE
+// the penalty we cover exactly the 4 living_room essentials (sofa, area_rug,
+// coffee_table, floor_lamp) and NO standard/finishing categories → the
+// coverage-based completeness is a clean 0.50 (essential 1.0 × 0.50 weight).
+// Padding to the target count uses DUPLICATE-category items (extra sofas): the
+// category Set is unchanged, so coverage stays 0.50 and ONLY the excess penalty
+// moves the score. living_room optimalRange = [14, 25].
+describe("computeBundleMathScores — completeness excess penalty", () => {
+  function bundleOfSize(n: number) {
+    const products = ["sofa", "area_rug", "coffee_table", "floor_lamp"].map((category) =>
+      makeProduct({ category }),
+    );
+    while (products.length < n) products.push(makeProduct({ category: "sofa" }));
+    return products;
+  }
+
+  it("applies NO excess penalty at the optimal upper bound (25 items) → completeness 0.5", () => {
+    const result = computeBundleMathScores(bundleOfSize(25), CTX_LIVING_ROOM);
+    expect(result.completeness).toBe(0.5);
+  });
+
+  it("subtracts −0.005 per item above optimalRange[1] (29 items, excess 4) → 0.48", () => {
+    // 0.50 − min(4 × 0.005, 0.05) = 0.50 − 0.02 = 0.48
+    const result = computeBundleMathScores(bundleOfSize(29), CTX_LIVING_ROOM);
+    expect(result.completeness).toBe(0.48);
+  });
+
+  it("clamps the excess penalty at −0.05 for large overages (65 items, excess 40) → 0.45 not 0.30", () => {
+    // 0.50 − min(40 × 0.005, 0.05) = 0.50 − 0.05 = 0.45 (clamp; without it 0.30)
+    const result = computeBundleMathScores(bundleOfSize(65), CTX_LIVING_ROOM);
+    expect(result.completeness).toBe(0.45);
+  });
+});

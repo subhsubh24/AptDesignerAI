@@ -242,8 +242,17 @@ export default function MockupsPage() {
             <Card variant="interactive" className="overflow-hidden">
               {mockup.result_image_url ? (
                 <div
-                  className="aspect-video w-full overflow-hidden bg-muted relative cursor-pointer group"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="View mockup full screen"
+                  className="aspect-video w-full overflow-hidden bg-muted relative cursor-pointer group rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setLightboxUrl(mockup.result_image_url)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setLightboxUrl(mockup.result_image_url);
+                    }
+                  }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img

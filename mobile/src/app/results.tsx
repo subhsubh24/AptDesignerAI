@@ -163,6 +163,28 @@ async function analyzeRoom(
   if (!json.analysis || typeof json.analysis !== 'object') {
     throw new Error('We couldn’t read the analysis result. Please try again.');
   }
+  // Object-shape is not enough. A partial 200 (e.g. summary + style present but a
+  // missing `design_direction` string, or a non-array `what_works`) still reaches
+  // stage 'done' and renders BLANK cards with only a header — the same
+  // no-results/no-error/no-retry dead end the object check above guards, one level
+  // deeper. Validate the fields the results screen renders as text/lists so a
+  // malformed payload surfaces the retryable error instead of a silent blank.
+  const a = json.analysis as Partial<AnalysisResult>;
+  const requiredStrings: (keyof AnalysisResult)[] = ['summary', 'style_name', 'design_direction'];
+  const requiredArrays: (keyof AnalysisResult)[] = [
+    'recommended_palette',
+    'recommended_materials',
+    'recommended_textures',
+    'what_works',
+    'what_should_go',
+  ];
+  const stringsOk = requiredStrings.every(
+    (k) => typeof a[k] === 'string' && (a[k] as string).length > 0,
+  );
+  const arraysOk = requiredArrays.every((k) => Array.isArray(a[k]));
+  if (!stringsOk || !arraysOk) {
+    throw new Error('We couldn’t read the analysis result. Please try again.');
+  }
   return json.analysis;
 }
 
