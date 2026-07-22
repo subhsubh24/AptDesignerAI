@@ -117,11 +117,11 @@ export default function SavedDesignsPage() {
     <PageTransition className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
+            <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">My Designs</h1>
             <p className="text-sm text-muted-foreground">Your saved room assessments and product selections</p>
@@ -165,9 +165,9 @@ export default function SavedDesignsPage() {
             <p className="text-sm text-muted-foreground mb-4">
               When you complete a room assessment or product search, save it here for later.
             </p>
-            <Link href="/dashboard">
-              <Button variant="outline">Go to Dashboard</Button>
-            </Link>
+            <Button asChild variant="outline">
+              <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -216,17 +216,17 @@ export default function SavedDesignsPage() {
                 </div>
 
                 <div className="flex gap-2 sm:gap-2.5 mt-3">
-                  <Link href={`/saved/${design.id}`} className="flex-1">
-                    <Button variant="outline" size="sm" className="w-full text-xs">
+                  <Button asChild variant="outline" size="sm" className="flex-1 w-full text-xs">
+                    <Link href={`/saved/${design.id}`}>
                       View
-                    </Button>
-                  </Link>
-                  {design.stage === "assessment" && design.project_id && design.room_id && (
-                    <Link href={`/projects/${design.project_id}/rooms/${design.room_id}/focus`} className="flex-1">
-                      <Button size="sm" className="w-full text-xs">
-                        Resume <ArrowRight className="h-3 w-3 ml-1" />
-                      </Button>
                     </Link>
+                  </Button>
+                  {design.stage === "assessment" && design.project_id && design.room_id && (
+                    <Button asChild size="sm" className="flex-1 w-full text-xs">
+                      <Link href={`/projects/${design.project_id}/rooms/${design.room_id}/focus`}>
+                        Resume <ArrowRight className="h-3 w-3 ml-1" />
+                      </Link>
+                    </Button>
                   )}
                 </div>
               </CardContent>

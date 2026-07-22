@@ -103,11 +103,11 @@ export default function PicksPage() {
       <main className="max-w-5xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8" aria-label="Back to dashboard">
+            <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">My Picks</h1>
             <p className="text-sm text-muted-foreground">Shortlisted products across all your rooms</p>
@@ -181,9 +181,9 @@ export default function PicksPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Shortlist products from your room searches — they&apos;ll all appear here.
             </p>
-            <Link href="/dashboard">
-              <Button variant="outline">Go to Dashboard</Button>
-            </Link>
+            <Button asChild variant="outline">
+              <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (

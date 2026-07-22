@@ -181,6 +181,11 @@ export default function FocusPage() {
   // Save design state
   const [saving, setSaving] = useState(false);
   const [savedStage, setSavedStage] = useState<"assessment" | "full" | null>(null);
+  // Id of the just-saved design, captured from the POST response so we can point
+  // the share nudge at the exact saved-design page (where the share toggle lives).
+  const [savedDesignId, setSavedDesignId] = useState<string | null>(null);
+  // Guards the share-nudge impression event so it fires at most once per session.
+  const shareNudgeShownRef = useRef(false);
   // Shown when a save is blocked by the free-tier limit (server returns 403 +
   // subscription_required). Surfaces the upgrade path instead of a dead-end
   // "try again" toast that would never succeed.
@@ -521,6 +526,17 @@ export default function FocusPage() {
     };
   }, [areaAnalysis, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fire the share-nudge impression exactly when it becomes visible — the nudge
+  // renders only in the "results" step once a design id exists. Tracking it in the
+  // save handler would over-count, because the assessment-stage save also sets the
+  // id while the nudge is NOT on screen. Ref-guarded so it counts one impression.
+  useEffect(() => {
+    if (step === "results" && savedDesignId && !shareNudgeShownRef.current) {
+      shareNudgeShownRef.current = true;
+      trackEvent("share_nudge_shown", { stage: savedStage ?? "full" });
+    }
+  }, [step, savedDesignId, savedStage]);
+
   const handleSaveDesign = async (stage: "assessment" | "full") => {
     setSaving(true);
     try {
@@ -532,6 +548,17 @@ export default function FocusPage() {
       if (res.ok) {
         trackEvent("design_saved", { stage });
         setSavedStage(stage);
+        // Capture the saved-design id so we can surface a share nudge that deep-
+        // links to its page. A parse failure just skips the nudge — the save
+        // itself already succeeded, so this is best-effort and never blocks it.
+        // The `share_nudge_shown` impression is fired from an effect keyed on the
+        // nudge actually being visible (results step) — NOT here — because this
+        // handler also runs for the assessment-stage save, where the nudge never
+        // renders; tracking it here would inflate the "shown" denominator.
+        const saved = (await res.json().catch(() => null)) as { id?: string } | null;
+        if (saved?.id) {
+          setSavedDesignId(saved.id);
+        }
       } else {
         const body = (await res.json().catch(() => ({}))) as {
           subscription_required?: boolean;
@@ -1362,6 +1389,23 @@ export default function FocusPage() {
               Back to assessment
             </button>
           </div>
+
+          {/* Save→share nudge (viral loop): once the design is saved, invite the
+              user — at the moment of pride — to share it. Deep-links to the saved
+              design's own page where the public share toggle lives. Available to
+              every tier; the share surface itself is where Pro value is upsold. */}
+          {savedDesignId && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5 pt-1 text-sm text-muted-foreground">
+              <span>Proud of this room?</span>
+              <Link
+                href={`/saved/${savedDesignId}`}
+                onClick={() => trackEvent("share_nudge_clicked", { stage: savedStage ?? "full" })}
+                className="inline-flex items-center font-medium text-accent-warm underline-offset-4 hover:underline"
+              >
+                <LinkIcon className="h-3.5 w-3.5 mr-1.5" /> Share it with a client or friend
+              </Link>
+            </div>
+          )}
         </>
       )}
 
