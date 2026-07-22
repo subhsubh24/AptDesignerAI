@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { ManualSourcingForm } from "@/components/manual-sourcing/ManualSourcingForm";
 import { ManualScorecardView, type EvaluateSetResult } from "@/components/manual-sourcing/ManualScorecardView";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-colors";
@@ -179,6 +181,14 @@ export default function FocusPage() {
   // Save design state
   const [saving, setSaving] = useState(false);
   const [savedStage, setSavedStage] = useState<"assessment" | "full" | null>(null);
+  // Shown when a save is blocked by the free-tier limit (server returns 403 +
+  // subscription_required). Surfaces the upgrade path instead of a dead-end
+  // "try again" toast that would never succeed.
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  // The free-save limit reported by the server's 403 body, so the paywall can
+  // show the accurate "at limit" copy + usage bar without the client importing
+  // the server-only entitlements module.
+  const [saveLimit, setSaveLimit] = useState<number | null>(null);
 
   // Elapsed time counter during search
   useEffect(() => {
@@ -523,7 +533,20 @@ export default function FocusPage() {
         trackEvent("design_saved", { stage });
         setSavedStage(stage);
       } else {
-        toast.error("Couldn't save design", "Please try again in a moment.");
+        const body = (await res.json().catch(() => ({}))) as {
+          subscription_required?: boolean;
+          limit?: number;
+        };
+        // The free-save limit is a paywall, not a transient failure — a "try
+        // again" toast would just fail again and bury the upgrade. Surface the
+        // real reason and the path forward instead.
+        if (res.status === 403 && body.subscription_required) {
+          trackEvent("save_limit_paywall_shown", { stage });
+          setSaveLimit(typeof body.limit === "number" ? body.limit : null);
+          setShowUpgrade(true);
+        } else {
+          toast.error("Couldn't save design", "Please try again in a moment.");
+        }
       }
     } catch {
       toast.error("Couldn't save design", "Check your connection and try again.");
@@ -1392,6 +1415,24 @@ export default function FocusPage() {
           }
         />
       )}
+
+      {/* Free-tier save-limit paywall. Reuses the in-product upgrade surface,
+          which routes to the real Stripe checkout; entitlement stays
+          server-enforced (this modal only appears after the server's 403). */}
+      <Dialog open={showUpgrade} onOpenChange={setShowUpgrade}>
+        <DialogContent className="max-w-md border-0 bg-transparent p-0 shadow-none">
+          <DialogTitle className="sr-only">
+            You&apos;ve reached your free save limit
+          </DialogTitle>
+          {/* When the server reports the limit, pass usedSaves === limit so the
+              card renders the accurate "at limit" heading + usage bar; otherwise
+              it falls back to the generic upgrade copy. */}
+          <UpgradeCtaCard
+            usedSaves={saveLimit ?? undefined}
+            limit={saveLimit ?? undefined}
+          />
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   );
 }

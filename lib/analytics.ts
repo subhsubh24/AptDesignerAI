@@ -16,6 +16,7 @@ type FunnelEvent =
   | 'analysis_started'
   | 'analysis_complete'
   | 'design_saved'
+  | 'save_limit_paywall_shown'
   | 'upgrade_page_view'
   | 'checkout_started'
   | 'checkout_complete';
