@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeCodeCompliance } from "@/lib/validation/code-compliance";
+import {
+  computeCodeCompliance,
+  formatCodeComplianceForPrompt,
+  type CodeComplianceResult,
+} from "@/lib/validation/code-compliance";
 
 describe("computeCodeCompliance", () => {
   it("flags bedroom door narrower than 32\"", () => {
@@ -193,5 +197,37 @@ describe("computeCodeCompliance", () => {
       { roomType: "kitchen", floorPlan: { counter_length: 100 } }, // no outlet count
     );
     expect(result.checks.find((c) => c.code.includes("210.52"))).toBeUndefined();
+  });
+});
+
+describe("formatCodeComplianceForPrompt", () => {
+  const result: CodeComplianceResult = {
+    score: 0.5,
+    checks: [
+      { code: "IRC-R311", description: "egress door width", passed: true, actual: '36"', required: '≥32"' },
+      { code: "NEC-210.52", description: "counter receptacles", passed: false, actual: "1", required: "≥2" },
+      // actual omitted → the `?? "?"` fallback must render, never "undefined".
+      { code: "IRC-R303", description: "natural light area", passed: false, required: "≥8% floor area" },
+    ],
+    violations: [{ code: "NEC-210.52", issue: "too few counter outlets", suggestion: "add a second small-appliance circuit" }],
+    warnings: ["code checks are advisory, not a substitute for a licensed inspection"],
+  };
+
+  it("marks passed checks ✓ and failed checks ✗", () => {
+    const out = formatCodeComplianceForPrompt(result);
+    expect(out).toContain("✓ IRC-R311");
+    expect(out).toContain("✗ NEC-210.52");
+  });
+
+  it("renders a missing actual value as '?' rather than 'undefined'", () => {
+    const out = formatCodeComplianceForPrompt(result);
+    expect(out).toContain("✗ IRC-R303: natural light area — ? (req ≥8% floor area)");
+    expect(out).not.toContain("undefined");
+  });
+
+  it("renders violations and advisory warnings", () => {
+    const out = formatCodeComplianceForPrompt(result);
+    expect(out).toContain("VIOLATION NEC-210.52: too few counter outlets → add a second small-appliance circuit");
+    expect(out).toContain("- NOTE: code checks are advisory, not a substitute for a licensed inspection");
   });
 });
