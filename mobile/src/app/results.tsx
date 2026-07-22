@@ -411,6 +411,7 @@ export default function ResultsScreen() {
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Try again"
                   onPress={() => run(imageUri, roomType)}
                 >
                   <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
@@ -424,6 +425,7 @@ export default function ResultsScreen() {
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Pick a photo"
                   onPress={() => router.push('/photo')}
                 >
                   <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>

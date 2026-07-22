@@ -201,7 +201,11 @@ export async function POST(request: NextRequest) {
       const hasPro = await hasProEntitlementWeb(userId);
       if (!hasPro) {
         return NextResponse.json(
-          { error: "Free save limit reached. Upgrade to Pro to save unlimited designs.", subscription_required: true },
+          {
+            error: "Free save limit reached. Upgrade to Pro to save unlimited designs.",
+            subscription_required: true,
+            limit: FREE_SAVE_LIMIT_WEB,
+          },
           { status: 403 },
         );
       }

@@ -217,6 +217,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
                 key={option.label}
                 onPress={() => setSelectedIndex(index)}
                 accessibilityRole="radio"
+                accessibilityLabel={`${option.label}, ${option.price}${option.subline ? `, ${option.subline}` : ''}${option.badge ? `, ${option.badge}` : ''}`}
                 accessibilityState={{ selected: index === selectedIndex }}
               >
                 <ThemedView

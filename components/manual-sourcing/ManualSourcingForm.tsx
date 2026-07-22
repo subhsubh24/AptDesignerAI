@@ -102,6 +102,8 @@ export function ManualSourcingForm({ categories, onSubmit, loading, onCancel }: 
                 {(urlsByCategory[cat.category] || [""]).map((url, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <Input
+                      type="url"
+                      aria-label={`Product URL ${idx + 1} for ${categoryLabel}`}
                       placeholder="https://www.example.com/product..."
                       value={url}
                       onChange={(e) => updateUrl(cat.category, idx, e.target.value)}

@@ -32,8 +32,20 @@ function RadarChart({ scores }: { scores: { label: string; value: number }[] }) 
   const dataPoints = scores.map((s, i) => getPoint(i, s.value));
   const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
 
+  // Make the chart legible to screen readers: the visual polygon is otherwise
+  // an unlabelled <svg>. Summarise each axis and its /10 score.
+  const chartSummary =
+    "Bundle scoring by dimension: " +
+    scores.map((s) => `${s.label} ${s.value.toFixed(1)} out of 10`).join(", ");
+
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[140px] mx-auto">
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      className="w-full max-w-[140px] mx-auto"
+      role="img"
+      aria-label={chartSummary}
+    >
+      <title>{chartSummary}</title>
       {/* Grid */}
       {gridLevels.map((level) => {
         const points = scores.map((_, i) => getPoint(i, level * 10));

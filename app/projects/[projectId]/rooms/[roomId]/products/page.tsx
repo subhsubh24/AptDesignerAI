@@ -401,11 +401,25 @@ export default function ProductsPage() {
               <CardHover>
               <Card
                 variant="interactive"
+                role="button"
+                tabIndex={0}
+                aria-label={`View details for ${product.title || "product"}`}
                 className={cn(
                   "overflow-hidden group focus-visible:ring-2 focus-visible:ring-ring",
                   isShortlisted && "ring-2 ring-accent-warm"
                 )}
                 onClick={() => setSelectedProduct(product)}
+                onKeyDown={(e) => {
+                  // Only act on keys that originate on the card itself — never
+                  // on ones bubbling up from the nested Score/Save/Reject/View
+                  // controls, or we'd preventDefault their own Enter/Space and
+                  // hijack them into opening this dialog.
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedProduct(product);
+                  }
+                }}
               >
                 {product.image_url && (
                   <div className="aspect-square w-full overflow-hidden bg-muted relative">
@@ -524,7 +538,12 @@ export default function ProductsPage() {
                         onClick={(e) => e.stopPropagation()}
                         asChild
                       >
-                        <a href={product.product_url} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={product.product_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`View ${product.title || "product"} at the retailer (opens in a new tab)`}
+                        >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
                       </Button>
