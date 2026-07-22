@@ -49,6 +49,34 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-xl font-semibold mb-3">Device permissions</h2>
+            <p className="text-muted-foreground mb-3">
+              On our mobile app, we request the device permissions below only when
+              you use a feature that needs them. Each is optional — you can decline
+              it, or later revoke it in your device settings, in which case the
+              feature that relies on it is simply unavailable until you grant it.
+            </p>
+            <ul className="space-y-2 text-muted-foreground list-disc pl-5">
+              <li>
+                <strong className="text-foreground">Camera</strong> — to photograph
+                your room for design analysis. We use it only while you are taking a
+                photo; we don&apos;t access the camera in the background.
+              </li>
+              <li>
+                <strong className="text-foreground">Photo library</strong> — to let
+                you pick an existing room photo to analyze. We access only the
+                image you select, never your whole library.
+              </li>
+              <li>
+                <strong className="text-foreground">Notifications</strong> — to let
+                us tell you when a design you asked for is ready and send occasional
+                product updates. Decline it and the app works exactly the same,
+                minus the alerts.
+              </li>
+            </ul>
+          </section>
+
+          <section>
             <h2 className="text-xl font-semibold mb-3">How we use your content</h2>
             <p className="text-muted-foreground">
               We process your photos and floor plans with Google&apos;s Gemini AI
