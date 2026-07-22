@@ -182,6 +182,24 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Waitlist "30% off, no promo code required" discount — back the marketing promise (added 2026-07-22, Run 104, Track D/E)
+
+The waitlist marketing copy makes a concrete launch commitment with **no backing mechanism**:
+- `app/waitlist/page.tsx:33` — "Waitlist members get 30% off their first paid plan at launch. No promo code required."
+- `app/waitlist/confirmed/page.tsx:64` — "...with your 30% early-access discount."
+
+Nothing in code creates, assigns, or auto-applies a discount, and the launch email that would carry it is a manual send (`connect-email-resend` still open). If the owner does not wire this before launch, the promise becomes a **broken commitment** to every waitlist member. The mechanism is live billing config (Stripe coupon + auto-apply), which is human-only per the billing/secrets guardrail — the loop cannot build it headlessly.
+
+**Owner step (before public launch / any waitlist outreach):**
+1. Create a **30% off** coupon in Stripe (suggested id `EARLY30`), scoped to first paid plan; decide duration (`once` for subscriptions vs one-time Pro).
+2. Make it apply **without a promo code** for waitlist members — either auto-apply the coupon at checkout for the waitlist cohort, or pre-attach it to their Stripe customer, so the "no promo code required" claim holds.
+3. Wire the code/mechanism into the launch email (Email 4) send.
+4. **Verify:** run a waitlist member through checkout in Stripe TEST mode and confirm 30% comes off the first charge with no code entered.
+
+Alternative if the discount is dropped: remove the two copy lines above so the site makes no unbacked promise.
+
+---
+
 ### Wire `npm run test:coverage` into the CI verify job (added 2026-07-02, Run 52 — PR #314, Track F2)
 
 The vitest coverage floors were raised toward reality (25/19/30/25 → 40/30/42/40, ~10pt under the measured ≈50/39/54/51) so a genuine coverage regression now fails `npm run test:coverage`. **But nothing runs that command in CI** — the `verify` job (and `scripts/preflight.sh`) run bare `vitest run` (no `--coverage`), so a coverage drop is not yet gated on merge. The loop cannot edit `.github/`, so this is an owner step.

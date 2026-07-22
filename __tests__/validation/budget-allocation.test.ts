@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeBudgetAllocation } from "@/lib/validation/budget-allocation";
+import {
+  computeBudgetAllocation,
+  formatBudgetAllocationForPrompt,
+  type BudgetAllocationResult,
+} from "@/lib/validation/budget-allocation";
 
 describe("computeBudgetAllocation", () => {
   it("flags under-investment on sofa", () => {
@@ -97,5 +101,50 @@ describe("computeBudgetAllocation", () => {
     );
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.score).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("formatBudgetAllocationForPrompt", () => {
+  // Fixed literal so every rendering branch is exercised deterministically:
+  // one row per status (within/under/over) + an "n/a" row that MUST be skipped,
+  // a positive total_spend, a warning, and an issue.
+  const mixed: BudgetAllocationResult = {
+    score: 0.42,
+    total_spend: 6200,
+    per_category: [
+      { category: "area_rug", aliases: [], spend: 800, share: 0.13, target: [0.1, 0.18], status: "within", item_count: 1 },
+      { category: "sofa", aliases: [], spend: 500, share: 0.08, target: [0.22, 0.4], status: "under", item_count: 1 },
+      { category: "wall_art", aliases: [], spend: 3000, share: 0.48, target: [0.02, 0.15], status: "over", item_count: 1 },
+      { category: "misc_widget", aliases: [], spend: 0, share: 0, target: [0, 0], status: "n/a", item_count: 0 },
+    ],
+    issues: [{ category: "sofa", issue: "sofa under-invested", suggestion: "allocate more to the sofa" }],
+    warnings: ["prices are estimates"],
+  };
+
+  it("renders a distinct mark per status and skips n/a rows", () => {
+    const out = formatBudgetAllocationForPrompt(mixed);
+    expect(out).toContain("✓ area_rug"); // within
+    expect(out).toContain("↓ sofa"); // under
+    expect(out).toContain("↑ wall_art"); // over
+    // n/a rows are `continue`d — the category must not appear as a rendered row.
+    expect(out).not.toContain("misc_widget");
+  });
+
+  it("renders share/target percentages and dollar spend", () => {
+    const out = formatBudgetAllocationForPrompt(mixed);
+    // sofa: 8% ($500) vs target 22-40%
+    expect(out).toContain("8% ($500) vs target 22-40%");
+  });
+
+  it("includes total spend only when > 0", () => {
+    expect(formatBudgetAllocationForPrompt(mixed)).toContain("- Total spend: $6200");
+    const noSpend: BudgetAllocationResult = { ...mixed, total_spend: 0, per_category: [], issues: [], warnings: [] };
+    expect(formatBudgetAllocationForPrompt(noSpend)).not.toContain("Total spend");
+  });
+
+  it("renders warnings as NOTE lines and issues as FIX lines", () => {
+    const out = formatBudgetAllocationForPrompt(mixed);
+    expect(out).toContain("- NOTE: prices are estimates");
+    expect(out).toContain("- FIX: sofa — allocate more to the sofa");
   });
 });
