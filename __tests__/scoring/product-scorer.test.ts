@@ -133,6 +133,42 @@ describe("computeFinalItemScore", () => {
   });
 });
 
+// The `category` argument routes the base geometric-mean score through
+// lib/scoring/calibration.ts (applyCategoryBaseline). In production this runs
+// for every categorized product, but every test above omits the argument, so
+// the whole calibration branch (product-scorer.ts, `if (category) { ... }`)
+// went unexercised. With no drift data recorded (this suite records none),
+// computeDynamicBaseline falls back to the STATIC_CATEGORY_BASELINES table and
+// no expansion/inflation applies (observed stats undefined) — a deterministic,
+// per-category shift of the base score.
+describe("computeFinalItemScore — category calibration", () => {
+  it("shifts a categorized score down by the category's static baseline (rug −0.3)", () => {
+    const base = computeFinalItemScore(makeScores()); // no category → 7.0, uncalibrated
+    expect(base).toBe(7);
+    // rug baseline is -0.3 → 7.0 - 0.3 = 6.7
+    expect(computeFinalItemScore(makeScores(), "rug")).toBe(6.7);
+  });
+
+  it("shifts a categorized score up by a positive static baseline (accent_chair +0.2)", () => {
+    // accent_chair baseline is +0.2 → 7.0 + 0.2 = 7.2
+    expect(computeFinalItemScore(makeScores(), "accent_chair")).toBe(7.2);
+  });
+
+  it("leaves the score unchanged for a zero-baseline category (sofa)", () => {
+    // The calibration branch still runs, but sofa's static baseline is 0.
+    expect(computeFinalItemScore(makeScores(), "sofa")).toBe(7);
+  });
+
+  it("is case-insensitive on the category key", () => {
+    // applyCategoryBaseline lowercases the key, so "RUG" resolves to rug's -0.3.
+    expect(computeFinalItemScore(makeScores(), "RUG")).toBe(6.7);
+  });
+
+  it("treats an unknown category as a zero baseline (no crash, no shift)", () => {
+    expect(computeFinalItemScore(makeScores(), "made_up_category")).toBe(7);
+  });
+});
+
 describe("determineVerdict", () => {
   it("should return 'strong_yes' for high score + high confidence", () => {
     expect(determineVerdict(8.0, 8)).toBe("strong_yes");
