@@ -183,22 +183,23 @@ export async function POST(request: Request) {
   //   grounding_references: string[] — product/style hints for web search
   const imageOptions = resolveImageOptions(body);
 
-  // Fetch room and diagnosis
-  const { data: room } = await supabase
-    .from("rooms")
-    .select("*, room_images(*)")
-    .eq("id", room_id)
-    .single();
+  // Fetch the room (with images) and its latest diagnosis in parallel — both
+  // key only on the request's room_id and have no dependency on each other, so
+  // serializing them stacked an extra round-trip on the mockup-render path
+  // (the core "wow" moment). The project read below needs room.project_id, so
+  // it stays sequential after the 404 guard.
+  const [{ data: room }, { data: diagnosis }] = await Promise.all([
+    supabase.from("rooms").select("*, room_images(*)").eq("id", room_id).single(),
+    supabase
+      .from("room_diagnoses")
+      .select("*")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
-
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("*")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   // Load project for building research context (finishes, flooring, walls, etc.)
   const { data: project } = await supabase

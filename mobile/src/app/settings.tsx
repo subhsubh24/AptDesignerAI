@@ -83,7 +83,19 @@ export default function SettingsScreen() {
       return;
     }
     try {
-      const info = await Purchases.getCustomerInfo();
+      // Bound the RC call: without a timeout, a hung getCustomerInfo() (network
+      // stall / SDK bug) leaves "Manage subscription" with no response and no
+      // escape hatch. Time out and fall through to the store-settings hint —
+      // the same fallback the catch below already provides on any RC error.
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const info = await Promise.race([
+        Purchases.getCustomerInfo(),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('getCustomerInfo timed out')), 8000);
+        }),
+      ]).finally(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+      });
       if (info.managementURL) {
         await Linking.openURL(info.managementURL);
         return;

@@ -728,6 +728,33 @@ export interface QuickScoreEntry {
 }
 
 /**
+ * Fold a product's four quick-score dimensions into a single 0–10 quick score.
+ *
+ * Gate: if ANY of the three fit dimensions (style / scale / value) is
+ * critically low (≤ 2), the product is physically impossible or fundamentally
+ * wrong for the room — cap the quick score at that minimum dimension so a
+ * strong average on the other dimensions cannot sneak it past the deep-score
+ * threshold. Otherwise the quick score is the plain average of all four
+ * dimensions. Rounded to one decimal place either way.
+ *
+ * Pure and deterministic — the single source of truth for the quick-score math
+ * so the critical-dimension gate can be unit-tested independently of the LLM
+ * batch call that produces the raw dimension values.
+ */
+export function computeQuickScore(
+  styleFit: number,
+  scaleFit: number,
+  valueFit: number,
+  confidence: number,
+): number {
+  const minDim = Math.min(styleFit, scaleFit, valueFit);
+  const avg = (styleFit + scaleFit + valueFit + confidence) / 4;
+  return minDim <= 2
+    ? Math.min(Math.round(avg * 10) / 10, minDim)
+    : Math.round(avg * 10) / 10;
+}
+
+/**
  * Quick-score a batch of products using Flash model (no images).
  * Returns a simplified 3-dimension score to filter before deep scoring.
  * Batches 5-8 products per call for efficiency.
@@ -891,14 +918,14 @@ Return JSON:
             for (const scoreEntry of validated.scores) {
               if (scoreEntry.index >= 0 && scoreEntry.index < batch.length) {
                 const scaleFit = scoreEntry.scale_fit ?? 5;
-                // Gate: if ANY dimension is critically low (≤ 2), the product
-                // is physically impossible or fundamentally wrong — cap the
-                // quick score so it cannot sneak past the deep-score threshold.
-                const minDim = Math.min(scoreEntry.style_fit, scaleFit, scoreEntry.value_fit);
-                const avg = (scoreEntry.style_fit + scaleFit + scoreEntry.value_fit + scoreEntry.confidence) / 4;
-                const quickScore = minDim <= 2
-                  ? Math.min(Math.round(avg * 10) / 10, minDim)
-                  : Math.round(avg * 10) / 10;
+                // Fold the four dimensions into the quick score, applying the
+                // critical-dimension gate (see computeQuickScore).
+                const quickScore = computeQuickScore(
+                  scoreEntry.style_fit,
+                  scaleFit,
+                  scoreEntry.value_fit,
+                  scoreEntry.confidence,
+                );
                 result.push({
                   productId: batch[scoreEntry.index].id,
                   quickScore,
