@@ -47,22 +47,30 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
 ];
 
 function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
-  return offering.availablePackages.map((pkg) => {
-    const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
-    const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
-    const priceStr = pkg.product.priceString;
-    return {
-      pkg,
-      label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
-      price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
-      subline: isAnnual
-        ? 'Free trial included · best value'
-        : isMonthly
-          ? 'Free trial included'
-          : pkg.product.description,
-      badge: isAnnual ? 'Best value' : null,
-    };
-  });
+  return offering.availablePackages
+    // A malformed offering can carry a package with no `product` (no
+    // purchasable price behind it). The RC types say `product` is always
+    // present, but the network payload is not type-checked — a null slips
+    // through and dereferencing pkg.product below would throw and
+    // white-screen the paywall (this app has no error boundary). Drop the
+    // unpurchasable package instead of crashing on it.
+    .filter((pkg) => pkg.product != null)
+    .map((pkg) => {
+      const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
+      const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
+      const priceStr = pkg.product.priceString;
+      return {
+        pkg,
+        label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
+        price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
+        subline: isAnnual
+          ? 'Free trial included · best value'
+          : isMonthly
+            ? 'Free trial included'
+            : pkg.product.description,
+        badge: isAnnual ? 'Best value' : null,
+      };
+    });
 }
 
 type Props = {
@@ -93,9 +101,15 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         if (cancelled) return;
         const current = offerings.current;
         if (current && current.availablePackages.length > 0) {
-          setOptions(packagesToOptions(current));
-          setSelectedIndex(0);
-          setOfferingLoaded(true);
+          const opts = packagesToOptions(current);
+          // If every package was unpurchasable (no product), keep the static
+          // fallback display + leave offeringLoaded false so the CTA's
+          // no-package path warns rather than showing an empty, priceless sheet.
+          if (opts.length > 0) {
+            setOptions(opts);
+            setSelectedIndex(0);
+            setOfferingLoaded(true);
+          }
         }
       })
       .catch((err: unknown) => {
