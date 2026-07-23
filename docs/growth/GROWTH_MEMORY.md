@@ -1188,3 +1188,117 @@ Research-backed candidate swap (if competition validates):
 - Same owner blockers as Runs 1-11? YES — circuit breaker remains FIRED (Run 12, 12th consecutive
   run, ~22 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run.
+
+---
+
+## Run 13 — 2026-07-23
+
+### What we found
+- All Run 1-12 owner blockers remain unresolved: verified directly against `PENDING_OPS.md` (`as_of`
+  still `2026-07-14`, unchanged since Run 10; `set-site-gate-password` / `connect-email-resend` /
+  `set-metrics-token` / `set-cron-secret` / `set-email-physical-address` all still `status: open`).
+  13th consecutive run, ~26 days since Run 1 first surfaced the core 4. `git log` shows the Product
+  Factory shipped Runs 99-107 in the interim (through PR #683): a DEEP AUDIT (8-lens), several
+  security/mobile-crash/a11y/F2-coverage fixes, and a Stripe `past_due` billing grace-period feature.
+  Verified via `git show`/`grep` that none of it touched a GTM-owned doc (store-listing, press-kit,
+  social-drafts, content-calendar, email docs, OUTREACH.md all clean) — none of it a growth-channel
+  connection.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a TENTH time via curl through the
+  agent-proxy: still `connect_rejected` / gateway 502 to CONNECT ("CONNECT tunnel failed"),
+  cross-checked directly against `/__agentproxy/status` `recentRelayFailures` (two entries,
+  `2026-07-23T05:08:37-38Z`) — identical signature to Runs 6-12. No new information; conclusion
+  unchanged across all 10 probes.
+- **`docs/growth/GTM_SCORECARD.md` MOVED significantly since Run 12** — the independent GTM Auditor's
+  weekly pass landed between Run 12 and this run (`auditor_run: 3`, `as_of: 2026-07-20`). The GTM
+  Factory's OWN ship gate is now **MET**: `overall: A`, `ship_gate_met: true`, all four ship-critical
+  dimensions A/A+ (`business_case_honesty` raised B->A on Run 9's already-landed annual-tier
+  disclosure fix, exactly as Run 12 anticipated). Read this carefully rather than assuming it unlocks
+  outreach: GTM_STANDARD S6's outbound-readiness precondition names the **separate, PRODUCT-side**
+  `docs/quality/QUALITY_SCORECARD.md` reporting `ship_gate_met` — re-read directly this run, still
+  `false` (`as_of: 2026-07-20`, `overall: C`, `functional_reality: C`, `design_taste: B`,
+  `business_case_strength: B`, all three ship-critical for the PRODUCT still below A). The two
+  scorecards grade two different things (GTM Factory honesty vs. product readiness) and conflating
+  them would be a real self-validation error — recorded this distinction as its own structured
+  `gtm_scorecard` entry in `GROWTH_STATUS.md`'s `validation:` block this run, not just a prose aside,
+  so a future run (or an auditor) cannot mistake one scorecard's A for the other's gate opening.
+- Demand-signal re-probe (S10's every-run requirement): `reddit.com` still hard-blocked by the
+  WebFetch tool itself; `trustpilot.com/review/havenly.com` still HTTP 403 — 7th consecutive
+  re-probe of both with the same result. Acting on Run 12's own `next_action` (target themes 1/3/4,
+  not theme 2 again), tried three fresh angles: theme 1 (furniture sizing/fit complaints) surfaced
+  only WebSearch-synthesized retailer-complaint aggregates (City Furniture, Jennifer Furniture,
+  Rooms2Go), no new verbatim source; theme 4 (AR view-in-room abandonment) surfaced only
+  re-paraphrased Baymard stats already cited, no new source; theme 3 (prior full-service e-design
+  fails on price/delivery) DID surface a genuinely new, directly-fetched, verbatim-verified source —
+  **BBB's Havenly, Inc. complaints page** (`bbb.org/us/co/denver/profile/interior-designer/
+  havenly-inc-1296-90260312/complaints`), fetched cleanly via WebFetch, unlike the Trustpilot page
+  for the same company which still 403s. Dated complaints spanning 7/24/2025 through 6/2/2026 (an
+  unapproved $6,772.06 charge; a $3,000 rug promised for delivery the week of 2/28-3/4/2026 with
+  still no ETA by 3/26/2026; an $814 discontinued-item charge left unrefunded after multiple
+  requests; "I cannot get someone on the phone and am continually connected to a bot") show this
+  pain is CURRENT at a live competitor, not a historical Modsy-shutdown-only story.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-23; refreshed `internal_metrics_api`
+  (10th probe) and `web_research` (7th re-probe of the two structural gaps, unchanged, plus the new
+  BBB citation and the discovery that bbb.org is NOT blocked the way trustpilot.com is) validation
+  reasons; **added a new structured `gtm_scorecard` entry** to `validation:` making explicit that the
+  GTM Auditor's ship-gate-met:true grades the GTM Factory's own honesty, not product readiness, and
+  citing the still-`false` product `QUALITY_SCORECARD` directly; added the BBB citation to
+  `demand_signal` theme 3's `sources`/`solved_by_product`/`recency` fields (now 2 independent verbatim
+  sources, up from 1); bumped `demand_signal.as_of` and wrote a Run 13 `method_note` (prior `method_note`
+  preserved under `prior_notes`, not overwritten) explaining the theme-1/3/4 targeting per Run 12's
+  own next_action, what was found and NOT found, and why `confidence` stays `emerging`; rewrote
+  `learnings`/`next_actions`/`owner_blockers` for the 13th consecutive circuit-breaker run, most
+  notably re-pointing "the scorecard to watch" from GTM_SCORECARD (now resolved, A) to
+  QUALITY_SCORECARD (still the real outreach-readiness gate). Ran `npm install` (materializes
+  `js-yaml` into a fresh `node_modules`, no `package.json` change) then `node scripts/validate-gtm.mjs`
+  — parses clean.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (10th probe, same
+  connect_rejected/502 signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND the PRODUCT `QUALITY_SCORECARD.ship_gate_met`
+  is still `false` (the GTM_SCORECARD's own A/ship_gate_met:true is a different gate — see above,
+  and does NOT unlock either S6 lane). Re-confirmed no `docs/growth/MARKETING_HOLD` or
+  `docs/growth/MARKETING_APPROVED` exists. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new quantitative funnel data
+  and no demand-signal finding cleared the S3 steer bar this run (the new BBB citation is qualitative,
+  strengthens one theme from 1 to 2 verbatim sources — real progress, still nowhere near "real data,
+  sufficient N, causal revenue link"). `docs/BUSINESS_CASE.md` needed no edit — its GTM_SCORECARD-named
+  gap was already fixed (Run 9) and is now independently confirmed graded A (GTM Auditor Run 3).
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer for the `GROWTH_STATUS.md` edit: this was a
+  routine S4/S5 dashboard-and-research update (new demand-signal citation with its own verbatim
+  verification, re-probes, bookkeeping, and a scorecard-distinction clarification) — no landing/email/
+  ASO copy, campaign, pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer
+  shipped, matching Runs 5-12's precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner-actionable item surfaced this run beyond what's already
+  listed there; all items already tracked with correct `status`.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4 fail-closed
+  reasoning as Runs 5-12.
+
+### Lessons learned
+- **Two independent scorecards grading two different things can both be real and both need to be read
+  correctly — conflating "the GTM Factory's honesty graded A" with "the product is ready to market" would
+  be exactly the kind of self-validation error S4 exists to prevent.** Made this distinction a first-class
+  structured entry (a `gtm_scorecard` validation-block item), not just a learning-file sentence, so it
+  survives into the dashboard itself where a future run or a human skimming would otherwise most plausibly
+  make that mistake — right when the GTM_SCORECARD headline (`overall: A`, `ship_gate_met: true`) looks,
+  at a glance, like exactly the kind of green light that unlocks outreach.
+- **A blocked source (Trustpilot) doesn't mean the underlying research question is closed — try an
+  adjacent source for the SAME company.** BBB's complaint database covers the same company (Havenly)
+  Trustpilot does, is not behind the same bot-block, and yielded dated, verbatim, citable complaints this
+  run alone couldn't get from Trustpilot in 7 consecutive attempts. Worth checking BBB as a standing
+  alternative whenever a competitor's Trustpilot page is the blocked source, not just for Havenly.
+- **Acting on last run's own stated next_action (target themes 1/3/4, not theme 2 again) is what
+  surfaced the new find.** Two of three attempted angles (themes 1 and 4) still came up empty of new
+  verbatim sources — an honest negative result, not a failure to try — but the third (theme 3) worked.
+  Diversifying WHICH theme gets a fresh search angle each run, not just varying the query wording, is
+  the mechanism that keeps demand-signal research from plateauing.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-12? YES — circuit breaker remains FIRED (Run 13, 13th consecutive
+  run, ~26 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; the QUALITY_SCORECARD (not the
+  now-resolved GTM_SCORECARD) is the scorecard to watch for the outreach-readiness gate going forward.
