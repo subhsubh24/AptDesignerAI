@@ -110,6 +110,31 @@ describe("computeBundleMathScores — palette_harmony", () => {
     ];
     const result = computeBundleMathScores(products, CTX_NO_FLOORPLAN);
     expect(result.palette_harmony).toBe(0.5);
+    // length === 0 branch emits the "no resolvable colors" issue.
+    expect(result.issues).toContain("No resolvable colors in bundle");
+  });
+
+  it("returns a neutral 0.5 with NO issue when exactly one color resolves", () => {
+    // Distinct from the zero-colors case above: with one resolvable color there
+    // is nothing to compare, so the score is neutral 0.5 but — unlike the
+    // zero-colors branch — no "no resolvable colors" issue is raised.
+    const products = [
+      makeProduct({ title: "A", category: "sofa", colors: ["ivory"] }),
+    ];
+    const result = computeBundleMathScores(products, CTX_NO_FLOORPLAN);
+    expect(result.palette_harmony).toBe(0.5);
+    expect(result.issues).not.toContain("No resolvable colors in bundle");
+  });
+
+  it("returns a neutral 0.7 when all resolvable colors belong to one product (no cross-product pairs)", () => {
+    // Two resolvable colors, but both on the same product → the cross-product
+    // pair loop skips them (pairCount === 0), so harmony can't be computed and
+    // the score short-circuits to a neutral 0.7 before palette alignment runs.
+    const products = [
+      makeProduct({ title: "Two-Tone Sofa", category: "sofa", colors: ["ivory", "cream"] }),
+    ];
+    const result = computeBundleMathScores(products, CTX_NO_FLOORPLAN);
+    expect(result.palette_harmony).toBe(0.7);
   });
 
   it("scores harmonious palette higher than clashing palette", () => {
@@ -157,6 +182,20 @@ describe("computeBundleMathScores — material_balance", () => {
     ];
     const result = computeBundleMathScores(products, CTX_NO_FLOORPLAN);
     expect(result.material_balance).toBe(0.5);
+    // length === 0 branch emits the "no resolvable materials" issue.
+    expect(result.issues).toContain("No resolvable materials in bundle");
+  });
+
+  it("returns a neutral 0.5 with NO issue when exactly one material resolves", () => {
+    // Mirror of the single-color case: one resolvable material has nothing to
+    // balance against, so the score is neutral 0.5 but — unlike the zero-materials
+    // branch — no "no resolvable materials" issue is raised.
+    const products = [
+      makeProduct({ title: "A", category: "sofa", materials: ["linen"] }),
+    ];
+    const result = computeBundleMathScores(products, CTX_NO_FLOORPLAN);
+    expect(result.material_balance).toBe(0.5);
+    expect(result.issues).not.toContain("No resolvable materials in bundle");
   });
 
   it("penalizes more than 2 wood species", () => {
