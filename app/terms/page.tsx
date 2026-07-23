@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default function TermsPage() {
-  const updatedDate = "July 4, 2026";
+  const updatedDate = "July 23, 2026";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -74,9 +74,31 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">6. Payments & refunds</h2>
             <p className="text-muted-foreground">
-              Paid tiers are billed as described on the pricing page. We offer
-              a 30-day money-back guarantee — email us within 30 days of
-              purchase and we&apos;ll refund you in full.
+              Prices are shown at checkout and on the pricing page. The one-time
+              Apartment plan is a single charge, not a subscription. Pro is an
+              auto-renewing subscription: it renews automatically at the end of
+              each billing period — monthly, or annually where an annual option
+              is offered — at the price shown at checkout, and continues until
+              you cancel.
+            </p>
+            <p className="text-muted-foreground mt-3">
+              You can cancel anytime, and cancelling stops all future renewals.
+              To cancel a web subscription, use the self-serve management link on
+              your account page; if it is temporarily unavailable, email{" "}
+              <a
+                href="mailto:hello@aptdesignerai.com"
+                className="text-accent-warm font-medium hover:underline"
+              >
+                hello@aptdesignerai.com
+              </a>{" "}
+              and we&apos;ll cancel or update it for you. Cancel mobile
+              subscriptions through your App Store (Settings → your name →
+              Subscriptions) or Google Play (Payments &amp; subscriptions)
+              account settings.
+            </p>
+            <p className="text-muted-foreground mt-3">
+              We also offer a 30-day money-back guarantee — email us within 30
+              days of purchase and we&apos;ll refund you in full.
             </p>
           </section>
 
