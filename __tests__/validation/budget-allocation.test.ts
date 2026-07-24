@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeBudgetAllocation,
   formatBudgetAllocationForPrompt,
+  getBudgetIssuesForItem,
   type BudgetAllocationResult,
 } from "@/lib/validation/budget-allocation";
 
@@ -146,5 +147,48 @@ describe("formatBudgetAllocationForPrompt", () => {
     const out = formatBudgetAllocationForPrompt(mixed);
     expect(out).toContain("- NOTE: prices are estimates");
     expect(out).toContain("- FIX: sofa — allocate more to the sofa");
+  });
+});
+
+describe("getBudgetIssuesForItem", () => {
+  // Feeds per-item budget FIX context into the diagnosis LLM prompt. It fuzzy-
+  // matches the requested category against each issue's (already-normalized)
+  // category and returns the `issue` text. The four sibling helpers
+  // (access/outlet/ergonomics/pairwise) are tested; this one was not.
+  const base: BudgetAllocationResult = {
+    score: 0,
+    total_spend: 0,
+    per_category: [],
+    warnings: [],
+    issues: [
+      { category: "sofa", issue: "sofa is under-invested", suggestion: "spend more" },
+      { category: "dining_table", issue: "dining table over budget", suggestion: "trim it" },
+    ],
+  };
+
+  it("returns the issue text on an exact category match", () => {
+    expect(getBudgetIssuesForItem(base, "sofa")).toEqual(["sofa is under-invested"]);
+  });
+
+  it("normalizes the input category (spaces/hyphens → underscore, lowercased)", () => {
+    // A mutation dropping normalizeCategory on the input would fail this: the
+    // raw "Dining Table" would never equal the stored "dining_table".
+    expect(getBudgetIssuesForItem(base, "Dining Table")).toEqual(["dining table over budget"]);
+    expect(getBudgetIssuesForItem(base, "dining-table")).toEqual(["dining table over budget"]);
+  });
+
+  it("matches when the requested category CONTAINS the issue category", () => {
+    // cat.includes(i.category): "sectional_sofa" contains "sofa".
+    expect(getBudgetIssuesForItem(base, "sectional sofa")).toEqual(["sofa is under-invested"]);
+  });
+
+  it("matches when the issue category CONTAINS the requested category", () => {
+    // i.category.includes(cat): "dining_table" contains "table".
+    expect(getBudgetIssuesForItem(base, "table")).toEqual(["dining table over budget"]);
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    expect(getBudgetIssuesForItem(base, "rug")).toEqual([]);
+    expect(getBudgetIssuesForItem({ ...base, issues: [] }, "sofa")).toEqual([]);
   });
 });
