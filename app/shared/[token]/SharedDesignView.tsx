@@ -175,32 +175,45 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
                 <div key={tier} className="mb-6 last:mb-0">
                   <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">{label}</h3>
                   <div className="grid gap-2.5 sm:grid-cols-2">
-                    {tierProducts.map((p, i) => (
-                      <a
-                        key={i}
-                        href={p.product_url ?? "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={cn(
-                          "flex gap-3 p-3 rounded-xl border bg-card transition-shadow",
-                          p.product_url && "hover:shadow-md hover:border-accent-warm/30 cursor-pointer"
-                        )}
-                      >
-                        {p.image_url && (
-                          <div className="h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{p.title}</p>
-                          <p className="text-xs text-muted-foreground">{p.retailer}</p>
-                          {p.price != null && (
-                            <p className="text-xs font-semibold mt-0.5 text-accent-warm">${p.price}</p>
+                    {tierProducts.map((p, i) => {
+                      const base = "flex gap-3 p-3 rounded-xl border bg-card transition-shadow";
+                      const inner = (
+                        <>
+                          {p.image_url && (
+                            <div className="h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
+                            </div>
                           )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{p.title}</p>
+                            <p className="text-xs text-muted-foreground">{p.retailer}</p>
+                            {p.price != null && (
+                              <p className="text-xs font-semibold mt-0.5 text-accent-warm">${p.price}</p>
+                            )}
+                          </div>
+                        </>
+                      );
+                      // Only render an anchor when there's a real destination. A
+                      // product with no URL becomes a plain card, never a dead
+                      // link to "#" — a nowhere-link is a keyboard-focusable dead
+                      // end on this public share page. Mirrors picks/page.tsx.
+                      return p.product_url ? (
+                        <a
+                          key={i}
+                          href={p.product_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(base, "hover:shadow-md hover:border-accent-warm/30 cursor-pointer")}
+                        >
+                          {inner}
+                        </a>
+                      ) : (
+                        <div key={i} className={base}>
+                          {inner}
                         </div>
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

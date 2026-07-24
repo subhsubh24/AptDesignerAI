@@ -56,7 +56,23 @@ export function useEntitlements(userId: string | undefined): EntitlementsState {
     if (!RC_KEY || !userId) return false;
     for (let attempt = 1; attempt <= REFRESH_ATTEMPTS; attempt++) {
       try {
-        const info = await Purchases.getCustomerInfo();
+        // Bound the RC call. Without a timeout a hung getCustomerInfo() (network
+        // stall / SDK bug) never resolves OR rejects, so this await blocks
+        // forever on the FIRST attempt — the retry loop never advances and, on
+        // the post-purchase path, a paying user is stranded on a locked screen
+        // with isLoading stuck true and no unlock. Time out into the catch below
+        // so a hang is treated like any transient failure (back off, retry, then
+        // return false so the caller can surface "couldn't confirm"). Mirrors the
+        // bounded getCustomerInfo() in settings.tsx.
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const info = await Promise.race([
+          Purchases.getCustomerInfo(),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('getCustomerInfo timed out')), 8000);
+          }),
+        ]).finally(() => {
+          if (timeoutId) clearTimeout(timeoutId);
+        });
         // Drop the result if this refresh was superseded while it was in flight
         // (component unmounted, or the active user changed under it).
         if (!mountedRef.current || activeUserRef.current !== userId) return false;
