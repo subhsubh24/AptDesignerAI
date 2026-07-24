@@ -30,6 +30,12 @@ interface SignupScreenProps {
   onLogin: () => void;
 }
 
+// Bound the auth network call. Without a timeout, a hung Supabase request
+// leaves the promise unsettled forever — the button stays disabled on
+// "Creating account…" with no error and no escape but a force-quit. The
+// timeout converts a hang into the same recoverable error path as any failure.
+const AUTH_TIMEOUT_MS = 15000;
+
 export function SignupScreen({ onLogin }: SignupScreenProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -59,19 +65,32 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
     setLoading(true);
     setError(null);
 
-    const { data, error: authError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-    });
-
-    if (authError) {
-      setError(authError.message);
-    } else if (data.session === null) {
-      // Email confirmation required — show "check your email" screen.
-      // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
-      setSuccess(true);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const { data, error: authError } = await Promise.race([
+        supabase.auth.signUp({ email: email.trim(), password }),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('Sign-up timed out. Check your connection and try again.')),
+            AUTH_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (authError) {
+        setError(authError.message);
+      } else if (data.session === null) {
+        // Email confirmation required — show "check your email" screen.
+        // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
+        setSuccess(true);
+      }
+    } catch (err) {
+      // A thrown fetch/network error or the timeout above. Surface a recoverable
+      // message rather than leaving the button stuck on "Creating account…".
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   if (success) {

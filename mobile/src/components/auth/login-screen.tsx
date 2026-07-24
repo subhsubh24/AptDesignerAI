@@ -20,6 +20,13 @@ interface LoginScreenProps {
   onSignup: () => void;
 }
 
+// Bound the auth network call. Without a timeout, a hung Supabase request
+// (dropped connection, captive portal, provider outage) leaves the promise
+// unsettled forever — the button stays disabled on "Signing in…" with no error
+// and no escape but a force-quit. The timeout converts a hang into the same
+// recoverable error path as any other failure.
+const AUTH_TIMEOUT_MS = 15000;
+
 export function LoginScreen({ onSignup }: LoginScreenProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -39,15 +46,28 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
     setLoading(true);
     setError(null);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (authError) {
-      setError(authError.message);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const { error: authError } = await Promise.race([
+        supabase.auth.signInWithPassword({ email: email.trim(), password }),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('Sign-in timed out. Check your connection and try again.')),
+            AUTH_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (authError) {
+        setError(authError.message);
+      }
+    } catch (err) {
+      // A thrown fetch/network error or the timeout above. Surface a recoverable
+      // message rather than leaving the button stuck on "Signing in…" forever.
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
