@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
 
@@ -203,6 +204,12 @@ export async function DELETE(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Authenticated DB write — apply the shared per-user write baseline (Track G1)
+  // so a client can't hammer the projects table with clear requests, matching the
+  // sibling project/room/product CRUD deletes.
+  const limited = enforceWriteRateLimit(user.id, "floor-plan:delete", DELETE_WRITE_LIMIT);
+  if (limited) return limited;
 
   const { data: project, error: fetchErr } = await supabase
     .from("projects")

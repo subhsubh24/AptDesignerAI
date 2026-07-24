@@ -182,6 +182,17 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### `sharp` HIGH advisory in next/image's runtime image optimizer — unfixable at Next 16 (added 2026-07-24, Run 111, Track F/security)
+
+Run 111 bumped Next.js 16.2.4 → 16.2.11, clearing all 21 HIGH advisories on the `next` package itself. Two HIGH advisories remain **inside next's own dependency subtree** and are **not resolvable at the Next 16 line** (npm's only `fixAvailable` is a downgrade to `next@9`, a non-viable major); both are pre-existing (lockfile pins identical before/after the bump):
+
+- **`sharp@0.34.5`** — inherited libvips CVEs (HIGH). `sharp` is an **optional runtime dependency of next/image's image-optimization pipeline**, which this app actively uses (`next/image` with external `remotePatterns` on the room focus/mockups/setup pages) — i.e. this sits on the production image-serving path, NOT dev/build tooling. Flagged explicitly so it is not lost among the dev-tooling deferrals below.
+- **`postcss@8.4.31`** — HIGH, vendored inside `next`'s own tree (separate from the app's `@tailwindcss/postcss`).
+
+**Owner step (monitor, not headlessly buildable):** track the Next.js release notes; when a 16.2.x / 16.3.x patch re-pins `sharp`/`postcss` to non-vulnerable versions, bump `next` again. Until then there is no safe headless fix (forcing `sharp`/`postcss` outside next's declared range risks breaking image optimization / the build). Lower-urgency dev/build-tooling advisories also outstanding (`vite`, `ws`, `@babel/core`, `protobufjs`) — resolvable with `npm audit fix` but deferred as unattended-merge risk.
+
+---
+
 ### Waitlist "30% off, no promo code required" discount — back the marketing promise (added 2026-07-22, Run 104, Track D/E)
 
 The waitlist marketing copy makes a concrete launch commitment with **no backing mechanism**:

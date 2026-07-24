@@ -679,11 +679,17 @@ RLS is necessary but not sufficient. A live app that calls PAID APIs (Gemini, Ta
 Browserbase, Stripe) and has PUBLIC forms (waitlist, signup) is a wallet-drain + abuse
 target. Build and ENFORCE these; the deep-audit security lens re-checks them each cycle,
 Reviewer A rejects regressions, and the preflight verifies the critical ones.
-- [ ] G1. **Rate limiting on EVERY paid-API / expensive / auth endpoint** (not
+- [x] G1. **Rate limiting on EVERY paid-API / expensive / auth endpoint** (not
   case-by-case): a sane baseline (e.g. ~100 req/min/IP public, ~1000/min authenticated),
   stricter on anything that hits Gemini/Tavily/Browserbase/Stripe or auth. An unthrottled
   expensive endpoint is a money leak and a brute-force surface. Reviewer A REJECTS any new
   expensive/auth route without rate limiting.
+  **[DONE — paid-API/LLM routes carry per-user `checkRateLimit` + daily `checkDailySpend`
+  (PR #119 spend-limiter, Run 33); the authenticated write endpoints carry the shared
+  `enforceWriteRateLimit` baseline (#515 sweep, Run 72). Run 111 closed the last tracked
+  write-endpoint gap — `DELETE /api/projects/[projectId]/floor-plan` (an authed `projects`
+  write that previously had no write limit). Every paid/expensive/auth/write route is now
+  rate-limited. Parent Track G stays open on G4 (login-lockout/password-reset).]**
 - [x] G2. **Server-side validation on every write** (client Zod is UX, not security):
   re-validate types/lengths/shape on the server for every endpoint that writes to the DB
   or calls a paid API; reject malformed/oversized input.

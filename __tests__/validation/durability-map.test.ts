@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lookupDurability,
+  lookupCategoryDurability,
   aggregateDurability,
   resolveLifestyleFlags,
   scoreLifestyleFit,
@@ -19,6 +20,40 @@ describe("lookupDurability", () => {
 
   it("returns null for unknown materials", () => {
     expect(lookupDurability("unobtainium")).toBeNull();
+  });
+});
+
+describe("lookupCategoryDurability", () => {
+  // This is the fallback path aggregateDurability takes when no material string
+  // resolves (e.g. a product with an empty/unmapped materials array) — a wrong
+  // vector here silently skews lifestyle-fit scoring, so each branch is pinned.
+
+  it("matches an exact category key regardless of spacing/hyphen/case (normalize + [\\s-]+->_)", () => {
+    const canonical = lookupCategoryDurability("dining_table");
+    expect(canonical).not.toBeNull();
+    // Space- and hyphen-separated, mixed-case variants must normalize to the
+    // same underscore key. If the `[\s-]+ -> _` rewrite is dropped, "dining
+    // table" no longer matches any key and falls through to null.
+    expect(lookupCategoryDurability("dining table")).toEqual(canonical);
+    expect(lookupCategoryDurability("Dining-Table")).toEqual(canonical);
+  });
+
+  it("falls back to a substring match when the input CONTAINS a known key (key.includes(k))", () => {
+    // "sectional sofa" -> "sectional_sofa": no exact key, but it contains "sofa".
+    expect(lookupCategoryDurability("sectional sofa")).toEqual(
+      lookupCategoryDurability("sofa"),
+    );
+  });
+
+  it("falls back to a substring match when a known key CONTAINS the input (k.includes(key))", () => {
+    // "chair" is not a key, but "accent_chair" contains it (first such key).
+    expect(lookupCategoryDurability("chair")).toEqual(
+      lookupCategoryDurability("accent_chair"),
+    );
+  });
+
+  it("returns null for an unknown category (no exact, no substring overlap)", () => {
+    expect(lookupCategoryDurability("spaceship")).toBeNull();
   });
 });
 
