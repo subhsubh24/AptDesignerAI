@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import Purchases, { PACKAGE_TYPE } from 'react-native-purchases';
 import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
+import { resolveFreeTrial } from '@/lib/paywall-trial';
 import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
@@ -26,27 +27,44 @@ type DisplayOption = {
   price: string;
   subline: string;
   badge: string | null;
+  /**
+   * Whether this plan includes a free trial THIS buyer can still take —
+   * configured on the store product AND (on iOS) confirmed eligible for the
+   * signed-in Apple ID. See lib/paywall-trial. Every piece of trial copy on the
+   * sheet — subline, CTA, and the renewal disclosure — keys off this rather
+   * than assuming one, so the terms shown at the point of purchase describe
+   * what the store will actually do (Apple 3.1.2).
+   */
+  hasFreeTrial: boolean;
 };
 
-// Shown when RC offerings haven't loaded yet or RC is not configured
+// Shown when RC offerings haven't loaded yet or RC is not configured. These
+// carry no purchasable package, so they must not promise a trial either: with
+// no product to read, we cannot know whether one exists.
 const FALLBACK_OPTIONS: DisplayOption[] = [
   {
     pkg: null,
     label: 'Annual',
     price: '$399 / year',
-    subline: '$33.25 per month · free trial included',
+    subline: '$33.25 per month · billed yearly',
     badge: 'Best value',
+    hasFreeTrial: false,
   },
   {
     pkg: null,
     label: 'Monthly',
     price: '$49 / month',
-    subline: 'Free trial included',
+    subline: 'Billed monthly · cancel anytime',
     badge: null,
+    hasFreeTrial: false,
   },
 ];
 
-function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
+function packagesToOptions(
+  offering: PurchasesOffering,
+  eligibility: Record<string, number> | null,
+): DisplayOption[] {
+  const isIOS = Platform.OS === 'ios';
   return offering.availablePackages
     // A malformed offering can carry a package with no `product` (no
     // purchasable price behind it). The RC types say `product` is always
@@ -59,16 +77,27 @@ function packagesToOptions(offering: PurchasesOffering): DisplayOption[] {
       const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
       const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
       const priceStr = pkg.product.priceString;
+      // Configured on the product AND still available to THIS buyer. On iOS a
+      // returning subscriber has already spent their trial; without the
+      // eligibility check the sheet would promise one and the store would
+      // charge them on the spot.
+      const hasFreeTrial = resolveFreeTrial(
+        pkg.product,
+        isIOS,
+        eligibility?.[pkg.product.identifier],
+      );
+      const trialNote = hasFreeTrial ? 'Free trial included' : 'Cancel anytime';
       return {
         pkg,
         label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
         price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
         subline: isAnnual
-          ? 'Free trial included · best value'
+          ? `${trialNote} · best value`
           : isMonthly
-            ? 'Free trial included'
+            ? trialNote
             : pkg.product.description,
         badge: isAnnual ? 'Best value' : null,
+        hasFreeTrial,
       };
     });
 }
@@ -97,11 +126,32 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     // on a gone component (React warning + wasted work).
     let cancelled = false;
     Purchases.getOfferings()
-      .then((offerings) => {
+      .then(async (offerings) => {
         if (cancelled) return;
         const current = offerings.current;
         if (current && current.availablePackages.length > 0) {
-          const opts = packagesToOptions(current);
+          // Ask whether THIS user can still take an intro offer before we
+          // describe one. Only meaningful on iOS (Android always answers
+          // UNKNOWN and filters ineligible offers server-side), and a failure
+          // resolves to "no trial" rather than blocking the sheet — the
+          // conservative direction, since over-promising is the harm.
+          let eligibility: Record<string, number> | null = null;
+          if (Platform.OS === 'ios') {
+            try {
+              const ids = current.availablePackages
+                .filter((pkg) => pkg.product != null)
+                .map((pkg) => pkg.product.identifier);
+              const result = await Purchases.checkTrialOrIntroductoryPriceEligibility(ids);
+              eligibility = Object.fromEntries(
+                Object.entries(result).map(([id, e]) => [id, e.status]),
+              );
+            } catch (err) {
+              console.warn('[paywall] intro-eligibility lookup failed', err);
+            }
+          }
+          if (cancelled) return;
+
+          const opts = packagesToOptions(current, eligibility);
           // If every package was unpurchasable (no product), keep the static
           // fallback display + leave offeringLoaded false so the CTA's
           // no-package path warns rather than showing an empty, priceless sheet.
@@ -126,8 +176,9 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   }, [visible, offeringLoaded]);
 
   const selectedOption = options[selectedIndex] ?? null;
+  const trialAvailable = selectedOption?.hasFreeTrial ?? false;
 
-  const handleStartTrial = useCallback(async () => {
+  const handlePurchase = useCallback(async () => {
     const pkg = selectedOption?.pkg;
     if (!RC_KEY) {
       // RC not configured (dev mode) — dismiss gracefully
@@ -278,14 +329,14 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
                 opacity: pressed || purchasing ? 0.8 : 1,
               },
             ]}
-            onPress={handleStartTrial}
+            onPress={handlePurchase}
             disabled={purchasing}
             accessibilityRole="button"
-            accessibilityLabel="Start free trial"
+            accessibilityLabel={trialAvailable ? 'Start free trial' : 'Subscribe'}
             accessibilityState={{ disabled: purchasing, busy: purchasing }}
           >
             <ThemedText style={[styles.ctaText, { color: colors.accentForeground }]}>
-              {purchasing ? 'Processing…' : 'Start Free Trial'}
+              {purchasing ? 'Processing…' : trialAvailable ? 'Start Free Trial' : 'Subscribe'}
             </ThemedText>
           </Pressable>
 
@@ -311,10 +362,18 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
                 Google Play subscription policy — both require telling the user
                 HOW to cancel, not just that they can). selectedOption.price
                 already reads e.g. "$49 / month"; the store-native path mirrors
-                the guidance shown in Settings (settings.tsx). */}
-            {selectedOption?.price
-              ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. Manage or cancel anytime in your App Store or Google Play subscription settings. `
-              : 'Payment is charged when your free trial ends. Manage or cancel anytime in your App Store or Google Play subscription settings. '}
+                the guidance shown in Settings (settings.tsx). The trial half of
+                the sentence appears ONLY when the selected product really has a
+                free phase — otherwise it would promise the buyer a grace period
+                the store is not going to give them. */}
+            {trialAvailable
+              ? selectedOption?.price
+                ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. `
+                : 'Payment is charged when your free trial ends. '
+              : selectedOption?.price
+                ? `You'll be charged ${selectedOption.price}, renewing automatically until you cancel. `
+                : 'Your subscription renews automatically until you cancel. '}
+            {'Manage or cancel anytime in your App Store or Google Play subscription settings. '}
             By subscribing you agree to our{' '}
             <ThemedText
               type="small"
