@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
@@ -126,6 +127,34 @@ export default async function UpgradePage({ searchParams }: Props) {
 
           <p className="text-xs text-muted-foreground text-center mt-4">
             Secure checkout via Stripe. You&apos;ll be redirected to complete payment.
+          </p>
+
+          {/*
+            Apple 3.1.2 wants the EULA + privacy links AT the point of purchase,
+            not merely somewhere on the page (the footer links both already).
+            Google Play's subscription policy is equivalent. Styling mirrors the
+            signup form's disclosure (app/(auth)/signup/page.tsx) so the two
+            legal notices read as one treatment.
+          */}
+          <p className="text-xs text-muted-foreground/70 text-center mt-3 leading-relaxed">
+            {/*
+              "subscribing" is only true for the auto-renewing tiers. `apartment`
+              is a ONE-TIME $29 charge (lib/billing/stripe.ts picks Stripe mode
+              "payment" for it), so this reuses the same `renewalNote` signal the
+              renewal disclosure above uses — telling a one-time purchaser they
+              are subscribing would be false, on a live checkout page.
+            */}
+            {"renewalNote" in copy && copy.renewalNote
+              ? "By subscribing you agree to our "
+              : "By purchasing you agree to our "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-muted-foreground">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-muted-foreground">
+              Privacy Policy
+            </Link>
+            .
           </p>
         </div>
       </main>
