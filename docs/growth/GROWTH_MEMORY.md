@@ -1302,3 +1302,121 @@ Research-backed candidate swap (if competition validates):
   run, ~26 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; the QUALITY_SCORECARD (not the
   now-resolved GTM_SCORECARD) is the scorecard to watch for the outreach-readiness gate going forward.
+
+---
+
+## Run 14 — 2026-07-25
+
+### What we found
+- All Run 1-13 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` /
+  `set-email-physical-address` / `apply-migration-021` all still `status: open`). The core 4 have
+  now been open, unchanged, since Run 1 (2026-06-27) — 14 consecutive daily runs, ~28 days, on
+  setup steps `docs/growth/CONNECT.md` estimates at well under 20 minutes combined.
+- Re-probed `https://aptdesignerai.com/` and the metrics API an 11th time (curl through the
+  agent-proxy): still unreachable — `connect_rejected` / gateway 502 to CONNECT ("CONNECT tunnel
+  failed"), the same signature as Runs 6-13, cross-checked directly against the agent-proxy's own
+  `/__agentproxy/status` `recentRelayFailures` log (two entries, 2026-07-25T05:07:03Z). No new
+  information; conclusion unchanged across all 11 probes to date.
+- `git log --name-only dc91a91..HEAD` (Runs 108-113, PRs #685-#693, between Run 13 and this run)
+  confirms the Product Factory shipped a DEEP AUDIT, several security/mobile/a11y/F2-coverage
+  fixes, a margin-under-reporting fix, and web sign-in bound/de-enumerated hardening (G4) — zero
+  commits touched any GTM-owned doc (store-listing.md, press-kit.md, social-drafts.md,
+  content-calendar.md, email-lifecycle.md, OUTREACH.md, brand-kit.md all clean; verified by the
+  empty `git log --name-only` diff against those paths). None of it is a growth-channel connection.
+- Re-verified both independent scorecards directly against their files (S4 fail-closed — do not
+  assume a prior run's reading still holds): `docs/growth/GTM_SCORECARD.md` unchanged since Run 13
+  (`auditor_run: 3`, `as_of: 2026-07-20`, `overall: A`, `ship_gate_met: true` for the GTM Factory's
+  OWN work). `docs/quality/QUALITY_SCORECARD.md` also unchanged (`as_of` still `2026-07-20`,
+  `overall: C`, `ship_gate_met: false` — `functional_reality C` / `design_taste B` /
+  `business_case_strength B` all still below A, all three top_gaps byte-for-byte the same language
+  as the prior cycle). Neither Auditor has re-run between Run 13 and this run. Both S6 outreach
+  lanes correctly stay hard-off (`site_gate_up: false` AND `ship_gate_met: false` on the
+  PRODUCT-side scorecard, which is the one that actually gates outreach).
+- No `docs/growth/MARKETING_HOLD` kill-switch file exists (checked first, per GTM_STANDARD S13);
+  no `docs/growth/MARKETING_APPROVED` / `approved_channels:` record exists (per S9/S13).
+- `docs/BUSINESS_CASE.md` unchanged since the last recompute (`as_of: 2026-07-13`): still
+  `floor_met_year1: false`, base ARR $122.9K steady-state, without-annual shippable-today figure
+  $99,926 (~$74 below the $100K floor). No new quantitative funnel or business data this run to
+  justify a recompute.
+
+### What we built this run
+- **Demand-signal research, per Run 13's own next_action** (target themes 1 and 4 — the two
+  thinnest — with fresh angles, and try BBB.org for other e-design competitors beyond Havenly).
+  Both fresh-angle searches surfaced genuinely new, directly-fetched, verbatim-verified evidence:
+  - **Theme 1** (furniture-shopping choice paralysis): found and directly WebFetched a SECOND,
+    distinct First Chair page — `firstchair.app/blog/furniture-purchase-decision-time-statistics`
+    (different from the Run 6-cited `firstchair.app/blog/home-ai-alternatives`) — quoting "Most
+    shoppers spend 14-21 days selecting a sofa after starting their search," ~4,000 decision
+    variables per couch purchase, and "47% of shoppers say it's important not to spend much time
+    on furniture shopping." This gives theme 1 its first quantified DURATION figure (14-21 days)
+    rather than only a tab/hour count, and a second independent source (up from one — eMarketer).
+  - **Theme 4** (AR view-in-room trust gap): re-fetched the SAME Baymard article already cited for
+    its 87%-avoidance stat and pulled NEW verbatim participant quotes on the failure MECHANISM,
+    not previously cited: "I'm just not comfortable with AR [showing] it in a hyper-accurate way,"
+    a participant who "accidentally resized it to 79% of its true size, but didn't notice
+    initially," a color-mismatch complaint, and "users who experience issues are less likely to
+    try it again on any site." This deepens the theme from "most people skip it" to a named,
+    quoted reason WHY (sizing/color/model-quality distrust) that directly validates this product's
+    grounded-photo-mockup approach over a live AR guess.
+  - **Competitor BBB check**: WebFetched BBB's Decorist profile (a Havenly/Modsy competitor) —
+    reachable, returned "0 complaints." Recorded honestly as a disconfirming data point (added to
+    `disconfirming`): the pricing/delivery/refund pain documented for Havenly does not
+    automatically generalize to every full-service e-design competitor.
+  - Held `confidence` at `emerging` — real incremental strengthening on 2 of 4 themes, not a tier
+    jump (theme 2 remains the only theme with 3+ independent sources, the bar S10 sets for
+    "strong").
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-07-25; refreshed `internal_metrics_api`
+  (11th probe) and `web_research` (re-confirmed Reddit/Trustpilot gaps, added the new First
+  Chair/Baymard/Decorist fetches) validation reasons; refreshed the `gtm_scorecard` validation
+  entry noting both scorecards were re-verified unchanged; updated `demand_signal.as_of`, wrote a
+  Run 14 `method_note` (prior `method_note` text preserved verbatim, not overwritten), updated
+  themes 1 and 4's `sources`/`solved_by_product`/`recency` fields, added the Decorist finding to
+  `disconfirming`; rewrote `learnings`/`next_actions`/`owner_blockers` for the 14th consecutive
+  circuit-breaker run. Ran `npm install` + `node scripts/validate-gtm.mjs` — parses clean.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (11th probe, same
+  connect_rejected/502 signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND the PRODUCT `QUALITY_SCORECARD.ship_gate_met`
+  is still `false` (re-verified directly this run, unchanged). Zero outreach drafts this run,
+  correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new quantitative funnel
+  data and no demand-signal finding cleared the S3 steer bar this run (the new theme 1/4 citations
+  are qualitative, each strengthening one theme from 1 to 2 independent sources — real progress,
+  still nowhere near "real data, sufficient N, causal revenue link"). No business-case recompute
+  needed — no new number, no changed lever.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer for the `GROWTH_STATUS.md` edit: this was a
+  routine S4/S5 dashboard-and-research update (two new demand-signal citations with their own
+  verbatim verification, re-probes, bookkeeping) — no landing/email/ASO copy, campaign,
+  pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer shipped,
+  matching Runs 5-13's precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner-actionable item surfaced this run beyond what's
+  already listed there; all items already tracked with the correct `status`.
+- Did not use the sandbox-local `SITE_GATE_PASSWORD`/`CRON_SECRET` for anything: same S4
+  fail-closed reasoning as Runs 5-13.
+
+### Lessons learned
+- **Re-fetching an ALREADY-cited source can still yield new evidence.** Theme 4's strengthening
+  this run didn't come from a new URL — it came from reading the SAME Baymard article more
+  closely and pulling participant quotes beyond the one adoption-rate stat already cited. A
+  citation isn't necessarily "fully mined" just because it's already in the file; worth a second
+  pass on a thin theme's existing source before assuming a brand-new source is required.
+- **A competitor with zero complaints on the same channel a peer has many on is itself a datum,
+  not a non-finding.** Decorist's clean BBB record next to Havenly's documented pattern sharpens
+  (rather than undermines) theme 3: the pain is real but competitor-specific, so positioning
+  copy citing "prior e-design services" should stay anchored to Havenly's actual documented
+  failure mode rather than implying the whole category behaves the same way.
+- **The two-scorecard distinction Run 13 made structural keeps paying off.** Re-verifying both
+  scorecards directly against their files (rather than trusting last run's cached reading) took
+  under a minute and confirmed neither had moved — cheap insurance against exactly the kind of
+  stale-data mistake S4 exists to prevent, especially now that the GTM_SCORECARD's green "A" sits
+  right next to the still-red QUALITY_SCORECARD "C" on the same dashboard.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-13? YES — circuit breaker remains FIRED (Run 14, 14th consecutive
+  run, ~28 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
+  RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; QUALITY_SCORECARD remains the
+  scorecard to watch for the outreach-readiness gate.
