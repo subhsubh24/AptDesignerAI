@@ -1,0 +1,25 @@
+// Self-contained tsconfig for this ONE directory, so the modules here can be
+// imported (and therefore BEHAVIOURALLY tested) by the repo-root vitest run.
+//
+// Why it is needed: mobile/tsconfig.json does `extends: "expo/tsconfig.base"`,
+// which only resolves when mobile/node_modules is installed. vitest's transform
+// loads the nearest tsconfig for every file it touches, and CI's `verify` job
+// runs `npm ci` at the ROOT only — so without this file a root test importing
+// anything under mobile/ transforms fine locally and dies in CI with
+// "Failed to load tsconfig ... Tsconfig not found".
+//
+// It does NOT affect the Expo app: `cd mobile && tsc --noEmit` and `expo lint`
+// both drive mobile/tsconfig.json and its own `include` globs, which already
+// cover these files; a nested tsconfig.json is inert to them. Keep the options
+// here compatible with the Expo base so the two views of these files agree.
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["*.ts"]
+}
