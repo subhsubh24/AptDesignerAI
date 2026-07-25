@@ -257,18 +257,49 @@ describe("native auth screens — no raw provider text reaches the user", () => 
     // through a variable assigned earlier. The set of SAFE shapes is finite, so
     // that is the invariant asserted here: a new legitimate shape has to be added
     // to this list deliberately, which is the point.
-    // A template literal is allowed only if it INTERPOLATES NOTHING (`$` not
-    // followed by `{`): `setError(`${authError.message}`)` is otherwise a plain
-    // literal to any naive matcher while carrying the full provider string.
-    const ALLOWED_ARG =
-      /^\s*(?:'[^']*'|"[^"]*"|`(?:[^`$]|\$(?!\{))*`|null|(?:signInErrorMessage|signUpErrorMessage)\()/;
+    // The argument is bounded to its OWN matching close-paren and matched
+    // WHOLE (^…$). A start-anchored search over the rest of the file would only
+    // prove the argument BEGINS with something safe, which
+    // `setError(signInErrorMessage(authError) + authError.message)` and
+    // `setError("Sign-in failed: " + authError.message)` both satisfy while
+    // leaking the full provider string.
+    //
+    // A template literal counts as a literal only if it INTERPOLATES NOTHING
+    // (`$` not followed by `{`) — otherwise `` `${authError.message}` `` reads as
+    // plain copy to any matcher.
+    const LITERAL = /^\s*(?:'[^']*'|"[^"]*"|`(?:[^`$]|\$(?!\{))*`|null)\s*$/;
+    const CLASSIFIER = /^\s*(?:signInErrorMessage|signUpErrorMessage)\(/;
+
+    /** Text between `(` at `open` and its matching `)`, quote-aware. */
+    function argAt(src: string, open: number): string {
+      let depth = 0;
+      let quote: string | null = null;
+      for (let i = open; i < src.length; i++) {
+        const c = src[i];
+        if (quote) {
+          if (c === "\\") i++;
+          else if (c === quote) quote = null;
+          continue;
+        }
+        if (c === "'" || c === '"' || c === "`") quote = c;
+        else if (c === "(") depth++;
+        else if (c === ")" && --depth === 0) return src.slice(open + 1, i);
+      }
+      throw new Error(`unbalanced setError( in ${file}`);
+    }
+
     const calls = [...source.matchAll(/setError\(/g)];
-    // Guard the guard: if setError disappears or is renamed, this test must fail
-    // rather than silently vacuously pass over an empty match list.
+    // Guard the guard: if setError is renamed away this must fail loudly rather
+    // than vacuously pass over an empty match list.
     expect(calls.length, `no setError( calls found in ${file} — update this guard`).toBeGreaterThan(1);
     for (const match of calls) {
-      const arg = source.slice(match.index + "setError(".length);
-      expect(arg, `unsafe setError argument in ${file}: ${arg.slice(0, 80)}`).toMatch(ALLOWED_ARG);
+      const arg = argAt(source, match.index + "setError".length);
+      const why = `unsafe setError argument in ${file}: ${arg.slice(0, 90)}`;
+      if (LITERAL.test(arg)) continue;
+      // Otherwise it must be EXACTLY one classifier call — nothing appended.
+      expect(arg, why).toMatch(CLASSIFIER);
+      const callOpen = arg.indexOf("(");
+      expect(arg.slice(callOpen + argAt(arg, callOpen).length + 2).trim(), why).toBe("");
     }
   });
 
