@@ -25,6 +25,9 @@ const HAS_SUPABASE_BACKEND = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
 // would break the moment TURNSTILE_SECRET_KEY is set.
 const CAPTCHA_ENABLED = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
+// Matches the login form: supabase-js leaves the auth fetch unbounded.
+const AUTH_TIMEOUT_MS = 15_000;
+
 export default function SignupPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -87,7 +90,24 @@ export default function SignupPage() {
     // 2) Establish a session and land in the working app. A failure here stays
     //    NEUTRAL (covers a wrong password on an existing email + transient
     //    errors) so it never reveals whether the address already had an account.
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    //    Bounded like the login form: supabase-js puts no timeout on the auth
+    //    fetch, so a wedged endpoint would strand the button on its spinner —
+    //    here with the account ALREADY created, which is the worst place to
+    //    dead-end (the user can recover by signing in).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let signInError: unknown = null;
+    try {
+      ({ error: signInError } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Sign-in timed out")), AUTH_TIMEOUT_MS);
+        }),
+      ]));
+    } catch {
+      signInError = new Error("Sign-in unavailable");
+    } finally {
+      clearTimeout(timer);
+    }
     if (signInError) {
       setError("We couldn't sign you in. Check your details or sign in instead.");
       setLoading(false);
