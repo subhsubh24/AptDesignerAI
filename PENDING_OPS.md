@@ -182,6 +182,22 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Supabase auth rate limits — the server-side half of G4 login lockout/backoff (added 2026-07-25, Run 113, Track G4)
+
+Run 113 closed the **user-enumeration** half of ROADMAP G4 on the web sign-in path (`lib/auth/login-errors.ts` — a wrong password, an unknown address, an unconfirmed account, a banned account and an SSO-managed address now all return one identical message). The **lockout/backoff** half is still open, and the loop deliberately did not fake it:
+
+- The web app signs in **client-side** (`app/(auth)/login/page.tsx` → `supabase.auth.signInWithPassword`), so there is no server route of ours in the path to count attempts on. A client-side attempt counter is trivially bypassed by calling the GoTrue endpoint directly — shipping one would look like a control while providing none, which is worse than none.
+- The real enforcement point for password-guessing at this architecture is **Supabase's own auth rate limiting**, which is project config, not code.
+
+**Owner step (before public launch):**
+1. Supabase Dashboard → Authentication → Rate Limits. Review/lower the **sign-in / token endpoint** limit (per IP, per hour) to a value that stops credential-stuffing while clearing real usage.
+2. Confirm the **anonymous sign-in** and **token refresh** limits are also set.
+3. **Verify:** from a throwaway IP, attempt the wrong password past the configured limit and confirm GoTrue starts returning 429. Our client already maps 429 → "Too many sign-in attempts. Please wait a moment and try again." (`LOGIN_ERROR_RATE_LIMITED`), so the user-facing half is already wired and will light up the moment the limit is enforced.
+
+Only if the owner wants app-level lockout beyond what Supabase offers does this become loop work — and it would require moving sign-in to a server route that sets session cookies via `@supabase/ssr` (a real architectural change, not a small one). **Keep G4 unchecked until either this owner step is applied or that route is built.**
+
+---
+
 ### `sharp` HIGH advisory in next/image's runtime image optimizer — unfixable at Next 16 (added 2026-07-24, Run 111, Track F/security)
 
 Run 111 bumped Next.js 16.2.4 → 16.2.11, clearing all 21 HIGH advisories on the `next` package itself. Two HIGH advisories remain **inside next's own dependency subtree** and are **not resolvable at the Next 16 line** (npm's only `fixAvailable` is a downgrade to `next@9`, a non-viable major); both are pre-existing (lockfile pins identical before/after the bump):
