@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { isAccountExistsError, signUpErrorMessage } from '@/lib/auth/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 // Apple 5.1.1(v) / Google Play require Terms & Privacy to be reachable in-app
@@ -77,7 +78,28 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
         }),
       ]);
       if (authError) {
-        setError(authError.message);
+        // An address that already has an account must not be distinguishable —
+        // and hiding the MESSAGE is not enough, because "an error box appeared
+        // at all" is itself the oracle: a brand-new address signs straight in
+        // (auto-confirm) while a taken one would stop here. So take the same
+        // path a new signup takes and attempt sign-in, exactly as the web flow
+        // does after its server route returns its identical response. With the
+        // right password the user lands in the app either way; only a wrong
+        // password stops, and then the message is the same generic one an
+        // unrelated failure produces.
+        if (isAccountExistsError(authError)) {
+          const { error: signInError } = await Promise.race([
+            supabase.auth.signInWithPassword({ email: email.trim(), password }),
+            new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Sign-in timed out.')), AUTH_TIMEOUT_MS);
+            }),
+          ]);
+          // Success: onAuthStateChange fires SIGNED_IN and routes us onward.
+          if (!signInError) return;
+        }
+        // Never render provider text: "User already registered" would confirm
+        // the address has an account. It shares the generic bucket instead.
+        setError(signUpErrorMessage(authError));
       } else if (data.session === null) {
         // Email confirmation required — show "check your email" screen.
         // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
@@ -85,8 +107,9 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
       }
     } catch (err) {
       // A thrown fetch/network error or the timeout above. Surface a recoverable
-      // message rather than leaving the button stuck on "Creating account…".
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // message rather than leaving the button stuck on "Creating account…" —
+      // through the same neutral mapping as the returned-error path.
+      setError(signUpErrorMessage(err as { message?: string }));
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);

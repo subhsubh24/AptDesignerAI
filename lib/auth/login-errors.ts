@@ -38,7 +38,12 @@ export interface LoginErrorLike {
 //
 // Erring INTO this bucket is safe (the cost is a slightly less precise message);
 // erring out of it reopens the leak. When in doubt, add the code here.
-const CREDENTIAL_CODES = new Set([
+// Exported so the mobile duplicate (mobile/src/lib/auth/auth-errors.ts) can be
+// asserted set-equal to this one. Behavioural fixtures only catch drift on
+// codes someone thought to add a fixture for; a new code added to one module
+// and not the other is exactly the case that needs catching, and only direct
+// set comparison catches it.
+export const CREDENTIAL_CODES = new Set([
   "invalid_credentials",
   "email_not_confirmed",
   "user_not_found",
