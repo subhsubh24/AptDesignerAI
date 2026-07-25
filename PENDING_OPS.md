@@ -182,6 +182,31 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### App Store Connect — set the Terms of Use (EULA) URL (added 2026-07-25, Run 114, Track D)
+
+Apple guideline **3.1.2** requires a **functional** Terms of Use (EULA) link in the App Store
+metadata for any auto-renewable subscription, alongside the privacy policy. The listing previously
+carried the privacy link only, which is a known 3.1.2 rejection cause. `docs/store-listing.md` now
+stages both, but the metadata field itself is owner-applied.
+
+**Owner steps (before submission):**
+1. App Store Connect → your app → **App Information** → **License Agreement**. Either supply
+   `https://aptdesignerai.com/terms` as your custom EULA URL, or keep Apple's standard EULA
+   selected — do **not** leave a custom agreement half-configured.
+2. Play Console → your app → **Store presence** → the subscription's terms are carried in the
+   description text; `docs/store-listing.md`'s Google block now includes the Terms line, so this is
+   covered by pasting the staged copy.
+3. **Verify:** open `https://aptdesignerai.com/terms` in a private window (logged out). It must
+   render, not bounce to `/login`. `/terms` and `/privacy` are both in the middleware's
+   `PUBLIC_PATHS`, and `app/terms/page.tsx` serves it — this is a check that the deployed domain
+   resolves, not that the code is right.
+
+The in-app half is already shipped and needs no owner action: the native paywall and now the web
+purchase surface (`app/billing/upgrade/page.tsx`) both link Terms + Privacy at the point of
+purchase.
+
+---
+
 ### Supabase auth rate limits — the server-side half of G4 login lockout/backoff (added 2026-07-25, Run 113, Track G4)
 
 Run 113 closed the **user-enumeration** half of ROADMAP G4 on the web sign-in path (`lib/auth/login-errors.ts` — a wrong password, an unknown address, an unconfirmed account, a banned account and an SSO-managed address now all return one identical message). The **lockout/backoff** half is still open, and the loop deliberately did not fake it:

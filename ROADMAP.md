@@ -720,7 +720,14 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   neutral messages, with the membership rule "could this outcome fire ONLY for an address
   that already has an account?" — a reviewer caught `user_banned` still falling through to a
   distinguishable generic message, and a sweep of the full auth-js code union added
-  `user_sso_managed` as the same class. REMAINING: login lockout/backoff — the web app signs
+  `user_sso_managed` as the same class. Run 114: the NATIVE half CLOSED — the Expo app is a
+  separate binary making its own Supabase calls, so the web fix never covered it; both
+  `mobile/src/components/auth/login-screen.tsx` and `signup-screen.tsx` rendered the raw
+  `error.message`. `mobile/src/lib/auth/auth-errors.ts` (a deliberate mirror — Metro cannot
+  resolve the web modules across the Expo package boundary) collapses sign-in outcomes and
+  routes an already-registered signup to the SAME "Check your email" screen; 21 tests
+  (behavioural + an allowlist call-site ratchet + web-parity drift guards). REMAINING: login
+  lockout/backoff — the web app signs
   in CLIENT-side, so there is no server route to count attempts on and a client-side counter
   would be security theatre; the real enforcement point is Supabase's own auth rate limits
   (owner config — see PENDING_OPS "Supabase auth rate limits"), or else moving sign-in to a
