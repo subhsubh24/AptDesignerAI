@@ -74,12 +74,13 @@ describe("getMeter (Margin egress gate)", () => {
 });
 
 /**
- * OPERATION BRIDGE: the pinned margin-meter@0.1.0 `recordCall` builds a fixed
- * payload and drops unknown fields, so `operation` (the supply-chain STEP label
- * the graph groups on) would never reach the ingest API. getMeter() wraps the
- * transport to re-inject it. These tests capture the actual POSTed payload
- * (by stubbing fetch) and prove operation + sessionId land on the wire, and that
- * a shared session + distinct/repeated operations survive concurrent emits.
+ * WIRE FORMAT: `operation` (the supply-chain STEP label the graph groups on),
+ * `reasoning_tokens` and `substrate` are what make an emit decomposable — without
+ * them Margin sees an undifferentiated blob of spend. They are native SDK fields
+ * as of margin-meter@0.2.0; the 0.1.0 build dropped them, which is exactly the
+ * silent under-reporting the version bump fixed. These tests capture the actual
+ * POSTed payload (by stubbing fetch) so a dependency regression that stops
+ * forwarding a field fails HERE rather than quietly corrupting the economics.
  */
 describe("getMeter operation + session (supply-chain wire format)", () => {
   async function meterWithCapturedPosts() {
@@ -112,6 +113,42 @@ describe("getMeter operation + session (supply-chain wire format)", () => {
       operation: "fit-scoring",
       session_id: "room-1",
     });
+  });
+
+  it("carries the reasoning-token split and the routing substrate onto the wire", async () => {
+    const { meter, posts } = await meterWithCapturedPosts();
+    // A HIGH-thinking Gemini call: 900 output tokens of which 700 were hidden
+    // thinking. Without `reasoning_tokens` the emit looks identical to a call
+    // that did no thinking at all, so the thinking-budget lever — the single
+    // biggest cost knob under the LLM cost contract — cannot be measured.
+    await meter.recordCall({
+      workflowId: "aptdesigner-search",
+      provider: "google",
+      model: "gemini-x",
+      inputTokens: 100,
+      outputTokens: 900,
+      reasoningTokens: 700,
+      substrate: "direct",
+    });
+    expect(posts[0].body).toMatchObject({
+      output_tokens: 900,
+      reasoning_tokens: 700,
+      substrate: "direct",
+    });
+  });
+
+  it("omits the reasoning split on a non-reasoning call rather than sending a zero", async () => {
+    const { meter, posts } = await meterWithCapturedPosts();
+    await meter.recordCall({
+      workflowId: "w",
+      provider: "p",
+      model: "m",
+      outputTokens: 40,
+      reasoningTokens: 0,
+    });
+    // A cheap flash-lite call did no thinking; an explicit 0 and an absent field
+    // mean the same thing, and the SDK sends neither.
+    expect(posts[0].body).not.toHaveProperty("reasoning_tokens");
   });
 
   it("omits `operation` when the caller didn't set one", async () => {

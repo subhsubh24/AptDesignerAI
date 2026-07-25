@@ -808,6 +808,15 @@ const realGeminiProvider: AIProvider = {
       inputTokens: usageMetadata?.promptTokenCount || 0,
       outputTokens: usageMetadata?.candidatesTokenCount || 0,
       cacheReadTokens: usageMetadata?.cachedContentTokenCount || 0,
+      // Hidden-thinking share of outputTokens (already inside candidatesTokenCount,
+      // never priced separately) — carried so Margin can isolate what the
+      // thinking-budget lever actually costs. Omitted while the SDK was pinned to
+      // 0.1.0, which had no such field, so every HIGH-thinking call reported as if
+      // it did no thinking at all.
+      reasoningTokens: thinkingTokens,
+      // This app talks to the vendor API directly (getClient() constructs
+      // GoogleGenAI with no baseUrl override) — not through a router or reseller.
+      substrate: "direct",
       latencyMs: Date.now() - marginStart,
       status: "ok",
     }));
