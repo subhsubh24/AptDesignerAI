@@ -8,13 +8,18 @@ name: CI
 on:
   push:
     branches: ["claude/ai-apartment-design-app-iHAdb", main, develop]
+    paths-ignore:
+      - 'PENDING_OPS.md'
+      - 'IMPROVEMENT_LOG.md'
+      - 'ROADMAP.md'
+      - 'docs/**'
   pull_request:
 
 # Cancel superseded in-progress runs for the same PR — the autonomous loop pushes commits in rapid
 # succession; without this every intermediate push ran full CI to completion. Only PR runs cancel.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true   # was PR-only; push bursts never cancelled
 
 jobs:
   verify:
