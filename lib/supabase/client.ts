@@ -36,6 +36,18 @@ function createMockClient() {
         error: null,
       }),
       signOut: async () => ({ error: null }),
+      // Back the /reset-password flow so it is exercisable without a real
+      // backend — local dev, and the journey tests that assert the page
+      // resolves to a real state (e2e/journeys.spec.ts). Mirrors the other mock
+      // methods: succeeds, changes nothing.
+      updateUser: async (_attrs: { password?: string }) => ({
+        data: { user: MOCK_USER },
+        error: null,
+      }),
+      verifyOtp: async (_params: { token_hash: string; type: string }) => ({
+        data: { user: MOCK_USER, session: { user: MOCK_USER, access_token: "mock" } },
+        error: null,
+      }),
       getUser: async () => ({ data: { user: MOCK_USER }, error: null }),
       getSession: async () => ({
         data: { session: { user: MOCK_USER, access_token: "mock" } },

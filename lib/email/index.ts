@@ -57,17 +57,32 @@ function isValidEmail(email: string): boolean {
 }
 
 /**
+ * Stages that are TRANSACTIONAL — sent in direct response to something the
+ * recipient just did, carrying no promotional content:
+ *   - waitlist_confirm: the double opt-in confirmation they asked for.
+ *   - password_reset:   the account-recovery link they just requested (G4).
+ * CAN-SPAM's physical-address and unsubscribe requirements apply to commercial
+ * messages, not to these, so they must NOT be gated behind
+ * EMAIL_PHYSICAL_ADDRESS. Gating password_reset would be actively harmful: it
+ * would silently swallow the only way a locked-out user gets back into their
+ * paid account.
+ */
+const TRANSACTIONAL_STAGES = new Set<EmailMessage["stage"]>([
+  "waitlist_confirm",
+  "password_reset",
+]);
+
+/**
  * CAN-SPAM requires a physical mailing address on every commercial/marketing
  * email (the lifecycle sequences: activation/habit/upgrade/paid_welcome/
- * paid_engagement/winback/referral_share). waitlist_confirm is a transactional
- * double opt-in confirmation, not a marketing message, so it is exempt. The
- * loop never invents a business address (EMAIL_PHYSICAL_ADDRESS is an owner-set
- * env var — see lib/email/templates/lifecycle.ts) — until it is set, a
- * marketing-stage send is forced through the dry-run provider so a
+ * paid_engagement/winback/referral_share). The transactional stages above are
+ * exempt. The loop never invents a business address (EMAIL_PHYSICAL_ADDRESS is
+ * an owner-set env var — see lib/email/templates/lifecycle.ts) — until it is
+ * set, a marketing-stage send is forced through the dry-run provider so a
  * non-compliant email can never actually leave the system.
  */
 function requiresPhysicalAddress(stage: EmailMessage["stage"]): boolean {
-  return stage !== undefined && stage !== "waitlist_confirm";
+  return stage !== undefined && !TRANSACTIONAL_STAGES.has(stage);
 }
 
 /**
