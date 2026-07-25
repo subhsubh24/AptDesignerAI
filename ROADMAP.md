@@ -724,8 +724,18 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   in CLIENT-side, so there is no server route to count attempts on and a client-side counter
   would be security theatre; the real enforcement point is Supabase's own auth rate limits
   (owner config — see PENDING_OPS "Supabase auth rate limits"), or else moving sign-in to a
-  server route that sets cookies via @supabase/ssr. Also REMAINING: password-reset /
-  verification enumeration guards. Keep G4 unchecked until those land.]**
+  server route that sets cookies via @supabase/ssr. Run 114: PASSWORD-RESET enumeration
+  CLOSED, by building the flow that did not exist at all — a user who forgot their password
+  was previously locked out for good. `POST /api/auth/forgot-password` returns an identical
+  body and status for a registered and an unregistered address, and hands the send to
+  `waitUntil` so the extra provider round-trip cannot leak existence through response
+  latency either; 3/IP/15min + Turnstile keep it from being an email cannon; and it never
+  claims mail was sent while the provider is in dry-run. Same run: the MOBILE auth screens
+  stopped rendering raw provider text (`mobile/src/lib/auth/auth-errors.ts`), and mobile
+  signup now attempts sign-in on an already-registered address so a taken address is not
+  distinguishable by WHICH SCREEN appears. REMAINING for G4: login lockout/backoff (above),
+  and the self-serve reset half stays inert until the owner connects Resend
+  (PENDING_OPS `connect-email-resend`). Keep G4 unchecked until those land.]**
 - [x] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
   **[DONE — Run 35 (PR #141): Turnstile on the WAITLIST form. Run 38 (PR #169): Turnstile on

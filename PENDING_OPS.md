@@ -112,7 +112,7 @@ OWNER_ACTIONS:
       title: "Connect Resend to switch the email lifecycle from dry-run to live (E7.2)"
       priority: high
       status: open
-      why: "lib/email (PR #117) ships in dry-run by default — it logs every send but transmits nothing until a provider key is present. The staged E4/E6 email lifecycle cannot actually reach users until this is connected."
+      why: "lib/email (PR #117) ships in dry-run by default — it logs every send but transmits nothing until a provider key is present. The staged E4/E6 email lifecycle cannot actually reach users until this is connected. RAISED IN IMPORTANCE (Run 114): this now also gates SELF-SERVE PASSWORD RESET. /api/auth/forgot-password mints a real recovery link but refuses to claim an email was sent while the provider is in dry-run — it returns emailUnavailable and the page tells the user to email support instead. So until this is connected, every locked-out user is a manual support ticket. Nothing else is needed: the flow, the template and the redemption page are built and tested."
       how: "Create a Resend account, verify your sending domain (SPF/DKIM DNS records), create a sending API key, then set RESEND_API_KEY + RESEND_FROM_EMAIL (an address on the verified domain) on the deployment. Leave GROWTH_EMAIL_DRY_RUN unset to go live automatically. Full runbook: docs/growth/CONNECT.md Step 1."
       blocks: growth-execution
     - id: apply-migration-025
@@ -631,7 +631,13 @@ REVENUECAT_SECRET_KEY=<your-rc-secret-key>
 - When present: save limit is enforced for non-Pro users (FREE_SAVE_LIMIT = 3).
 
 Verify:
-1. Mobile: build with key set → "Start Free Trial" reaches the OS purchase dialog
+1. Mobile: build with key set → the purchase CTA reaches the OS purchase dialog.
+   NOTE (Run 114): the CTA reads "Start Free Trial" only when the product really
+   carries an introductory free phase AND (on iOS) this Apple ID is still
+   eligible for it; otherwise it reads "Subscribe" and the disclosure drops the
+   trial wording. If you expect a trial, confirm the intro offer is configured
+   in App Store Connect / Play — a "Subscribe" button means no eligible trial
+   was found, which is the intended behaviour, not a bug.
 2. Server: Pro subscriber with ≥3 saves → POST `/api/mobile/saved-designs` succeeds (HTTP 201)
 3. Server: Free user with ≥3 saves → POST returns HTTP 403 `{ subscription_required: true }`
 
