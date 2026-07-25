@@ -713,9 +713,19 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   link is idempotent (double-click safe); signup with an existing email does NOT leak that
   it's already registered (no user enumeration). Add a test for each case.
   **[Partial — Run 34 (PR #124): signup user-enumeration CLOSED — already-registered shows
-  the same neutral screen as a new signup (lib/auth/signup-errors.ts, 6 tests). REMAINING:
-  login lockout/backoff (needs a server-side login route) + password-reset/verification
-  enumeration guards. Keep G4 unchecked until those land.]**
+  the same neutral screen as a new signup (lib/auth/signup-errors.ts, 6 tests). Run 113:
+  LOGIN user-enumeration CLOSED — the form rendered Supabase's raw `error.message`, so
+  "Email not confirmed" vs "Invalid login credentials" revealed which addresses are
+  registered; `lib/auth/login-errors.ts` (8 tests) collapses every failure into one of four
+  neutral messages, with the membership rule "could this outcome fire ONLY for an address
+  that already has an account?" — a reviewer caught `user_banned` still falling through to a
+  distinguishable generic message, and a sweep of the full auth-js code union added
+  `user_sso_managed` as the same class. REMAINING: login lockout/backoff — the web app signs
+  in CLIENT-side, so there is no server route to count attempts on and a client-side counter
+  would be security theatre; the real enforcement point is Supabase's own auth rate limits
+  (owner config — see PENDING_OPS "Supabase auth rate limits"), or else moving sign-in to a
+  server route that sets cookies via @supabase/ssr. Also REMAINING: password-reset /
+  verification enumeration guards. Keep G4 unchecked until those land.]**
 - [x] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
   **[DONE — Run 35 (PR #141): Turnstile on the WAITLIST form. Run 38 (PR #169): Turnstile on

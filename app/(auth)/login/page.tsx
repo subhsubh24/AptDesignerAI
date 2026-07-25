@@ -4,12 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { loginErrorMessage, type LoginErrorLike } from "@/lib/auth/login-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Home, Ruler, Lock, Wallet } from "lucide-react";
 import { LogoMark } from "@/components/ui/logo-mark";
+
+// supabase-js puts NO timeout on the auth fetch, so an unreachable or wedged
+// auth endpoint leaves the promise pending forever and the submit button stuck
+// on its spinner with no way back but a page reload. Bound it (same 15s the
+// mobile auth screens use) so a hang becomes a recoverable on-screen error.
+const AUTH_TIMEOUT_MS = 15_000;
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -24,18 +31,34 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError((error as { message: string })?.message || "Login failed");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Sign-in timed out")), AUTH_TIMEOUT_MS);
+        }),
+      ]);
+      if (error) {
+        // Never render provider text: "Email not confirmed" vs "Invalid login
+        // credentials" would tell an attacker which addresses have accounts.
+        setError(loginErrorMessage(error as LoginErrorLike));
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      // A throw (network failure) or the timeout above — same neutral mapping.
+      setError(loginErrorMessage(err as LoginErrorLike));
       setLoading(false);
-    } else {
-      router.push("/dashboard");
-      router.refresh();
+      return;
+    } finally {
+      clearTimeout(timer);
     }
+
+    // Stay in the loading state through navigation so the form can't be
+    // re-submitted while the dashboard is being pushed.
+    router.push("/dashboard");
+    router.refresh();
   };
 
   return (

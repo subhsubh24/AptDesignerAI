@@ -413,6 +413,13 @@ export const deepseekProvider: AIProvider = {
         inputTokens: data.usage?.prompt_tokens || 0,
         outputTokens: data.usage?.completion_tokens || 0,
         cacheReadTokens: data.usage?.prompt_cache_hit_tokens || 0,
+        // Hidden-reasoning share of completion_tokens (a SUBSET of output, already
+        // priced at the output rate) — carried so Margin can isolate the cost of
+        // the reasoner. Omitted while the SDK was pinned to 0.1.0, which had no
+        // such field, so every reasoner call reported as if it did no reasoning.
+        reasoningTokens,
+        // DEEPSEEK_API_URL is the vendor's own endpoint — no router or reseller.
+        substrate: "direct",
         latencyMs: Date.now() - marginStart,
         status: "ok",
       }));
