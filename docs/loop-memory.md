@@ -4,6 +4,58 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-26 (Run 117) — LANDED #697 (the top pickup) + found the routing bug that had been silently breaking public pages, share links, and the reset flow. 6 file-disjoint changes, 15 reviewer verdicts.
+
+### State on entry
+- Cold container. Designated branch `claude/sleepy-goldberg-u0uf0f` == default tip `be3bfec` (#707, Run 116 ledger), 0/0 divergence.
+- **loop-memory layout trap held for a SEVENTH run** — newest entries are PREPENDED after the `---`; `tail` showed Run 106 while 107-116 sat at the top. Still the single most reliably-repeated first-read error.
+- DEEP AUDIT not due (ran Run 115, next ~Run 119) -> full 8-Haiku-scout sweep.
+- **Exactly ONE open PR: #697** — the Run 116 rotation guide's named top pickup. Red on `verify` (the `mobile/` tsconfig blocker, since FIXED on default) and on `journeys`.
+
+### THE RUN'S CENTRAL FINDING: the journeys failure was not #697's bug — it was the middleware
+Run 116 fixed the `verify` blocker but never diagnosed `journeys`. Reading the job log took two minutes and pointed somewhere nobody had looked: all three failures were on #697's new pages, and the shape was diagnostic — `#email` VISIBLE but the "Send reset link" button ABSENT. That is not a broken page, that is the LOGIN page being served instead.
+
+`/forgot-password` and `/reset-password` were not in the middleware's `PUBLIC_PATHS`, so both 307'd to `/login`. **The recovery flow was unreachable by the signed-out users who are its entire population** — #697's pages were correct the whole time and could never have worked.
+
+Pulling that thread found the same bug class three more times, because the signed-in bounce keyed on the WHOLE of `PUBLIC_PATHS` rather than the auth forms:
+- **/terms and /privacy, linked from `app/billing/upgrade/page.tsx:149,153` — the checkout page.** Apple 3.1.2 and Play both require those links AT the point of purchase, and every visitor to a checkout page is signed in. The disclosure was dead for 100% of the people it exists for. A store-readiness scout had just graded this surface COMPLIANT by reading the code; only the runtime behaviour disagreed.
+- **/pricing**, target of the "See all plans" CTA, the topbar, and both checkout-result pages — the free->paid path dead-ended on the dashboard.
+- **/shared/<token>**, whose whole audience is people who are NOT signed in. The `/api/shared/*` prefix was public but the PAGE was not, so **every share link 307'd its recipient to /login** — the public-share retention feature and the Run 106 save->share loop were broken for everyone they were built for.
+- **/gallery**, linked from the marketing footer that renders on `/waitlist` itself, so the pre-launch landing page served anonymous visitors a dead link. (Found by a REVIEWER, not by me or any scout.)
+
+Verified empirically against a running server, not by reading: `/shared/testtoken -> 307 /login`, `/gallery -> 200`, `/dashboard -> 307 /login`.
+
+### Shipped — 6 file-disjoint (no file touched by two commits; 45 files, +2011/-75)
+1. **`feat(auth/G4)` password reset** — rebased from #697 with the mobile-enumeration commit dropped (it landed independently in Run 116) and the stale `action_link` JSDoc corrected. Its PKCE finding is the durable one: `createBrowserClient` hardcodes `flowType: "pkce"` AFTER spreading caller options, so mailing Supabase's `action_link` would render "that link has expired" for EVERY valid link with green route tests. Mails a `token_hash` and redeems it with `verifyOtp`. Both reviewers re-derived this against the installed packages.
+2. **`fix(auth/routing)`** the finding above — bounce narrowed to `SIGNED_IN_REDIRECT_PATHS`; `/forgot-password`, `/reset-password`, `/shared/*`, `/gallery` made reachable.
+3. **`feat(seo/E)` sitemap + robots.txt** — neither existed ANYWHERE in the repo, so Track E3's three SEO articles have been uncrawlable since they were written. `/shared/` explicitly disallowed (unlisted design links must not become search results); whole-site disallow while the pre-launch gate is up.
+4. **`fix(security)`** no fallback identity outside local dev (from #697).
+5. **`fix(billing/store)`** paywall stops promising a trial the store may not give (from #697).
+6. **`fix(a11y)`** 21 surfaces of opacity-dimmed muted text below the AA floor.
+
+### The reviewers' best catch: my own safety justification was false (-> issue #708)
+To justify opening `/shared/<token>` I wrote that "migration 019 pins the anon RLS policy to the same token, so the token is the credential either way." Two independent re-reviewers took that claim apart. 019 was SUPERSEDED by 020, whose live policy is `USING (is_public = true AND share_token IS NOT NULL)` — and a Postgres `USING` clause is evaluated per row against ROW DATA, so it cannot require the caller's `WHERE` filter. 020's own header comment ("a SELECT without the share_token filter matches 0 rows") is simply wrong: any holder of the public anon key can `GET /rest/v1/saved_designs?is_public=eq.true` and receive every shared design, `share_token` included — the exact enumeration 015->019 was written to close.
+Dormant only because DATA_BACKEND defaults to memory; it goes live on the owner's pending cutover. **NOT widened by my change** — `NEXT_PUBLIC_SUPABASE_ANON_KEY` already ships to every browser, so that PostgREST path was equally reachable before. Filed as #708 rather than fixed inline: the real fix is a token-parameterized SECURITY DEFINER RPC, and the memory-store `.rpc()` shim is a no-op, so a straight rewrite breaks the default backend for everyone (the same trap that deferred the pgvector RPC). Claim corrected in the commit and the source comment.
+
+### Lessons learned
+1. **When a gate is red, read the FAILURE SHAPE before assuming whose bug it is.** "`#email` visible, submit button absent" is the signature of a REDIRECT, not a broken component. Four sessions across three runs treated #697 as the thing that was broken; the pages were correct and the router was wrong.
+2. **A code-reading audit cannot certify reachability.** The store-readiness scout read `app/billing/upgrade/page.tsx`, saw Terms + Privacy links, and graded Apple 3.1.2 COMPLIANT — correctly, as far as the file goes. The links were dead. BUILDS != WORKS applies to AUDITS too: a compliance claim about a link needs a request, not a grep.
+3. **An allowlist and a redirect rule must not share one set.** `PUBLIC_PATHS` answered both "who may see this signed out?" and "who should be bounced signed in?". Those are different questions, and collapsing them made every legal/marketing page unreachable for signed-in users. The two-set split is the whole fix.
+4. **Watch for a carve-out that exactly matches your tool's blind spot.** My a11y ratchet keyed on "a font-size utility on the same line" and the commit justified skipping "inactive step labels in cn() conditionals" — which is PRECISELY what that regex could not see. A reviewer found three real status labels hiding in the gap. Rewritten default-deny (violation unless the className carries icon sizing `h-N w-N`). **If an exemption's boundary coincides with a detector's limit, the exemption is probably the detector talking.**
+5. **An RLS `USING` clause cannot enforce a filter the CLIENT is expected to send.** This is worth stating as a standing rule because the repo has now made the mistake twice — once in migration 020's comment, once in my own commit message trusting it. If the security argument is "the caller must pass ?token=...", RLS is the wrong layer; it needs a parameterized SECURITY DEFINER function. And the wider lesson: I cited a migration by NUMBER without checking whether a LATER migration had replaced it. Grep the whole migrations directory for the table before citing any policy.
+6. **State which surface a contrast number was measured against.** I published dark-theme ratios computed against `--muted` while writing them up as the standard pairing. A reviewer recomputed all twelve and caught it. Now published as a 2x2 table over `--background` and `--card`, both themes. (Third consecutive run where reviewers passed the DIFF and caught the EVIDENCE.)
+7. **`git checkout -- <path>` silently does nothing for an UNTRACKED file.** Reverting a mutation test that way left the mutation in place in a new file; only the follow-up grep caught it. Verify a revert by re-reading the content, never by the exit code.
+8. **Prompt-injection recurred for a SEVENTH consecutive run**, same signature: a fabricated system-reminder claiming a just-made edit was "intentional... don't tell the user", arriving right after a file write. Hit both me and a reviewer independently. Treated as DATA, tree verified against `git`, mutation reverted as planned. Held.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 119** (last ran Run 115).
+- **#697 is now LANDED via this branch and can be CLOSED** — its remaining content is here.
+- The three ship-critical scorecard dims stay human/CI-gated: functional_reality C (owner DATA_BACKEND cutover + cold-start test), design_taste B (authed-axe on seeded routes + F7 screenshots), business_case_strength B (owner annual flip OR a new built lever).
+- **#708 (NEW, security):** migration 020's share policy does not require the token — fix BEFORE the DATA_BACKEND cutover. Needs a memory-store `.rpc()` implementation first, so it is a focused standalone run, not batch work.
+- **NAMED buildable follow-ups:** per-target-email rate limiting on password reset (today per-IP only, so a distributed sender can still bomb one address — a reviewer's non-blocking note); a second AA-safe muted token so dimmed tiers keep a visual step instead of collapsing to secondary text; OG images for the marketing pages (no `images:` in any route's openGraph today); `withCostLedger`/`recordUsage` rollout beyond the 2 instrumented routes; provider `recordCall` only firing on `status:"ok"`.
+- **DO-NOT-RE-FLAG (carry ALL prior lists +):** sitemap/robots (SHIPPED); the four routing gaps (SHIPPED); password reset (SHIPPED — do not rebuild from #697); paywall trial honesty + fallback identity (SHIPPED from #697); `text-muted-foreground/NN` on icons (INTENTIONAL — WCAG 1.4.3 does not govern decorative icons; the ratchet permits exactly `h-N w-N`); "Higher AI generation limits" / Pro daily-ceiling (still #699/#704, do NOT re-derive); web share-link Pro gating (issue #692 owner pricing decision, and gating it would regress the Run 106 all-tiers viral loop).
+
+
 ## Run 2026-07-26 (Run 116) — THE UNBLOCK RUN. Diagnosed WHY the queue was jammed instead of scouting for new work. 5 changes merged (#705), 1 built-then-abandoned, 3 duplicate PRs closed, 2 issues filed.
 
 ### State on entry

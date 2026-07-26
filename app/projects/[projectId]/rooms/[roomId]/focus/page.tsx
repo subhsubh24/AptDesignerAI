@@ -1263,7 +1263,7 @@ export default function FocusPage() {
                         "text-sm",
                         isDone && "text-emerald-700 dark:text-emerald-400 font-medium",
                         isActive && "text-foreground font-medium",
-                        !isDone && !isActive && "text-muted-foreground/60"
+                        !isDone && !isActive && "text-muted-foreground"
                       )}>
                         {phase.label}
                       </span>

@@ -26,17 +26,17 @@ dashboard reads this block.
 ```yaml
 LOOP_HEALTH:
   project: AptDesignerAI
-  as_of: 2026-07-19
-  last_run: 100                  # the Run N this reflects (null until first bookkeeping update)
-  last_deep_audit: 99            # 8-lens sweep ran Run 99 (2026-07-19); next due ~Run 103
+  as_of: 2026-07-26
+  last_run: 117                  # the Run N this reflects
+  last_deep_audit: 115           # 8-lens sweep ran Run 115 (2026-07-26); next due ~Run 119
   this_run:
-    changes_shipped: 5           # one PR (single-branch git constraint): (1) G1 rate-limit the public GET /api/waitlist/confirm (per-IP 10/15min) + test; (2) F2 coverage of the untested REVERSE arm of material-math's cross-room metal-temperature OR-branch; (3) a11y WCAG-4.1.2 aria-label on the desktop user-menu icon-only trigger (topbar); (4) a11y WCAG-1.3.1 aria-label on the placeholder-only RefineChat textarea; (5) mobile design-bar — Save button shows "Checking…" while disabled during the quotaLoading window. All 5 both-Sonnet-APPROVED first-pass.
-    changes_abandoned: 0         # scout findings DEFERRED before any code (not started-then-dropped): E7 paid-engagement cron (cohort-selection needs a defensible activity timestamp — focused run); 4 business-case conversion/retention levers (monetization-path changes, not runtime-verifiable headlessly — dedicated run); analyze-apartment GET dup-room collapse (known low-value completeness); .single()-error pattern on 4 hot paths (speculative under memory backend); store-listing web-sync claim (conditionally true post-cutover); doc-clarity + permission-string + hardcoded-color items (churn).
-    abandoned_reasons: []        # none started-then-dropped this run (all drops were pre-code selection calls: dead_end/review_value/blocked_owner class, not abandoned builds)
-    verify_cycle_failures: 0     # LOOP-2 clean for all 5 (tsc/eslint/test/determinism); baseline 2171 → integrated 2173 (+2 tests)
-    review_rejections: 0         # LOOP-3: 10/10 first-pass APPROVE, ZERO REQUEST_CHANGES (both security reviewers confirmed limiter-before-DB + no token oracle; both coverage reviewers empirically mutation-verified the untested arm; a11y reviewers confirmed Radix Slot passes aria-label through without clobbering)
+    changes_shipped: 6           # one PR (single-branch git constraint): (1) password reset built from nothing, rebased off the stalled PR #697; (2) the middleware routing fix — public pages unreachable for signed-in users, recovery + /shared/<token> + /gallery unreachable for signed-out ones; (3) sitemap.xml + robots.txt, neither of which existed anywhere in the repo; (4) no fallback identity outside local dev; (5) paywall stops promising a trial the store may not give; (6) 21 surfaces of opacity-dimmed muted text below the WCAG AA floor. All 6 file-DISJOINT (no file touched by two commits).
+    changes_abandoned: 0         # scout findings DROPPED before any code: web share-link Pro gating (issue #692 owner pricing decision, and gating it would regress the Run 106 all-tiers viral loop); tier-differentiated daily limits (= the abandoned #704, do not re-derive); two stream-route parallelizations (the standing "micro-opt, standalone only, never batch" tier); OG images for marketing pages (real but a separate standalone change). Also dropped from PR #697: its mobile-auth-enumeration commit (landed independently in Run 116) and its stale dep-lockfile commit.
+    abandoned_reasons: []        # none started-then-dropped this run; all drops were pre-code selection calls (blocked_owner/dead_end/review_value class)
+    verify_cycle_failures: 0     # LOOP-2 clean: tsc, 2383 tests (+107), determinism, prod build, mobile tsc, eslint 0 on touched files, and the runtime journey suite GREEN (the 3 reset journeys that were red on #697 now pass)
+    review_rejections: 3         # LOOP-3: 15 verdicts. 3 REQUEST_CHANGES, every one a REAL defect the maker missed — (a) the dev-mode half of the routing fix had NO test (reverting it left all 33 green); (b) the proxy matcher's new alternatives were unanchored/unescaped, so /sitemap.xml-preview would have skipped auth+CORS+the site gate, AND /gallery was being rationalised as non-public when it was a live dead link in the marketing footer; (c) the a11y ratchet's "inactive step label" carve-out exactly matched its own regex blind spot, hiding three real status labels, and the published dark-theme contrast numbers were measured against the wrong surface. All fixed and re-reviewed.
     circuit_breaker_trips: 0
-    ci_flake: "none observed at author time; PR pushed and set to auto-merge on the required verify/build/mobile checks."
+    ci_flake: "none observed at author time; PR pushed and set to auto-merge on the required verify/build/mobile/lint/journeys checks."
   rolling_7d:
     merged_prs: 50               # all routines' merged PRs over the last 7d (git log --since=7d origin/default | grep -cE '\(#N\)')
     reverts: 0                   # PRs that REVERTED a prior merge — the rework/quality-miss signal

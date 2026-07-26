@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // logic that gates it.
 
 // A sentinel "real" Supabase client so we can tell it apart from the memory store.
-const realAuth = { getUser: vi.fn(async () => ({ data: { user: { id: "real-user" } } })) };
+// `user` is nullable on purpose: a signed-out request is a real case these
+// tests exercise, and the mock must be able to represent it.
+type GetUserResult = { data: { user: { id: string } | null } };
+const realAuth = {
+  getUser: vi.fn(async (): Promise<GetUserResult> => ({ data: { user: { id: "real-user" } } })),
+};
 const realClient = {
   __real: true as const,
   auth: realAuth,
@@ -97,5 +102,65 @@ describe("getCurrentUserId", () => {
     expect(await getCurrentUserId()).toBe("00000000-0000-0000-0000-000000000001");
     // @ts-expect-error restore
     process.env.NODE_ENV = prev;
+  });
+});
+
+// The fixed dev identity must never be handed out where requests are real.
+// Doing so silently merges every unauthenticated visitor into ONE account: they
+// read and write each other's saved_designs rows through it, and a real user's
+// save can land under an identity they can never sign in as.
+describe("getCurrentUserId — no fallback identity outside local dev", () => {
+  const MOCK_ID = "00000000-0000-0000-0000-000000000001";
+
+  beforeEach(() => {
+    process.env[URL_KEY] = "https://x.supabase.co";
+    process.env[ANON_KEY] = "anon-key";
+  });
+
+  it("returns null (not the mock id) for a signed-out request under DATA_BACKEND=supabase", async () => {
+    process.env.DATA_BACKEND = "supabase";
+    realAuth.getUser.mockResolvedValueOnce({ data: { user: null } });
+    expect(await getCurrentUserId()).toBeNull();
+  });
+
+  /** try/finally so an unexpected throw can't leak NODE_ENV into later tests. */
+  async function inProduction<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = process.env.NODE_ENV;
+    // @ts-expect-error test override
+    process.env.NODE_ENV = "production";
+    try {
+      return await fn();
+    } finally {
+      // @ts-expect-error restore
+      process.env.NODE_ENV = prev;
+    }
+  }
+
+  it("returns null (not the mock id) for a signed-out request in production", async () => {
+    realAuth.getUser.mockResolvedValueOnce({ data: { user: null } });
+    const id = await inProduction(() => getCurrentUserId());
+    expect(id).toBeNull();
+    expect(id).not.toBe(MOCK_ID);
+  });
+
+  it("returns null (not the mock id) when the auth call THROWS in production", async () => {
+    realAuth.getUser.mockRejectedValueOnce(new Error("auth service unreachable"));
+    expect(await inProduction(() => getCurrentUserId())).toBeNull();
+  });
+
+  it("returns null when the auth call THROWS under DATA_BACKEND=supabase", async () => {
+    // Same branch reached by the other strict-identity entry point — an outage
+    // must not degrade into the shared fallback identity there either.
+    process.env.DATA_BACKEND = "supabase";
+    realAuth.getUser.mockRejectedValueOnce(new Error("auth service unreachable"));
+    expect(await getCurrentUserId()).toBeNull();
+  });
+
+  it("still falls back to the mock id in local dev, so nothing changes there", async () => {
+    realAuth.getUser.mockResolvedValueOnce({ data: { user: null } });
+    expect(await getCurrentUserId()).toBe(MOCK_ID);
+
+    realAuth.getUser.mockRejectedValueOnce(new Error("offline"));
+    expect(await getCurrentUserId()).toBe(MOCK_ID);
   });
 });

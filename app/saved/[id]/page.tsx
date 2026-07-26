@@ -291,7 +291,7 @@ export default function SavedDesignDetailPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{item.search_title || item.category}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                    {item.specs && <p className="text-xs text-muted-foreground/70 mt-1 font-mono">{item.specs}</p>}
+                    {item.specs && <p className="text-xs text-muted-foreground mt-1 font-mono">{item.specs}</p>}
                   </div>
                 </div>
               ))}

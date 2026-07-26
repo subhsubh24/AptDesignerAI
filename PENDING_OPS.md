@@ -108,6 +108,13 @@ OWNER_ACTIONS:
       why: "The in-memory rate limiter (added Run 32, PR #111) AND the per-user/day spend limiter (added Run 33, PR #119, lib/utils/spend-limiter.ts) both reset on cold start and are per-Vercel-function-instance. On multi-instance deployments a single user can bypass per-user limits by hitting different instances. Pre-launch this is acceptable; before significant traffic the state must move to a shared store."
       how: "Install the Upstash Redis Vercel integration (1-click from Vercel dashboard → Integrations), set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN env vars, swap lib/utils/rate-limiter.ts AND lib/utils/spend-limiter.ts to use @upstash/ratelimit (Sliding Window) / a shared Redis counter."
       blocks: rate-limiting-at-scale
+    - id: waitlist-early-discount-coupon
+      title: "Create the Stripe coupon behind the waitlist's \"30% off, no promo code required\" promise"
+      priority: high
+      status: open
+      why: "app/waitlist/page.tsx and app/waitlist/confirmed/page.tsx both promise every waitlist signup 30% off their first paid plan, with NO promo code required. There is no mechanism behind it: no coupon exists in the Stripe config and nothing in lib/billing applies one. Whoever joins the waitlist arrives at checkout on launch day and pays full price, which is a broken public promise on the pre-launch conversion surface. Prior runs recorded this as tracked in PENDING_OPS, but no entry was ever actually written — this is that entry."
+      how: "Create a 30%-off Stripe coupon (Products -> Coupons; percent_off=30, duration=once) and note its ID. Then EITHER (a) auto-apply it: pass `discounts: [{ coupon }]` in the checkout session for customers whose email is in waitlist_emails with confirmed_at set (a loop-buildable change once the coupon ID exists in env as STRIPE_WAITLIST_COUPON_ID), OR (b) soften the copy to require a code and email it on launch. (a) keeps the promise as written and is preferred. Until one is done, the claim is unbacked."
+      blocks: launch-promise-integrity
     - id: connect-email-resend
       title: "Connect Resend to switch the email lifecycle from dry-run to live (E7.2)"
       priority: high

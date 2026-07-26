@@ -95,11 +95,41 @@ export async function createClient() {
   return proxy;
 }
 
+/** Fixed identity used ONLY in local dev, where there is no real session. */
+const DEV_MOCK_USER_ID = "00000000-0000-0000-0000-000000000001";
+
 /**
- * Get the current user ID, falling back to the mock user for local dev only.
+ * Get the current user ID, or `null` when the request has no authenticated user.
+ *
+ * Callers MUST handle null (401) — it is not "the anonymous user", it means we
+ * could not establish who is asking.
+ *
+ * Falling back to `DEV_MOCK_USER_ID` is a LOCAL-DEV-ONLY convenience. Anywhere
+ * real — production, or `DATA_BACKEND=supabase` — handing it back is an
+ * identity bug of the same family the credential branch below already refuses:
+ * an unresolved caller silently becomes one fixed account that every other
+ * unresolved caller also becomes, so they read and write each other's
+ * `saved_designs` rows through it. So in those environments a missing session,
+ * or an auth call that fails outright, returns null instead.
+ *
+ * This is defence in depth, not the only guard: `lib/supabase/middleware.ts`
+ * already 401s an unauthenticated request to these API paths, and under
+ * `DATA_BACKEND=supabase` RLS would reject a mismatched identity at the
+ * database. What this closes is the gap between those layers — middleware's
+ * `getUser()` succeeding while the handler's own call a moment later does not —
+ * and the memory-backend case, which has no RLS behind it at all.
+ *
+ * A transient auth outage and a genuinely signed-out request both surface as
+ * null (and therefore 401) rather than being told apart: the distinction would
+ * change the message, not the correct answer, and conflating them keeps the
+ * safe outcome on the failure path. The throw is logged server-side so the
+ * outage case stays diagnosable (G3).
  */
-export async function getCurrentUserId(): Promise<string> {
+export async function getCurrentUserId(): Promise<string | null> {
   const { url, key } = supabaseCredentials();
+  // Environments where a fixed fallback identity is never acceptable.
+  const strictIdentity =
+    supabaseDataBackendEnabled() || process.env.NODE_ENV === "production";
 
   if (!url || !key) {
     // Symmetric with createClient(): if the persistent backend was explicitly
@@ -114,14 +144,19 @@ export async function getCurrentUserId(): Promise<string> {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Supabase credentials are required in production");
     }
-    return "00000000-0000-0000-0000-000000000001";
+    return DEV_MOCK_USER_ID;
   }
 
   const supabase = await buildRealClient(url, key);
   try {
     const { data } = await supabase.auth.getUser();
-    return data.user?.id ?? "00000000-0000-0000-0000-000000000001";
-  } catch {
-    return "00000000-0000-0000-0000-000000000001";
+    if (data.user?.id) return data.user.id;
+    return strictIdentity ? null : DEV_MOCK_USER_ID;
+  } catch (err) {
+    if (strictIdentity) {
+      console.error("[supabase] auth.getUser() failed; treating as unauthenticated:", err);
+      return null;
+    }
+    return DEV_MOCK_USER_ID;
   }
 }

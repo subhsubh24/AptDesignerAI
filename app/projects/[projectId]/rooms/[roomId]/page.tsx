@@ -273,7 +273,7 @@ export default async function RoomPage({
                           <p className="text-sm text-muted-foreground">{step.description}</p>
                           <p className={cn(
                             "text-xs mt-1.5",
-                            step.completed ? "text-accent-warm font-medium" : "text-muted-foreground/60"
+                            step.completed ? "text-accent-warm font-medium" : "text-muted-foreground"
                           )}>
                             {step.status}
                           </p>

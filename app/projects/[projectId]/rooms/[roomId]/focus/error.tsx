@@ -29,7 +29,7 @@ export default function FocusError({
               {error.message || "An error occurred while loading the design focus view. Your designs are safe — try again."}
             </p>
             {error.digest && (
-              <p className="text-xs text-muted-foreground/50 font-mono">
+              <p className="text-xs text-muted-foreground font-mono">
                 Error ID: {error.digest}
               </p>
             )}

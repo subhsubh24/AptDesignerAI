@@ -725,7 +725,7 @@ Reviewer A rejects regressions, and the preflight verifies the critical ones.
   would be security theatre; the real enforcement point is Supabase's own auth rate limits
   (owner config — see PENDING_OPS "Supabase auth rate limits"), or else moving sign-in to a
   server route that sets cookies via @supabase/ssr. Also REMAINING: password-reset /
-  verification enumeration guards. Keep G4 unchecked until those land.]**
+  verification enumeration guards. Run 117: PASSWORD-RESET landed — the flow did not exist at all before (`resetPasswordForEmail` had zero hits repo-wide), so a locked-out user was permanently locked out; the new route is enumeration-safe by body, status AND latency (the outbound send is moved off the response path with `waitUntil` so only the registered branch's Resend round-trip cannot be timed), rate-limited 3/IP/15min behind Turnstile, and never claims mail was sent while the provider is in dry-run. REMAINING for G4: login lockout/backoff (owner-config, above) and email-verification link idempotency. Also open: reset rate limiting is per-IP only, so a distributed sender can still bomb one address. Keep G4 unchecked until those land.]**
 - [x] G5. **CAPTCHA / bot protection on public forms** (waitlist, signup, any unauth
   POST) — e.g. Cloudflare Turnstile — so day-one bot floods can't spam or drain.
   **[DONE — Run 35 (PR #141): Turnstile on the WAITLIST form. Run 38 (PR #169): Turnstile on

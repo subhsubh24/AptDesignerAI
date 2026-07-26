@@ -40,6 +40,9 @@ const GATE_EXEMPT_PATHS = new Set<string>([
   "/support",
   "/faq",
   "/pricing",
+  // Reached from the marketing footer that renders on /waitlist itself, so it
+  // has to survive the gate or the coming-soon page serves a dead link.
+  "/gallery",
 ]);
 
 // Prefix-matched exempt routes (sub-pages + the public waitlist API).

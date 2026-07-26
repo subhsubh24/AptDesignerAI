@@ -75,7 +75,7 @@ export default function GuidesPage() {
                         {tag}
                       </Badge>
                     ))}
-                    <span className="text-xs text-muted-foreground/70 self-center">{guide.readTime}</span>
+                    <span className="text-xs text-muted-foreground self-center">{guide.readTime}</span>
                   </div>
                   <h2 className="text-xl font-bold mb-2 group-hover:text-accent-warm transition-colors leading-snug">
                     {guide.title}

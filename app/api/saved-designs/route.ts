@@ -10,6 +10,9 @@ import { hasProEntitlementWeb, FREE_SAVE_LIMIT_WEB } from "@/lib/entitlements/we
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+  // null means we could not establish WHO is asking. Querying on it would hand
+  // back whatever rows a null/fallback identity owns, so refuse instead.
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 500 });
 
@@ -27,11 +30,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+  // A save written under an unresolved identity would be unreachable by its
+  // real owner (and readable by the next unauthenticated visitor). Refuse.
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Rate limit — matches the mobile save endpoint (10/min per user). A save is
   // a cheap write, but each one fans out into several DB reads (room, diagnosis,
   // products, bundles) to build the snapshot, so an unbounded loop is real load.
-  const limit = checkRateLimit(`saved-designs:${userId ?? "anon"}`, { maxRequests: 10, windowMs: 60_000 });
+  const limit = checkRateLimit(`saved-designs:${userId}`, { maxRequests: 10, windowMs: 60_000 });
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many save requests. Please wait a moment." },

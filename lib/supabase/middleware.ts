@@ -6,6 +6,11 @@ import { applySiteGate } from "@/lib/security/site-gate";
 const PUBLIC_PATHS = new Set([
   "/login",
   "/signup",
+  // Account recovery. A locked-out user is by definition signed OUT, so these
+  // must be reachable without a session or the whole flow is unreachable by the
+  // only people it exists for.
+  "/forgot-password",
+  "/reset-password",
   "/waitlist",
   // Double opt-in landing page, reached from an emailed link by an
   // unauthenticated visitor. Listed explicitly (not as a /waitlist prefix) so a
@@ -16,10 +21,55 @@ const PUBLIC_PATHS = new Set([
   "/privacy",
   "/terms",
   "/support",
+  // Linked from the "Product" column of components/marketing/marketing-footer.tsx,
+  // which renders on every marketing page including /waitlist — so while it was
+  // missing here, an anonymous visitor clicking "Gallery" from the pre-launch
+  // landing page was redirected to /login.
+  "/gallery",
 ]);
 
-// /guides has sub-routes (/guides/color-palette-guide, etc.) — use prefix match below.
-const PUBLIC_PATH_PREFIXES = ["/guides"];
+// The subset of PUBLIC_PATHS that a signed-in user should be bounced away from.
+// Only the auth FORMS are pointless once you already have a session; the
+// pricing, legal, support and guide pages are not, and bouncing them to the
+// dashboard makes them unreachable for everyone who is signed in:
+//   - /terms and /privacy are linked from /billing/upgrade, where Apple 3.1.2
+//     and Play both require them to be reachable AT the point of purchase —
+//     and every visitor to a checkout page is signed in.
+//   - /pricing is the target of the "See all plans" upgrade CTA, so bouncing it
+//     dead-ends the free→paid path.
+// The recovery routes are deliberately NOT here: /reset-password mints a
+// session as it redeems the emailed token, so bouncing on a session would
+// break the flow at the exact moment it starts working.
+const SIGNED_IN_REDIRECT_PATHS = new Set([
+  "/login",
+  "/signup",
+  "/waitlist",
+  "/waitlist/confirmed",
+]);
+
+// Prefix-matched public routes.
+// /guides has sub-routes (/guides/color-palette-guide, etc.).
+// /shared/<token> is a public design share link whose whole audience is people
+// who are NOT signed in — a friend or client sent the URL. The matching
+// /api/shared/* prefix was already public below, but the PAGE was not, so every
+// share link 307'd its recipient to /login.
+//
+// The token is enforced at the app layer: both the page and the API filter on
+// `.eq("share_token", token).eq("is_public", true)` and notFound()/404 otherwise
+// (app/shared/[token]/page.tsx:56-60, app/api/shared/[token]/route.ts:42-43).
+// That is the control here — deliberately NOT the RLS policy. The live policy is
+// migration 020 (which superseded 019's JWT-claim version), and its
+// `USING (is_public = true AND share_token IS NOT NULL)` cannot require the
+// caller's filter: a Postgres USING clause is evaluated per row against row
+// data, not against the client's WHERE predicate, so 020's comment claiming
+// "a SELECT without the share_token filter matches 0 rows" is wrong. Opening
+// this route widens nothing — NEXT_PUBLIC_SUPABASE_ANON_KEY already ships to
+// every browser, so that PostgREST path is equally reachable with or without
+// this change. Tracked separately; do not treat 020 as a token guard.
+//
+// Left OUT of the site-gate exempt set on purpose: pre-launch there is nothing
+// worth sharing, so a share link correctly meets the coming-soon curtain.
+const PUBLIC_PATH_PREFIXES = ["/guides", "/shared"];
 
 // API routes that must accept unauthenticated requests.
 // /api/billing/webhook — Stripe POSTs here with its own signature verification.
@@ -71,7 +121,7 @@ export async function updateSession(request: NextRequest) {
   // No Supabase configured — bypass auth entirely (local dev mode)
   if (!url || !key) {
     // In dev mode, redirect login/signup to dashboard
-    if (PUBLIC_PATHS.has(request.nextUrl.pathname)) {
+    if (SIGNED_IN_REDIRECT_PATHS.has(request.nextUrl.pathname)) {
       const redir = request.nextUrl.clone();
       redir.pathname = "/dashboard";
       return NextResponse.redirect(redir);
@@ -132,7 +182,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Logged-in users hitting login/signup → redirect to dashboard
-  if (user && isPublicPath) {
+  if (user && SIGNED_IN_REDIRECT_PATHS.has(pathname)) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
     return NextResponse.redirect(dashUrl);

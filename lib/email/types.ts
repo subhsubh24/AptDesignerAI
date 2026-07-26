@@ -12,6 +12,7 @@
  *
  * Doc mapping:
  *   waitlist_confirm                         -> double opt-in confirmation (E7.1; precedes the welcome sequence)
+ *   password_reset                           -> transactional account-recovery link (G4; no sequence, user-triggered)
  *   waitlist_welcome_1..3 / waitlist_launch  -> docs/email-welcome-sequence.md (Emails 1–4)
  *   activation_1..3        -> docs/email-lifecycle.md Sequence 1 (A1–A3)
  *   habit_1..3             -> docs/email-lifecycle.md Sequence 2 (B1–B3)
@@ -23,6 +24,7 @@
  */
 export type EmailStage =
   | "waitlist_confirm"
+  | "password_reset"
   | "waitlist_welcome_1"
   | "waitlist_welcome_2"
   | "waitlist_welcome_3"

@@ -29,7 +29,7 @@ export default function RoomError({
               {error.message || "An unexpected error occurred while loading this room. Please try again."}
             </p>
             {error.digest && (
-              <p className="text-xs text-muted-foreground/50 font-mono">
+              <p className="text-xs text-muted-foreground font-mono">
                 Error ID: {error.digest}
               </p>
             )}

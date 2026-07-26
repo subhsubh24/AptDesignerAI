@@ -18,7 +18,10 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 |---|---|---|---|
 | `/signup` | public | real form (`#name`/`#email`/`#password` + "Create Account"); no error boundary | ✅ |
 | `/signup` → `/dashboard` (real UI signup) | authed | new account is usable immediately, lands on a working dashboard, NO "check your email" dead-end (no email verification) | ✅ |
-| `/login` | public | real form (`#email`/`#password` + "Sign In") | ✅ |
+| `/login` | public | real form (`#email`/`#password` + "Sign In") **+ the "Forgot password?" link points at `/forgot-password`** — account recovery is reachable from where the user gets stuck | ✅ |
+| `/forgot-password` | public | real form (`#email` + "Send reset link"); no boundary | ✅ |
+| `/forgot-password` (submit) | public | reaches a DEFINITE outcome — "Check your inbox" (a send was attempted) or the honest "we'll reset it for you" support fallback when the email provider is not connected; never a silent no-op, never an inbox promise with nothing sent | ✅ |
+| `/reset-password` | public | resolves to a real state (password form or "That link has expired"), never a stuck link-checking spinner | ✅ |
 | `/dashboard` (logged out) | structural | redirects to `/login` | ✅ |
 | `/account` (logged out) | structural | redirects to `/login` | ✅ |
 | `/saved` (logged out) | structural | redirects to `/login` | ✅ |

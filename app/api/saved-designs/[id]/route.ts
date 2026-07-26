@@ -12,6 +12,9 @@ export async function GET(
   const { id } = await params;
   const supabase = await createClient();
   const userId = await getCurrentUserId();
+  // null means the request has no established identity; `.eq("user_id", null)`
+  // is not an ownership check, so refuse rather than query on it.
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data, error } = await supabase
     .from("saved_designs")
@@ -34,10 +37,9 @@ export async function PATCH(
   const { id } = await params;
   const supabase = await createClient();
   const userId = await getCurrentUserId();
-  if (userId) {
-    const limited = enforceWriteRateLimit(userId, "saved-designs:update");
-    if (limited) return limited;
-  }
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(userId, "saved-designs:update");
+  if (limited) return limited;
 
   let body: { is_public?: boolean };
   try {
@@ -92,10 +94,9 @@ export async function DELETE(
   const { id } = await params;
   const supabase = await createClient();
   const userId = await getCurrentUserId();
-  if (userId) {
-    const limited = enforceWriteRateLimit(userId, "saved-designs:delete", DELETE_WRITE_LIMIT);
-    if (limited) return limited;
-  }
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limited = enforceWriteRateLimit(userId, "saved-designs:delete", DELETE_WRITE_LIMIT);
+  if (limited) return limited;
 
   const { error } = await supabase
     .from("saved_designs")
