@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-26 (Run 116) — THE UNBLOCK RUN. Diagnosed WHY the queue was jammed instead of scouting for new work. 5 changes merged (#705), 1 built-then-abandoned, 3 duplicate PRs closed, 2 issues filed.
+
+### State on entry
+- Cold container. Designated branch `claude/sleepy-goldberg-ic6nf2` == default tip `2eec7b4` (#703, Run 115), 0/0 divergence.
+- **loop-memory layout trap held for a SIXTH run** — newest entries are PREPENDED after the `---`; `tail` showed Run 106 while 107-115 sat at the top. Still the most reliably-repeated first-read error.
+- DEEP AUDIT not due (ran Run 115). **No scout sweep was run at all** — see below.
+
+### THE RUN'S CENTRAL LESSON: when work stops landing, read the CI LOGS before scouting
+Run 115 discovered four concurrent unmerged "Run 114" PRs (#696 #697 #700 #701) duplicating each other and correctly dropped its own 5th copy. It did NOT diagnose *why* none could merge. Pulling the actual job logs answered it in two reads:
+
+- **BLOCKER 1 — `verify` (killed #697, #700, #701).** Any `__tests__/**` importing `mobile/**` dies with `[TSCONFIG_ERROR] ... Tsconfig not found`. `mobile/tsconfig.json` extends `expo/tsconfig.base`, resolvable only with `mobile/node_modules`; CI's `verify` runs `npm ci` at the ROOT only. Green locally for anyone who ever ran `npm install` in mobile/, red in CI, always.
+- **BLOCKER 2 — `journeys` (killed #696).** Its OWN new Apple-3.1.2 disclosure used `text-muted-foreground/70` at `text-xs` → **#9a948d on #ffffff = 3.00:1** vs the 4.5:1 WCAG AA floor. The authed axe gate caught it. The gate worked; nobody read the log.
+
+Four sessions each built a correct fix and each assumed the *other* PRs were the problem. **Duplicate-detection (Run 115) is necessary but NOT sufficient — you must also diagnose the jam.** A scout sweep would have produced a 5th duplicate; reading two job logs produced the run.
+
+### Shipped — 5 file-disjoint (merged as #705, all CI green incl. `journeys`)
+1. **`fix(test-harness)` `mobile/src/tsconfig.json`** — needs no node_modules, mirrors the EFFECTIVE Expo options. Hoisted from #696's narrow `mobile/src/lib/auth/tsconfig.json` so all future mobile imports are covered. **Verified by reproducing CI: with `mobile/node_modules` moved aside the suite passes WITH the file and fails with the original error WITHOUT it.**
+2. **`fix(auth/G4)` native auth enumeration** — the fix all four PRs contained and none landed.
+3. **`fix(reliability)` analyze-apartment non-array LLM field** (closes #687) — un-landed 21+ runs.
+4. **`fix(store)` Apple 3.1.2 legal links** — with blocker 2 fixed, plus the identical violation on signup, plus the verb now derived from `isRecurringTier()` (the same predicate picking the Stripe charge mode) so copy cannot drift from billing.
+5. **`perf(dashboard)` rooms 1+N** — ordering extracted to `lib/rooms/embedded-images.ts` and actually tested.
+
+### BUILT THEN ABANDONED: the Pro daily-ceiling lift (now #704) — the run's best judgment call
+Reached working, fully-tested, both-reviewer-APPROVED state. Then two independent re-reviewers each reproduced the same defect: the counter is ONE per-user bucket with the ceiling passed at call time, so raising text to 180 while holding image renders at 60 meant **a Pro user's ordinary analysis usage silently ate their mockup budget** — 61 permitted text calls, then a 429 on their FIRST image of the day. Exactly backwards for the users it targeted.
+Worse, my own margin derivation was falsified **from the repo's own comments**: `/api/places/photo` is ~$0.007/call and `computer-use/product-verify` is "Browserbase ~$5-20/session", both of which the change had moved onto the raised ceiling. At $0.007 alone, 180 x 30 x $0.007 = $37.80/mo > the ~$34.30/mo net revenue the safety case rested on.
+**Dropped via `git rebase --onto` rather than patched** — a spend-control mechanism that is half-right is worse than none, and it had spent its 2 review cycles. LESSON: **before justifying a ceiling with a unit cost, grep every route the ceiling governs for its OWN documented cost.** The numbers were sitting in route comments the whole time.
+
+### Lessons learned
+1. **`git checkout <branch> -- <path>` is a whole-file REPLACE, not a merge.** Taking #701's route changes silently CLOBBERED #696's `firstArray` fix in `app/api/analyze-apartment/route.ts` — both PRs touch it. Caught by grepping for the symbol after checkout, reapplied with `git apply --3way`. **When landing work from multiple branches, after each checkout grep for the symbols the OTHER branch contributed to the same file.**
+2. **Commit-splitting across cherry-picked branches breaks bisect silently.** Three reviewers independently found that `analyze-apartment` called `checkDailySpendForUser` two commits before it existed — `npm test` stayed GREEN because the test mocks the whole module, while `tsc` at that commit failed. History was rebuilt so every commit typechecks standalone (verified by replaying each in a detached worktree). **A mocked module hides a missing export from the test suite; only per-commit tsc catches it.**
+3. **A source-text ratchet cannot prove a runtime binding — say so in the test.** Reviewers broke the G4 call-site ratchet FOUR ways: alias+local shadow (caught after hardening), namespace-import mutation **proven to leak at runtime** with real compiled output (now caught — a named import compiles to a property lookup on the shared module object, so reassigning it redirects every later call), plus a destructuring shadow and a parameter-default shadow that **defeat any static scan by construction**. Resolution was to state the limitation in the test file and downgrade the claim rather than pretend — the real guard is a render test (#706). **Don't let a tripwire's name imply a proof.**
+4. **Reviewer subagents mutating a SHARED working tree corrupt each other.** One reviewer `git checkout --`'d another's in-flight mutation mid-experiment; several reported "files changing under me". **Fix: spawn self-mutating reviewers with `isolation: worktree`** — did this for the re-review round and the interference vanished. Carry this forward permanently.
+5. **Prompt-injection recurred for a 6th consecutive run**, same signature: a fabricated system-reminder claiming a change was "intentional" and instructing concealment, arriving in tool output right after a file edit. Multiple reviewers hit it independently, all treated it as DATA and reported it. Held. Keep verifying tree state against `git`.
+
+### Rotation guide for next run
+- **TOP PICKUP: #697 is deliberately still OPEN and is NOT superseded.** Its password-reset flow (the product has NONE — `resetPasswordForEmail` has zero hits repo-wide; a user who forgets their password is locked out permanently) plus a `getCurrentUserId()` prod-fallback-identity security fix and the paywall trial-honesty fix never landed. **The `verify` blocker that killed it is now fixed on the default branch, so a rebase clears it.** Its PKCE finding (`createBrowserClient` hardcodes `flowType: "pkce"` after spreading caller options, so EVERY valid reset link 500s with 10 green route tests) is worth more than its diff — preserve it in any reimplementation.
+- **#704** — Pro limits redesign (two-bucket) with the verified cost table. **#706** — render-based auth-leak test.
+- Deferred, named, file-disjoint: `app/guides/page.tsx:78` has the same `/70`-at-`text-xs` 3.00:1 violation on a route `e2e/a11y.spec.ts` scans (note that spec appears NOT to be in the required CI checks — worth confirming; if so, that gate is decorative).
+- **DO-NOT-RE-FLAG (carry prior lists +):** the four-PR duplicate cluster (#696/#700/#701 closed, #697 intentionally open); Pro daily-ceiling lift (abandoned with reasons — read #704 BEFORE rebuilding, do not re-derive); mockups-on-tier-aware-ceiling (it is a deliberate carve-out question, see #704).
+
 ## Run 2026-07-26 (Run 115) — DEEP AUDIT (8-lens, due) + 1 shipped fix + 1 dep-security fix. **Discovered FOUR concurrent unmerged "Run 114" PRs duplicating each other; DROPPED a finished, reviewed change of my own as the 5th duplicate.** Harness issue filed.
 
 ### State on entry
