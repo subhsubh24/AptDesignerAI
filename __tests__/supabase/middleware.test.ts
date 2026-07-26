@@ -90,6 +90,20 @@ describe("updateSession — auth-gating boundary", () => {
       expect(res.status).toBe(200);
       expect(getUser).not.toHaveBeenCalled();
     });
+
+    // The dev-mode branch had the same over-broad bounce as the real-auth one:
+    // it keyed on PUBLIC_PATHS, so every marketing, legal and support page
+    // redirected to /dashboard for a local developer too. Without these the
+    // dev-mode half of the fix is untested and can silently regress.
+    it.each(["/pricing", "/terms", "/privacy", "/faq", "/support", "/gallery"])(
+      "lets the public page %s through instead of bouncing it to /dashboard",
+      async (path) => {
+        withoutSupabase();
+        const res = await updateSession(req(path));
+        expect(res.status).toBe(200);
+        expect(locationOf(res)).toBeNull();
+      },
+    );
   });
 
   describe("real auth, logged OUT", () => {
@@ -106,15 +120,46 @@ describe("updateSession — auth-gating boundary", () => {
       expect(await res.json()).toEqual({ error: "Unauthorized" });
     });
 
-    it("lets a public marketing page through (no redirect loop)", async () => {
-      const res = await updateSession(req("/pricing"));
-      expect(res.status).toBe(200);
-      expect(locationOf(res)).toBeNull();
-    });
+    it.each(["/pricing", "/gallery"])(
+      "lets the public marketing page %s through (no redirect loop)",
+      async (path) => {
+        const res = await updateSession(req(path));
+        expect(res.status).toBe(200);
+        expect(locationOf(res)).toBeNull();
+      },
+    );
+
+    // Account recovery is only reachable by someone who is signed OUT — that is
+    // the entire population it serves. Before these were listed as public, both
+    // pages redirected to /login, so a user who forgot their password was
+    // permanently locked out no matter how correct the pages themselves were.
+    it.each(["/forgot-password", "/reset-password"])(
+      "lets the signed-out recovery page %s through instead of bouncing to /login",
+      async (path) => {
+        const res = await updateSession(req(path));
+        expect(res.status).toBe(200);
+        expect(locationOf(res)).toBeNull();
+      },
+    );
 
     it("lets /guides sub-routes through via the prefix match", async () => {
       const res = await updateSession(req("/guides/color-palette-guide"));
       expect(res.status).toBe(200);
+    });
+
+    // A share link's entire audience is people who are NOT signed in. While the
+    // page route was missing from the public prefixes, every shared design
+    // 307'd its recipient to /login — the /api/shared/* prefix below was public
+    // but the page itself was not.
+    it("lets a public /shared/<token> design link through for a logged-out recipient", async () => {
+      const res = await updateSession(req("/shared/abc123token"));
+      expect(res.status).toBe(200);
+      expect(locationOf(res)).toBeNull();
+    });
+
+    it("does NOT treat a lookalike prefix (/sharedX) as public", async () => {
+      const res = await updateSession(req("/sharedX"));
+      expect(locationOf(res)).toBe("/login");
     });
 
     it("does NOT treat a lookalike prefix (/guidesX) as public", async () => {
@@ -147,10 +192,45 @@ describe("updateSession — auth-gating boundary", () => {
       userResult = { user: { id: "u1" } };
     });
 
-    it("redirects a logged-in user away from /login to /dashboard", async () => {
-      const res = await updateSession(req("/login"));
-      expect(locationOf(res)).toBe("/dashboard");
+    it.each(["/login", "/signup", "/waitlist", "/waitlist/confirmed"])(
+      "redirects a logged-in user away from the auth/waitlist page %s to /dashboard",
+      async (path) => {
+        const res = await updateSession(req(path));
+        expect(locationOf(res)).toBe("/dashboard");
+      },
+    );
+
+    // The bounce above used to key on "is this path public?", which swept up
+    // every marketing, legal and support page too. That made /terms and
+    // /privacy — linked from /billing/upgrade, where Apple 3.1.2 and Play both
+    // require them at the point of purchase — unreachable for the only people
+    // who ever see that page, and dead-ended the "See all plans" upgrade CTA.
+    it.each([
+      "/pricing",
+      "/terms",
+      "/privacy",
+      "/faq",
+      "/support",
+      "/gallery",
+      "/guides",
+      "/guides/color-palette-guide",
+    ])("lets a logged-in user actually reach the public page %s", async (path) => {
+      const res = await updateSession(req(path));
+      expect(res.status).toBe(200);
+      expect(locationOf(res)).toBeNull();
     });
+
+    // /reset-password mints a session as it redeems the emailed token, so a
+    // bounce keyed on "has a session" would break the flow at the exact moment
+    // it starts working.
+    it.each(["/forgot-password", "/reset-password"])(
+      "lets a logged-in user complete recovery at %s instead of bouncing them",
+      async (path) => {
+        const res = await updateSession(req(path));
+        expect(res.status).toBe(200);
+        expect(locationOf(res)).toBeNull();
+      },
+    );
 
     it("lets a logged-in user reach a protected page", async () => {
       const res = await updateSession(req("/dashboard"));
