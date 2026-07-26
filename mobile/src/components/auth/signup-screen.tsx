@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { isAlreadyRegisteredError, signUpErrorMessage } from '@/lib/auth/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 // Apple 5.1.1(v) / Google Play require Terms & Privacy to be reachable in-app
@@ -76,8 +77,16 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
           );
         }),
       ]);
-      if (authError) {
-        setError(authError.message);
+      if (isAlreadyRegisteredError(authError)) {
+        // An already-registered address MUST land on the same neutral "check your
+        // email" screen a brand-new signup shows. Rendering Supabase's "User
+        // already registered" told anyone with the app which emails have
+        // accounts — the leak the web signup closes server-side via
+        // lib/auth/signup-errors.ts. Indistinguishable outcomes are the fix; a
+        // politer wording is not.
+        setSuccess(true);
+      } else if (authError) {
+        setError(signUpErrorMessage(authError));
       } else if (data.session === null) {
         // Email confirmation required — show "check your email" screen.
         // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
@@ -86,7 +95,8 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
     } catch (err) {
       // A thrown fetch/network error or the timeout above. Surface a recoverable
       // message rather than leaving the button stuck on "Creating account…".
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // Classified for the same reason as the returned-error path above.
+      setError(signUpErrorMessage(err instanceof Error ? err : undefined));
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
