@@ -30,8 +30,21 @@ import {
 /** The 8-byte PNG signature — the money-path render must return REAL image bytes. */
 const PNG_MAGIC_HEX = "89504e470d0a1a0a";
 
-// Rendered by app/error.tsx + app/global-error.tsx. A healthy screen NEVER shows it.
-const BOUNDARY_TEXT = /something went wrong/i;
+// Every error-boundary heading in the app. A healthy screen NEVER shows one.
+//
+// This is a UNION, not just app/error.tsx's copy, because a Next.js segment
+// resolves to the NEAREST error.tsx — and a segment that overrides the heading
+// is invisible to a check that only looks for the root wording. That was a real
+// blind spot: app/projects/[projectId]/rooms/[roomId]/focus/error.tsx heads with
+// "Design focus failed to load", so a genuine crash anywhere in the 1800-line
+// FocusPage would have rendered a boundary this assertion happily ignored.
+//
+// KEEP IN SYNC: adding a segment-level error.tsx with new heading copy means
+// adding it here, or that segment silently stops being guarded.
+// Current sources: app/error.tsx, app/global-error.tsx,
+// app/projects/[projectId]/rooms/[roomId]/error.tsx ("Something went wrong");
+// .../rooms/[roomId]/focus/error.tsx ("Design focus failed to load").
+const BOUNDARY_TEXT = /something went wrong|design focus failed to load/i;
 
 async function expectNoErrorBoundary(page: Page): Promise<void> {
   await expect(page.getByText(BOUNDARY_TEXT)).toHaveCount(0);
@@ -276,7 +289,20 @@ test.describe("authenticated journeys", () => {
   // furniture is identical in both), NOT a full closure — scanning the populated
   // state additionally needs a diagnosis+sourcing fixture, which stays on the
   // tracked-gaps list in e2e/ROUTE_INVENTORY.md.
-  const SEEDED_A11Y_SURFACES = ["focus", "diagnosis", "products", "mockups", "bundles", "compare"];
+  //
+  // /focus is DELIBERATELY EXCLUDED. Unlike these five — which are GET-on-mount
+  // pages that render a designed empty state — FocusPage's mount effect
+  // auto-POSTs to /api/area-analysis whenever the room has no analysis yet, with
+  // nothing gating it on the room having photos. Scanning it here would make the
+  // journeys job fire a REAL Gemini call, in a job whose own env comment states
+  // "journeys don't call the LLMs" and which supplies a deliberately-invalid
+  // key; worse, the provider timeout (GEMINI_CALL_TIMEOUT_MS = 180s) far exceeds
+  // Playwright's 30s default, so a slow failure is a flaky red rather than a
+  // clean one. It therefore never reaches a steady empty state at all — the
+  // honest description of /focus under this fixture is "error state", not
+  // "empty state". Covering it needs a fixture that pre-seeds the analysis so
+  // the effect no-ops; tracked in e2e/ROUTE_INVENTORY.md.
+  const SEEDED_A11Y_SURFACES = ["diagnosis", "products", "mockups", "bundles", "compare"];
   for (const surface of SEEDED_A11Y_SURFACES) {
     test(`authed a11y: seeded room ${surface} has no critical/serious axe violations`, async ({
       page,

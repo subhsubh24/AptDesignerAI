@@ -147,28 +147,68 @@ describe("mobile signUpErrorMessage", () => {
 });
 
 describe("mobile/web parity — the duplicate must not drift", () => {
-  it("classifies the same sign-in codes as the web module", async () => {
+  // HARD-CODED on purpose. Iterating over the imported CREDENTIAL_CODES /
+  // CREDENTIAL_PATTERNS arrays would be tautological: deleting an entry from the
+  // source would also delete its own test case, so the suite would stay green
+  // while the leak reopened. (Verified — dropping the bare "sso" pattern passed
+  // all 22 tests under the loop version.) These literals are an INDEPENDENT
+  // statement of what must be masked; the web suite is hard-coded for the same
+  // reason. Adding a code to the source means adding it here too.
+  const MUST_MASK_CODES = [
+    "invalid_credentials",
+    "email_not_confirmed",
+    "user_not_found",
+    "phone_not_confirmed",
+    "user_banned",
+    "user_sso_managed",
+  ];
+  const MUST_MASK_MESSAGES = [
+    "invalid login credentials",
+    "email not confirmed",
+    "invalid credentials",
+    "user not found",
+    "banned",
+    "single sign-on",
+    // GoTrue's real codeless text for an SSO-provisioned (therefore REGISTERED)
+    // address is "Only a SSO authentication method is allowed for this user" —
+    // it contains neither "single sign-on" nor "sso-managed", so the bare "sso"
+    // substring is load-bearing, not redundant. Asserted with the REAL sentence
+    // rather than the bare token so the test fails if that pattern is dropped.
+    "Only a SSO authentication method is allowed for this user",
+  ];
+
+  it("masks every enumeration-sensitive sign-in code on BOTH surfaces", async () => {
     const web = await import("@/lib/auth/login-errors");
-    for (const code of CREDENTIAL_CODES) {
-      // Both surfaces must treat the code as enumeration-sensitive. The message
-      // WORDING is allowed to differ per platform; the CLASSIFICATION is not.
-      expect(
-        web.loginErrorMessage({ code }),
-        `web module does not mask sign-in code "${code}" that mobile masks`,
-      ).toBe(web.LOGIN_ERROR_CREDENTIALS);
-      expect(signInErrorMessage({ code })).toBe(AUTH_ERROR_CREDENTIALS);
+    for (const code of MUST_MASK_CODES) {
+      expect(signInErrorMessage({ code }), `mobile stopped masking code "${code}"`).toBe(
+        AUTH_ERROR_CREDENTIALS,
+      );
+      expect(web.loginErrorMessage({ code }), `web stopped masking code "${code}"`).toBe(
+        web.LOGIN_ERROR_CREDENTIALS,
+      );
     }
   });
 
-  it("classifies the same codeless sign-in messages as the web module", async () => {
+  it("masks every enumeration-sensitive codeless sign-in message on BOTH surfaces", async () => {
     const web = await import("@/lib/auth/login-errors");
-    for (const pattern of CREDENTIAL_PATTERNS) {
-      expect(
-        web.loginErrorMessage({ message: pattern }),
-        `web module does not mask sign-in message "${pattern}" that mobile masks`,
-      ).toBe(web.LOGIN_ERROR_CREDENTIALS);
-      expect(signInErrorMessage({ message: pattern })).toBe(AUTH_ERROR_CREDENTIALS);
+    for (const message of MUST_MASK_MESSAGES) {
+      expect(signInErrorMessage({ message }), `mobile stopped masking "${message}"`).toBe(
+        AUTH_ERROR_CREDENTIALS,
+      );
+      expect(web.loginErrorMessage({ message }), `web stopped masking "${message}"`).toBe(
+        web.LOGIN_ERROR_CREDENTIALS,
+      );
     }
+  });
+
+  it("keeps the exported code/pattern sets exactly as wide as the hard-coded lists", () => {
+    // Catches the other direction: a code SILENTLY REMOVED from the source set
+    // (the mutation that survived the loop-based version), and equally a code
+    // added to the source without anyone extending the assertions above.
+    expect([...CREDENTIAL_CODES].sort()).toEqual([...MUST_MASK_CODES].sort());
+    expect([...CREDENTIAL_PATTERNS].sort()).toEqual(
+      ["invalid login credentials", "email not confirmed", "invalid credentials", "user not found", "banned", "single sign-on", "sso"].sort(),
+    );
   });
 
   it("agrees with the web module on what 'already registered' means", async () => {

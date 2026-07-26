@@ -29,7 +29,7 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | `/login` (logged in) | authed | redirects to `/dashboard` | ✅ |
 | `/account` (logged in) | authed | renders real screen; no boundary | ✅ |
 | `/billing/upgrade?tier=pro` | authed | real checkout entry renders; no boundary | ✅ |
-| `/projects/[id]/rooms/[id]/{focus,diagnosis,products,mockups,bundles,compare}` | authed | axe (WCAG 2 A/AA): zero critical/serious on each surface's chrome + **empty state**, against a seeded project+room; no boundary | ✅ |
+| `/projects/[id]/rooms/[id]/{diagnosis,products,mockups,bundles,compare}` | authed | axe (WCAG 2 A/AA): zero critical/serious on each surface's chrome + **empty state**, against a seeded project+room; no boundary. **`focus` is NOT covered — see tracked gaps** | ✅ |
 
 ## Tracked gaps (next coverage to add — listed honestly, not silently skipped)
 - **Full core pipeline E2E** (photo upload → area-analysis → diagnosis → product sourcing →
@@ -40,7 +40,15 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   UI). Needs Stripe test keys + a webhook stub in the test env; today only the upgrade entry
   screen is asserted.
 - **Save & share** (`/saved/[id]`, `/shared/[token]` happy path with a seeded design).
-- **Per-room design routes, POPULATED state.** The six surfaces are now scanned by axe against a
+- **`/projects/[id]/rooms/[id]/focus` — not scanned at all.** Deliberately excluded from the seeded
+  a11y loop: FocusPage's mount effect auto-POSTs to `/api/area-analysis` when the room has no
+  analysis, ungated on whether the room even has photos. Scanning it would make the `journeys` job
+  issue a real Gemini call (the job supplies a deliberately-invalid key and its own comment states
+  the journeys don't call the LLMs), and the 180s provider timeout dwarfs Playwright's 30s default,
+  so a slow failure would be a flaky red. Covering it needs a fixture that pre-seeds the analysis so
+  the mount effect no-ops. This is the largest single design surface in the app and it is currently
+  unscanned — do not read the row above as including it.
+- **Per-room design routes, POPULATED state.** The five surfaces above are now scanned by axe against a
   seeded project+room (`seedProjectAndRoom` in `journeys.spec.ts`), but a fresh room has no
   diagnosis, products or mockups — so what is covered is each surface's page chrome and its EMPTY
   state. Scanning a POPULATED diagnosis/mockups/compare additionally needs a diagnosis + sourcing

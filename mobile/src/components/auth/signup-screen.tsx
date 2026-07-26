@@ -85,9 +85,14 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
         // ENUMERATION-SAFE: an address that already has an account gets the
         // EXACT screen a brand-new signup gets. Rendering "User already
         // registered" here would confirm the address is taken — the same leak
-        // the web signup route masks (app/api/auth/signup/route.ts). The user
-        // is not stranded: the confirmation screen's button goes to sign-in,
-        // which is where an existing account needs to go anyway.
+        // the web signup route masks (app/api/auth/signup/route.ts, though by a
+        // different mechanism: web creates-or-noops then attempts sign-in).
+        //
+        // NOTE for whoever edits that screen next: its copy is deliberately
+        // conditional because NO email is sent on this path. Do not "improve" it
+        // into a flat "we sent you a link" — that claim is false here.
+        // The user is not stranded: its button goes to sign-in, which is where an
+        // existing account needs to go anyway.
         setSuccess(true);
       } else if (authError) {
         // Never render provider text — internal phrasing at best, an existence
@@ -114,11 +119,24 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
       <ThemedView style={styles.root}>
         <SafeAreaView style={[styles.safeArea, styles.centeredContent]}>
           <View style={styles.successSection}>
+            {/*
+              This screen is reached by TWO paths that must stay indistinguishable
+              (see handleSignUp): a genuinely new account awaiting confirmation,
+              and an address that ALREADY has an account. So the copy must be true
+              of both — and in the already-registered case NO email was sent, because
+              signUp returned an error and never attempted one. Asserting "we sent a
+              confirmation link" there would be a success message with no operation
+              behind it, which is precisely the side-effect-integrity failure this
+              repo treats as release-blocking. The conditional wording below claims
+              nothing that did not happen, while still telling both users exactly
+              what to do next.
+            */}
             <ThemedText type="title" style={styles.successTitle}>
-              Check your email
+              Almost there
             </ThemedText>
             <ThemedText type="default" style={[styles.successBody, { color: colors.textSecondary }]}>
-              We sent a confirmation link to {email.trim()}. Open it to activate your account, then sign in.
+              If {email.trim()} needs confirming, we&apos;ve emailed you a link — open it, then sign
+              in. If you already have an account with this address, just sign in.
             </ThemedText>
             <Pressable
               accessibilityRole="button"
