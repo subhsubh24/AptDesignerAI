@@ -15,6 +15,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  AUTH_ERROR_NETWORK,
+  isAlreadyRegisteredError,
+  signUpErrorMessage,
+} from '@/lib/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 // Apple 5.1.1(v) / Google Play require Terms & Privacy to be reachable in-app
@@ -76,17 +81,27 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
           );
         }),
       ]);
-      if (authError) {
-        setError(authError.message);
+      if (authError && isAlreadyRegisteredError(authError)) {
+        // ENUMERATION-SAFE: an address that already has an account lands on the
+        // exact same confirmation screen a brand-new signup does, so the two are
+        // indistinguishable to an attacker probing addresses. This mirrors the
+        // web signup route, which returns the identical { ok } response in both
+        // cases (app/api/auth/signup/route.ts). The real owner of the address
+        // still reaches their account via sign-in.
+        setSuccess(true);
+      } else if (authError) {
+        // Never render the provider's text — classify it. See lib/auth-errors.
+        setError(signUpErrorMessage(authError));
       } else if (data.session === null) {
         // Email confirmation required — show "check your email" screen.
         // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
         setSuccess(true);
       }
     } catch (err) {
-      // A thrown fetch/network error or the timeout above. Surface a recoverable
-      // message rather than leaving the button stuck on "Creating account…".
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // A thrown fetch/network error or the timeout above. Both are transport
+      // failures with no verdict, so they get the neutral network message —
+      // classified rather than echoed, for the same reason as above.
+      setError(err instanceof Error ? signUpErrorMessage(err) : AUTH_ERROR_NETWORK);
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);

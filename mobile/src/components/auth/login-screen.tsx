@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AUTH_ERROR_NETWORK, signInErrorMessage } from '@/lib/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 interface LoginScreenProps {
@@ -58,12 +59,16 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
         }),
       ]);
       if (authError) {
-        setError(authError.message);
+        // Never render the provider's text: GoTrue distinguishes "Email not
+        // confirmed" (account EXISTS) from "Invalid login credentials", which
+        // tells an attacker which addresses are registered. See lib/auth-errors.
+        setError(signInErrorMessage(authError));
       }
     } catch (err) {
-      // A thrown fetch/network error or the timeout above. Surface a recoverable
-      // message rather than leaving the button stuck on "Signing in…" forever.
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // A thrown fetch/network error or the timeout above. Both are transport
+      // failures with no verdict, so they get the neutral network message —
+      // classified rather than echoed, for the same reason as above.
+      setError(err instanceof Error ? signInErrorMessage(err) : AUTH_ERROR_NETWORK);
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
