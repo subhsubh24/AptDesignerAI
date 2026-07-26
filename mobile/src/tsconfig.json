@@ -1,0 +1,50 @@
+{
+  "//": [
+    "WHY THIS FILE EXISTS — do not delete it.",
+    "",
+    "Root vitest (__tests__/**) transforms every file it imports with oxc, and oxc",
+    "loads the NEAREST tsconfig.json walking up from the file. For anything under",
+    "mobile/src/** that used to be mobile/tsconfig.json, which starts with",
+    "\"extends\": \"expo/tsconfig.base\" — resolvable only when mobile/node_modules is",
+    "installed. CI's `verify` job runs `npm ci` at the REPOSITORY ROOT only, so",
+    "there a root test importing mobile source dies with:",
+    "",
+    "  [TSCONFIG_ERROR] Failed to load tsconfig for 'mobile/src/...': Tsconfig not found",
+    "",
+    "and it dies ONLY in CI — locally the same test passes for anyone who has run",
+    "`npm install` inside mobile/ at some point. That asymmetry burned three",
+    "separate pull requests (#697, #700, #701), each of which shipped a green local",
+    "gate and a red `verify`.",
+    "",
+    "This config sits between mobile/src and mobile/, resolves with no node_modules",
+    "at all, and mirrors the EFFECTIVE options the Expo app compiles with",
+    "(expo/tsconfig.base plus mobile/tsconfig.json's own overrides) so the transform",
+    "semantics are the same either way. The Expo app itself is unaffected:",
+    "`tsc -p mobile/tsconfig.json` and Metro both read the mobile ROOT config, which",
+    "still extends the Expo base.",
+    "",
+    "Keep in sync with mobile/tsconfig.json when that file's compilerOptions change.",
+    "__tests__/auth/mobile-auth-errors.test.ts is the live consumer — if this file",
+    "goes away, that suite fails in CI."
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+    "customConditions": ["react-native"],
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2020"],
+    "module": "preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "paths": {
+      "@/*": ["./*"],
+      "@/assets/*": ["../assets/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}
