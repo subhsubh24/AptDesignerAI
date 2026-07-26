@@ -607,7 +607,11 @@ Verify:
 3. Complete a test purchase in Stripe test mode → stripe_customers row appears in Supabase
 4. GET `/api/mobile/entitlements` (web user) → `{ tier: "apartment" }` for the buyer
 
-Note: `hasProEntitlementWeb()` is not yet wired to web save/generation routes — that enforcement step is a follow-up PR.
+Note: `hasProEntitlementWeb()` gates the web saved-design limit, and the Pro-only
+generation widening is wired via `hasProSubscriptionWeb()` (Run 114) — that one
+requires tier `pro`/`pro_annual` specifically, since `hasProEntitlementWeb()`
+also returns true for this one-time Apartment purchase. The per-user DAILY
+paid-call ceiling is still tier-blind; see issue #699.
 
 ### RevenueCat keys — mobile + server (added 2026-06-24, PRs #42 + #43 — set before EAS build and before production Vercel deploy)
 
