@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { UpgradeCheckoutButton } from "./upgrade-checkout-button";
 import { UpgradeViewTracker } from "./upgrade-tracker";
-import { isAnnualBillingEnabled } from "@/lib/billing/stripe";
+import { isAnnualBillingEnabled, isRecurringTier } from "@/lib/billing/stripe";
 
 export const metadata: Metadata = {
   title: "Upgrade — AptDesigner",
@@ -126,6 +127,33 @@ export default async function UpgradePage({ searchParams }: Props) {
 
           <p className="text-xs text-muted-foreground text-center mt-4">
             Secure checkout via Stripe. You&apos;ll be redirected to complete payment.
+          </p>
+
+          {/*
+            Apple 3.1.2 wants the EULA + privacy links AT the point of purchase,
+            not merely somewhere on the page (the footer links both already).
+            Google Play's subscription policy is equivalent.
+
+            Colour must stay the FULL `text-muted-foreground` token, never an
+            opacity-reduced variant: at text-xs, `/70` resolves to #9a948d on the
+            white card, which is 3.0:1 against WCAG 2 AA's 4.5:1 requirement. The
+            full token is 5.6:1. Legally required purchase terms should not be
+            the faintest text on a checkout page.
+          */}
+          <p className="text-xs text-muted-foreground text-center mt-3 leading-relaxed">
+            {/* Reads from the same predicate that picks the Stripe charge mode,
+                so the disclosure cannot drift from what the customer is billed. */}
+            {isRecurringTier(tier)
+              ? "By subscribing you agree to our "
+              : "By purchasing you agree to our "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+              Privacy Policy
+            </Link>
+            .
           </p>
         </div>
       </main>

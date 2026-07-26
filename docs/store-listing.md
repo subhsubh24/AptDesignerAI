@@ -76,6 +76,8 @@ Explore for free — analyze one room end-to-end at no cost, no credit card requ
 
 Pricing details shown at checkout. 30-day money-back guarantee on paid plans.
 
+Terms of Use (EULA): aptdesignerai.com/terms — Privacy Policy: aptdesignerai.com/privacy
+
 PRIVACY
 
 Room photos are processed by AI to generate your design plan. Photos are stored in your account and deleted when you delete your account — which you can do anytime in the app under Settings. We do not sell your data. See our full privacy policy at aptdesignerai.com/privacy.
@@ -116,6 +118,17 @@ https://aptdesignerai.com
 ### Privacy Policy URL
 ```
 https://aptdesignerai.com/privacy
+```
+
+### Terms of Use (EULA) URL — REQUIRED for the auto-renewing Pro subscription
+Apple's guideline 3.1.2 requires a **functional** Terms of Use (EULA) link in the App
+Store metadata for any auto-renewable subscription, alongside the privacy policy —
+a listing that carries only the privacy link is a known 3.1.2 rejection. Paste this
+into the App Store Connect app-information **License Agreement / EULA URL** field
+(leave the standard Apple EULA selected only if you are NOT supplying your own).
+Served by `app/terms/page.tsx`.
+```
+https://aptdesignerai.com/terms
 ```
 
 ---
@@ -159,6 +172,8 @@ Apartment ($29, one-time): every room in your apartment — unlimited analyses, 
 Pro ($49/month): unlimited apartments and projects for designers and property managers. Auto-renews monthly until you cancel; manage or cancel anytime in Google Play (Play Store → Payments & subscriptions).
 
 Pricing details shown at checkout. 30-day money-back guarantee.
+
+Terms of Use: aptdesignerai.com/terms — Privacy Policy: aptdesignerai.com/privacy
 
 PRIVACY
 

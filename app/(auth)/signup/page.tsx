@@ -214,13 +214,13 @@ export default function SignupPage() {
                   Sign in
                 </Link>
               </p>
-              <p className="text-xs text-muted-foreground/70 text-center mt-4 leading-relaxed">
+              <p className="text-xs text-muted-foreground text-center mt-4 leading-relaxed">
                 By creating an account, you agree to our{" "}
-                <Link href="/terms" className="underline underline-offset-2 hover:text-muted-foreground">
+                <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
                   Terms of Service
                 </Link>{" "}
                 and{" "}
-                <Link href="/privacy" className="underline underline-offset-2 hover:text-muted-foreground">
+                <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
                   Privacy Policy
                 </Link>
                 .

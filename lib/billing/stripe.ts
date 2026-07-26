@@ -47,6 +47,24 @@ export function isAnnualBillingEnabled(): boolean {
   return process.env.ANNUAL_BILLING_ENABLED === "true";
 }
 
+/**
+ * Does buying this tier create a recurring charge?
+ *
+ * `apartment` is a one-time $29 charge; `pro` and `pro_annual` auto-renew. This
+ * is the single source of truth for that distinction: it decides the Stripe
+ * checkout `mode` AND the wording of the legal disclosure at the purchase
+ * action ("By subscribing" vs "By purchasing", app/billing/upgrade/page.tsx).
+ *
+ * Those two MUST agree. Deriving the copy from a separate signal — the presence
+ * of a `renewalNote` in the page's own copy table, as it first did — lets a
+ * future edit to that table tell a one-time purchaser they are subscribing, on
+ * a live checkout page. Apple 3.1.2 and consumer law both care that the
+ * disclosure matches the charge, so the charge is what it reads from.
+ */
+export function isRecurringTier(tier: BillingTier): boolean {
+  return tier !== "apartment";
+}
+
 let _stripe: Stripe | null = null;
 
 function getStripe(): Stripe {
@@ -104,8 +122,9 @@ export async function createCheckoutSession(
     );
   }
 
-  const mode: Stripe.Checkout.SessionCreateParams.Mode =
-    tier === "apartment" ? "payment" : "subscription";
+  const mode: Stripe.Checkout.SessionCreateParams.Mode = isRecurringTier(tier)
+    ? "subscription"
+    : "payment";
 
   const session = await stripe.checkout.sessions.create({
     mode,
