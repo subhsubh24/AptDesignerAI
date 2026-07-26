@@ -173,38 +173,122 @@ test.describe("authenticated journeys", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
+  /**
+   * Run the axe gate on the currently-loaded page. Shared by both authed a11y
+   * loops so the tag set, the critical/serious filter and the CI diagnostic
+   * output can only ever be defined once.
+   */
+  async function expectNoA11yViolations(page: Page, label: string): Promise<void> {
+    await expectNoErrorBoundary(page);
+    await page.waitForLoadState("networkidle");
+
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    const criticalOrSerious = results.violations.filter(
+      (v) => v.impact === "critical" || v.impact === "serious",
+    );
+    if (criticalOrSerious.length > 0) {
+      const summary = criticalOrSerious
+        .map(
+          (v) =>
+            `[${v.impact}] ${v.id}: ${v.description}\n  ` +
+            v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
+        )
+        .join("\n\n");
+      console.error(`Authed accessibility violations on ${label}:\n${summary}`);
+    }
+    expect(criticalOrSerious, `axe violations on ${label}`).toHaveLength(0);
+  }
+
+  /**
+   * Create a project + room through the app's OWN API from inside the signed-in
+   * page, and return their ids.
+   *
+   * It has to go through the app rather than an admin/Postgres seed for the same
+   * reason the money-path test documents: lib/supabase/server.ts proxies data ops
+   * to the in-memory store and uses real Supabase only for auth, so a row written
+   * out-of-band is invisible to the route that reads it.
+   *
+   * Throws with the failing stage + body so a CI failure names what broke instead
+   * of surfacing later as an unexplained 404 on the route under test.
+   */
+  async function seedProjectAndRoom(
+    page: Page,
+    projectName: string,
+  ): Promise<{ projectId: string; roomId: string }> {
+    const result = await page.evaluate(async (name) => {
+      async function postJson(path: string, payload: unknown) {
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        return { status: r.status, text: await r.text() };
+      }
+      const proj = await postJson("/api/projects", { name });
+      if (proj.status !== 201) return { stage: "projects", ...proj };
+      const projectId = JSON.parse(proj.text).id as string;
+      const room = await postJson("/api/rooms", {
+        project_id: projectId,
+        name: "E2E Living Room",
+        room_type: "living_room",
+      });
+      if (room.status !== 201) return { stage: "rooms", ...room };
+      return { stage: "ok", projectId, roomId: JSON.parse(room.text).id as string };
+    }, projectName);
+
+    if (result.stage !== "ok") {
+      throw new Error(
+        `seedProjectAndRoom failed at ${result.stage}: ` +
+          `${"status" in result ? result.status : "?"} ${"text" in result ? result.text : ""}`,
+      );
+    }
+    return { projectId: result.projectId as string, roomId: result.roomId as string };
+  }
+
   // Authed a11y GATE (design_taste): the public-page axe scan (e2e/a11y.spec.ts)
-  // never reaches the signed-in, design-dense surfaces. Scan the authed routes a
-  // fresh user can reach WITHOUT deep seeding — dashboard (the primary home),
-  // account, the free-tier /saved gate, and the paywall — and fail on any
-  // critical/serious WCAG 2 A/AA violation. reducedMotion avoids confetti/
-  // animation churn so the scan is deterministic.
+  // never reaches the signed-in surfaces. Scan the authed routes a fresh user can
+  // reach WITHOUT seeding — dashboard (the primary home), account, the free-tier
+  // /saved gate, and the paywall — and fail on any critical/serious WCAG 2 A/AA
+  // violation. reducedMotion avoids confetti/animation churn so the scan is
+  // deterministic.
   const AUTHED_A11Y_ROUTES = ["/dashboard", "/account", "/saved", "/billing/upgrade?tier=pro"];
   for (const route of AUTHED_A11Y_ROUTES) {
     test(`authed a11y: ${route} has no critical/serious axe violations`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await signIn(page);
       await page.goto(route);
-      await expectNoErrorBoundary(page);
-      await page.waitForLoadState("networkidle");
+      await expectNoA11yViolations(page, route);
+    });
+  }
 
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-        .analyze();
-      const criticalOrSerious = results.violations.filter(
-        (v) => v.impact === "critical" || v.impact === "serious",
-      );
-      if (criticalOrSerious.length > 0) {
-        const summary = criticalOrSerious
-          .map(
-            (v) =>
-              `[${v.impact}] ${v.id}: ${v.description}\n  ` +
-              v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
-          )
-          .join("\n\n");
-        console.error(`Authed accessibility violations on ${route}:\n${summary}`);
-      }
-      expect(criticalOrSerious, `axe violations on ${route}`).toHaveLength(0);
+  // The four routes above are all LOW-density chrome. The design-dense surfaces —
+  // where the layered layouts, image grids, tab switchers and comparison tables
+  // live, and where contrast/label failures actually concentrate — sit behind a
+  // project+room, so nothing was scanning them.
+  //
+  // SCOPE, stated honestly: a freshly-seeded room has no diagnosis, products or
+  // mockups yet, so these scans cover each surface's page chrome and its EMPTY
+  // state, not a fully-populated one. That is a real narrowing of the gap (the
+  // empty state is a shipped state a user sees, and the persistent nav/header/tab
+  // furniture is identical in both), NOT a full closure — scanning the populated
+  // state additionally needs a diagnosis+sourcing fixture, which stays on the
+  // tracked-gaps list in e2e/ROUTE_INVENTORY.md.
+  const SEEDED_A11Y_SURFACES = ["focus", "diagnosis", "products", "mockups", "bundles", "compare"];
+  for (const surface of SEEDED_A11Y_SURFACES) {
+    test(`authed a11y: seeded room ${surface} has no critical/serious axe violations`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await signIn(page);
+      const { projectId, roomId } = await seedProjectAndRoom(page, `E2E A11y ${surface}`);
+      const route = `/projects/${projectId}/rooms/${roomId}/${surface}`;
+      await page.goto(route);
+      // Label by SURFACE, not the full path: the ids are per-run, and a stable
+      // label keeps a CI failure greppable across runs.
+      await expectNoA11yViolations(page, `seeded room /${surface}`);
     });
   }
 

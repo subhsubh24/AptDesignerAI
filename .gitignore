@@ -42,3 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 supabase/.temp/
+
+# Playwright run artifacts (traces/screenshots on failure) — never committed.
+test-results/
+playwright-report/

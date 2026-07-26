@@ -29,6 +29,7 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | `/login` (logged in) | authed | redirects to `/dashboard` | ✅ |
 | `/account` (logged in) | authed | renders real screen; no boundary | ✅ |
 | `/billing/upgrade?tier=pro` | authed | real checkout entry renders; no boundary | ✅ |
+| `/projects/[id]/rooms/[id]/{focus,diagnosis,products,mockups,bundles,compare}` | authed | axe (WCAG 2 A/AA): zero critical/serious on each surface's chrome + **empty state**, against a seeded project+room; no boundary | ✅ |
 
 ## Tracked gaps (next coverage to add — listed honestly, not silently skipped)
 - **Full core pipeline E2E** (photo upload → area-analysis → diagnosis → product sourcing →
@@ -39,8 +40,14 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   UI). Needs Stripe test keys + a webhook stub in the test env; today only the upgrade entry
   screen is asserted.
 - **Save & share** (`/saved/[id]`, `/shared/[token]` happy path with a seeded design).
-- **Per-room design routes** (`/projects/[id]/rooms/[id]/{focus,diagnosis,products,mockups,bundles,compare}`)
-  once a seeded project fixture exists.
+- **Per-room design routes, POPULATED state.** The six surfaces are now scanned by axe against a
+  seeded project+room (`seedProjectAndRoom` in `journeys.spec.ts`), but a fresh room has no
+  diagnosis, products or mockups — so what is covered is each surface's page chrome and its EMPTY
+  state. Scanning a POPULATED diagnosis/mockups/compare additionally needs a diagnosis + sourcing
+  fixture (the money-path cassette seeds a mockup only). Until that exists, the dense populated
+  layouts are still unscanned; do not read the ✅ above as covering them.
+- **Outcome assertions on the per-room surfaces.** The seeded scans assert a11y + no error
+  boundary, not that each surface renders its intended content.
 
 ## Human-only (cannot run headlessly — verify manually, never assume working)
 - Real **payment capture** on a live card (Stripe live mode).
