@@ -27,6 +27,8 @@ import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { generationLimitFor } from "@/lib/entitlements/generation-limits";
+import { hasProSubscriptionWeb } from "@/lib/entitlements/web";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { runWithMarginSession, withMarginOperation, getMarginContext } from "@/lib/observability/margin-context";
@@ -101,7 +103,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const limit = checkRateLimit(`area-analysis:${user.id}`, RATE_LIMITS.areaAnalysis);
+  // Pro subscribers get the wider generation allowance the pricing page sells
+  // ("Higher AI generation limits"). Gated on the PRO SUBSCRIPTION specifically,
+  // not on "has paid" — the one-time Apartment tier does not list this benefit.
+  // One indexed row read in front of a multi-second LLM call; free users keep
+  // exactly the limit they had.
+  const isPro = await hasProSubscriptionWeb(user.id);
+  const limit = checkRateLimit(`area-analysis:${user.id}`, generationLimitFor(RATE_LIMITS.areaAnalysis, isPro));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many area-analysis requests. Please wait a few minutes." },

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { generationLimitFor } from "@/lib/entitlements/generation-limits";
+import { hasProSubscriptionWeb } from "@/lib/entitlements/web";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
@@ -63,7 +65,13 @@ export async function POST(
   // Extraction is a paid vision/LLM call — gate it behind the per-user rate
   // limit + daily spend breaker so a single authed user can't drive unbounded
   // model spend (matching the other paid LLM endpoints).
-  const limit = checkRateLimit(`floor-plan:${user.id}`, RATE_LIMITS.floorPlanExtract);
+  // Pro subscribers get the wider generation allowance the pricing page sells
+  // ("Higher AI generation limits"). Gated on the PRO SUBSCRIPTION specifically,
+  // not on "has paid" — the one-time Apartment tier does not list this benefit.
+  // One indexed row read in front of a multi-second LLM call; free users keep
+  // exactly the limit they had.
+  const isPro = await hasProSubscriptionWeb(user.id);
+  const limit = checkRateLimit(`floor-plan:${user.id}`, generationLimitFor(RATE_LIMITS.floorPlanExtract, isPro));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many floor-plan requests. Please wait a moment." },

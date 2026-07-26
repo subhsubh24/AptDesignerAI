@@ -16,6 +16,8 @@ import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { generationLimitFor } from "@/lib/entitlements/generation-limits";
+import { hasProSubscriptionWeb } from "@/lib/entitlements/web";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
@@ -159,7 +161,13 @@ export async function POST(request: Request) {
   // higher allowance than full room-scene mockups.
   const rlConfig = recommendation_mockup ? RATE_LIMITS.recommendationMockup : RATE_LIMITS.mockup;
   const rlKey = recommendation_mockup ? `rec-mockup:${user.id}` : `mockup:${user.id}`;
-  const limit = checkRateLimit(rlKey, rlConfig);
+  // Pro subscribers get the wider generation allowance the pricing page sells
+  // ("Higher AI generation limits"). Gated on the PRO SUBSCRIPTION specifically,
+  // not on "has paid" — the one-time Apartment tier does not list this benefit.
+  // One indexed row read in front of a multi-second LLM call; free users keep
+  // exactly the limit they had.
+  const isPro = await hasProSubscriptionWeb(user.id);
+  const limit = checkRateLimit(rlKey, generationLimitFor(rlConfig, isPro));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many mockup requests. Please wait a moment." },

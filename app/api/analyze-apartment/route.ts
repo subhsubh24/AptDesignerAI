@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { generationLimitFor } from "@/lib/entitlements/generation-limits";
+import { hasProSubscriptionWeb } from "@/lib/entitlements/web";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
@@ -53,7 +55,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const limit = checkRateLimit(`analyze-apartment:${user.id}`, RATE_LIMITS.analyzeApartment);
+  // Pro subscribers get the wider generation allowance the pricing page sells
+  // ("Higher AI generation limits"). Gated on the PRO SUBSCRIPTION specifically,
+  // not on "has paid" — the one-time Apartment tier does not list this benefit.
+  // One indexed row read in front of a multi-second LLM call; free users keep
+  // exactly the limit they had.
+  const isPro = await hasProSubscriptionWeb(user.id);
+  const limit = checkRateLimit(`analyze-apartment:${user.id}`, generationLimitFor(RATE_LIMITS.analyzeApartment, isPro));
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many analysis requests. Please wait before retrying." },

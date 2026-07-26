@@ -82,6 +82,38 @@ export async function hasProEntitlementWeb(userId: string): Promise<boolean> {
 }
 
 /**
+ * True only for an ACTIVE PRO SUBSCRIPTION (monthly or annual).
+ *
+ * Deliberately distinct from `hasProEntitlementWeb`, which — despite its name —
+ * answers "has this user paid for ANYTHING": it returns true for the $29
+ * one-time Apartment tier as well. That is correct for a gate any purchase
+ * should open (the saved-design limit), and WRONG for a benefit sold only under
+ * Pro. Using the wrong one hands Apartment buyers a Pro differentiator for free
+ * and erases the difference between the two tiers.
+ *
+ * Failure semantics match hasProEntitlementWeb exactly: fail CLOSED on a
+ * production misconfiguration (a missing key must not grant Pro to everyone),
+ * fail OPEN on a transient query error (a paying subscriber is never blocked by
+ * an outage).
+ */
+export async function hasProSubscriptionWeb(userId: string): Promise<boolean> {
+  if (!isEntitlementConfigured()) {
+    const isProduction = process.env.NODE_ENV === "production";
+    console.error(
+      "[entitlements/web] Supabase credentials not configured — " +
+      (isProduction
+        ? "denying Pro subscription (fail-closed in production)"
+        : "granting access (fail-open in development)") +
+      ". Set SUPABASE_SERVICE_ROLE_KEY in Vercel env vars (see PENDING_OPS.md).",
+    );
+    return !isProduction;
+  }
+  const result = await getWebBillingStatus(userId);
+  if (result === null) return true; // fail-open on a transient query error (outage)
+  return result.hasPaid && (result.tier === "pro" || result.tier === "pro_annual");
+}
+
+/**
  * Returns full billing status for the user, or null when it cannot be
  * determined — EITHER credentials are absent (misconfiguration) OR the query
  * errored (outage). Callers decide how to treat null: use isEntitlementConfigured()

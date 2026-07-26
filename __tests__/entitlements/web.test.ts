@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getWebBillingStatus, hasProEntitlementWeb } from "@/lib/entitlements/web";
+import {
+  getWebBillingStatus,
+  hasProEntitlementWeb,
+  hasProSubscriptionWeb,
+} from "@/lib/entitlements/web";
 
 vi.mock("@/lib/supabase/admin", () => ({
   getAdminClient: vi.fn(),
@@ -211,5 +215,67 @@ describe("hasProEntitlementWeb", () => {
     const chain = makeSupabaseChain(null);
     mockGetAdminClient.mockReturnValue(chain as never);
     expect(await hasProEntitlementWeb("user-1")).toBe(false);
+  });
+});
+
+// ── hasProSubscriptionWeb ─────────────────────────────────────────────────────
+//
+// The predicate that decides who gets the advertised Pro "higher AI generation
+// limits". It exists BECAUSE hasProEntitlementWeb is the wrong tool for the job:
+// that one answers "has this user paid for anything" and returns true for the
+// $29 one-time Apartment tier, which is NOT sold that benefit. The apartment
+// case below is the whole reason this function exists — if it ever returns true,
+// the two paid tiers have silently collapsed into one.
+
+describe("hasProSubscriptionWeb", () => {
+  it("returns FALSE for an active apartment buyer — the tier that must not get it", async () => {
+    const chain = makeSupabaseChain({ tier: "apartment", status: "active", current_period_end: null });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    expect(await hasProSubscriptionWeb("user-1")).toBe(false);
+    // ...while the generic paid check still says true for the SAME row. That
+    // divergence is the point of having two predicates.
+    mockGetAdminClient.mockReturnValue(
+      makeSupabaseChain({ tier: "apartment", status: "active", current_period_end: null }) as never,
+    );
+    expect(await hasProEntitlementWeb("user-1")).toBe(true);
+  });
+
+  it("returns true for an active pro subscriber", async () => {
+    const chain = makeSupabaseChain({ tier: "pro", status: "active", current_period_end: null });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    expect(await hasProSubscriptionWeb("user-1")).toBe(true);
+  });
+
+  it("returns true for an active pro_annual subscriber", async () => {
+    const chain = makeSupabaseChain({ tier: "pro_annual", status: "active", current_period_end: null });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    expect(await hasProSubscriptionWeb("user-1")).toBe(true);
+  });
+
+  it("returns false for a cancelled pro subscriber", async () => {
+    const chain = makeSupabaseChain({ tier: "pro", status: "cancelled", current_period_end: null });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    expect(await hasProSubscriptionWeb("user-1")).toBe(false);
+  });
+
+  it("returns false for a user with no stripe record", async () => {
+    mockGetAdminClient.mockReturnValue(makeSupabaseChain(null) as never);
+    expect(await hasProSubscriptionWeb("user-1")).toBe(false);
+  });
+
+  it("fails CLOSED in production when credentials are missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    mockGetAdminClient.mockReturnValue(null as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await hasProSubscriptionWeb("user-1")).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("production"));
+  });
+
+  it("fails OPEN on a transient query error so an outage never blocks a subscriber", async () => {
+    const chain = makeSupabaseChain(null, { message: "connection reset" });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await hasProSubscriptionWeb("user-1")).toBe(true);
+    consoleSpy.mockRestore();
   });
 });

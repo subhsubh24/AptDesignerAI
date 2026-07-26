@@ -7,6 +7,8 @@ import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+import { generationLimitFor } from "@/lib/entitlements/generation-limits";
+import { hasProSubscriptionWeb } from "@/lib/entitlements/web";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { logServerError } from "@/lib/utils/api-error";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
@@ -55,7 +57,13 @@ export async function POST(request: Request) {
   }
 
   // Rate limit
-  const limit = checkRateLimit(`diagnosis:${user.id}`, RATE_LIMITS.diagnosis);
+  // Pro subscribers get the wider generation allowance the pricing page sells
+  // ("Higher AI generation limits"). Gated on the PRO SUBSCRIPTION specifically,
+  // not on "has paid" — the one-time Apartment tier does not list this benefit.
+  // One indexed row read in front of a multi-second LLM call; free users keep
+  // exactly the limit they had.
+  const isPro = await hasProSubscriptionWeb(user.id);
+  const limit = checkRateLimit(`diagnosis:${user.id}`, generationLimitFor(RATE_LIMITS.diagnosis, isPro));
   if (!limit.allowed) {
     return new Response(
       JSON.stringify({ error: "Too many diagnosis requests. Please wait a moment." }),
