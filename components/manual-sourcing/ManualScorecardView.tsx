@@ -240,7 +240,7 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
                         {value.toFixed(1)}
                       </div>
                       <div className="text-xs text-muted-foreground">{dim.label}</div>
-                      {dim.weight && <div className="text-[10px] text-muted-foreground/60">{dim.weight}</div>}
+                      {dim.weight && <div className="text-[10px] text-muted-foreground">{dim.weight}</div>}
                     </div>
                   );
                 })}
@@ -468,7 +468,7 @@ function ProductScorecard({
                     <Icon className="h-3 w-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">{dim.label}</span>
                     {dim.weight && (
-                      <span className="text-[10px] text-muted-foreground/60 ml-auto">{dim.weight}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">{dim.weight}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

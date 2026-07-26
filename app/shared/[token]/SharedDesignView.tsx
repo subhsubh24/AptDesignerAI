@@ -120,7 +120,7 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
                     <p className="text-sm font-semibold">{item.search_title || item.category}</p>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.description}</p>
                     {item.specs && (
-                      <p className="text-[11px] text-muted-foreground/60 mt-1 font-mono">{item.specs}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1 font-mono">{item.specs}</p>
                     )}
                   </div>
                 </StaggerItem>

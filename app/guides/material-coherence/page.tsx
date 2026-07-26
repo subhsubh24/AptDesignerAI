@@ -36,7 +36,7 @@ export default function MaterialCoherencePage() {
             <div className="flex flex-wrap gap-2 mb-4">
               <Badge variant="warm">Materials</Badge>
               <Badge variant="secondary">Design Principles</Badge>
-              <span className="text-xs text-muted-foreground/70 self-center">5 min read</span>
+              <span className="text-xs text-muted-foreground self-center">5 min read</span>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
               Material Coherence: Why Oak and Brass Work (and Chrome and Pine Don&rsquo;t)

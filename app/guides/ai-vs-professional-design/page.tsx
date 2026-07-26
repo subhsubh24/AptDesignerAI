@@ -36,7 +36,7 @@ export default function AIVsProfessionalPage() {
             <div className="flex flex-wrap gap-2 mb-4">
               <Badge variant="warm">AI</Badge>
               <Badge variant="secondary">Design Process</Badge>
-              <span className="text-xs text-muted-foreground/70 self-center">4 min read</span>
+              <span className="text-xs text-muted-foreground self-center">4 min read</span>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
               AI Interior Design: When It Works and When You Still Need a Pro

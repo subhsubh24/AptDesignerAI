@@ -849,7 +849,7 @@ export default function DashboardPage() {
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
                 <FileImage className="h-4 w-4" />
                 Do you have a floor plan?
-                <span className="text-xs font-normal text-muted-foreground/60 normal-case tracking-normal ml-1">— would help with design</span>
+                <span className="text-xs font-normal text-muted-foreground normal-case tracking-normal ml-1">— would help with design</span>
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
                 Drop in a floor plan image or PDF and we&apos;ll pull room dimensions, wall features, and layout — so every piece we pick fits exactly where it belongs.
@@ -1150,7 +1150,7 @@ function StepIndicator({ done, active, label }: { done?: boolean; active?: boole
       "flex items-center gap-3 py-1",
       done && "text-emerald-600 dark:text-emerald-400",
       active && "text-accent-warm font-medium",
-      !done && !active && "text-muted-foreground/60"
+      !done && !active && "text-muted-foreground"
     )}>
       {done ? (
         <CheckCircle2 className="h-4.5 w-4.5" />

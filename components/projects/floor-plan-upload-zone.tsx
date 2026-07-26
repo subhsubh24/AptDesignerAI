@@ -250,7 +250,7 @@ export function FloorPlanUploadZone({
             <p className="text-sm font-medium text-muted-foreground">
               {state === "uploading" ? "Uploading..." : "Extracting room data..."}
             </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">This may take 10–20 seconds</p>
+            <p className="text-xs text-muted-foreground mt-1">This may take 10–20 seconds</p>
           </>
         ) : preview ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -261,7 +261,7 @@ export function FloorPlanUploadZone({
             <p className="text-sm font-medium text-muted-foreground">
               {isDragActive ? "Drop floor plan here" : "Drag & drop your floor plan"}
             </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">PNG, JPG, or PDF · or click to browse</p>
+            <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or PDF · or click to browse</p>
           </>
         )}
       </div>

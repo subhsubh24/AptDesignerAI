@@ -350,7 +350,7 @@ export function PlaceAutocomplete({
               </div>
             </li>
           ))}
-          <li className="px-3 py-1.5 text-[10px] text-muted-foreground/50 text-right">
+          <li className="px-3 py-1.5 text-[10px] text-muted-foreground text-right">
             Powered by Google
           </li>
         </ul>

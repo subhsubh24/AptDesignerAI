@@ -192,7 +192,7 @@ export default function MockupsPage() {
                 <div className="text-sm font-medium text-accent-warm">
                   {GENERATION_ROTATION_LABELS[rotationIndex]}
                 </div>
-                <div className="text-xs text-muted-foreground/70">
+                <div className="text-xs text-muted-foreground">
                   Image generation usually takes 30–60 seconds.
                 </div>
               </div>

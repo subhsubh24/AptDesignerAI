@@ -157,7 +157,7 @@ export default function LandingPage() {
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-secondary to-accent group-hover:from-accent-warm/10 group-hover:to-accent-warm/5 transition-colors duration-300">
                       <feature.icon className="h-6 w-6 text-foreground group-hover:text-accent-warm transition-colors duration-300" />
                     </div>
-                    <span className="text-xs font-bold text-muted-foreground/30 tabular-nums">{feature.num}</span>
+                    <span className="text-xs font-bold text-muted-foreground tabular-nums">{feature.num}</span>
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm mb-1.5">{feature.title}</h3>
@@ -278,7 +278,7 @@ export default function LandingPage() {
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center space-y-2">
                       <Camera className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-                      <p className="text-sm text-muted-foreground/50 font-medium">Your room today</p>
+                      <p className="text-sm text-muted-foreground font-medium">Your room today</p>
                     </div>
                   </div>
                   <div className="absolute top-4 left-4">

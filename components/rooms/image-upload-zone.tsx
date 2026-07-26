@@ -152,7 +152,7 @@ export function ImageUploadZone({
           <p className="text-sm font-medium text-muted-foreground">
             {isDragActive ? "Drop your photo here" : "Drag & drop a photo"}
           </p>
-          <p className="text-xs text-muted-foreground/70 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             or click to browse · HEIC, JPG, PNG, WEBP
           </p>
         </>

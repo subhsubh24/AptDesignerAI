@@ -36,7 +36,7 @@ export default function ColourPaletteGuidePage() {
             <div className="flex flex-wrap gap-2 mb-4">
               <Badge variant="warm">Colour</Badge>
               <Badge variant="secondary">Design Basics</Badge>
-              <span className="text-xs text-muted-foreground/70 self-center">5 min read</span>
+              <span className="text-xs text-muted-foreground self-center">5 min read</span>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
               How to Choose a Colour Palette for Your Room
