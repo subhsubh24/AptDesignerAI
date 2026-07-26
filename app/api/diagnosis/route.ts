@@ -18,7 +18,7 @@ import { pickLatestDiagnosis } from "@/lib/diagnosis/latest-diagnosis";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
 import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
 import { withTrace } from "@/lib/observability/tracing";
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: { room_id?: string };

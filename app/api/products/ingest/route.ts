@@ -5,7 +5,7 @@ import { extractFromUrl, extractFromImage } from "@/lib/agents/product-extractor
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { validateExternalUrl } from "@/lib/utils/url-validator";
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   // Extraction is a paid LLM call — gate it behind the daily spend breaker too
   // so a single authed user can't drive unbounded model spend (matching the
   // other paid LLM endpoints).
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

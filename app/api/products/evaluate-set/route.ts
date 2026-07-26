@@ -8,7 +8,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { logServerError } from "@/lib/utils/api-error";
 import { validateExternalUrl } from "@/lib/utils/url-validator";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { CandidateProduct } from "@/lib/types/database";
 
 // This endpoint fans out many LLM calls per request (extract + deep-score per
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: unknown;

@@ -16,15 +16,35 @@
  */
 
 import { NextResponse } from "next/server";
+import { getWebBillingStatus } from "@/lib/entitlements/web";
 
 const DEFAULT_DAILY_LIMIT = 60;
+const DEFAULT_PRO_DAILY_LIMIT = 180;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
-function dailyLimit(): number {
-  const raw = process.env.DAILY_PAID_CALL_LIMIT;
-  if (!raw) return DEFAULT_DAILY_LIMIT;
+function envLimit(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_DAILY_LIMIT;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+function dailyLimit(): number {
+  return envLimit("DAILY_PAID_CALL_LIMIT", DEFAULT_DAILY_LIMIT);
+}
+
+/**
+ * The Pro ceiling. Pro is sold with "Higher AI generation limits" (the Pro tier
+ * on /pricing and /billing/upgrade), so the ceiling has to actually differ —
+ * otherwise the subscription advertises a benefit the server does not grant,
+ * which is both untrue and an App Store 3.1.2 review risk.
+ *
+ * Never let the Pro ceiling resolve BELOW the free one: a mis-set
+ * DAILY_PAID_CALL_LIMIT_PRO (or a raised free limit) must not leave subscribers
+ * worse off than free users.
+ */
+function proDailyLimit(): number {
+  return Math.max(dailyLimit(), envLimit("DAILY_PAID_CALL_LIMIT_PRO", DEFAULT_PRO_DAILY_LIMIT));
 }
 
 interface DailyEntry {
@@ -69,9 +89,13 @@ export type BlockedSpendResult = Extract<SpendCheckResult, { allowed: false }>;
  *
  * `now` is injectable for deterministic tests; defaults to the wall clock.
  */
-export function checkDailySpend(userId: string, now: number = Date.now()): SpendCheckResult {
+export function checkDailySpend(
+  userId: string,
+  now: number = Date.now(),
+  limitOverride?: number,
+): SpendCheckResult {
   maybeCleanup(now);
-  const limit = dailyLimit();
+  const limit = limitOverride ?? dailyLimit();
   const entry = store.get(userId);
 
   if (!entry || now >= entry.resetAt) {
@@ -85,6 +109,51 @@ export function checkDailySpend(userId: string, now: number = Date.now()): Spend
 
   entry.count++;
   return { allowed: true, used: entry.count, limit, retryAfterMs: 0 };
+}
+
+/**
+ * True only for a subscriber on an ACTIVE Pro plan (monthly or annual).
+ *
+ * `hasPaid` alone is not enough: the one-time Apartment purchase also sets it,
+ * and "Higher AI generation limits" is sold on the Pro tier only.
+ *
+ * FAILS TO THE FREE CEILING whenever the tier cannot be determined — a missing
+ * service-role key, a DB outage, a user with no billing row. This is the
+ * DELIBERATE OPPOSITE of hasProEntitlementWeb(), which fails OPEN so an outage
+ * never locks a paying subscriber out of a feature they bought. The two differ
+ * because the failure costs differ: wrongly denying a *feature* is a broken
+ * product, but wrongly raising a *spend ceiling* hands an abusive account 3x the
+ * paid-API budget — and the downside here is mild and self-correcting (a Pro
+ * user briefly capped at the free ceiling during an outage, on a limit most
+ * users never approach). An abuse ceiling must never be raised by an error.
+ */
+async function hasActiveProPlan(userId: string): Promise<boolean> {
+  let status: Awaited<ReturnType<typeof getWebBillingStatus>>;
+  try {
+    status = await getWebBillingStatus(userId);
+  } catch {
+    // getWebBillingStatus already returns null for a query error, but a thrown
+    // network/client failure must not take down an otherwise-working route.
+    return false;
+  }
+  if (!status || !status.hasPaid) return false;
+  return status.tier === "pro" || status.tier === "pro_annual";
+}
+
+/**
+ * Record a paid-API call and report whether it is within THAT USER'S daily
+ * ceiling — the free ceiling by default, the higher Pro ceiling for an active
+ * Pro subscriber. Prefer this over calling checkDailySpend() directly from a
+ * route; the bare function applies the free ceiling to everyone.
+ *
+ * `now` is injectable for deterministic tests; defaults to the wall clock.
+ */
+export async function checkDailySpendForUser(
+  userId: string,
+  now: number = Date.now(),
+): Promise<SpendCheckResult> {
+  const limit = (await hasActiveProPlan(userId)) ? proDailyLimit() : dailyLimit();
+  return checkDailySpend(userId, now, limit);
 }
 
 /** Uniform 429 response for an exceeded daily ceiling — keeps route wiring DRY. */

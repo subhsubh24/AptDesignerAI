@@ -28,7 +28,7 @@ import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser } from "@/lib/utils/spend-limiter";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 
 // Product identifiers are short strings; cap them so a malicious body can't
@@ -188,7 +188,7 @@ export async function PATCH(
     // Meter only the actual paid call: a non-embedding confirm costs nothing and
     // must not consume the daily ceiling. When the ceiling is hit we skip the
     // best-effort write-back (confirming must still succeed — never 500).
-    checkDailySpend(user.id).allowed
+    (await checkDailySpendForUser(user.id)).allowed
   ) {
     try {
       // Embedding the full source image + the label is the simplest workable

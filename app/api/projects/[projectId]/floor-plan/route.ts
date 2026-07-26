@@ -5,7 +5,7 @@ import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
 
 const log = createLogger("floor-plan-route");
@@ -70,7 +70,7 @@ export async function POST(
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -7,7 +7,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { IdentifiedProduct } from "@/lib/types/database";
 
 // Scoring fans out an LLM call per product. Without an explicit maxDuration,
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } }
     );
   }
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

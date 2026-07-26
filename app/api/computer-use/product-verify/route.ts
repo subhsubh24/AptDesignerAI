@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runProductVerifier } from "@/lib/agents/computer-use/product-verifier";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { validateExternalUrl } from "@/lib/utils/url-validator";
 
 const log = createLogger("api-computer-use-product-verify");
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: {

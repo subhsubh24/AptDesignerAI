@@ -17,7 +17,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: { room_id?: string; content?: string };

@@ -7,7 +7,7 @@ import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { logServerError } from "@/lib/utils/api-error";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { runIdentifiedProductsPipeline } from "@/lib/agents/identified-products-pipeline";
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // Ownership guard BEFORE the (paid) diagnosis pipeline: room_id is

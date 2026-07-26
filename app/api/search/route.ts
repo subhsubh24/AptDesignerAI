@@ -10,7 +10,7 @@ import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
 import type { IdentifiedProduct } from "@/lib/types/database";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { apiError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { getMeter } from "@/lib/observability/margin-meter";
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

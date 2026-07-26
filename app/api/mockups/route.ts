@@ -16,7 +16,7 @@ import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
@@ -167,7 +167,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });

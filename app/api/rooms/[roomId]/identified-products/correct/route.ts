@@ -34,7 +34,7 @@ import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
 import type { IdentifiedProductCandidate } from "@/lib/types/schemas";
 
@@ -87,7 +87,7 @@ export async function POST(
       { status: 429, headers: { "Retry-After": String(Math.ceil((limit.retryAfterMs || 60000) / 1000)) } },
     );
   }
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   const body = await request.json().catch(() => null);

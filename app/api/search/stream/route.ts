@@ -4,7 +4,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { logServerError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   if (!(await userOwnsRoom(supabase, room_id, user.id))) {

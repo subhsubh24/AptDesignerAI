@@ -16,6 +16,7 @@ vi.mock("@/lib/utils/rate-limiter", () => ({
 }));
 vi.mock("@/lib/utils/spend-limiter", () => ({
   checkDailySpend: vi.fn(() => ({ allowed: true })),
+  checkDailySpendForUser: vi.fn(async () => ({ allowed: true })),
   dailySpendExceededResponse: vi.fn(),
 }));
 vi.mock("@/lib/db/agent-runs", () => ({

@@ -27,7 +27,7 @@ import { buildIdentifiedPiecesBlock } from "@/lib/prompts/product-identification
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
-import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { checkDailySpendForUser, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { runWithMarginSession, withMarginOperation, getMarginContext } from "@/lib/observability/margin-context";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const spend = checkDailySpend(user.id);
+  const spend = await checkDailySpendForUser(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   let body: Record<string, unknown>;
