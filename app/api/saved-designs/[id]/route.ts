@@ -68,9 +68,16 @@ export async function PATCH(
     .from("saved_designs")
     .update({ is_public, share_token, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .select()
+    .single();
 
-  // `data` is null when no rows matched (e.g. deleted between read and write)
+  // `.select().single()` is load-bearing, not decoration: PostgREST returns NO
+  // body for an update unless the rows are asked for, so without it `data` is
+  // null on SUCCESS and the guard below rejects every share toggle that in fact
+  // wrote. With it, a row that vanished between the ownership read above and
+  // this write surfaces as a no-rows error instead. Same shape as the sibling
+  // PATCH handlers in projects/[projectId] and rooms/[roomId].
   if (error || !updated) {
     return apiError("saved-designs.byId", error ?? "Update failed");
   }
