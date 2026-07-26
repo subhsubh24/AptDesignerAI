@@ -312,7 +312,7 @@ Include at LEAST 6-10 items in "add". A well-designed room needs soft furnishing
         // loop below, which is already index-aligned for the same reason.
         const a = roomResults[i]?.analysis;
         if (!a) return `## ${r.name} (${r.room_type})\n(no analysis)`;
-        return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${(a.keep || []).join("; ")}\nReplace: ${(a.replace || []).join("; ")}\nAdd: ${(a.add || []).join("; ")}`;
+        return `## ${r.name} (${r.room_type})\nSummary: ${a.summary || ""}\nScore: ${a.score || "?"}/10\nKeep: ${firstArray(a.keep).join("; ")}\nReplace: ${firstArray(a.replace).join("; ")}\nAdd: ${firstArray(a.add).join("; ")}`;
       })
       .join("\n\n");
 
@@ -394,10 +394,8 @@ ${synthInput}
         room_id: room.id,
         diagnosis_json: roomAnalysis,
         design_direction_json: { overall: analysis.overall },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        missing_categories: (roomAnalysis as any).add || (roomAnalysis as any).needs || [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
-        action_list: (roomAnalysis as any).replace || (roomAnalysis as any).weaknesses || [],
+        missing_categories: firstArray(roomAnalysis.add, roomAnalysis.needs),
+        action_list: firstArray(roomAnalysis.replace, roomAnalysis.weaknesses),
         model_used: model,
       });
       if (diagInsertError) {
@@ -438,6 +436,31 @@ ${synthInput}
     });
     return NextResponse.json({ error: "Analysis failed. Please try again." }, { status: 500 });
   }
+}
+
+/**
+ * First argument that is genuinely an array, else `[]`.
+ *
+ * The per-room analysis is raw `extractJsonObject` output — parsed JSON with NO
+ * schema validation — so `keep`/`replace`/`add`/`needs`/`weaknesses` are entirely
+ * model-controlled and can come back as an object or a string. `x || []` does not
+ * guard a TRUTHY non-array, which broke two things on the paid apartment path:
+ *
+ *  - the synthesis prompt called `.join()` on it → uncaught TypeError → 500,
+ *    orphaning the whole agent run for every room in the apartment;
+ *  - the `room_diagnoses` insert stored the non-array verbatim into the
+ *    `action_list` / `missing_categories` JSONB columns, so the diagnosis page
+ *    and the mockups placement map later iterated a non-iterable.
+ *
+ * Behaviour is identical to `a || b || []` for well-formed arrays; a non-array
+ * degrades to empty (that room contributes no keep/replace/add) instead of
+ * failing the request.
+ */
+function firstArray(...candidates: unknown[]): unknown[] {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
 }
 
 function buildSummaryFromDiagnoses(rooms: Array<{
