@@ -132,6 +132,18 @@ describe("CAN-SPAM physical-address gating (marketing-stage sends only)", () => 
     expect(r.delivered).toBe(true);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+
+  it("never gates the transactional password_reset stage on the missing address", async () => {
+    // A locked-out user's only route back into a paid account. Gating it behind
+    // a CAN-SPAM footer rule that does not apply to transactional mail would
+    // silently swallow every reset link.
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "msg_1" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await sendEmail({ ...VALID, stage: "password_reset" });
+    expect(r.dryRun).toBe(false);
+    expect(r.delivered).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });
 
 describe("ResendProvider", () => {

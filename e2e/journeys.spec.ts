@@ -56,6 +56,57 @@ test.describe("public + structural journeys", () => {
     await expect(page.locator("#email")).toBeVisible();
     await expect(page.locator("#password")).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    // Account recovery only exists if it is reachable FROM the screen where a
+    // user discovers they're locked out. Asserted here, under the same
+    // precondition as the form itself, rather than as a separate test that
+    // could only ever fail for the same reason this one would.
+    await expect(page.getByRole("link", { name: /forgot password/i })).toHaveAttribute(
+      "href",
+      "/forgot-password",
+    );
+  });
+
+  test("forgot-password page renders the real form", async ({ page }) => {
+    await page.goto("/forgot-password");
+    await expectNoErrorBoundary(page);
+    await expect(page.locator("#email")).toBeVisible();
+    await expect(page.getByRole("button", { name: /send reset link/i })).toBeVisible();
+  });
+
+  test("submitting the reset form reaches a real outcome, never a silent no-op", async ({
+    page,
+  }) => {
+    // Whichever branch the environment takes, the user must land on a definite
+    // answer. The one outcome that must NEVER appear is a "check your inbox"
+    // promise in an environment that sent nothing — so this asserts the two
+    // legitimate end states and that the button did not just quietly reset.
+    await page.goto("/forgot-password");
+    await page.locator("#email").fill("journey-reset@example.com");
+    await page.getByRole("button", { name: /send reset link/i }).click();
+
+    // "Check your inbox" (a send was really attempted) OR the honest
+    // provider-not-connected fallback that routes the user to support.
+    // getByText, not getByRole("heading"): CardTitle renders a styled <div>
+    // across every auth page, so a heading-role query matches nothing here.
+    await expect(
+      page.getByText(/check your inbox|we'll reset it for you/i).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expectNoErrorBoundary(page);
+  });
+
+  test("reset-password page resolves to a real state, not a stuck spinner", async ({ page }) => {
+    // Visited without a valid recovery link. Either state is correct depending
+    // on whether a session exists; what would be a BUG is the link-checking
+    // spinner never resolving, which is exactly what an unbounded wait looks
+    // like to a locked-out user.
+    await page.goto("/reset-password");
+    await expect(page.getByText(/checking your reset link/i)).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByText(/choose a new password|that link has expired/i).first(),
+    ).toBeVisible();
+    await expectNoErrorBoundary(page);
   });
 
   for (const path of ["/dashboard", "/account", "/saved"]) {
