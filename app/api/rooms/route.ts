@@ -24,9 +24,15 @@ export async function GET(request: NextRequest) {
 
   const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 300 });
 
+  // Embed room_images so a caller listing rooms doesn't then have to fire one
+  // GET /api/rooms/[roomId]/images per room — the dashboard's project load was
+  // doing exactly that (1 rooms request + N image requests, each re-running
+  // auth.getUser() and its own ownership check). Same shape the apartment
+  // analysis route already reads (app/api/analyze-apartment/route.ts), and
+  // additive for any other consumer: every existing room column is unchanged.
   const { data, error } = await supabase
     .from("rooms")
-    .select("*")
+    .select("*, room_images(*)")
     .eq("project_id", projectId)
     .order("created_at", { ascending: true })
     .range(offset, rangeEnd);

@@ -13,6 +13,7 @@ import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autoc
 import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { trackEvent } from "@/lib/analytics";
+import { orderRoomImages } from "@/lib/rooms/embedded-images";
 import { toast } from "@/components/ui/toast";
 
 // ─── Room Sections Config ────────────────────────────────────────────
@@ -56,6 +57,14 @@ interface UploadedImage {
   id: string;
   url: string;
   path: string;
+}
+
+/** A room row as returned by GET /api/rooms, which embeds its room_images. */
+interface RoomWithImages {
+  id: string;
+  room_type: string;
+  status: string;
+  room_images?: { id: string; image_url: string; storage_path: string; created_at?: string }[];
 }
 
 // ─── Step Components ─────────────────────────────────────────────────
@@ -133,22 +142,19 @@ export default function DashboardPage() {
             let hasAnalysis = false;
 
             const statuses: Record<string, string> = {};
-            await Promise.all(rooms.map(async (room: { id: string; room_type: string; status: string }) => {
+            // /api/rooms now embeds room_images, so the project load is a
+            // single request instead of 1 + N (one image fetch per room, each
+            // paying its own auth + ownership round-trip).
+            for (const room of rooms as RoomWithImages[]) {
               ids[room.room_type] = room.id;
               statuses[room.room_type] = room.status ?? "setup";
               if (["diagnosed", "sourcing", "completed"].includes(room.status)) {
                 hasAnalysis = true;
               }
-              const imgRes = await fetch(`/api/rooms/${room.id}/images`);
-              if (imgRes.ok) {
-                const imgs = await imgRes.json();
-                images[room.room_type] = imgs.map((img: { id: string; image_url: string; storage_path: string }) => ({
-                  id: img.id,
-                  url: img.image_url,
-                  path: img.storage_path,
-                }));
-              }
-            }));
+              // Neither backend orders an embedded relation, and images[0] is
+              // the room's primary thumbnail — see lib/rooms/embedded-images.ts.
+              images[room.room_type] = orderRoomImages(room.room_images);
+            }
             setRoomIds(ids);
             setRoomStatuses(statuses);
             setRoomImages(images);

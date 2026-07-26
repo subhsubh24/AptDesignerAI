@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { signInErrorMessage } from '@/lib/auth/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 interface LoginScreenProps {
@@ -58,12 +59,19 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
         }),
       ]);
       if (authError) {
-        setError(authError.message);
+        // Never render the provider's text: GoTrue's "Email not confirmed" /
+        // banned / SSO-managed responses only fire for an address that ALREADY
+        // has an account, so showing them verbatim tells an attacker which
+        // emails are registered. signInErrorMessage collapses every such outcome
+        // into one neutral message. See mobile/src/lib/auth/auth-errors.ts.
+        setError(signInErrorMessage(authError));
       }
     } catch (err) {
       // A thrown fetch/network error or the timeout above. Surface a recoverable
       // message rather than leaving the button stuck on "Signing in…" forever.
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // Routed through the same classifier so the timeout/offline case reads
+      // consistently and a provider-shaped throw can't leak either.
+      setError(signInErrorMessage(err instanceof Error ? err : undefined));
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);

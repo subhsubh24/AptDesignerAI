@@ -124,4 +124,104 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
     expect(synthText).toContain("ROOM_A_ANALYSIS");
     expect(synthText).toContain("ROOM_B_ANALYSIS");
   });
+
+  // The per-room analysis is raw extractJsonObject output — parsed JSON with NO
+  // schema validation — so keep/replace/add are model-controlled and can come
+  // back as a string or an object. The old `x || []` guard only caught
+  // null/undefined, so a TRUTHY non-array reached `.join()` in the synthesis
+  // prompt (uncaught TypeError -> 500 for the WHOLE apartment run) and was
+  // stored verbatim into the action_list / missing_categories JSONB columns,
+  // breaking the diagnosis page and the mockups placement map downstream.
+  it("survives a non-array keep/replace/add and still persists array columns", async () => {
+    mockUserOwnsProject.mockResolvedValue(true);
+
+    const usage = { input_tokens: 1, output_tokens: 1 };
+    mockChat.mockImplementation(async (args: { messages: unknown }) => {
+      const text = JSON.stringify(args.messages);
+      if (text.includes("synthesize")) {
+        return { content: JSON.stringify({ overall: "apartment narrative" }), usage };
+      }
+      if (text.includes("Bedroom A")) {
+        // Both malformed shapes at once: a bare string and an object.
+        return {
+          content: JSON.stringify({
+            summary: "ROOM_A_ANALYSIS",
+            score: 7,
+            keep: "the oak floor",
+            replace: { item: "floor lamp" },
+            add: "a wool rug",
+          }),
+          usage,
+        };
+      }
+      // Room B stays well-formed — the guard must not change good input.
+      return {
+        content: JSON.stringify({ summary: "ROOM_B_ANALYSIS", score: 6, keep: ["floor b"], replace: ["lamp b"], add: ["rug b"] }),
+        usage,
+      };
+    });
+
+    const diagnosesInserts: Array<{
+      room_id: string;
+      action_list: unknown;
+      missing_categories: unknown;
+    }> = [];
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: (table: string) => {
+        if (table === "projects") {
+          return {
+            select: () => ({ eq: () => ({ single: async () => ({ data: { id: "proj-1" }, error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "rooms") {
+          return {
+            select: () => ({ eq: () => ({ order: async () => ({ data: [roomA, roomB], error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "room_diagnoses") {
+          return {
+            insert: async (payload: { room_id: string; action_list: unknown; missing_categories: unknown }) => {
+              diagnosesInserts.push(payload);
+              return { error: null };
+            },
+          };
+        }
+        return {};
+      },
+    });
+
+    // Pre-fix this threw a TypeError inside the synthesis prompt builder and the
+    // route's catch turned it into a 500 — no room got persisted at all.
+    const res = await analyzeApartmentPost(jsonReq({ project_id: "proj-1" }));
+    expect(res.status).toBe(200);
+
+    // Every persisted JSONB column that downstream code iterates must be a real
+    // array, for the malformed room as well as the well-formed one.
+    expect(diagnosesInserts).toHaveLength(2);
+    for (const insert of diagnosesInserts) {
+      expect(Array.isArray(insert.action_list)).toBe(true);
+      expect(Array.isArray(insert.missing_categories)).toBe(true);
+    }
+
+    // The malformed room degrades to empty (it contributes no recommendations)
+    // rather than storing the string/object verbatim...
+    const byRoom = Object.fromEntries(diagnosesInserts.map((d) => [d.room_id, d]));
+    expect(byRoom["room-a"].action_list).toEqual([]);
+    expect(byRoom["room-a"].missing_categories).toEqual([]);
+    // ...while the well-formed room is passed through completely unchanged.
+    expect(byRoom["room-b"].action_list).toEqual(["lamp b"]);
+    expect(byRoom["room-b"].missing_categories).toEqual(["rug b"]);
+
+    // The synthesis prompt still ran and still carried both rooms.
+    const synthCall = mockChat.mock.calls
+      .map((c) => c[0] as { messages: unknown })
+      .find((args) => JSON.stringify(args.messages).includes("synthesize"));
+    expect(synthCall).toBeDefined();
+    const synthText = JSON.stringify(synthCall!.messages);
+    expect(synthText).toContain("ROOM_A_ANALYSIS");
+    expect(synthText).toContain("ROOM_B_ANALYSIS");
+  });
 });
