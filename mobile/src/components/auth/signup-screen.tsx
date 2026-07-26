@@ -15,6 +15,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  isAlreadyRegisteredError,
+  signUpErrorMessage,
+  type AuthErrorLike,
+} from '@/lib/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 // Apple 5.1.1(v) / Google Play require Terms & Privacy to be reachable in-app
@@ -76,17 +81,28 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
           );
         }),
       ]);
-      if (authError) {
-        setError(authError.message);
+      if (authError && isAlreadyRegisteredError(authError as AuthErrorLike)) {
+        // ENUMERATION-SAFE: an address that already has an account gets the
+        // EXACT screen a brand-new signup gets. Rendering "User already
+        // registered" here would confirm the address is taken — the same leak
+        // the web signup route masks (app/api/auth/signup/route.ts). The user
+        // is not stranded: the confirmation screen's button goes to sign-in,
+        // which is where an existing account needs to go anyway.
+        setSuccess(true);
+      } else if (authError) {
+        // Never render provider text — internal phrasing at best, an existence
+        // oracle at worst.
+        setError(signUpErrorMessage(authError as AuthErrorLike));
       } else if (data.session === null) {
         // Email confirmation required — show "check your email" screen.
         // If auto-confirm is on, onAuthStateChange fires SIGNED_IN automatically.
         setSuccess(true);
       }
     } catch (err) {
-      // A thrown fetch/network error or the timeout above. Surface a recoverable
-      // message rather than leaving the button stuck on "Creating account…".
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // A thrown fetch/network error or the timeout above — same neutral
+      // mapping, so the button never stays stuck on "Creating account…" and no
+      // provider phrasing reaches the screen.
+      setError(signUpErrorMessage(err as AuthErrorLike));
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);

@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { signInErrorMessage, type AuthErrorLike } from '@/lib/auth-errors';
 import { supabase } from '@/lib/supabase';
 
 interface LoginScreenProps {
@@ -58,12 +59,15 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
         }),
       ]);
       if (authError) {
-        setError(authError.message);
+        // Never render provider text: "Email not confirmed" vs "Invalid login
+        // credentials" would tell an attacker which addresses have accounts.
+        setError(signInErrorMessage(authError as AuthErrorLike));
       }
     } catch (err) {
-      // A thrown fetch/network error or the timeout above. Surface a recoverable
-      // message rather than leaving the button stuck on "Signing in…" forever.
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // A thrown fetch/network error or the timeout above — same neutral
+      // mapping, so a stuck button still becomes a recoverable on-screen error
+      // without leaking provider phrasing.
+      setError(signInErrorMessage(err as AuthErrorLike));
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
