@@ -4,6 +4,12 @@ One line per autonomous loop run. Most recent first.
 
 | Date | Area | Change | Outcome |
 |------|------|--------|---------|
+| 2026-07-26 | Auth routing | Split the middleware's public-path allowlist from its signed-in redirect set; made /forgot-password, /reset-password, /shared/<token> and /gallery reachable | Fixed Apple-3.1.2 Terms/Privacy links dead at checkout, the /pricing upgrade CTA, every public share link, and the reset flow — all verified against a running server |
+| 2026-07-26 | Auth (G4) | Password reset built from nothing (route, both pages, email template, transactional stage) — rebased off the stalled PR #697 | A locked-out user can self-serve again; enumeration-safe by body, status AND latency; the 3 journey tests that had been red now pass |
+| 2026-07-26 | SEO / Track E | Added app/sitemap.ts + app/robots.ts (neither existed anywhere in the repo) | Track E3's three SEO articles are crawlable for the first time; /shared/ disallowed so unlisted designs can't be indexed; whole-site disallow while the pre-launch gate is up |
+| 2026-07-26 | Security | getCurrentUserId() no longer returns the dev UUID in production or under DATA_BACKEND=supabase | Unresolved callers 401 instead of collapsing into one shared account under the memory backend |
+| 2026-07-26 | Billing / store | Paywall trial copy derived from live product data + per-buyer iOS eligibility instead of static text | Stops promising a free trial to buyers the store would charge; every uncertain path resolves to no-trial |
+| 2026-07-26 | Accessibility | Removed the opacity modifier from muted text on 21 surfaces; default-deny ratchet added | WCAG AA contrast restored (2.4-3.3:1 -> 5.1-5.6:1); only decorative icons may keep it |
 | 2026-07-26 | CI harness | `mobile/src/tsconfig.json` so root vitest can import mobile source without `mobile/node_modules` | Unblocked the class of failure that killed PRs #697/#700/#701; verified by reproducing CI with mobile deps removed |
 | 2026-07-26 | Security (G4) | Native Expo auth screens no longer render Supabase's raw error text | Closes the email-enumeration oracle on the native entry path; ratchet now pins the classifier BINDING after a reviewer bypassed the name-only check |
 | 2026-07-26 | Billing (Track C) | Pro daily-ceiling lift BUILT then ABANDONED on review | Reviewer reproduced a shared-counter bug (text usage falsely blocking a Pro user's first mockup) and falsified the margin math — $0.007/call Places and $5-20/session Browserbase routes were on the raised ceiling. Design + real costs filed as an issue |
