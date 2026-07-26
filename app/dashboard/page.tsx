@@ -58,6 +58,14 @@ interface UploadedImage {
   path: string;
 }
 
+/** A room row as returned by GET /api/rooms, which embeds its room_images. */
+interface RoomWithImages {
+  id: string;
+  room_type: string;
+  status: string;
+  room_images?: { id: string; image_url: string; storage_path: string; created_at?: string }[];
+}
+
 // ─── Step Components ─────────────────────────────────────────────────
 type Step = "welcome" | "layout" | "location" | "setup" | "analyzing" | "room_select";
 
@@ -133,22 +141,27 @@ export default function DashboardPage() {
             let hasAnalysis = false;
 
             const statuses: Record<string, string> = {};
-            await Promise.all(rooms.map(async (room: { id: string; room_type: string; status: string }) => {
+            // /api/rooms now embeds room_images, so the project load is a
+            // single request instead of 1 + N (one image fetch per room, each
+            // paying its own auth + ownership round-trip).
+            for (const room of rooms as RoomWithImages[]) {
               ids[room.room_type] = room.id;
               statuses[room.room_type] = room.status ?? "setup";
               if (["diagnosed", "sourcing", "completed"].includes(room.status)) {
                 hasAnalysis = true;
               }
-              const imgRes = await fetch(`/api/rooms/${room.id}/images`);
-              if (imgRes.ok) {
-                const imgs = await imgRes.json();
-                images[room.room_type] = imgs.map((img: { id: string; image_url: string; storage_path: string }) => ({
-                  id: img.id,
-                  url: img.image_url,
-                  path: img.storage_path,
-                }));
-              }
-            }));
+              // PostgREST does not guarantee an order for an embedded relation,
+              // and the memory backend returns insertion order — so sort here
+              // to keep the oldest-first order the dedicated images endpoint
+              // returned, with `id` as the tiebreaker equal timestamps need.
+              images[room.room_type] = [...(room.room_images ?? [])]
+                .sort(
+                  (a, b) =>
+                    (a.created_at ?? "").localeCompare(b.created_at ?? "") ||
+                    a.id.localeCompare(b.id),
+                )
+                .map((img) => ({ id: img.id, url: img.image_url, path: img.storage_path }));
+            }
             setRoomIds(ids);
             setRoomStatuses(statuses);
             setRoomImages(images);
