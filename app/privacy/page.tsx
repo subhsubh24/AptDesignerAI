@@ -45,10 +45,10 @@ export default function PrivacyPage() {
                 <strong className="text-foreground">Where you live</strong> — the apartment building,
                 neighbourhood and city you pick from the address box when you set up a project, plus the
                 coordinates Google returns for that address. We use it to research your actual building
-                (its layout, finishes, orientation and light) instead of guessing. This is only ever an
-                address you type and choose — we never ask for a location permission, never read your
-                device&apos;s GPS, and never track where you go. Skip the address box and everything else
-                still works.
+                (its layout, finishes, orientation and light) instead of guessing, so setting up a project
+                asks you to choose a location before you can continue. It is only ever an address you type
+                and pick — we never ask for a location permission, never read your device&apos;s GPS, and
+                never track where you go.
               </li>
               <li>
                 <strong className="text-foreground">Usage data</strong> — basic analytics (pages visited,
