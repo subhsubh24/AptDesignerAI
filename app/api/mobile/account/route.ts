@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { purgeUserStorage } from "@/lib/storage/user-storage";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+
+// Matches the web deletion route: purging every stored object is more round
+// trips than the cascade alone.
+export const maxDuration = 60;
 
 /**
  * DELETE /api/mobile/account
@@ -50,6 +55,23 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(
       { error: "Account deletion is unavailable right now. Please contact support." },
       { status: 503 },
+    );
+  }
+
+  // Storage sits outside the Postgres cascade and both buckets are public, so
+  // purge the user's objects BEFORE the cascade removes the rows that attribute
+  // generated mockups to them. A failed purge must not report a successful
+  // deletion — the account stays intact and the (idempotent) call is retryable.
+  try {
+    await purgeUserStorage(admin, user.id);
+  } catch (err) {
+    console.error("[mobile-account-delete] storage purge failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't remove your stored images, so your account was not deleted. Please try again or contact support.",
+      },
+      { status: 500 },
     );
   }
 
