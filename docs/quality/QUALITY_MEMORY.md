@@ -7,6 +7,106 @@ history behind it.
 
 ---
 
+## 2026-07-27 — NINTH INDEPENDENT GRADE (overall HELD at C; THREE dims dropped on fresh adversarial findings — store_readiness A→C, artifact_integrity A→B, performance B→C — while four real improvements landed)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link),
+but the per-dimension picture WORSENED for the second cycle running: **three dimensions dropped**, and
+**five ship-critical dims now sit below A, up from three**. Crucially, none of the three drops is a code
+regression the factory introduced — all three are *fresh adversarial findings against previously
+over-generous grades*, the same pattern as the functional_reality A→C and security A+→A corrections in
+earlier cycles. The factory also shipped four genuine improvements this cycle, which are credited below.
+
+**Per-dimension diff vs 2026-07-20:** functional_reality **C→C** · correctness **A→A** · security_rls
+**A→A** · design_taste **B→B** (one capping gap genuinely CLOSED) · store_readiness **A→C** ⬇⬇ ·
+artifact_integrity **A→B** ⬇ · business_case **B→B** · tests_evals **B→B** · performance **B→C** ⬇.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npm run check:determinism` → green.
+- `npm test` → **2438 passed / 11 skipped** (up from 2185; 11 skips RUN_EVALS-gated by design).
+- `npx eslint .` → **0 errors, 19 warnings** (unchanged — same vendored `.agents/skills/impeccable` file).
+- `npx vitest run --coverage` → **62.6% stmts / 51.88% branch / 67.53% funcs / 63.6% lines** (up from
+  61.15/50.33/66.35/62.22), above the 40/30/42/40 floor — still NOT CI-gated.
+- `bash scripts/preflight.sh` → **51 pass / 2 fail**, byte-identical to last cycle: GATE 1 all green incl.
+  production build + mobile tsc, GATE 5 all 4 dashboard blocks parse + pass schema, GATE 6 RLS 26/26. The
+  2 fails are the expected pre-launch ones (functional-journeys cold; DoD 9-unchecked).
+- Business case re-derived via committed scripts: `business_case_without_annual_arr.mjs` → **$99,926**
+  (bit-identical to last cycle); `validate-computation.mjs` → PASS, 6 figures verified.
+
+**Why store_readiness dropped A→C (the most consequential finding this cycle).** Two defects, both
+verified by hand by the auditor, both 100% within the loop's control — no owner step:
+1. **Account deletion never purges storage.** Both delete routes call only `admin.auth.admin.deleteUser()`
+   (`app/api/user/delete/route.ts:31`, `app/api/mobile/account/route.ts:57`); `grep -rn "\.remove(" app lib`
+   → **ZERO hits repo-wide**, no auth.users delete trigger, no storage DELETE policy. Uploads land at
+   `${user.id}/${hash}.ext` and **both buckets are `public: true`**
+   (`001_initial_schema.sql:408,410`). So a deleted user's room photos and mockups stay **publicly
+   fetchable forever**, directly contradicting `app/privacy/page.tsx:208` ("immediately and permanently
+   removes all your content") and failing Apple 5.1.1(v).
+2. **Privacy labels false in BOTH directions.** `docs/app-privacy.md:19` declares "Not collected: …
+   physical address, precise or coarse location" while `projects` stores city/neighborhood/building_name
+   (`002_onboarding_fields.sql:4-7`) and latitude/longitude (`005_place_ids.sql:4-5`), sent to Google with
+   place_id+latLng (`apartment-research/route.ts:875-918`). The Maps/Places purpose entry describes
+   product image search when it is actually address autocomplete.
+Every other store artifact re-verified real (1024×1024 PNG icon, eas.json build+submit, bundle ids,
+permission strings, tested paywall disclosure, DB-cascade deletion). C not D for exactly that reason.
+
+**Why artifact_integrity dropped A→B.** Not a new false tick — 12 sampled ticks ALL verified, pricing
+fully consistent across 7 files, ARCHITECTURE.md accurate. It drops because **both nits named last cycle
+survived 33 commits untouched**, and the rubric's A bar is "no real gaps": `ROADMAP.md:591-594` still `[x]`
+asserting "a regression below the floor fails the gate" while `--coverage` exists only in
+`package.json:12` — and `vitest.config.ts:18-21` *literally contradicts the tick in its own comment*;
+`ROADMAP.md:587-590` still `[x]` "Lint clean + ENFORCED" against 19 warnings and no `--max-warnings 0`.
+Plus 3 newly-stale docs and A4 `[x]` claiming RLS "correct and secure" against `PENDING_OPS.md:60`.
+
+**Why performance dropped B→C (a correction, and a lesson).** The prior B rested on the belief that the
+headline N+1 was *inert* under the memory backend and therefore harmless today. A deeper sweep falsified
+that premise: `lib/ai/gemini.ts:254` fetches images **serially per photo** before every vision call and
+runs **outside** the concurrency gate (declared `:60`, applied only at `:605`); `lib/ai/resolve-image.ts:59`
+exports the batched `resolveImageBlocks()` with **zero call sites** while all 13 real uses loop serially on
+the mockup money path; `mockups/route.ts:105` runs `fs.readdirSync` on the request path; and
+`evaluate-set/route.ts:151` fans out `Promise.all` over request-body URLs with **no cap** while the scoring
+phase right below it *is* batched at 5. All four re-verified by the auditor. None is data-layer dependent.
+
+**What genuinely IMPROVED this cycle (credit where due):**
+1. **The authed journey tier now RUNS GREEN in CI** (run 30254523085 @ a38160d, `journeys` job success with
+   `E2E_AUTH_STACK=1` + service-role env). The money path asserts a real decodable PNG with non-zero IHDR
+   dimensions, and paywall→unlock is a **real Postgres proof** via `seedProEntitlement` → `getAdminClient()`.
+2. **The saved-designs IDOR is genuinely FIXED** (1a4b1dc) with `.eq("user_id", userId).maybeSingle()` and a
+   regression test — and for the FIRST cycle in four, a fresh 56-route sweep found **no successor finding**.
+   Share-token enforcement (7284446) is real, with migration 030 dropping the permissive anon policy.
+3. **design_taste's a11y capping gap CLOSED** — `DESIGN_DENSE_A11Y_ROUTES` (journeys.spec.ts:281-351) scans
+   the six design-dense surfaces and asserts each route's own h1 to defeat the not-found false-pass; it
+   caught a **real critical** button-name violation (Radix SelectTrigger is role="combobox").
+4. **The raw-`<img>` ratchet is real and enforcing** — bidirectional, CI-run, replicated against a synthetic
+   31-img fixture that correctly failed; count fell 32→30.
+
+**Issues reconciled:** NEW issue (store_readiness — ship_critical A→C). NEW issue (artifact_integrity —
+ship_critical A→B). UPDATE #525 (functional_reality — still C; named the in-loop next step: set
+`DATA_BACKEND: "supabase"` in the CI journeys job). UPDATE #204 (design_taste — one gap closed, F7 + a new
+three-accent violation remain). UPDATE #672 (business_case — $99,926 bit-identical; new channel-consistency
+finding). UPDATE #200 (tests_evals). UPDATE #385 (performance — B→C with four new findings).
+
+**Lessons for next run:**
+1. **"Inert" is a premise to re-test, not inherit.** performance sat at B for cycles partly because the N+1
+   was judged harmless under the memory backend. That was true of *that* defect and false of the dimension:
+   a wider sweep found live serial I/O and an uncapped fan-out that no data-layer flip affects. When a grade
+   rests on "this is dormant," the next cycle must ask what ELSE lives on that path.
+2. **A dimension can rot while its checklist stays perfect.** store_readiness held A for cycles on an
+   artifact checklist (icon, eas.json, processors) that is still entirely accurate — the A was wrong because
+   nobody had asked whether "delete my account" *actually deletes*, or whether the labels match what the code
+   collects. Grade the BEHAVIOR the artifact promises, not the artifact's existence.
+3. **A named-but-unfixed nit must eventually cost a letter.** The F1/F2 ticks were named as "held at A" nits
+   for two cycles and went untouched through 33 commits. Naming without consequence reads as tolerance;
+   artifact_integrity dropping to B is the correct escalation.
+4. **The maker→checker loop is working where it is aimed.** Every gap the auditor named at the *code* level
+   last cycle (mockups IDOR, saved-designs IDOR, raw-`<img>` guard, a11y route density) got fixed. The gaps
+   that persist are the ones needing an owner step (persistence cutover, migration 021) or a `.github/` edit
+   the loop cannot make. Watch that the loop doesn't keep picking the reachable wins while the two binding
+   blockers sit.
+5. Cold-start recipe re-confirmed: `npm install` first; run preflight and the coverage run separately from a
+   large subagent fan-out (a concurrent build + 9 graders is enough to stall the box).
+
+---
+
 ## 2026-07-20 — EIGHTH INDEPENDENT GRADE (overall HELD at C; per-dimension picture STABLE — mockups IDOR FIXED but a fresh sweep found a NEW same-class residual, so security_rls stays A not A+)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link,
