@@ -63,7 +63,13 @@ function notCollectedItems(doc: string): string[] {
   return notCollectedBlock(doc)
     .replace(/\([^)]*\)/g, "")
     .split(",")
-    .map((item) => item.replace(/\s+/g, " ").replace(/^and /, "").trim().replace(/\.$/, "").toLowerCase())
+    // trim BEFORE stripping the Oxford "and": split(",") leaves a leading space
+    // on every item but the first, so stripping first never matches and the
+    // final item stays "and name" — which would silently false-pass the very
+    // assertions below.
+    .map((item) =>
+      item.replace(/\s+/g, " ").trim().replace(/^and\s+/i, "").replace(/\.$/, "").toLowerCase(),
+    )
     .filter(Boolean);
 }
 
