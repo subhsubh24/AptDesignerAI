@@ -4,7 +4,8 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { verifyTurnstile } from "@/lib/security/turnstile";
 import { sendEmail, isEmailDryRun } from "@/lib/email";
 import { buildPasswordResetEmail } from "@/lib/email/templates/password-reset";
-import { rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
+import { createHash } from "node:crypto";
+import { checkRateLimit, RATE_LIMITS, rateLimitBypassedForTest } from "@/lib/utils/rate-limiter";
 
 // Mints a Supabase recovery link (admin call) and hands it to the email
 // provider (outbound Resend fetch). Bound the function so a slow upstream can't
@@ -35,6 +36,11 @@ export const maxDuration = 20;
  *     to an attacker-supplied address is an abuse vector, so it carries the
  *     same per-IP limit + Turnstile as the other public forms (G1/G5), with a
  *     tighter budget than signup: reset is a rare action.
+ *
+ *     The per-IP limit alone does not deliver this — it bounds the SENDER, not
+ *     the VICTIM'S INBOX. A second control keyed on the target address closes
+ *     that, but only in a shape that cannot itself deny a user their recovery:
+ *     see `emailBudget()` for why it is a cooldown and not a quota.
  */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -78,6 +84,47 @@ function siteOrigin(req: NextRequest): string | null {
 
 /** The one neutral success body. Never varies on whether the account exists. */
 const NEUTRAL_OK = { ok: true } as const;
+
+/**
+ * Is this ADDRESS due another reset email, or was one just sent to it?
+ *
+ * A COOLDOWN (one send per address per 2 minutes), deliberately NOT an hourly
+ * quota — the distinction is the whole design, because the obvious version of
+ * this control is worse than the problem it solves.
+ *
+ * A quota ("3 per address per hour") looks right and creates a
+ * DENIAL-OF-RECOVERY weapon. The per-IP limit is 3 per 15 minutes, so a quota
+ * of 3/hour is exhaustible by ONE address from ONE IP with three requests, and
+ * `verifyTurnstile` fails OPEN while TURNSTILE_SECRET_KEY is unset. Any
+ * anonymous caller could therefore spend three POSTs and stop a real user
+ * receiving ANY reset mail for the rest of the hour. Before such a control,
+ * bombing was possible but recovery always worked; after it, recovery can be
+ * switched off on demand. That trade is not worth making.
+ *
+ * A cooldown has no such state. Every window's FIRST request still sends, so
+ * the victim of a flood always holds a link at most two minutes old — the
+ * attacker's own requests keep delivering it — and the flood is capped at 30
+ * mails an hour instead of unbounded. Suppression never denies recovery; it
+ * only declines to send a second copy of a link that is already in the inbox.
+ *
+ * The caller must treat `false` as "skip the send, return the SAME neutral
+ * body" — never as an error to report. A 429 here would signal that this
+ * address was recently the target of a reset request, which is exactly the
+ * probe the identical-response design exists to close.
+ *
+ * Keyed on a hash of the address: the limiter's `store` is a long-lived
+ * in-process Map and does not need plaintext addresses to count them. (The hash
+ * is unsalted and email is a guessable space, so this is hygiene, not secrecy.)
+ *
+ * SCOPE, honestly: `checkRateLimit` is per-process. On a multi-instance
+ * deployment the real ceiling is one send per window PER INSTANCE, so this
+ * throttles a flood rather than hard-capping it — the same pre-existing
+ * limitation the per-IP bucket above already carries.
+ */
+function emailBudget(email: string): boolean {
+  const key = `pwreset-email:${createHash("sha256").update(email).digest("hex")}`;
+  return checkRateLimit(key, RATE_LIMITS.passwordResetPerEmail).allowed;
+}
 
 export async function POST(req: NextRequest) {
   const ip =
@@ -151,6 +198,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // (3) NOT AN EMAIL CANNON, second half: throttle the VICTIM's inbox, not just
+  // the sender's rate. Evaluated here — after validation and Turnstile, so it
+  // cannot be probed for free — but it gates ONLY the send, NOT the
+  // generateLink call below.
+  //
+  // That separation is load-bearing. generateLink is an awaited network
+  // round-trip; skipping it on the suppressed path would make those responses
+  // measurably faster and leak, by latency, the very fact the identical body
+  // and status exist to hide — the same timing oracle the `waitUntil` on the
+  // send (see below) was written to avoid. So both paths pay the same call and
+  // only the mail differs.
+  const sendDue = emailBudget(email);
+  if (!sendDue) {
+    console.warn("[auth/forgot-password] address in cooldown; suppressing duplicate send");
+  }
+
   // (2) ENUMERATION-SAFE. generateLink errors for an address with no account.
   // That error is logged and swallowed — the caller gets the same body either
   // way. Everything below this point returns NEUTRAL_OK.
@@ -169,31 +232,31 @@ export async function POST(req: NextRequest) {
   // mismatch entirely.
   let resetUrl: string | null = null;
   try {
-    const { data, error } = await admin.auth.admin.generateLink({
-      type: "recovery",
-      email,
-      options: { redirectTo: `${origin}/reset-password` },
-    });
-    if (error) {
-      console.warn("[auth/forgot-password] generateLink declined:", error.message);
-    } else {
-      const tokenHash = data?.properties?.hashed_token;
-      if (tokenHash) {
-        resetUrl = `${origin}/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`;
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo: `${origin}/reset-password` },
+      });
+      if (error) {
+        console.warn("[auth/forgot-password] generateLink declined:", error.message);
       } else {
-        // Provider-contract violation: success with nothing to redeem. Silent
-        // here would be a fake success — the user is told a link was sent.
-        console.error(
-          "[auth/forgot-password] generateLink succeeded but returned no hashed_token; " +
-            "no reset email sent",
-        );
+        const tokenHash = data?.properties?.hashed_token;
+        if (tokenHash) {
+          resetUrl = `${origin}/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`;
+        } else {
+          // Provider-contract violation: success with nothing to redeem. Silent
+          // here would be a fake success — the user is told a link was sent.
+          console.error(
+            "[auth/forgot-password] generateLink succeeded but returned no hashed_token; " +
+              "no reset email sent",
+          );
+        }
       }
-    }
   } catch (err) {
     console.error("[auth/forgot-password] generateLink threw:", err);
   }
 
-  if (resetUrl) {
+  if (resetUrl && sendDue) {
     const { subject, html, text } = buildPasswordResetEmail(resetUrl);
     // The send must NOT be awaited before responding. Awaiting an outbound
     // provider round-trip only on the registered-address branch makes the

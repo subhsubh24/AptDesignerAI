@@ -168,6 +168,13 @@ export const RATE_LIMITS = {
   billingCheckout: { maxRequests: 10, windowMs: 60 * 60_000 },
   /** Account deletion — 3 per day (highly destructive) */
   userDelete: { maxRequests: 3, windowMs: 24 * 60 * 60_000 },
+  /**
+   * Password reset, keyed on the TARGET ADDRESS — a COOLDOWN of one send per
+   * 2 minutes, deliberately not an hourly quota. See `emailBudget()` in
+   * app/api/auth/forgot-password/route.ts for the full reasoning; the short
+   * version is that a quota would create a worse hole than the one it closes.
+   */
+  passwordResetPerEmail: { maxRequests: 1, windowMs: 2 * 60_000 },
   /** Area analysis refine chat — 20 per minute */
   areaAnalysisRefineChat: { maxRequests: 20, windowMs: 60_000 },
   /** Area analysis refine (full re-run) — 5 per 5 minutes */
