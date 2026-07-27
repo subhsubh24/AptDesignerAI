@@ -27,8 +27,16 @@ export const ANNUAL_EFFECTIVE_MONTHLY_CHURN = 0.024;
  * @param {number} installsPerMonth
  * @param {number} conversionRate    free -> paid conversion (of Day-30-retained active users)
  * @param {number} annualShareOfPro  share of NEW Pro subscribers who choose annual (0 = annual tier gated off)
+ * @param {number} monthlyChurn      monthly Pro churn rate (default MONTHLY_CHURN) -- overridable for sensitivity scripts
+ * @param {number} annualEffectiveMonthlyChurn  annual Pro's effective monthly churn (default ANNUAL_EFFECTIVE_MONTHLY_CHURN) -- overridable for sensitivity scripts
  */
-export function computeScenario(installsPerMonth, conversionRate, annualShareOfPro = ANNUAL_SHARE_OF_PRO) {
+export function computeScenario(
+  installsPerMonth,
+  conversionRate,
+  annualShareOfPro = ANNUAL_SHARE_OF_PRO,
+  monthlyChurn = MONTHLY_CHURN,
+  annualEffectiveMonthlyChurn = ANNUAL_EFFECTIVE_MONTHLY_CHURN,
+) {
   const activeAtPaywall = installsPerMonth * DAY30_RETENTION;
   const paidConversions = activeAtPaywall * conversionRate;
 
@@ -39,8 +47,8 @@ export function computeScenario(installsPerMonth, conversionRate, annualShareOfP
   const newMonthlyPro = newPro * (1 - annualShareOfPro);
   const newAnnualPro = newPro * annualShareOfPro;
 
-  const steadyMonthlySubs = newMonthlyPro / MONTHLY_CHURN;
-  const steadyAnnualSubs = annualShareOfPro > 0 ? newAnnualPro / ANNUAL_EFFECTIVE_MONTHLY_CHURN : 0;
+  const steadyMonthlySubs = newMonthlyPro / monthlyChurn;
+  const steadyAnnualSubs = annualShareOfPro > 0 ? newAnnualPro / annualEffectiveMonthlyChurn : 0;
 
   const monthlyProMRR = steadyMonthlySubs * PRO_MONTHLY_PRICE * STORE_NET;
   const annualProMRR = steadyAnnualSubs * (PRO_ANNUAL_PRICE / 12) * STORE_NET;

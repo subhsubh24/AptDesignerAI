@@ -17,6 +17,7 @@ interface Props {
 export default async function WaitlistConfirmedPage({ searchParams }: Props) {
   const { status } = await searchParams;
   const invalid = status === "invalid";
+  const unsubscribed = status === "unsubscribed";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -54,6 +55,23 @@ export default async function WaitlistConfirmedPage({ searchParams }: Props) {
                 Back to the waitlist
               </Link>
             </>
+          ) : unsubscribed ? (
+            <>
+              <h1 className="text-2xl font-bold tracking-tight mb-3">
+                You&apos;re unsubscribed
+              </h1>
+              <p className="text-muted-foreground leading-relaxed mb-8">
+                You won&apos;t get any more emails from the AptDesignerAI
+                waitlist. If that was a mistake, you&apos;re welcome to join
+                again any time.
+              </p>
+              <Link
+                href="/waitlist"
+                className="inline-flex items-center justify-center rounded-xl bg-accent-warm text-white font-semibold px-7 py-3 text-sm hover:opacity-90 transition-opacity"
+              >
+                Back to the waitlist
+              </Link>
+            </>
           ) : (
             <>
               <h1 className="text-2xl font-bold tracking-tight mb-3">
@@ -61,8 +79,8 @@ export default async function WaitlistConfirmedPage({ searchParams }: Props) {
               </h1>
               <p className="text-muted-foreground leading-relaxed mb-8">
                 Your email is confirmed. We&apos;ll send you one email the moment
-                the iOS and Android apps go live — with your 30% early-access
-                discount. Nothing else in between.
+                the iOS and Android apps go live — with your early-access
+                pricing details. Nothing else in between.
               </p>
               <Link
                 href="/signup"

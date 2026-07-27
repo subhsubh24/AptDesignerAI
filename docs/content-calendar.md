@@ -445,5 +445,6 @@ the App Store and Play Store links. Keep it three sentences.
   use Expo's screen recording / iOS screen capture. Do not use AI-generated video.
 - Reddit posts perform best when the author engages in comments. Plan 30 minutes
   of reply time after each Reddit post.
-- The `EARLY30` waitlist discount from `email-welcome-sequence.md` can be used as
+- The waitlist early-access discount, once finalized (see `email-welcome-sequence.md` and
+  `PENDING_OPS.md` `waitlist-early-discount-coupon` — no real code exists yet), can be used as
   a CTA hook in the first 72 hours of the launch week posts.

@@ -11,7 +11,10 @@ Ready-to-use launch assets for Product Hunt, journalists, and bloggers.
 1. Create a Product Hunt account if you don't have one. A personal account outperforms a brand account for launches.
 2. Schedule the post for **12:01 AM PST on launch day** (the start of the Product Hunt day).
 3. Embed at least 2 screenshots + 1 short demo video (30–60 seconds of the app flow).
-4. Prep 10–20 supporters to upvote on launch day — notify them via the email waitlist.
+4. Let your network know launch day is happening (e.g. a waitlist email pointing to the live
+   Product Hunt post) — do NOT ask anyone to upvote. Product Hunt's guidelines treat solicited
+   voting as manipulation and can get a launch penalized or removed; a genuine mention that lets
+   people decide for themselves is the compliant version of the same reach.
 
 ### Product Hunt tagline (max 60 chars)
 ```
@@ -178,7 +181,7 @@ apartment); the Pro plan is $49/month, for professional use.
 | Screenshots (iPad Pro 13") | Required if iPad support enabled | Owner to capture |
 | Screenshots (Android 16:9) | Full-bleed Android screenshots | Owner to capture |
 | Demo video (30–60s) | Screen recording of full analysis flow | Owner to record |
-| OG image (1200×630) | Social preview card (warm editorial, wordmark, tagline) | Owner to create |
+| OG image (1200×630) | Social preview card (warm editorial, wordmark, tagline) | DONE — `app/opengraph-image.tsx` + `app/waitlist/opengraph-image.tsx` shipped 2026-07-26 (PR #714); no owner action needed |
 
 Press assets folder (owner creates): [LINK]
 
@@ -197,7 +200,7 @@ Press assets folder (owner creates): [LINK]
 - [ ] Post Product Hunt first comment immediately after launch post goes live
 - [ ] Send launch email to waitlist
 - [ ] Post X/Twitter launch thread
-- [ ] Notify supporters (email / DM) to upvote on Product Hunt
+- [ ] Let supporters know the Product Hunt post is live (email / DM a link) — do not ask them to upvote
 
 ### During launch day
 - [ ] Reply to every Product Hunt comment within 2 hours
@@ -243,7 +246,10 @@ Two headline variants for the `/waitlist` page. Owner tests which converts bette
 
 - Never invent download counts, user numbers, or testimonials.
 - Press reviews take 1–3 weeks. Send outreach 2 weeks before launch, not the day of.
-- Product Hunt ranking is heavily influenced by launch-day upvotes from supporters.
-  Email your waitlist the morning of launch asking them to support on PH — include the direct PH link.
-- The `EARLY30` waitlist discount code (see `email-welcome-sequence.md`) can be offered
+- Product Hunt ranking is heavily influenced by launch-day traffic and genuine engagement.
+  Email your waitlist the morning of launch with the direct PH link so people who want to check
+  it out can — but do NOT ask them to upvote or vote-brigade; Product Hunt's guidelines prohibit
+  solicited voting and enforce against it.
+- The waitlist early-access discount code, once finalized (see `email-welcome-sequence.md` and
+  `PENDING_OPS.md` `waitlist-early-discount-coupon` — no real code exists yet), can be offered
   to journalists and bloggers as a review incentive — that's standard practice.

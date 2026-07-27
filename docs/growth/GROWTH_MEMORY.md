@@ -1420,3 +1420,155 @@ Research-backed candidate swap (if competition validates):
   run, ~28 days elapsed since Run 1). Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) +
   RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). No new blocker this run; QUALITY_SCORECARD remains the
   scorecard to watch for the outreach-readiness gate.
+
+---
+
+## Run 15 — 2026-07-27
+
+### What we found
+- The GTM Auditor's Run 4 pass (`docs/growth/GTM_SCORECARD.md`, as_of 2026-07-27) CLOSED the ship
+  gate: overall C (down from Run 3's A), with `self_validation_honesty` and `business_case_honesty`
+  both below A (ship-critical) and `experiment_validity`/`artifact_freshness` both below B. The
+  scorecard's own `regression_note` is explicit that most of this drop is the auditor CORRECTING
+  ITS OWN prior over-grading on artifacts that hadn't changed since Run 3 graded them A — not the
+  Factory regressing. Per GTM_STANDARD S8, a sub-A ship-critical dimension makes its named `top_gap`
+  the highest-priority work this run, ahead of any new GTM work — so this run did ZERO new
+  demand-signal mining, ASO, or outreach, and instead worked through all 8 `top_gaps` items.
+
+### What we fixed this run (all 8 top_gaps, each independently verified — see below)
+1. **self_validation_honesty**: `GROWTH_STATUS.md`'s validation block FALSELY claimed
+   `internal_metrics_api` surfaces MRR + churn once `INTERNAL_METRICS_TOKEN` is set — re-grepped
+   `lib/growth/metrics.ts` myself and confirmed zero `mrr` field exists; churn is only an
+   approximate 30-day cancellation COUNT, not a rate. Corrected the claim and declared the
+   previously-undeclared `vercel_analytics` dependency (a live `package.json`/`app/layout.tsx`
+   dependency named in CONNECT.md but missing from the validation block).
+2. **business_case_honesty**: corrected a rate/probability conflation (84% "7%/mo x 12" restated
+   as the true compounding value 58.1% = 1-0.93^12, so the annual-tier advantage is -33pp not
+   -59pp) and two sensitivity figures that didn't reproduce ($85K->$93,556 monthly-churn-12%
+   scenario; $106K->$103,214 annual-churn-40% scenario, the second having erred in the flattering
+   direction). Rather than just hand-fixing the prose, extended `analysis/business-case-model.mjs`'s
+   `computeScenario()` with optional churn-override params and added TWO new registered figures
+   (`analysis/business_case_sensitivity_monthly_churn12_arr.mjs`,
+   `..._annual_churn40_arr.mjs`) so both sensitivity figures are now under the same
+   `scripts/validate-computation.mjs` gate the other 4 already use (6/6 figures verified, deriving
+   the 40%-churn effective monthly rate from the same `1-(1-x)^(1/12)` formula the doc's own 2.4%
+   constant uses, rather than hand-typing a rounded rate).
+3. **compliance**: `waitlist_welcome_1` (a marketing-classified send per
+   `lib/email/index.ts` TRANSACTIONAL_STAGES) rendered NO unsubscribe link or physical address —
+   the env-var gate only checked that `EMAIL_PHYSICAL_ADDRESS` was SET, not that the template
+   actually rendered it. First pass matched `lib/email/templates/lifecycle.ts`'s footer pattern
+   exactly (conditional address + an unsubscribe link) — see the CORRECTION below for why this
+   wasn't actually sufficient. Also fixed 3 Product-Hunt upvote-solicitation lines in
+   `press-kit.md` (against PH's own community guidelines and this factory's own
+   never-manufacture-engagement rule) — a compliance gap named in the auditor's dimension text but
+   not in `top_gaps`.
+4. **artifact_freshness (EARLY30)**: `app/waitlist/page.tsx` and `app/waitlist/confirmed/page.tsx`
+   promised "30% off, no promo code required" with zero coupon in Stripe config — a broken public
+   promise `PENDING_OPS.md` itself already called out. Purged the specific number/no-code claim
+   from both live pages AND the 4 downstream GTM docs that told the owner to publicize the
+   placeholder `EARLY30` code (`email-welcome-sequence.md`, `press-kit.md`, `social-drafts.md`,
+   `content-calendar.md`) — replaced with an honest "early-access pricing, details at launch" claim
+   plus explicit `[PLACEHOLDER]` markers gated behind the (rewritten) `PENDING_OPS.md`
+   `waitlist-early-discount-coupon` entry, rather than inventing a new unbacked number.
+5. **artifact_freshness (other 3 named drifts)**: `docs/analytics.md` was missing 3 of 10 shipped
+   `FunnelEvent`s (`save_limit_paywall_shown`, `share_nudge_shown`, `share_nudge_clicked`) — added
+   all 3 with their real call sites. `press-kit.md`'s OG-image row and `store-listing.md`'s
+   `/support` note both still said "owner to create" for things that had already shipped (verified
+   `app/opengraph-image.tsx`, `app/waitlist/opengraph-image.tsx`, `app/support` all exist) — marked
+   DONE. `brand-kit.md`'s app name ("AptDesigner — AI Interior Design") matched neither
+   `store-listing.md`'s actual Name field ("AptDesignerAI") nor its identity table — corrected.
+   `email-lifecycle.md`'s "Delivery notes for owner" section described a pre-engine product ("you'll
+   need to connect a webhook") though the activation/habit/winback cron + billing-webhook engine is
+   code-complete — rewritten to describe what's actually built vs. still-unwired (Sequences 3 and 6
+   honestly flagged as NOT built, rather than papering over the gap).
+6. **experiment_validity**: Run 14's Decorist "0 complaints" BBB citation (recorded as disconfirming
+   evidence against theme 3's cross-competitor generalizability) is VOID — independently
+   re-verified via WebSearch this run (not just trusting the auditor's claim): Decorist
+   (Bed Bath & Beyond-owned) shut down in September 2022 per Business of Home, so zero complaints
+   on a company with no customers since 2022 is a dead-company artifact, not a live signal. Worse,
+   the sign was inverted: a second full-service e-design shutdown is CONFIRMING for theme 3, not
+   disconfirming. Moved the citation from `disconfirming` into theme 3's `sources` with the
+   corrected read. Also added a First Chair conflict-of-interest disclosure to `disconfirming`
+   (cited 16x for themes 1/2, but itself a competing commercial AI interior-design app whose
+   "statistics" pages are promotional content).
+7. **metric_integrity (counting rule)**: theme 1's source count was stated 4 irreconcilable ways
+   across prior runs' `method_note` prose (1 / 2 / 3 / 4), with no defined rule, making the
+   `confidence` tier gate unauditable. Defined `cited_count` (distinct named sources) vs.
+   `verbatim_count` (the subset independently re-fetched, not WebSearch-synthesized) and applied it
+   to all 4 themes as new fields, leaving the historical prose logs untouched (they're each run's
+   own contemporaneous record) but making Run 15's fields the authoritative count going forward.
+8. **metric_integrity (Baymard quote)**: theme 4's sources field presented a paraphrase as verbatim
+   — live-refetched `baymard.com/blog/deprioritize-view-in-room-augmented-reality` myself and
+   confirmed the real sentence opens "When users make the effort to try AR and fail to get
+   sufficient (or any) value out of the experience," which had been silently compressed away with
+   no ellipsis. Restored the full, accurate sentence.
+
+### MAKER != CHECKER caught a real gap (and we fixed the actual problem, not just the ticket)
+Spawned an independent reviewer subagent (fresh context) before committing, per the mandate, told
+to adversarially re-verify every fix against the real code/docs rather than trusting the diff. It
+independently re-derived the churn math, re-ran all 6 computation-gate scripts, ran the full test
+suite, live-refetched both external sources, and — critically — caught that the compliance fix's
+"working unsubscribe link" (item 3 above, pointed at `/account`) does NOT actually work: a
+waitlist_emails subscriber never gets a Supabase auth account (`app/api/waitlist/route.ts` and
+`confirm/route.ts` never call `supabase.auth`), and `app/account/layout.tsx` hard-redirects any
+unauthenticated visitor to `/login`. The link satisfied the LETTER of the auditor's ask but was a
+dead end for its actual audience — exactly the class of defect the fix was meant to close, one
+layer deeper. Built the real fix instead of re-closing the same ticket shallowly:
+- Migration 031 (`waitlist_emails.unsubscribed_at`).
+- A new public, no-login endpoint (`app/api/waitlist/unsubscribe`), authenticated by the waitlist
+  row's own unguessable UUID `id` — the same unguessable-token-as-auth pattern this codebase
+  already uses for `confirmation_token` on this same table.
+- A new `/waitlist/confirmed?status=unsubscribed` landing state.
+- The confirm route now skips the welcome send (but still confirms the signup) if the row was
+  already unsubscribed before the confirm click.
+- 8 new/updated tests (footer link, unsubscribe route success/invalid/error/idempotent/rate-limit
+  cases, confirm-route wiring), all passing alongside the full existing suite.
+
+### Verification (before committing)
+`npx tsc --noEmit` clean · `npm test` 2424/2424 passing (0 regressions vs. the pre-run 2418) ·
+`npx eslint .` clean on every touched file (pre-existing vendored-file warnings only, untouched) ·
+`npm run check:determinism` green · `node scripts/validate-computation.mjs` 6/6 figures PASS ·
+`bash scripts/preflight.sh` GATE 5 (all 4 dashboard YAML blocks parse) and GATE 6 (RLS/secret
+invariants) green — the only 2 preflight failures are the same pre-existing, non-GTM-owned
+functional-journeys/DoD gates, unchanged by this run.
+
+### What we did NOT do (and why)
+- No new demand-signal mining, ASO keyword work, or outreach drafting this run — S8 makes fixing a
+  sub-A ship-critical dimension's named gaps the priority over new work, and this run's fix list
+  was large enough to fill the session on its own.
+- Left 3 named auditor gaps untouched (confirmed reasonable by the independent reviewer):
+  `roadmap_steer_justification`'s one mislabeled-provenance nit (single lowest-priority item on an
+  A-graded dimension); `experiment_validity`'s "pair confirmation-seeking queries with
+  disconfirming ones" methodology fix (a future-research-method change, flagged as next_action, not
+  a same-day text fix); `pmf_read_accuracy`'s missing activation/retention-instrumentation ask
+  (dimension already graded B, above the ship bar).
+- Did not touch ROADMAP.md, VISION.md, or BUSINESS_CASE.md's headline ARR figures — this run's
+  business-case edits were corrections to sensitivity/derived figures already flagged as wrong, not
+  a steer (no S3 bar was met or attempted).
+
+### Lessons learned
+- **A "working link" claim needs the SAME adversarial scrutiny as a numeric claim.** The
+  self-review temptation after fixing a named compliance gap is to treat "the footer now has a
+  link" as done. The independent reviewer's actual value here was checking whether the link's
+  DESTINATION works for the RECIPIENT who would actually click it — not just whether a URL string
+  is present. Worth generalizing: for any "add link X" fix, verify the audience of the email can
+  actually reach a working page at X, not just that X renders.
+- **A "clean" signal (0 complaints, 0 support tickets, 0 anything) is not self-interpreting — check
+  whether the entity is still alive before reading it as reassuring OR as disconfirming.** Run 14's
+  own lesson ("Decorist's clean BBB record... sharpens rather than undermines theme 3") was itself
+  wrong, because it never checked whether Decorist still existed. A zero can mean "no problem" or
+  "no one left to have the problem" — the denominator matters as much as the numerator.
+- **Auditor corrections on unchanged artifacts are still worth fixing even when they're "just" the
+  auditor catching up, not the Factory regressing.** The `regression_note`'s honesty about WHOSE
+  fault the C is doesn't change that the underlying defects (false MRR claim, non-reproducing
+  figures, broken unsubscribe) are real and should be fixed regardless of blame attribution.
+- **Extending a shared computation module (optional params with defaults) is safer than duplicating
+  formula logic per sensitivity script** — re-ran the 4 pre-existing figure scripts after the
+  `computeScenario()` signature change and confirmed byte-identical output before trusting the 2
+  new ones.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-14? YES — circuit breaker remains FIRED (15th consecutive run,
+  ~29 days elapsed since Run 1). One NEW blocker added this run: apply migration 031 (required for
+  the corrected waitlist unsubscribe link to actually record an opt-out). Highest-leverage pair
+  unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min).

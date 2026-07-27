@@ -89,6 +89,7 @@ const PUBLIC_PATH_PREFIXES = ["/guides", "/shared"];
 const PUBLIC_API_PATHS = new Set([
   "/api/waitlist",
   "/api/waitlist/confirm",
+  "/api/waitlist/unsubscribe",
   "/api/billing/webhook",
 ]);
 

@@ -1,0 +1,31 @@
+-- ============================================================
+-- 031 — Waitlist unsubscribe (CAN-SPAM opt-out for waitlist_emails)
+-- ============================================================
+--
+-- GTM Auditor Run 4 (compliance) found that `waitlist_welcome_1` is classified
+-- as a marketing send (lib/email/index.ts TRANSACTIONAL_STAGES excludes it),
+-- but had no working opt-out mechanism at all. The first fix (Run 15) pointed
+-- its footer link at /account — but waitlist_emails subscribers never get a
+-- Supabase auth account (see app/api/waitlist/route.ts,
+-- app/api/waitlist/confirm/route.ts: neither ever calls supabase.auth), and
+-- /account hard-redirects an unauthenticated visitor to /login. CAN-SPAM
+-- requires an opt-out that works WITHOUT requiring a login, so that link was a
+-- dead end for its actual audience. This migration adds the real column a
+-- no-login unsubscribe endpoint needs.
+--
+-- waitlist_emails is a SHARED, NON-TENANT table read/written ONLY by the
+-- service-role admin client (see app/api/waitlist/*). RLS is already enabled
+-- with no policy (migration 017) — that boundary is unchanged here.
+--
+-- Column added:
+--   unsubscribed_at — set when the subscriber uses the no-login unsubscribe
+--                     link (app/api/waitlist/unsubscribe). NULL = still
+--                     subscribed. The unsubscribe link is authenticated by the
+--                     row's own `id` (an unguessable UUID) — the same
+--                     unguessable-token-as-auth pattern already used for
+--                     confirmation_token (migration 022) on this same table.
+--
+-- Idempotent: safe to re-run.
+
+ALTER TABLE waitlist_emails
+  ADD COLUMN IF NOT EXISTS unsubscribed_at timestamptz;

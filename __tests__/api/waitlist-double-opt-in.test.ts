@@ -145,7 +145,7 @@ function confirmReq(token: string, ip?: string) {
 
 describe("buildWaitlistWelcomeEmail", () => {
   it("returns a non-empty subject and grounded HTML/text (no confirm-link CTA)", () => {
-    const { subject, html, text } = buildWaitlistWelcomeEmail();
+    const { subject, html, text } = buildWaitlistWelcomeEmail("https://aptdesignerai.com", "row-1");
     expect(subject.length).toBeGreaterThan(0);
     expect(html).toContain("early-access");
     expect(text).toContain("App Store");

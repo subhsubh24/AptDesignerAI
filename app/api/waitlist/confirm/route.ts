@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     .update({ confirmed_at: new Date().toISOString(), confirmation_token: null })
     .eq("confirmation_token", token)
     .is("confirmed_at", null)
-    .select("id, email");
+    .select("id, email, unsubscribed_at");
 
   if (error || !data || data.length === 0) {
     return redirectTo(req, "invalid");
@@ -76,9 +76,20 @@ export async function GET(req: NextRequest) {
   // most once per subscriber. Dry-run until RESEND_API_KEY is set; sendEmail
   // never throws, so a send failure must not turn a real confirmation into an
   // "invalid" message.
-  const email = data[0]?.email;
-  if (typeof email === "string" && email) {
-    const { subject, html, text } = buildWaitlistWelcomeEmail();
+  const row = data[0];
+  const email = row?.email;
+  if (row?.unsubscribed_at) {
+    // Someone can unsubscribe (via an older welcome email, or by request)
+    // before ever clicking a still-pending confirm link — honor that opt-out
+    // rather than mailing them anyway. The waitlist confirmation itself still
+    // succeeds; only the marketing welcome send is skipped.
+    console.info("[waitlist] confirmed row already unsubscribed; welcome not sent");
+  } else if (typeof email === "string" && email) {
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aptdesignerai.com").replace(
+      /\/+$/,
+      "",
+    );
+    const { subject, html, text } = buildWaitlistWelcomeEmail(siteUrl, row.id);
     const result = await sendEmail({ to: email, subject, html, text, stage: "waitlist_welcome_1" });
     if (result.error) {
       console.error("[waitlist] welcome email not sent:", result.error);

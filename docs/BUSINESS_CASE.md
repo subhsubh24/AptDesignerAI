@@ -115,7 +115,7 @@ Annual subscribers pay $399 × 0.70 (after 30% store commission) = **$279.30 net
 | Metric | Monthly Pro | Pro Annual | Delta |
 |---|---|---|---|
 | Net revenue per subscriber/yr | $49 × 0.70 × 12 = **$411.60** | **$279.30** | −32% per year |
-| Annual renewal churn | 84% (7%/mo × 12) | **~25%** (at renewal) | −59pp |
+| Annual renewal churn | 58.1% (1 − 0.93¹², compounding monthly churn over 12 months — CORRECTED Run 15; a prior version wrote 84% = 7%/mo × 12, a rate-vs-probability conflation that overstated this row) | **~25%** (at renewal) | −33pp |
 | Avg subscriber lifetime | ~14 months | **~4 years** | +240% |
 | LTV | ~$490 | **~$1,117** | +128% |
 
@@ -305,7 +305,8 @@ regardless of acquisition mix (year-1 exit run-rate ~$58–60K; floor reached ~y
 pools compound). But at the honest 40%-organic anchor it is only **≈ break-even on net margin** with
 pure paid acquisition — so sustainable profit depends on driving non-paid share toward 50%+.
 That is precisely what the two **built** levers below are for; the annual tier (which lifts
-LTV by cutting renewal churn on 25% of Pro conversions from 84%/yr to 25%/yr) compounds the
+LTV by cutting renewal churn on 25% of Pro conversions from ~58%/yr to 25%/yr — corrected
+Run 15, see the Pro Annual tier economics table above) compounds the
 return on every acquired user. The strategy is unchanged and now honestly stated: **the floor
 is revenue-secured; positive margin is organic-led, and the levers to get there are built.**
 
@@ -362,8 +363,13 @@ Total MRR: $23,068  →  ARR: ~$276,800/year
 **Verdict:** Significantly exceeds $100K with ~61% net margin after all marketing spend.
 Requires both strong organic presence AND paywall optimization (6% is achievable but
 requires real effort — Canva runs ~6%, and AptDesigner's value proposition is more
-focused). The annual tier adds ~$52K ARR at steady state vs monthly-only. This is the
-reachable ceiling within 12–18 months of a disciplined launch.
+focused). The annual tier adds ~$52K ARR at steady state vs monthly-only. **This is a
+STEADY-STATE ceiling, not a 12–18-month timeline** (corrected Run 15 — a prior version
+called it "the reachable ceiling within 12–18 months", but Scenario B's own analysis two
+sections up shows the smaller $122.9K base case alone needs ~3 years for its monthly/annual
+Pro pools to fill against 7%/2.4% monthly churn; this scenario's larger subscriber pools
+(386 + 375 vs 171 + 167) take at least as long to compound, so read $276.8K as the
+multi-year steady-state this scenario's inputs support, not a near-term number).
 
 ---
 
@@ -402,9 +408,18 @@ reachable ceiling within 12–18 months of a disciplined launch.
 
 If Scenario B inputs slip:
 - Conversion drops from 4% → 2%: ARR falls to ~$62K. Need to rebuild paywall/onboarding.
-- Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR ~$85K.
+- Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR **$93,556** (Run 15 —
+  now under the computation gate: `analysis/business_case_sensitivity_monthly_churn12_arr.mjs`,
+  registered in `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`. A prior version
+  of this line said "~$85K", which did not reproduce and sat outside the gate — this is BELOW the
+  $100K floor).
 - Annual mix stays at 0% (the current live state — annual billing is gated off, see above): ARR is ~$99.9K, AT the floor rather than over it — $23K lower than the annual-tier model. This is the honest number for TODAY'S transactable product; the $122.9K figure requires shipping the annual-billing cutover (migration 021 + `ANNUAL_BILLING_ENABLED`).
-- Annual renewal churn rises to 40% (→ 4.2%/month effective): Annual pool shrinks ~43%. ARR ~$106K.
+- Annual renewal churn rises to 40% (→ 1 − 0.6^(1/12) ≈ 4.17%/month effective): Annual pool shrinks
+  ~43%. ARR **$103,214** (Run 15 — now under the computation gate:
+  `analysis/business_case_sensitivity_annual_churn40_arr.mjs`, registered in
+  `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`. A prior version of this line
+  said "~$106K", which erred in the FLATTERING direction — clears the $100K floor by only ~$3.2K,
+  not the ~$6K the old figure implied).
 - Installs stall at 2,000/month: ARR ~$46K (conservative scenario). Need growth channel.
 - Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year and net margin flips negative (−$11K) — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
 
