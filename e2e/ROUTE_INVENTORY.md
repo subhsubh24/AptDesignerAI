@@ -1,7 +1,10 @@
 # Route & Flow Inventory — runtime functional coverage
 
-Proves coverage is **complete**: every route/flow, the spec that exercises it, the
-**intended outcome** asserted (not `status < 400`), and the tracked gaps. This is the
+Records runtime functional coverage: which routes/flows have a spec, the **intended
+outcome** it asserts (not `status < 400`), and what is still uncovered. It does NOT
+claim every route is covered — 14 of the 35 `app/**/page.tsx` routes appear in the
+table below, and the rest are enumerated under "Tracked gaps" so the shortfall is
+counted rather than implied away. This is the
 companion to the **BUILDS ≠ WORKS** guard in `ROADMAP.md` — a route/flow with no
 outcome-asserting runtime test is an UNVALIDATED GAP and may not be certified "works".
 
@@ -43,7 +46,14 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   screen is asserted.
 - **Save & share** (`/saved/[id]`, `/shared/[token]` happy path with a seeded design).
 - **Per-room design routes** (`/projects/[id]/rooms/[id]/{focus,diagnosis,products,mockups,bundles,compare}`)
-  once a seeded project fixture exists.
+  once a seeded project fixture exists. These ARE axe-scanned with a seeded project by
+  `DESIGN_DENSE_A11Y_ROUTES` in `journeys.spec.ts`, which asserts each route's own `h1`;
+  what is missing is an outcome-asserting functional pass, not a smoke check.
+- **Routes with no spec at all** — counted here rather than left implied. Marketing/content:
+  `/faq`, `/gallery`, `/picks`, `/support`, `/guides` and its three article pages. Product:
+  `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`. Billing outcomes:
+  `/billing/checkout-success`, `/billing/checkout-cancel`. Sharing/waitlist:
+  `/saved/[id]`, `/shared/[token]`, `/waitlist/confirmed`.
 
 ## Human-only (cannot run headlessly — verify manually, never assume working)
 - Real **payment capture** on a live card (Stripe live mode).
@@ -57,5 +67,6 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 Stand up an ephemeral, fully-migrated Supabase-local DB (all `supabase/migrations` applied,
 `pgvector`/`pg_trgm` extensions present), boot the app against it with the service-role env,
 set `E2E_AUTH_STACK=1`, then `bash scripts/run-journeys.sh`. Captcha/bot protection fails open
-without a key, so seeded signups work. See `PENDING_OPS.md` for the exact CI job to add
-(`.github/` is human-applied — the loop cannot edit it).
+without a key, so seeded signups work. That `journeys` job now EXISTS in
+`.github/workflows/ci.yml` and has run green on the default branch — this section
+describes what it does, not something still to be added.

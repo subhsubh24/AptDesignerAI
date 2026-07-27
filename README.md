@@ -33,7 +33,7 @@ npx tsc --noEmit  # TypeScript check
 npx eslint .      # lint
 ```
 
-The app runs without API keys in local dev — Supabase auth is bypassed when `NEXT_PUBLIC_SUPABASE_URL` is unset, and the AI pipeline is skipped when `GEMINI_API_KEY` is absent.
+The app boots and browses without API keys in local dev — Supabase auth is bypassed when `NEXT_PUBLIC_SUPABASE_URL` is unset. The AI pipeline is **not** skipped without `GEMINI_API_KEY`, though: `lib/ai/gemini.ts` builds its client with an undefined key and the call fails at request time, and `lib/ai/deepseek.ts` throws outright. Set `GEMINI_API_KEY` before exercising anything that analyses a room.
 
 For the mobile app:
 ```bash

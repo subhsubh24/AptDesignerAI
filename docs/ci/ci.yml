@@ -1,8 +1,11 @@
-# READY-TO-APPLY workflow — copy this to .github/workflows/ci.yml (workflow scope; the loop can't).
-# = the existing verify/mobile/build jobs + a REQUIRED `lint` (replaces the old non-blocking
-# `quality`) + the new `journeys` gate (BUILDS != WORKS). After applying: push on a throwaway
-# branch, confirm `lint` and `journeys` go GREEN, THEN add them to branch-protection required
-# checks. Do NOT require `journeys` until you've seen it green (a red required check halts auto-merge).
+# ARCHIVED — this was the proposal, and it has been APPLIED. Do NOT copy this file
+# anywhere: `.github/workflows/ci.yml` is live, has run green, and has since moved
+# AHEAD of this snapshot (it gained a `paths-ignore` list, a `concurrency` block that
+# cancels superseded runs, and a `migrate` job — none of which are below).
+#
+# Kept only as the historical record of what was proposed and why. `.github/` is
+# human-applied and the loop cannot edit it, so this file cannot be kept in sync and
+# must not be treated as the source of truth. Read the real workflow instead.
 name: CI
 
 on:

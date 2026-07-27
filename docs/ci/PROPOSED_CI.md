@@ -1,10 +1,12 @@
 # PROPOSED CI — make the loop's quality gates REQUIRED checks (owner applies)
 
-> **Ready-to-apply file:** `docs/ci/ci.yml` is the COMPLETE merged workflow (existing
-> verify/mobile/build + a required `lint` + the new `journeys` gate). Copy it to
-> `.github/workflows/ci.yml` (workflow scope), confirm `lint`+`journeys` go GREEN on a throwaway
-> branch, THEN add them to branch-protection required checks. The sections below explain each part
-> + the optional auto-migrate job.
+> **STATUS: APPLIED.** `.github/workflows/ci.yml` is live with the `lint` and `journeys`
+> jobs, and `journeys` has run green on the default branch. The real workflow has since
+> moved ahead of the snapshot in `docs/ci/ci.yml` (it gained `paths-ignore`, a
+> `concurrency` cancel block, and the auto-migrate job). Treat `docs/ci/ci.yml` as an
+> archived proposal, not a file to copy. The sections below remain useful as the
+> rationale for each job. What is still OWNER-ONLY: promoting `lint` and `journeys` to
+> **required** checks in branch protection.
 
 
 **Why:** today the required checks are `verify` (tsc+tests) / `build` / `mobile`. The
