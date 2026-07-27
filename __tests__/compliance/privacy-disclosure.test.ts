@@ -86,6 +86,21 @@ describe("privacy artifacts match what the code actually collects", () => {
     expect(page.toLowerCase()).toMatch(/coordinates/);
   });
 
+  it("declares name collection, because signup stores a full name on the profile", () => {
+    // Same shape as the location assertion: establish the premise from the
+    // schema + the route, then require the disclosure. The signup form's name
+    // field is optional, but "optional" is not "not collected".
+    const sql = migrationsText();
+    expect(/create table profiles[\s\S]{0,400}?full_name/i.test(sql)).toBe(true);
+    expect(read("app/api/auth/signup/route.ts")).toMatch(/full_name/);
+
+    const notCollected = notCollectedBlock(read(APP_PRIVACY));
+    // Word-boundary match: "name" must not appear as a standalone item. Guarded
+    // against false hits from "full name" phrasing elsewhere by scoping to the
+    // Not-collected block only.
+    expect(notCollected).not.toMatch(/(^|[,\s])name([,.\s]|$)/i);
+  });
+
   it("does not describe Google Maps/Places as product-image search when it powers address autocomplete", () => {
     // Premise: an address autocomplete component exists and the dashboard uses it.
     const autocompletePath = "components/ui/place-autocomplete.tsx";

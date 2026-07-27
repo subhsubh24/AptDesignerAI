@@ -12,6 +12,7 @@ stay consistent.
 | Data type | Category | Why collected | Linked to identity? |
 |---|---|---|---|
 | Email address | Contact Info | Account creation + authentication | Yes |
+| Name | Contact Info | Optional free-text field at signup, stored on the profile and shown back in the app's top bar | Yes |
 | Room photos (user-uploaded) | Photos or Videos | AI room analysis pipeline | Yes |
 | Design preferences & history | Other User Content | Saved designs, design direction history | Yes |
 | Apartment building, neighborhood, city/state | Contact Info → Physical Address | The user types their building into an address autocomplete during project setup, so the AI can research the building's real layout, finishes and light | Yes |
@@ -28,10 +29,9 @@ Because the stored value is a latitude/longitude at full precision, Apple's
 definition puts it under **Precise Location** regardless of how it was obtained,
 so it is declared here rather than argued down to Coarse.
 
-**Not collected:** name, phone number, health data, financial info, browsing
-history, search history, sensitive info, contacts, user content beyond room
-photos, messages, third-party social IDs, device/GPS location, background
-location.
+**Not collected:** phone number, health data, financial info, browsing history,
+search history, sensitive info, contacts, user content beyond room photos,
+messages, third-party social IDs, device/GPS location, background location.
 
 ---
 
@@ -54,6 +54,8 @@ by other companies?" question.
 
 **Contact Info**
 - Email address — *App Functionality* (authentication, account management)
+- Name — *App Functionality* (optional at signup; stored on the user's profile
+  and displayed back to them in the app)
 - Physical Address — *App Functionality* (the apartment building / neighbourhood /
   city the user selects at project setup, used to research that specific building)
 
@@ -115,6 +117,7 @@ no advertising identifiers.
 | Category | Type | Required? | Encrypted? | Deletion on request? |
 |---|---|---|---|---|
 | Personal info | Email address | Required to use app | Yes (TLS) | Yes — in-app account deletion |
+| Personal info | Name (optional, entered at signup) | Optional (user-initiates) | Yes (TLS) | Yes — in-app account deletion |
 | Personal info | Address (apartment building / neighbourhood / city, user-entered) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | Location | Approximate & precise location (coordinates of the user-selected building; **not** device location — no location permission is requested) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | Photos & videos | Photos | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
