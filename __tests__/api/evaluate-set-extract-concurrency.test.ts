@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 /**
  * /api/products/evaluate-set turns every URL in the request body into an LLM
- * extraction plus a deep score. The rate limiter and daily spend breaker cap how
- * OFTEN it runs; nothing capped how much ONE call does. These pin both halves of
- * the guard: a hard ceiling on total URLs, checked before any paid work, and a
- * bounded extraction fan-out rather than "all of them at once".
+ * extraction. The scoring phase below it was already batched at 5; extraction —
+ * the phase directly above, and equally an LLM call per URL — ran `Promise.all`
+ * over the whole body at once. This pins the gate that closed that asymmetry.
+ *
+ * There is deliberately NO test for a total-URL ceiling. An earlier version of
+ * this change added one and it was dropped: no defensible bound on a legitimate
+ * request size exists in the code today. `what_it_needs`, the array that feeds
+ * ManualSourcingForm, is uncapped, and the pipeline's own ROOM_FURNISHING_TIERS
+ * targets run to 28 categories for a studio — so any ceiling picked here risks
+ * rejecting ordinary requests. The concurrency gate ships alone.
  */
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
@@ -74,31 +80,8 @@ beforeEach(() => {
   mockExtract.mockResolvedValue({ success: false, error: "stubbed" });
 });
 
-describe("POST /api/products/evaluate-set — request fan-out is bounded", () => {
-  it("rejects an oversized request BEFORE doing any paid work", async () => {
-    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(101) }] }));
-
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/too many products/i);
-    // The point of the guard: not one LLM extraction is issued.
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  it("counts URLs across ALL items, so splitting the list is not a way around it", async () => {
-    // 40 each is under the ceiling per item, 120 over it in total.
-    const items = [
-      { category: "seating", urls: urls(40) },
-      { category: "lighting", urls: urls(40) },
-      { category: "rugs", urls: urls(40) },
-    ];
-
-    const res = await POST(request({ room_id: "r1", items }));
-
-    expect(res.status).toBe(400);
-    expect(mockExtract).not.toHaveBeenCalled();
-  });
-
-  it("accepts a request AT the ceiling and never runs more than 5 extractions at once", async () => {
+describe("POST /api/products/evaluate-set — extraction fan-out is bounded", () => {
+  it("never runs more than 5 extractions at once, however many URLs are posted", async () => {
     let inFlight = 0;
     let peak = 0;
     mockExtract.mockImplementation(async () => {
@@ -109,14 +92,38 @@ describe("POST /api/products/evaluate-set — request fan-out is bounded", () =>
       return { success: false, error: "stubbed" };
     });
 
-    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(100) }] }));
+    await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(60) }] }));
 
-    // 422 (nothing extracted) is the expected outcome for stubbed failures —
-    // what matters is that it got past the ceiling check and did the work.
-    expect(res.status).not.toBe(400);
-    expect(mockExtract).toHaveBeenCalledTimes(100);
-    // An unbounded Promise.all over the request body puts this at 100.
+    expect(mockExtract).toHaveBeenCalledTimes(60);
+    // An unbounded Promise.all over the request body puts this at 60.
     expect(peak).toBeLessThanOrEqual(5);
     expect(peak).toBeGreaterThan(1);
+  });
+
+  it("throttles without dropping — every URL across every item is still extracted", async () => {
+    const items = [
+      { category: "seating", urls: urls(7) },
+      { category: "lighting", urls: urls(7) },
+      { category: "rugs", urls: urls(7) },
+    ];
+
+    await POST(request({ room_id: "r1", items }));
+
+    expect(mockExtract).toHaveBeenCalledTimes(21);
+  });
+
+  it("reports results in REQUEST order, not completion order", async () => {
+    // Later URLs finish FIRST, so a completion-ordered implementation would
+    // scramble which result belongs to which URL.
+    mockExtract.mockImplementation(async (url: string) => {
+      const i = Number(url.split("/").pop());
+      await new Promise((resolve) => setTimeout(resolve, (10 - i) * 2));
+      return { success: false, error: `err-${i}` };
+    });
+
+    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(6) }] }));
+    const body = await res.json();
+
+    expect(body.details.map((d: { url: string }) => d.url)).toEqual(urls(6));
   });
 });

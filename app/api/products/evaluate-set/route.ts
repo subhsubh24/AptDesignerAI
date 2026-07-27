@@ -20,25 +20,6 @@ import type { CandidateProduct } from "@/lib/types/database";
 export const maxDuration = 300;
 
 /**
- * Hardest cap on how much one request may ask for. Sized against the REAL
- * ceiling rather than a guess: the category list this form is built from is
- * schema-capped at 20 (`lib/agents/category-planner.ts` `.min(1).max(20)`), and
- * ManualSourcingForm lets the user add unlimited comparison URLs per category
- * while its own copy invites "multiple options per category to compare". So a
- * maximal legitimate session is 20 categories x a handful of options. 100
- * clears that with room to spare and still refuses a payload that is plainly
- * not a furnishing set. The first cut of this was 40 — under, not over, what
- * the UI invites, which would have rejected ordinary use.
- *
- * NOTE what this does and does not buy. It bounds COST and turns a runaway
- * payload into a clean 400 instead of a mid-flight maxDuration kill. It is not
- * a latency guarantee: extraction, scoring and bundle evaluation run as
- * sequential phases, so a request near this ceiling can still approach the
- * route's 300s budget. That ceiling is unchanged by this commit.
- */
-const MAX_URLS_PER_REQUEST = 100;
-
-/**
  * Extraction fan-out width. Matches SCORE_CONCURRENCY below: the scoring phase
  * was already batched at 5 while extraction — the phase right above it, and
  * equally an LLM call per URL — ran every URL at once straight off the request
@@ -93,23 +74,6 @@ export async function POST(request: Request) {
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   if (!items?.length) return NextResponse.json({ error: "items required" }, { status: 400 });
-
-  // Bound the total work a single request can ask for. The rate limiter and the
-  // daily spend breaker cap how OFTEN this endpoint runs, not how much one call
-  // does: every URL here is an LLM extraction plus a deep score, so an unbounded
-  // list is both a cost lever and a reliability problem — the run would exceed
-  // this route's own maxDuration and be killed mid-flight, which is worse for
-  // the caller than a clear rejection. Counted across all items so splitting the
-  // list is not a way around the ceiling.
-  const totalUrls = items.reduce((sum, item) => sum + (item.urls?.length ?? 0), 0);
-  if (totalUrls > MAX_URLS_PER_REQUEST) {
-    return NextResponse.json(
-      {
-        error: `Too many products in one request (${totalUrls}). Evaluate at most ${MAX_URLS_PER_REQUEST} at a time.`,
-      },
-      { status: 400 },
-    );
-  }
 
   // Ownership guard BEFORE the (paid) fan-out of extraction + scoring + bundle
   // evaluation: room_id is client-supplied and the memory-store reads are not
