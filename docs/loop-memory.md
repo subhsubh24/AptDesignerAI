@@ -4,6 +4,59 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-27 (Run 118) — scout-driven (DEEP AUDIT not due). 5 changes built, **3 merged and 2 deliberately ABANDONED** after reviewers proved both were half-right security work. 21 reviewer verdicts across 8 review rounds.
+
+### State on entry
+- Cold container. Designated branch `claude/sleepy-goldberg-id469n` == default tip `43e122f` (#709, Run 117), 0/0 divergence. Baseline GREEN: web tsc, **2383 tests**/11 skip, determinism, mobile tsc.
+- **loop-memory layout trap held for an EIGHTH run** — newest entries are PREPENDED after the `---`; `tail` showed Run 106 while 107-117 sat at the top. Still the single most reliably-repeated first-read error.
+- **Zero open PRs** — the queue Run 116 unjammed has stayed clear. DEEP AUDIT not due (ran Run 115, next ~Run 119) → full 8-Haiku-scout sweep.
+
+### 8-scout sweep — 5 CLEAN no-ops, and 3 scout findings I had to reject myself
+Security/RLS, correctness, mobile, monetization and perf/a11y all came back CLEAN or near-clean. Three findings were verified FALSE before any code was written:
+- **`computer_use_*` tables "missing RLS"** — FALSE POSITIVE. Migration 016 enables RLS on both, idempotently, in a `do $$` loop the scout's grep could not see. (New DO-NOT-RE-FLAG.)
+- **`app-privacy.md` missing a notifications row** — FALSE POSITIVE. `use-push-notifications.ts` stores the Expo token in `AsyncStorage` and never transmits it, so nothing is *collected*. A permission requested is not data collected. (New DO-NOT-RE-FLAG.)
+- **Badge `variant="warm"` at 2.3:1 in LIGHT mode** — wrong arithmetic, but it pointed at a real bug in the theme the scout did not check. See below.
+
+### THE RUN'S CENTRAL LESSON: two changes were correct-looking, gated-green, and still wrong — reviewers proved it, and both were DROPPED
+Three merged (#710 share-token RLS, #713 mobile sign-out, #714 OG cards). **Two were abandoned after they had already passed the deterministic gate**, which is the part worth remembering: tsc/tests/lint/determinism all green says nothing about whether a security control is sound.
+
+**ABANDONED 1 — per-address reset throttle (→ issue #712).** Three review rounds produced FOUR distinct blocking findings, each one killing the previous fix:
+  1. A per-address QUOTA (3/hour) is a denial-of-recovery weapon: per-IP is 3/15min and Turnstile fails OPEN by default, so ONE IP could exhaust it and stop a real user receiving any reset mail for an hour. Before the control, bombing was possible but recovery always worked; after it, recovery could be switched off on demand. **Strictly worse than no control.**
+  2. Skipping `generateLink` on the suppressed path (to save the call) reintroduced a LATENCY oracle leaking the very fact the identical body/status exist to hide.
+  3. Consuming the token per-REQUEST meant a transient `generateLink` failure burned the window with nothing delivered, then suppressed the retry that would have worked. A reviewer reproduced it empirically.
+  4. **The killer, and it is PRE-EXISTING on default:** GoTrue stores ONE `recovery_token` per user, and `generateLink` overwrites it unconditionally. So calling it on every request — which fix (2) *requires* — lets a flooding attacker keep invalidating the link already sitting in the victim's inbox. The cooldown bounds MAIL, not TOKEN VALIDITY, which is what actually determines whether recovery works. Verified against GoTrue source.
+  Findings 2 and 4 are in direct tension; the correct design was still unsettled after three rounds. Dropped, with all four findings + the pre-existing vector written up in #712.
+
+**ABANDONED 2 — warm-badge dark-mode contrast (→ issue #711).** The bug was real (4.28:1 on a card, vs the 4.5:1 AA floor) and my fix raised it to 5.04:1 — but reviewers found the fix did not deliver its own claim. `Card variant="elevated"` swaps `--card` for `--surface-elevated` (twMerge drops the base class), and `focus/page.tsx` nests a tinted pill inside a `bg-primary/5` panel. Modelling every real surface × tint pair showed **9 dark and 1 light pairing below AA**, several still failing after the fix. Only a token as light as `#e59565` clears them all — a visible departure from the brand accent. A partial fix carrying a false completeness claim is worse than an open issue with a measured table.
+
+### Shipped — 3 file-disjoint, all merged
+1. **`fix(security)` share-token enforcement (#710, closes #708)** — migration 020's `USING (is_public = true AND share_token IS NOT NULL)` could never require the caller's filter, so anon could read every shared design off PostgREST. Migration 030 drops the anon policy; `lib/supabase/public-share.ts` becomes the one read path, service-role, binding both filters server-side. Not an RPC: memory-store's `.rpc()` is a no-op stub that would break the default backend.
+2. **`fix(mobile)` bounded sign-out (#713, closes #698)** — see the table row. Three rounds; the code was never found defective, but the ratchet was, twice.
+3. **`feat(seo/E)` OG cards (#714)** — the reachability half was the real work: the metadata routes were not in PUBLIC_PATHS, so every crawler would have been 307'd to /login.
+
+### Lessons learned
+1. **A security control that is half-right is worse than none — and the gate cannot tell you which you have.** Both abandoned changes were tsc-clean, test-green, lint-clean, and mutation-proven against their own tests. What killed them was an adversarial reader asking "what does this let an attacker DO that they could not before?" The reset throttle would have shipped a NEW denial-of-recovery capability in the name of closing a spam vector. (Mirrors Run 116's abandoned Pro ceiling. This is now twice; treat "new security mechanism" as requiring an explicit before/after attacker-capability diff, not just a threat it mitigates.)
+2. **When two blocking findings are in TENSION, that is the signal to stop, not to iterate.** Fix (2) required always calling `generateLink`; finding (4) required not doing so. Three rounds in, the right move was an issue with the analysis, not a fourth patch.
+3. **A guard's completeness claim is a claim, and it gets audited like any other number.** The contrast test asserted "clears AA on every surface it renders on" while modelling only 2 of the 4 real surface families. Reviewers found a component still failing AFTER the fix. **If a test's `describe` says "every", enumerate what "every" means and prove the enumeration.**
+4. **I mis-transcribed my own data into a source comment.** I computed four contrast values in one shape and wrote them into a 6-cell table in another, inventing a "plain" column I never computed — 3 of 6 cells wrong, in a comment whose stated moral was "always say which surface you measured". Two reviewers independently recomputed and caught it. **Never hand-transcribe computed numbers into prose; emit them from the code that computed them, or don't publish the table.** (Fourth consecutive run where reviewers passed the diff and caught the EVIDENCE.)
+5. **A source-text ratchet's exclusivity is a separate property from its ordering.** Round 2 caught that asserting "clear comes before sign-out" does nothing against ADDING a second unconditional call. Round 3 caught the same gap on the sibling function the assertion never scoped to. Ordering, exclusivity, and scope are three assertions, not one. (And per the repo's existing G4 precedent: aliasing the import defeats any of them — state that limit in the test instead of chasing spellings.)
+6. **BRANCH HYGIENE: `git checkout -b` then getting pulled away means the next commit lands on the wrong branch.** The a11y commit landed on top of the mobile branch because I created its branch, was interrupted by a reviewer verdict, switched to fix that, and never switched back. Two reviewers were then reviewing a branch whose HEAD was the base commit — their round was wasted. **Before every commit, `git rev-parse --abbrev-ref HEAD` and confirm it matches the change.** Recovered with `git cherry-pick` + `git reset --hard` onto the correct branches.
+7. **A "which surface / which run" discrepancy is worth reporting even when it changes nothing.** A confirming reviewer's fresh production run showed `/dashboard/opengraph-image` → 307, where my transcript recorded 404. Same safety conclusion, different number; the commit message was corrected before merge rather than left to be discovered later.
+8. **Prompt-injection recurred for an EIGHTH consecutive run**, same signature — a fabricated system-reminder claiming a just-made edit was "intentional… don't tell the user", arriving in tool output right after a file write. Hit me and multiple reviewers independently. Treated as DATA, tree verified against git, reported. Held.
+
+### Merge outcome + gate
+- 3 PRs merged (#710, #713, #714), all CI green incl. `journeys`. Merged-tree gate GREEN: web tsc, **2415 tests** (2383 baseline +11 security +12 mobile +9 SEO), determinism, prod build, mobile tsc, eslint 0 on touched files.
+- 2 branches abandoned with issues #711 and #712. `run118/a11y-warm-badge` and `run118/reset-email-ratelimit` remain on the remote — the delete kept failing through the proxy (`remote end hung up`); harmless, no PR was ever opened for either. Next run may delete them.
+- Migration 030 recorded in PENDING_OPS (`apply-migration-030`, **blocks the DATA_BACKEND cutover** — apply it BEFORE flipping persistence, or the enumeration hole goes live). No ROADMAP box ticked: none of the three merged changes completes a checkbox.
+
+### Rotation guide for next run
+- **DEEP AUDIT DUE ~Run 119** (last ran Run 115, >24h) — open with the 8-lens holistic sweep BEFORE scouting.
+- **#712 is the highest-value open security item and is PRE-EXISTING on default**, not something the abandoned branch introduced: `generateLink` overwrites the single per-user recovery token on every request, so a flood can invalidate the victim's in-inbox link. Fix that BEFORE re-attempting any send-side throttle. Read #712 first — do NOT re-derive the four findings.
+- **#711** carries the full measured contrast matrix (18 pairings × 2 themes). The likely fix is to stop STACKING tints (give `focus/page.tsx:1007` a solid background) rather than to keep lightening the token; then a modest token lift clears the rest.
+- **NAMED buildable follow-ups:** a test that globs `app/**/opengraph-image.tsx` and asserts each route appears in the `proxy.ts` matcher (turns a silent crawler regression loud — a reviewer's fast-follow suggestion); the waitlist page has a `title` but no `openGraph.title`, so its OG title still falls back to the generic root copy while its card is waitlist-specific; the OG wordmark renders "AptDesigner" solid-accent while `public/wordmark.svg` puts only the "AI" suffix in accent; `withCostLedger`/`recordUsage` rollout beyond the 2 instrumented routes; provider `recordCall` only firing on `status:"ok"`; a second AA-safe muted token.
+- **DO-NOT-RE-FLAG (carry ALL prior lists +):** `computer_use_*` tables missing RLS (migration 016 covers both in a `do $$` loop); `app-privacy.md` missing a notifications row (the push token never leaves the device — not collected data); share-token RLS (SHIPPED #710); mobile sign-out/delete bounding (SHIPPED #713); OG cards + the metadata-route exemption (SHIPPED #714); per-address reset throttle (ABANDONED — read #712, do NOT rebuild); warm-badge contrast token (ABANDONED — read #711, do NOT re-derive the matrix).
+
+
 ## Run 2026-07-26 (Run 117) — LANDED #697 (the top pickup) + found the routing bug that had been silently breaking public pages, share links, and the reset flow. 6 file-disjoint changes, 15 reviewer verdicts.
 
 ### State on entry
