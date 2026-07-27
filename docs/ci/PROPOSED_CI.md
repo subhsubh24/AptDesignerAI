@@ -5,8 +5,11 @@
 > moved ahead of the snapshot in `docs/ci/ci.yml` (it gained `paths-ignore`, a
 > `concurrency` cancel block, and the auto-migrate job). Treat `docs/ci/ci.yml` as an
 > archived proposal, not a file to copy. The sections below remain useful as the
-> rationale for each job. What is still OWNER-ONLY: promoting `lint` and `journeys` to
-> **required** checks in branch protection.
+> rationale for each job. `lint` and `journeys` are ALREADY required checks
+> (PENDING_OPS.md `enforce-ci-required-checks`, status done). What is still
+> OWNER-ONLY on this workflow: pointing `verify` at `npm run test:coverage` and
+> adding `--max-warnings 0` to the lint step, so the floors preflight now enforces
+> are enforced in CI too.
 
 
 **Why:** today the required checks are `verify` (tsc+tests) / `build` / `mobile`. The
