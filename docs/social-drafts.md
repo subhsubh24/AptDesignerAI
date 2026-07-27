@@ -188,7 +188,7 @@ AptDesigner: [link]
 ## Notes for owner
 
 - All posts are templates. Replace [link] with your actual App Store / Play Store links before posting.
-- The EARLY30 discount code from the email sequence can be woven into the Instagram/TikTok CTAs if you want to drive direct downloads from launch-week content.
+- The waitlist early-access discount code, once finalized (see `email-welcome-sequence.md` and `PENDING_OPS.md` `waitlist-early-discount-coupon` — no real code exists yet), can be woven into the Instagram/TikTok CTAs if you want to drive direct downloads from launch-week content.
 - Do not add testimonials, user counts, or download numbers unless you can verify them from your analytics dashboard.
 - Reddit posts perform best when they're authentic and the author engages in comments. Don't post-and-ghost.
 - Schedule X thread and Instagram posts in advance via Buffer, Later, or native scheduling. TikTok must be posted natively for best reach.

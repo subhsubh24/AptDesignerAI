@@ -108,7 +108,7 @@ Initial release of AptDesignerAI for iOS. Photograph any room, get AI-powered de
 ```
 https://aptdesignerai.com/support
 ```
-*(Owner: create a /support page or redirect to support email before submission)*
+*(DONE — /support (app/support) has shipped in-repo since 2026-07-17; no owner action needed here. Corrected Run 15, GTM Auditor Run 4 artifact_freshness finding.)*
 
 ### Marketing URL
 ```

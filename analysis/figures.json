@@ -27,6 +27,20 @@
       "value": 99926,
       "tolerance": 1,
       "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual mix stays at 0%: ARR is ~$99.9K' -- the shippable-TODAY figure both GTM_SCORECARD.md and QUALITY_SCORECARD.md (business_case_strength) cite precisely as $99,926, ~$74 below the $100K floor. Tight tolerance: this is the figure under active auditor scrutiny."
+    },
+    {
+      "id": "business_case_sensitivity_monthly_churn12_arr",
+      "script": "analysis/business_case_sensitivity_monthly_churn12_arr.mjs",
+      "value": 93556,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%: ARR ~$93,556' -- added Run 15 (GTM Auditor Run 4 found the prior '~$85K' prose figure did not reproduce and sat outside this gate; this script + registration closes that gap)."
+    },
+    {
+      "id": "business_case_sensitivity_annual_churn40_arr",
+      "script": "analysis/business_case_sensitivity_annual_churn40_arr.mjs",
+      "value": 103214,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%: ARR ~$103,214' -- added Run 15 (GTM Auditor Run 4 found the prior '~$106K' prose figure did not reproduce, erring in the flattering direction, and sat outside this gate; this script + registration closes that gap)."
     }
   ]
 }

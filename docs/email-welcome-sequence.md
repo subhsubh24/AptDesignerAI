@@ -66,7 +66,7 @@ See you at launch,
 
 **Subject:** What to look for on launch day
 
-**Preview text:** iOS App Store and Google Play links, plus a 30% discount for early access.
+**Preview text:** iOS App Store and Google Play links, plus early-access pricing details.
 
 ---
 
@@ -78,7 +78,7 @@ Launch is getting close. Here's exactly what to do when we go live:
 
 **On Android:** Same — search on Google Play or use the direct link.
 
-**Your early-access discount:** As a waitlist member, you'll receive a 30% discount code on your first paid plan. We'll include it in the launch email — don't miss it.
+**Your early-access pricing:** As a waitlist member, you'll get early-access pricing on your first paid plan [PLACEHOLDER: the specific offer is not yet finalized — see PENDING_OPS.md `waitlist-early-discount-coupon`; do not send this line until it is decided and a real mechanism exists]. We'll include the details in the launch email — don't miss it.
 
 **What to have ready:**
 - A few photos of the room you want to start with (natural light, no flash)
@@ -95,7 +95,7 @@ More soon,
 
 ## Email 4 — Launch day (triggered manually when app goes live)
 
-**Subject:** AptDesigner is live — here's your 30% discount
+**Subject:** AptDesigner is live — here's your early-access discount [PLACEHOLDER: fill in the real % once decided]
 
 **Preview text:** iOS and Android. Download free, upgrade when you're ready.
 
@@ -111,8 +111,7 @@ It's here.
 **[Download on Google Play →]**
 [PLACEHOLDER: insert Google Play URL]
 
-**Your early-access code:** `EARLY30`
-Applies to the Apartment plan ($29 → $20.30) or Pro plan ($49/month → $34.30/month). Valid for 72 hours.
+**Your early-access code:** `[PLACEHOLDER: no code exists yet — see PENDING_OPS.md `waitlist-early-discount-coupon`. Decide the real discount, create the Stripe coupon, then fill in the code + price math here before sending.]`
 
 **Where to start:**
 1. Download and create your account (free)
@@ -130,7 +129,7 @@ Thank you for waiting.
 
 ## Notes for owner
 
-- Replace `EARLY30` discount code with your actual Stripe/RevenueCat promotional code before sending Email 4.
+- Decide the real early-access discount (see `PENDING_OPS.md` `waitlist-early-discount-coupon`), create the Stripe coupon, then fill in the placeholders in Email 3 and Email 4 above with your actual code/percentage before sending.
 - Replace App Store / Play Store placeholder URLs with live links once submitted.
 - All four emails should be loaded into your email platform and activated as an automation on waitlist signup (trigger: new row in `waitlist_emails` table, or via webhook from the `POST /api/waitlist` endpoint).
 - Recommended platform: Loops, Resend + custom templates, or Mailchimp. The `POST /api/waitlist` endpoint currently only inserts the email — you'll need to connect a webhook or use Supabase Edge Functions to sync signups to your email platform.

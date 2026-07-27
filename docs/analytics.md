@@ -15,6 +15,12 @@ Custom funnel events are fired via `trackEvent()` from `lib/analytics.ts`, a typ
 | `upgrade_page_view` | `app/billing/upgrade/upgrade-tracker.tsx` (client island) | `tier: string` | Fires on mount of the upgrade page |
 | `checkout_started` | `app/billing/upgrade/upgrade-checkout-button.tsx` → `handleCheckout` | `tier: string` | Fires when user clicks "Continue to checkout" |
 | `checkout_complete` | `app/billing/checkout-success/conversion-tracker.tsx` (client island) | `tier: string` | Fires on mount of the checkout-success page; best-effort proxy — Stripe only redirects here after successful payment |
+| `save_limit_paywall_shown` | `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx` → `handleSaveDesign` | `stage: "assessment" \| "full"` | Fires when a save is rejected with `403 subscription_required` (the free-save-limit paywall) |
+| `share_nudge_shown` | `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx` (effect keyed on `step`/`savedDesignId`) | `stage: "assessment" \| "full"` | Fires once per page view, exactly when the share nudge becomes visible (results step, after a save) — NOT from the save handler itself, to avoid over-counting the assessment-stage save where the nudge never renders |
+| `share_nudge_clicked` | `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx` (share nudge CTA `onClick`) | `stage: "assessment" \| "full"` | Fires when the user clicks the share nudge CTA |
+
+Added Run 15 (GTM Auditor Run 4, artifact_freshness): these three were shipped but missing from
+this table — `lib/analytics.ts`'s `FunnelEvent` union has 10 members; this table now covers all 10.
 
 ## Known limitations
 

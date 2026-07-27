@@ -129,7 +129,7 @@ all exports. Scale uniformly; never rasterise at less than 2× the target size.
 Full store listing copy (App Store + Google Play) is staged at
 `docs/store-listing.md`.
 
-- **App name:** AptDesigner — AI Interior Design
+- **App name:** AptDesignerAI (corrected Run 15 — was "AptDesigner — AI Interior Design", which matched neither the canonical `docs/store-listing.md` App Store "Name" field nor the app identity table there)
 - **Subtitle (iOS):** AI Interior Design for Any Room
 - **Short description (Android):** Photograph any room. Get an AI design plan instantly.
 - **Primary keyword cluster:** interior design app, room design AI, home decor planner

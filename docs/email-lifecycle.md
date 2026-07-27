@@ -422,17 +422,29 @@ If they want to run their own room, one analysis is free. No card required.
 
 ## Delivery notes for owner
 
-1. **Email platform**: Resend (for transactional + automation), Loops or Mailchimp
-   (for marketing sequences). The `POST /api/waitlist` endpoint captures emails;
-   connect it to your platform via webhook or Supabase Edge Functions.
+CORRECTED Run 15 (GTM Auditor Run 4, artifact_freshness): this section previously described a
+pre-engine product ("you'll need to connect a webhook or use Supabase Edge Functions") that no
+longer matches what has actually shipped. The sending + trigger engine for Sequences 1, 4, and 5
+is CODE-COMPLETE — no webhook/Edge-Function wiring needed for those. What remains is real owner
+env-var/migration steps, tracked in `PENDING_OPS.md`, not a build gap:
 
-2. **Event triggers**: The sequences above require event hooks:
-   - `signup_complete` → Sequence 1
-   - `analysis_complete` (first time) → Sequence 2
-   - `upgrade_page_view` repeated + no conversion → Sequence 3
-   - `design_saved` (paid user, inactivity timer reset) → Sequence 4
-   - RevenueCat / Stripe `subscription_deleted` → Sequence 5
-   - `design_shared` (public share link created) → Sequence 6
+1. **Email platform: Resend, already wired.** `lib/email` sends through Resend directly (no
+   Loops/Mailchimp integration exists or is needed) — dry-run until the owner sets
+   `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (`PENDING_OPS.md connect-email-resend`).
+
+2. **Triggers — built, not webhook-driven:**
+   - Sequence 1 (Activation A1/A2/A3) and the analogous habit-formation sequence: daily Vercel
+     crons (`app/api/cron/activation-emails`, `app/api/cron/habit-emails`, registered in
+     `vercel.json`) query signup/activity windows directly — no event-hook wiring needed. Requires
+     `CRON_SECRET` + migration 025 (`PENDING_OPS.md set-cron-secret`, `apply-migration-025`).
+   - Sequence 5 (Win-back E1/E2/E3): E1 fires directly from the Stripe billing webhook on
+     `customer.subscription.deleted` (`app/api/billing/webhook/route.ts`); E2/E3 follow via
+     `app/api/cron/winback-emails`.
+   - **Sequence 6 (Referral/Share, F1) is NOT yet built** — no `design_shared` trigger or cron
+     exists for it. This one genuinely needs the event-hook wiring this section used to describe
+     for everything; treat it as a real Product-Factory backlog item, not an owner env-var step.
+   - Sequence 3 (upgrade-nudge on repeated `upgrade_page_view` with no conversion) is also not
+     wired to a dedicated cron/trigger today — re-verify before promising it fires.
 
 3. **Do not send all sequences at once.** Set up one sequence per week and verify
    deliverability, open rates, and unsubscribe rates before adding the next.

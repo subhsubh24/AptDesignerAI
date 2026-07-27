@@ -30,7 +30,7 @@ const PERKS = [
   {
     icon: Star,
     title: "Early-access pricing",
-    body: "Waitlist members get 30% off their first paid plan at launch. No promo code required.",
+    body: "Waitlist members get early-access pricing on their first paid plan — details land in your inbox at launch.",
   },
 ];
 

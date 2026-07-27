@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-07-14
+  as_of: 2026-07-27
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -109,11 +109,11 @@ OWNER_ACTIONS:
       how: "Install the Upstash Redis Vercel integration (1-click from Vercel dashboard → Integrations), set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN env vars, swap lib/utils/rate-limiter.ts AND lib/utils/spend-limiter.ts to use @upstash/ratelimit (Sliding Window) / a shared Redis counter."
       blocks: rate-limiting-at-scale
     - id: waitlist-early-discount-coupon
-      title: "Create the Stripe coupon behind the waitlist's \"30% off, no promo code required\" promise"
+      title: "Decide + build the real early-access discount mechanism for waitlist members (copy softened in the meantime)"
       priority: high
       status: open
-      why: "app/waitlist/page.tsx and app/waitlist/confirmed/page.tsx both promise every waitlist signup 30% off their first paid plan, with NO promo code required. There is no mechanism behind it: no coupon exists in the Stripe config and nothing in lib/billing applies one. Whoever joins the waitlist arrives at checkout on launch day and pays full price, which is a broken public promise on the pre-launch conversion surface. Prior runs recorded this as tracked in PENDING_OPS, but no entry was ever actually written — this is that entry."
-      how: "Create a 30%-off Stripe coupon (Products -> Coupons; percent_off=30, duration=once) and note its ID. Then EITHER (a) auto-apply it: pass `discounts: [{ coupon }]` in the checkout session for customers whose email is in waitlist_emails with confirmed_at set (a loop-buildable change once the coupon ID exists in env as STRIPE_WAITLIST_COUPON_ID), OR (b) soften the copy to require a code and email it on launch. (a) keeps the promise as written and is preferred. Until one is done, the claim is unbacked."
+      why: "app/waitlist/page.tsx and app/waitlist/confirmed/page.tsx used to promise every waitlist signup 30% off their first paid plan, with NO promo code required, but no coupon existed in Stripe config and nothing in lib/billing applied one -- a broken public promise on the pre-launch conversion surface (flagged by the GTM Auditor, Run 4, artifact_freshness). FIXED Run 15 (GTM Factory): both pages now say only 'early-access pricing... details land in your inbox at launch' -- true today (no specific number or mechanism claimed) and not contradicted by anything in code. This entry stays OPEN because the underlying decision (what discount, if any, to actually offer) and its mechanism are still unbuilt -- the copy fix removes the honesty defect, it does not replace the business decision."
+      how: "Decide the real discount (or decide not to offer one). If offering one: create the Stripe coupon (Products -> Coupons) and note its ID, then EITHER (a) auto-apply it -- pass `discounts: [{ coupon }]` in the checkout session for customers whose email is in waitlist_emails with confirmed_at set (a loop-buildable change once the coupon ID exists in env as STRIPE_WAITLIST_COUPON_ID; note Stripe's API does not allow `discounts` and `allow_promotion_codes: true` together in the same session, so lib/billing/stripe.ts:137 needs updating too) -- OR (b) keep it manual: finalize a real code and send it via the existing Email 4 draft (docs/email-welcome-sequence.md already marks EARLY30 there as a placeholder to replace before sending, not a live claim). Once a real number is committed, restore it to the waitlist copy."
       blocks: launch-promise-integrity
     - id: connect-email-resend
       title: "Connect Resend to switch the email lifecycle from dry-run to live (E7.2)"
@@ -164,6 +164,13 @@ OWNER_ACTIONS:
       why: "Run 118 (PR #710): migration 020 replaced 019's policy with `USING (is_public = true AND share_token IS NOT NULL)` and justified it by claiming a SELECT without the share_token filter matches 0 rows. That is wrong — a Postgres USING clause is evaluated PER ROW against row data and cannot see, let alone require, the caller's WHERE predicate, so every public row satisfied it unconditionally. Because NEXT_PUBLIC_SUPABASE_ANON_KEY ships to every browser, anyone could call PostgREST directly (GET /rest/v1/saved_designs?is_public=eq.true&select=*) and receive EVERY shared design — share_token, user_id and full snapshot included. That is the exact enumeration migrations 015->019 were written to close. Dormant TODAY only because DATA_BACKEND still defaults to the in-memory store; it goes LIVE the moment the persistence cutover is flipped, which is why this must be applied first. 030 drops the anon read entirely; public share links are now served server-side by the service-role client in lib/supabase/public-share.ts, which binds BOTH share_token and is_public where a client cannot route around them. The owner-scoped policies (auth.uid() = user_id) are untouched."
       how: "1) Run `supabase db push` (or paste supabase/migrations/030_saved_designs_drop_permissive_public_policy.sql into the Supabase SQL Editor). 2) Confirm SUPABASE_SERVICE_ROLE_KEY is set on the deployment — it is now REQUIRED to serve share links; the app throws a specific named error rather than silently 404ing if it is missing. 3) VERIFY as the anon role, BOTH must return 0 rows: `SELECT id FROM saved_designs WHERE is_public = true LIMIT 5;` and `SELECT id FROM saved_designs WHERE share_token = '<a valid token>';`. 4) Then confirm the FEATURE still works through the app, which is now the only reader: open /shared/<valid-token> (must render the design) and /shared/<garbage> (must 404). If a VALID token 404s, the deployment is missing the service-role key."
       blocks: cutover-to-persistent-data
+    - id: apply-migration-031
+      title: "Apply migration 031_waitlist_unsubscribe.sql to prod (real no-login CAN-SPAM opt-out for the waitlist)"
+      priority: high
+      status: open
+      why: "GTM Auditor Run 4 (compliance) found waitlist_welcome_1 is a marketing-classified send with no working opt-out. Run 15's first fix pointed the footer at /account, but an independent review caught that this doesn't work: waitlist_emails subscribers never get a Supabase auth account, so /account just bounces them to a login wall. This migration adds the unsubscribed_at column the real fix (app/api/waitlist/unsubscribe, a public no-login endpoint keyed by the row's own id) needs."
+      how: "Run `supabase db push` (or paste supabase/migrations/031_waitlist_unsubscribe.sql into the Supabase SQL Editor). No env var or app-code change needed beyond this — the route and email template are already wired to use it. Verify: click the 'Unsubscribe' link in a real waitlist_welcome_1 email and confirm it redirects to /waitlist/confirmed?status=unsubscribed without requiring sign-in, and that the row's unsubscribed_at is set."
+      blocks: launch-promise-integrity
     - id: set-cron-secret
       title: "Set CRON_SECRET to activate the lifecycle email cron jobs"
       priority: normal
