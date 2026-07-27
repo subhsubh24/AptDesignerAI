@@ -53,9 +53,19 @@ addition). The ceiling was rejected twice and I could not ground it either time.
   whose own ROOM_FURNISHING_TIERS target reaches [15,28] for a studio. A studio at
   the top of its range with four options each is 112 URLs of ordinary use.
 **I dropped the ceiling rather than pick a third number.** Two rounds of guessing a
-bound that turned out to be under real usage IS the evidence that no defensible
-bound exists at that layer. Rejecting legitimate paid-feature requests to protect
+bound that turned out to be under real usage IS the evidence that I could not size
+one correctly at that layer. Rejecting legitimate paid-feature requests to protect
 against a hypothetical is the wrong trade.
+**But the approving reviewer's caveat belongs here too, because my framing
+overstated it:** "no defensible ceiling exists" is too strong. A ceiling sized as a
+pure DoS backstop rather than a usage limit — say 500, comfortably above the ~112
+legitimate maximum — would have been defensible and was never considered. I argued
+myself from "I picked the wrong number twice" to "no number is right", which is a
+different claim. The cost lever is genuinely still open: checkRateLimit and
+checkDailySpend both count REQUESTS, not URLs, so a 5,000-URL request now runs until
+maxDuration kills it mid-flight, burning spend with no clean rejection. Next run
+should take EITHER the source-level cap on `what_it_needs` (best) OR a high DoS
+backstop (cheap) — not neither.
 **Generalisable rules:**
 - When a limit is contested twice, the problem is usually that you are bounding at
   the WRONG LAYER. The real fix here is to cap `what_it_needs` at the source, where
