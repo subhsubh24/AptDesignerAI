@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
+import { signOutWithTimeout } from '@/lib/auth/sign-out';
 import { RC_KEY } from '@/lib/rc-init';
 import { supabase } from '@/lib/supabase';
 import { clearPendingSession } from '@/state/photo-session';
@@ -129,11 +130,32 @@ export default function SettingsScreen() {
         signal: controller.signal,
       });
       if (resp.ok) {
-        // Account is gone — sign out clears the local session and returns to login.
-        await supabase.auth.signOut();
-        // Also wipe the in-memory pending photo/room-type so it can't leak to
-        // the next user on a shared device.
+        // The server has CONFIRMED the account is destroyed. From here nothing
+        // may report a delete failure — the delete succeeded, and telling the
+        // user otherwise invites them to retry a delete of an account that no
+        // longer exists.
+        //
+        // Wipe the in-memory pending photo/room-type FIRST: it is local state
+        // that cannot fail, and on a shared device it is the part that would
+        // leak the previous user's room to the next one.
         clearPendingSession();
+
+        // Then clear the session, bounded. This used to be an unbounded await
+        // inside this try, so a network drop in the window between "account
+        // deleted" and "session cleared" threw into the catch below and
+        // surfaced "Unable to delete account" — about an account that was
+        // already gone (issue #698).
+        const signedOut = await signOutWithTimeout(supabase.auth);
+        if (!signedOut.ok) {
+          // The tokens are already dead server-side (the account they identify
+          // no longer exists), so this is a stuck-UI problem rather than an
+          // access one — but the app can't route itself back to login without a
+          // SIGNED_OUT event, so say plainly what the user needs to do.
+          Alert.alert(
+            'Account deleted',
+            'Your account and designs have been deleted. Please close and reopen the app to finish signing out.',
+          );
+        }
       } else {
         const body = (await resp.json().catch(() => ({}))) as { error?: string };
         Alert.alert(
@@ -164,22 +186,39 @@ export default function SettingsScreen() {
   }, [performDelete]);
 
   const handleSignOut = useCallback(async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      // Wipe the in-memory pending photo/room-type on sign-out so the next user
-      // on a shared device can't see the previous user's pending room photo.
+    // Bounded (issue #698): this used to be an unbounded await, so on a dead
+    // network the row simply stopped responding — no spinner, no error, no way
+    // to tell a slow sign-out from a broken one — until the platform's own
+    // socket timeout eventually fired.
+    const result = await signOutWithTimeout(supabase.auth);
+
+    if (result.ok) {
+      // Wipe the in-memory pending photo/room-type so the next user on a shared
+      // device can't see the previous user's pending room. ONLY on success:
+      // unlike the delete path, a failed sign-out leaves the SAME user signed in
+      // on the same device, so there is no next user to protect from — clearing
+      // it there would just destroy their in-progress room for nothing.
+      //
+      // The one case that leaves open — a sign-out reported as `timeout` that
+      // the server nonetheless completes a moment later — is covered outside
+      // this file by the global `SIGNED_OUT` handler in hooks/use-session.ts,
+      // which clears on EVERY sign-out however it originates. That listener is
+      // load-bearing for this branch: remove it and the success-only clear here
+      // becomes a real leak.
       clearPendingSession();
-    } catch {
-      // supabase-js returns the error in-band (and can also throw on a network
-      // failure). A silently-failed sign-out leaves the session live — the user
-      // believes they are signed out but isn't, which can expose their account
-      // on a shared device. Surface it so they can retry instead of walking away.
-      Alert.alert(
-        'Unable to sign out',
-        "We couldn't sign you out. Please check your connection and try again.",
-      );
+      return;
     }
+
+    // A silently-failed sign-out leaves the session live: the user believes they
+    // are signed out but isn't, which exposes their account on a shared device.
+    // Surface it so they retry instead of walking away — and don't claim the
+    // request failed when it may simply not have answered yet.
+    Alert.alert(
+      'Still signed in',
+      result.reason === 'timeout'
+        ? "Signing out is taking longer than expected, so you may still be signed in on this device. Check your connection and try again."
+        : "We couldn't sign you out. Please check your connection and try again.",
+    );
   }, []);
 
   return (
