@@ -259,6 +259,97 @@ test.describe("authenticated journeys", () => {
     });
   }
 
+  // The DESIGN-DENSE half of the same gate. The sweep above only reaches routes
+  // a fresh user hits with no seeding, which are the SPARSEST screens in the
+  // product — while the surfaces carrying the actual design work (the room
+  // pipeline: setup, diagnosis, products, bundles, mockups, compare) were never
+  // scanned by anything. That gap was not hypothetical: it hid a CRITICAL
+  // button-name violation on /setup, where the Budget Mode control had no
+  // accessible name at all because Radix's SelectTrigger is a
+  // role="combobox" and combobox does not take its name from content.
+  //
+  // /focus is deliberately EXCLUDED: opening it kicks off the room-analysis
+  // pipeline, which would make an a11y scan both slow and dependent on live LLM
+  // behaviour. This gate stays a fast, deterministic scan of entry states.
+  //
+  // Each route is paired with the h1 its OWN page renders. Asserting merely
+  // "an h1 exists" is not enough: app/not-found.tsx renders
+  // `<h1>This room doesn't exist</h1>`, so a 404 would satisfy a bare h1 check
+  // and axe would then find nothing wrong with it — a broken surface scoring
+  // CLEAN is exactly the failure this gate exists to prevent. Matching the
+  // page's own heading is what makes the scan provably about the real screen.
+  const DESIGN_DENSE_A11Y_ROUTES: Array<{ segment: string; heading: RegExp }> = [
+    { segment: "setup", heading: /^room setup$/i },
+    { segment: "diagnosis", heading: /^your room, studied$/i },
+    { segment: "products", heading: /^products$/i },
+    { segment: "bundles", heading: /^bundles$/i },
+    { segment: "mockups", heading: /^mockups$/i },
+    { segment: "compare", heading: /^compare products$/i },
+  ];
+  test("authed a11y: the design-dense room surfaces have no critical/serious axe violations", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signIn(page);
+
+    // Seed through the app's OWN API from inside the page, for the same reason
+    // the money-path test does: createClient() proxies data ops to the in-memory
+    // store, so an admin/Postgres seed would be invisible to these pages.
+    const seed = await page.evaluate(async () => {
+      async function postJson(path: string, payload: unknown) {
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        return { status: r.status, text: await r.text() };
+      }
+      const proj = await postJson("/api/projects", { name: "E2E A11y Project" });
+      if (proj.status !== 201) return { stage: "projects", ...proj };
+      const projectId = JSON.parse(proj.text).id as string;
+      const room = await postJson("/api/rooms", {
+        project_id: projectId,
+        name: "E2E A11y Living Room",
+        room_type: "living_room",
+      });
+      if (room.status !== 201) return { stage: "rooms", ...room };
+      return { stage: "ok", projectId, roomId: JSON.parse(room.text).id as string };
+    });
+    expect(seed.stage, `seeding failed: ${JSON.stringify(seed)}`).toBe("ok");
+    const { projectId, roomId } = seed as { projectId: string; roomId: string };
+
+    // Collected across ALL routes, then asserted once — a per-route throw would
+    // report the first broken surface and hide the rest.
+    const failures: string[] = [];
+    for (const { segment, heading } of DESIGN_DENSE_A11Y_ROUTES) {
+      const route = `/projects/${projectId}/rooms/${roomId}/${segment}`;
+      await page.goto(route);
+      await page.waitForLoadState("networkidle");
+      await expectNoErrorBoundary(page);
+      // The page must have actually rendered ITS OWN screen — not the 404
+      // boundary, not an empty shell. See the note on the route table above.
+      await expect(
+        page.getByRole("heading", { level: 1, name: heading }),
+        `${route} did not render its own h1 (${heading}) — 404, empty shell or ` +
+          `renamed heading, not a scannable surface`,
+      ).toBeVisible();
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      for (const v of results.violations) {
+        if (v.impact !== "critical" && v.impact !== "serious") continue;
+        failures.push(
+          `${route}\n  [${v.impact}] ${v.id}: ${v.description}\n  ` +
+            v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
+        );
+      }
+    }
+    expect(failures, `design-dense axe violations:\n\n${failures.join("\n\n")}`).toEqual([]);
+  });
+
   test("paywall: /billing/upgrade renders a REAL Stripe checkout entry", async ({ page }) => {
     await signIn(page);
     await page.goto("/billing/upgrade?tier=pro");

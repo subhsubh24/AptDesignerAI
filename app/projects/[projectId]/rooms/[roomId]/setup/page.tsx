@@ -221,8 +221,13 @@ export default function RoomSetupPage() {
         <CardContent className="space-y-6">
           <div className="grid gap-2">
             <Label>Budget Mode</Label>
+            {/* aria-label, not the visible <Label>: SelectTrigger renders
+                role="combobox", and combobox does NOT take its name from
+                content — the "Balanced" text inside the trigger is ignored by
+                the accessible-name computation. Without this the control has
+                no name at all (axe button-name, critical). */}
             <Select value={budgetMode} onValueChange={setBudgetMode}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="Budget Mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
