@@ -19,7 +19,7 @@ import { createServerClient } from "@supabase/ssr";
  * risky blind cutover: default behavior is unchanged, and enabling persistence is
  * a single env flip the owner controls.
  */
-function supabaseDataBackendEnabled(): boolean {
+export function supabaseDataBackendEnabled(): boolean {
   return process.env.DATA_BACKEND === "supabase";
 }
 

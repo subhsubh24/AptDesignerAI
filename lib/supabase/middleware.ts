@@ -54,18 +54,20 @@ const SIGNED_IN_REDIRECT_PATHS = new Set([
 // /api/shared/* prefix was already public below, but the PAGE was not, so every
 // share link 307'd its recipient to /login.
 //
-// The token is enforced at the app layer: both the page and the API filter on
-// `.eq("share_token", token).eq("is_public", true)` and notFound()/404 otherwise
-// (app/shared/[token]/page.tsx:56-60, app/api/shared/[token]/route.ts:42-43).
-// That is the control here — deliberately NOT the RLS policy. The live policy is
-// migration 020 (which superseded 019's JWT-claim version), and its
-// `USING (is_public = true AND share_token IS NOT NULL)` cannot require the
-// caller's filter: a Postgres USING clause is evaluated per row against row
-// data, not against the client's WHERE predicate, so 020's comment claiming
-// "a SELECT without the share_token filter matches 0 rows" is wrong. Opening
-// this route widens nothing — NEXT_PUBLIC_SUPABASE_ANON_KEY already ships to
-// every browser, so that PostgREST path is equally reachable with or without
-// this change. Tracked separately; do not treat 020 as a token guard.
+// The token is enforced at the app layer, in ONE place: both the page and the
+// API route read through `readSharedDesignByToken()`
+// (lib/supabase/public-share.ts), which binds `share_token` AND `is_public`
+// server-side with the service-role client and 404s otherwise.
+//
+// That is deliberately the control, because the RLS policy could never be. The
+// old policy (migration 020, superseding 019's JWT-claim version) was
+// `USING (is_public = true AND share_token IS NOT NULL)`, and a Postgres USING
+// clause is evaluated per row against ROW DATA, not against the client's WHERE
+// predicate — so it could not require the caller to send the token, and 020's
+// comment claiming "a SELECT without the share_token filter matches 0 rows" was
+// wrong. Since NEXT_PUBLIC_SUPABASE_ANON_KEY ships to every browser, anon could
+// read every shared design straight off PostgREST. Migration 030 DROPS that
+// policy, so anon now has no read on `saved_designs` at all (issue #708).
 //
 // Left OUT of the site-gate exempt set on purpose: pre-launch there is nothing
 // worth sharing, so a share link correctly meets the coming-soon curtain.
@@ -74,8 +76,10 @@ const PUBLIC_PATH_PREFIXES = ["/guides", "/shared"];
 // API routes that must accept unauthenticated requests.
 // /api/billing/webhook — Stripe POSTs here with its own signature verification.
 // /api/shared/*       — public design share links; each route MUST enforce
-//                       share_token + is_public via RLS. Do not add auth-gated
-//                       routes under this prefix.
+//                       share_token + is_public IN THE APP (via
+//                       lib/supabase/public-share.ts), not via RLS — see the
+//                       note above. Do not add auth-gated routes under this
+//                       prefix.
 // /api/mobile/*       — mobile clients authenticate via Bearer token in the
 //                       Authorization header (no session cookie); each route
 //                       calls supabase.auth.getUser(token) directly.

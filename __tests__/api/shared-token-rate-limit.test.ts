@@ -4,7 +4,15 @@ import { NextRequest } from "next/server";
 // The public /api/shared/[token] endpoint is unauthenticated and addressable by
 // a guessable-length token, so it is rate-limited per IP to slow enumeration.
 // These tests assert the limiter is wired and keyed on the caller IP.
-vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// The route reads through lib/supabase/public-share.ts, which picks its client
+// from the active data backend. Tests run on the default (memory) backend, so
+// `supabaseDataBackendEnabled()` is false and the mocked createClient serves
+// the read — see __tests__/security/public-share-token.test.ts for the
+// service-role path.
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(),
+  supabaseDataBackendEnabled: () => false,
+}));
 
 import { createClient } from "@/lib/supabase/server";
 import { GET } from "@/app/api/shared/[token]/route";

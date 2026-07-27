@@ -1,0 +1,71 @@
+-- Close the share-link enumeration hole that migration 020 left open.
+--
+-- THE BUG (issue #708)
+--
+-- Migration 020 replaced 019's JWT-claim policy with:
+--
+--     USING (is_public = true AND share_token IS NOT NULL)
+--
+-- and justified it in its own header with: "a SELECT without the share_token
+-- filter matches 0 rows because is_public alone is insufficient to satisfy the
+-- USING clause." That reasoning is wrong. A Postgres USING clause is evaluated
+-- PER ROW against ROW DATA — it cannot see, and therefore cannot require, the
+-- caller's WHERE predicate. Every row with is_public = true and a non-null
+-- share_token satisfies it unconditionally.
+--
+-- The app's `.eq("share_token", token)` was only ever a CLIENT-SIDE filter, and
+-- NEXT_PUBLIC_SUPABASE_ANON_KEY ships to every browser. So any visitor could
+-- call PostgREST directly:
+--
+--     GET /rest/v1/saved_designs?is_public=eq.true&select=*
+--
+-- and receive EVERY shared design — share_token, user_id and the full snapshot
+-- included. That is precisely the enumeration migrations 015 → 019 were written
+-- to close, reintroduced by 020's replacement policy.
+--
+-- Dormant until now only because DATA_BACKEND still defaults to the in-memory
+-- store. It would go live the moment the owner flips the persistence cutover,
+-- so it is fixed BEFORE that flip, not after.
+--
+-- THE FIX
+--
+-- Drop the anon read entirely. `saved_designs` keeps RLS enabled and keeps its
+-- owner-scoped policies (auth.uid() = user_id) — only the public path changes.
+-- Public share links are now served by the SERVICE-ROLE client in
+-- lib/supabase/public-share.ts, which binds BOTH share_token and is_public
+-- server-side where a client cannot route around them. The token remains the
+-- credential; it is now enforced by code that actually checks it instead of by
+-- a policy that never could.
+--
+-- This mirrors the established pattern for a table read only by the admin
+-- client — see 016_rls_computer_use_tables.sql: RLS enabled, no anon policy,
+-- service_role bypasses RLS, the app is unaffected.
+--
+-- Do NOT re-add a permissive anon SELECT policy on this table. There is no
+-- policy shape that can require the caller to send a token filter; if a future
+-- change needs anon reads, it needs a token-parameterised SECURITY DEFINER
+-- function, not a USING clause.
+--
+-- Idempotent: safe to re-run.
+--
+-- HOW TO APPLY:
+--   psql $DATABASE_URL -f supabase/migrations/030_saved_designs_drop_permissive_public_policy.sql
+--
+-- HOW TO VERIFY (as the anon role — BOTH must now return 0 rows):
+--   SELECT id FROM saved_designs WHERE is_public = true LIMIT 5;
+--   -- Expected: 0 rows  (was: every shared design)
+--   SELECT id FROM saved_designs WHERE share_token = '<a valid token>';
+--   -- Expected: 0 rows  (anon no longer reads this table at all)
+--
+-- Then confirm the FEATURE still works end-to-end through the app, which is now
+-- the only reader: open /shared/<valid-token> — it must render the design, and
+-- /shared/<garbage-token> must 404. If the page 404s on a VALID token, the
+-- deployment is missing SUPABASE_SERVICE_ROLE_KEY (the app throws a specific
+-- error naming it — see lib/supabase/public-share.ts).
+
+DROP POLICY IF EXISTS "Public can view shared designs via token" ON saved_designs;
+
+-- Belt-and-braces: RLS must stay ON. With no anon/authenticated policy for the
+-- public path, PostgREST denies these reads; the owner-scoped policies from
+-- 011/015 continue to serve the signed-in owner's own designs.
+ALTER TABLE saved_designs ENABLE ROW LEVEL SECURITY;

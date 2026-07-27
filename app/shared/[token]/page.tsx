@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { readSharedDesignByToken } from "@/lib/supabase/public-share";
 import { SharedDesignView } from "./SharedDesignView";
 import { isValidSnapshot } from "./snapshot-guard";
 
@@ -49,19 +49,14 @@ export type SharedDesign = {
 // React.cache deduplicates per-request across both generateMetadata and the
 // page component — Next.js runs them in the same request context.
 const getSharedDesign = cache(async (token: string): Promise<SharedDesign | null> => {
-  if (!token || token.length < 16) return null;
-
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("saved_designs")
-    .select("id, title, room_type, stage, thumbnail_url, snapshot, created_at, is_public")
-    .eq("share_token", token)
-    .eq("is_public", true)
-    .maybeSingle();
+  // The token is the credential, so the lookup goes through the one module that
+  // binds share_token AND is_public server-side — the anon client's RLS policy
+  // could never require the token filter. See lib/supabase/public-share.ts.
+  const data = await readSharedDesignByToken(token);
 
   if (!data) return null;
 
-  const row = data as SharedDesign & { is_public: boolean };
+  const row = data as unknown as SharedDesign;
 
   // A public row whose snapshot is missing/malformed (an older or partially
   // written save) would otherwise 500 the page — generateMetadata and the view
