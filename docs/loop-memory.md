@@ -4,6 +4,54 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-27 (Run 120) — scout-driven off the FRESH scorecard (no DEEP AUDIT, ran Run 119). 6 file-disjoint changes, 12 reviewer rounds. Every REQUEST_CHANGES was a real defect; FOUR were mine, and two reviewers independently found the same security hole.
+
+### State on entry
+- Cold container. Designated branch `claude/sleepy-goldberg-4hnkgo` == default tip `0e0f901`, 0/0 divergence. Baseline GREEN: web tsc, **2438 tests**/11 skip, determinism.
+- **QUALITY_SCORECARD was FRESH** (`as_of: 2026-07-27`, commit `0e0f901`, landed hours earlier) — the opposite of Run 119, where it was a week stale. Five ship-critical dims below A. Its top_gaps were specific enough to BE the run's candidate list, so scouting was 6 Haiku agents verifying the auditor's findings against the tree rather than hunting fresh ones. That was the right call: every finding it named was still true, and the scouts added file:line detail the fixes needed.
+- DEEP AUDIT NOT due (ran Run 119; next ~Run 123).
+
+### THE RUN'S CENTRAL LESSON: my security reasoning was wrong in the way that matters — I trusted a boundary I never checked
+The deletion purge needed to delete generated mockups, whose storage keys carry NO user id (`mockups/<hash>.png`), so they can only be attributed through rows that reference them. I read three URL columns and wrote in the module docstring that all three are "server-written, never free-form client JSON". **Two of the three are client-settable** — `saved_designs.thumbnail_url` comes straight from a request body (validated only for https + our Supabase host, which is public) and `projects.cover_image_url` is a PATCH allow-list field with no validation at all. Since `isPurgeablePath` has to admit the WHOLE `mockups/` namespace, whatever feeds it is a delete instruction: a user could read another tenant's mockup URL from a public share, PATCH it onto their own project, delete their own account, and take the victim's image with them.
+**Both reviewers found it independently, on the same commit, from different prompts.** That is the strongest signal this loop has produced that the 2-reviewer rule is not ceremony.
+And the test I had written to cover exactly this used a path under `victim-user/`, which the OTHER branch of `isPurgeablePath` already blocked — so it exercised the closed door and never touched the open one. **A security test that passes against the wrong branch is worse than no test: it buys confidence without coverage.** Rule: when a guard is an OR, write the test against the permissive side.
+
+### Reviewers caught three more things I would have shipped
+1. **The purge missed the native app's photos entirely.** mobile/src/app/results.tsx bypasses `/api/upload` and PUTs straight to Supabase Storage into a bucket named `room-photos` (documented in PENDING_OPS since 2026-06-24, manually created, public). I had derived the bucket list from the web upload route and never asked whether anything else uploads. The platform whose guideline mandates the deletion was the one platform the fix missed. Now the test DERIVES the bucket name from the mobile source, so a rename there fails here.
+2. **Two more false "Not collected" entries, found one at a time.** First `name` (signup writes `profiles.full_name`), then `messages` + "user content beyond room photos" (floor plans, `rooms.user_context`, `refine_messages`). Each was found only AFTER the previous fix landed — I corrected the two items the auditor named and never re-audited the rest of the list. **When a doc is found to contain a false claim, the finding is "this list is unverified", not "these two items are wrong".**
+3. **A false claim I INTRODUCED into the privacy page** — "skip the address box and everything else still works". The dashboard gates Continue on `disabled={!city}`, settable only by picking a Places suggestion. I wrote a reassurance into a compliance page without checking the flow. Same defect class the commit was fixing.
+
+### THE PROCESS BUG THAT COST THE MOST: reviewer subagents mutate the working tree
+Two reviewers ran `git stash` / `git checkout` to isolate a commit's tree for testing — and **silently destroyed my uncommitted work in progress**. Symptoms were confusing: a file reverted to HEAD mid-edit, then re-appeared with my edits DOUBLE-APPLIED after I re-ran a patch script against what I thought was a clean file. One reviewer's own report confirms the mechanism ("confirmed via `git stash`/`git status`").
+**Rules adopted mid-run, keep them:**
+- COMMIT BEFORE SPAWNING ANY REVIEWER. Never hold uncommitted work across a review.
+- Tell every reviewer verbatim: do NOT modify, checkout, stash, clean or otherwise mutate the working tree; read-only commands plus tsc/vitest/eslint only.
+- When re-applying a patch after suspected contention, `git checkout HEAD -- <file>` FIRST and assert on the result — a patch script must ASSERT each replacement matched (`assert s != before`), or a silently-skipped hunk looks like success. My python patch reported "PATCH OK" while the most important hunk had not applied.
+- Extends the Run 119 lesson ("a `M` in git status is not proof of a modification") in the other direction: **the ABSENCE of `M` is not proof your work is still there.**
+
+### Shipped — 6 file-disjoint changes
+1. **`fix(store/D)`** — account deletion never purged storage; a deleted user's photos + mockups stayed publicly fetchable forever (auditor's #1 gap, severity critical). Purge runs BEFORE the cascade (the cascade destroys the attributing rows) and fails CLOSED — a failed purge leaves the account intact rather than reporting a deletion it did not perform. Native route went from zero tests to six.
+2. **`fix(store/D)`** — the App Privacy declaration was false in five categories. Guard test derives every premise from migrations + routes, and was verified to FAIL on the pre-change text of both artifacts.
+3. **`perf(A)`** — vision calls fetched images serially inside the part-builder loop, in front of every vision call; real call sites carry 5-12 images. Batched behind their own gate (NOT the model-call gate — that one holds a per-minute quota at 8, so downloads would compete with in-flight model calls and a prefetch becomes a stall). Results written to reserved slots, so completion order never reaches the model.
+4. **`feat(F1,F2)`** — the lint and coverage ticks had no mechanism anywhere. `.agents/**` (vendored, source of all 19 warnings, imported by nothing) eslint-ignored so `--max-warnings 0` could go on; thresholds 40/30/42/40 -> 60/49/64/61 against actual 64.01/53.18/68.58/65.15; preflight GATE 1f runs both. Coverage gate verified to FAIL by re-running with a 99% floor.
+5. **`fix(perf/G)`** — `/api/products/evaluate-set` fanned out `Promise.all` over every URL in the request body, an LLM extraction each, while the scoring phase directly below was already batched at 5. Capped at 40 URLs/request + pLimit(5).
+6. **`docs(F5)`** — five artifact claims that had stopped being true, including one I got wrong myself one commit earlier and corrected in the next.
+
+### Reviewer B rejected a commit purely on COHERENCE — and was right
+I bundled the gemini perf change with three store/D reviewer fixes into one commit. Reviewer B rejected it citing this repo's own five preceding commits, each a single atomic fix. Split into three; content unchanged. **Worth remembering: a technically-perfect diff can still be a REQUEST_CHANGES, and "the preceding commits establish the convention" is a legitimate, checkable argument.**
+
+### NOT done / carried forward
+- **ROADMAP A4 UN-TICKED** — "Accounts, data model, and RLS are correct and secure" cannot be claimed while the 26/26 policies never execute at runtime (DATA_BACKEND defaults to memory). First un-tick in a while; do NOT re-tick until the cutover lands.
+- **The deletion purge is PRE-CUTOVER preparation, not a live fix** — under the memory backend `/api/upload` writes to the fake store while `getAdminClient()` always targets real Supabase. Reviewer B flagged this; it does not diminish correctness but it must not be described as closing a currently-exploitable hole.
+- Named, NOT built this run (all still real, all file-disjoint from what shipped): the score-colour system (`lib/scoring/verdicts.ts` `getScoreColor`/`getScoreBgColor` encode ORDINAL scores with emerald/amber/rose across 7 consumers — the ROOT CAUSE behind the auditor's ManualScorecardView finding, so fixing verdicts.ts fixes all seven); the business-case CHANNEL inconsistency (a flat 30% store haircut applied to a web/Stripe-only shippable figure — modelling one channel at real fees is the honest path to the $100K floor and needs no input nudging); the two security A+ nits (saved-designs `project_id` persisted after an unbound fetch, products `search_session_id` never bound); `resolveImageBlocks()` still has ZERO call sites while 13 loops resolve serially; `app/api/mockups/route.ts` `fs.readdirSync` on the request path.
+- **Mobile paywall gaps** (scout finding, corroborates the auditor): the $29 Apartment tier is absent from `mobile/src/components/paywall-sheet.tsx` while credited with 60% of conversions in the model, and mobile offers Annual with NO equivalent of web's `isAnnualBillingEnabled()` gate — so mobile can sell a tier the web DB constraint cannot yet represent. Needs RevenueCat product config (owner) alongside the code, so it belongs in a dedicated monetization run.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 123** (last ran Run 119).
+- **Read the scorecard FIRST and check its `as_of`.** When it is fresh, it IS the candidate list and scouting becomes verification. When it is stale (Run 119), verify before acting.
+- **Highest-value unbuilt items, in order:** the verdicts.ts score-colour root cause (ship-critical design_taste, one file fixes 7 surfaces); the business-case channel model (ship-critical business_case_strength, and the honest route to clearing the floor); the two security A+ nits.
+- **DO-NOT-RE-FLAG (carry all prior lists +):** `floor-plans` bucket (REMOVED from the upload allow-list — no migration ever created it and both upload zones post `room-images`); the `.agents/**` eslint ignore (vendored Apache-2.0 skill, imported by nothing, verified as the source of all 19 warnings — not suppression).
+
 ## Run 2026-07-27 (Run 119) — DEEP AUDIT (8-lens, due) + 5 file-disjoint value-bar changes. 14 reviewer verdicts across 9 review rounds; every REQUEST_CHANGES was a REAL defect, and three of them were things my own commit message OVERCLAIMED.
 
 ### State on entry

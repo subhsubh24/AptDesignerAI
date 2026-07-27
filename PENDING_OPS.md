@@ -192,6 +192,20 @@ OWNER_ACTIONS:
       why: "GTM Auditor (docs/growth/GTM_SCORECARD.md, auditor_run 2) named a compliance nit: the activation/win-back/paid-welcome lifecycle templates (lib/email/templates/lifecycle.ts) render an unsubscribe link but no physical mailing address, which CAN-SPAM requires on every commercial email. The loop cannot invent a real business address, so this is owner-core. Growth Agent Run 9 wired the template to render EMAIL_PHYSICAL_ADDRESS when set, and made lib/email/index.ts force dry-run on every marketing-lifecycle stage (not the transactional waitlist_confirm) until the address is set — so a non-compliant email can never actually leave the system even after RESEND_API_KEY goes live."
       how: "Set EMAIL_PHYSICAL_ADDRESS (e.g. \"123 Main St, Springfield, ST 00000\") on the deployment (Vercel env). No code change needed — the footer renders it automatically and the compliance dry-run gate lifts once both this AND RESEND_API_KEY are set."
       blocks: marketing-email-compliance
+    - id: refile-store-privacy-forms
+      title: "RE-FILE the Apple App Privacy and Google Play Data Safety forms — the declared answers changed"
+      priority: high
+      status: open
+      why: "Run 120 found docs/app-privacy.md declaring five categories as NOT collected that the app does collect: physical address + precise location (projects.city/neighborhood/building_name/latitude/longitude, written by the dashboard's Places autocomplete), name (profiles.full_name from signup), in-app messages (refine_messages), and user content beyond room photos (floor plans in projects.building_research, free-text notes in rooms.user_context). Both store forms are attestations — a false one is review-blocking on its own terms, independently of the app's quality."
+      how: "docs/app-privacy.md is the corrected source of truth; both platform sections are filled in there. In App Store Connect -> App Privacy add Contact Info (Name, Physical Address), Location (Precise Location), User Content (floor plans, room notes, refine-chat messages); keep 'Data Used to Track You' = None. In Play Console -> Data Safety add Personal info (Name, Address), Location (approximate + precise), Messages, and extend Photos & videos to include floor-plan images/PDFs. NOTE the nuance the doc states and the forms should reflect: no DEVICE location is ever read and no location permission is requested — the coordinates come from an address the user types and picks."
+      blocks: submission
+    - id: audit-orphaned-storage-objects
+      title: "One-time sweep for storage objects orphaned by account deletions that predate the purge"
+      priority: normal
+      status: open
+      why: "Before Run 120 the delete routes removed the auth user but never the Storage objects, and getAdminClient() always targets the REAL Supabase project regardless of DATA_BACKEND. Any account deleted against the real project before 2026-07-27 left its room photos and mockups in place, publicly fetchable. The new purge only runs at future deletion time — it does not clean up history."
+      how: "In the Supabase dashboard -> Storage, list the `room-images`, `room-photos` and `mockups` buckets. Top-level folders are user ids; cross-check each against auth.users and delete any folder whose user no longer exists. Also check `room-images/mockups/` (content-addressed, no owner in the key) for images belonging to deleted accounts. Cheap to do once; ideally before the persistence cutover."
+      blocks: none
     - id: tune-daily-spend-cap
       title: "(Optional) tune DAILY_PAID_CALL_LIMIT for the paid-API spend ceiling (G7)"
       priority: normal
@@ -250,7 +264,9 @@ Alternative if the discount is dropped: remove the two copy lines above so the s
 
 ### Wire `npm run test:coverage` into the CI verify job (added 2026-07-02, Run 52 — PR #314, Track F2)
 
-The vitest coverage floors were raised toward reality (25/19/30/25 → 40/30/42/40, ~10pt under the measured ≈50/39/54/51) so a genuine coverage regression now fails `npm run test:coverage`. **But nothing runs that command in CI** — the `verify` job (and `scripts/preflight.sh`) run bare `vitest run` (no `--coverage`), so a coverage drop is not yet gated on merge. The loop cannot edit `.github/`, so this is an owner step.
+**Figures refreshed Run 120 (2026-07-27).** The vitest coverage floors are now **60/49/64/61**, ~4pt under the measured **64.01/53.18/68.58/65.15** — they were 40/30/42/40, roughly 24 points under actual and therefore untrippable. `scripts/preflight.sh` **GATE 1f now runs `npm run test:coverage`**, so a regression does fail the readiness gate. **What is still missing is CI**: the `verify` job runs bare `vitest run` (no `--coverage`), so a coverage drop is not gated on merge. The loop cannot edit `.github/`, so this is an owner step.
+
+**Same job, second item (Run 120):** the CI `lint` step runs bare `npx eslint .`, which exits 0 on warnings. `npm run lint` is now `eslint . --max-warnings 0` and the repo is at 0 errors / 0 warnings, so the CI step can safely be switched to `npm run lint` to make ROADMAP F1's "ENFORCED" true in CI as well as in preflight.
 
 **Owner step:** add a coverage step to `.github/workflows/ci.yml` (either extend the `verify` job or add a small job):
 ```yaml
