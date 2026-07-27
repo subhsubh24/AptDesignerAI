@@ -21,7 +21,11 @@ export const metadata: Metadata = {
       "A deeply personalized AI-powered interior design assistant for your apartment.",
   },
   twitter: {
-    card: "summary",
+    // Upgraded from "summary" now that a real 1200×630 card exists
+    // (app/opengraph-image.tsx). "summary" renders a small square thumbnail and
+    // would crop the wide card to an unreadable centre; X falls back to og:image
+    // when twitter:image is absent, so the one generated card serves both.
+    card: "summary_large_image",
     title: "AptDesigner - AI Interior Design Copilot",
     description:
       "A deeply personalized AI-powered interior design assistant for your apartment.",
