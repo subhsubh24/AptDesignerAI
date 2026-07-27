@@ -2,10 +2,11 @@
  * Deleting a user's stored objects.
  *
  * Deleting the auth user cascades through every Postgres table, but Supabase
- * Storage is NOT part of that cascade — and both buckets this app writes to are
- * created `public` (supabase/migrations/001_initial_schema.sql:408-410) with an
- * "Anyone can view" policy. So without an explicit purge a deleted user's room
- * photos and generated mockups stay publicly fetchable forever at a
+ * Storage is NOT part of that cascade — and `room-images`, which holds both the
+ * web app's uploads and every generated mockup, is created `public` with an
+ * "Anyone can view" policy (supabase/migrations/001_initial_schema.sql:408,417).
+ * So without an explicit purge a deleted user's room photos and generated
+ * mockups stay publicly fetchable forever at a
  * guessable-prefix URL, contradicting the promise the app makes on
  * app/privacy/page.tsx ("immediately and permanently removes all your content")
  * and failing Apple 5.1.1(v) / Google Play's deletion policy, both of which
@@ -41,9 +42,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Buckets `app/api/upload` accepts, and therefore buckets a purge must sweep.
- * The upload route imports this same constant, so a bucket cannot be added to
- * one side without the other.
+ * Buckets `app/api/upload` accepts. The upload route imports this constant, so
+ * a bucket cannot be accepted for upload without also being swept below.
  *
  * `floor-plans` used to be on this allow-list and is gone: no migration ever
  * creates that bucket (supabase/migrations/001_initial_schema.sql:408-410 makes
@@ -52,7 +52,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * post `bucket=room-images`. Accepting it only meant a request naming it wrote
  * to a bucket that does not exist instead of falling back to room-images.
  */
-export const USER_UPLOAD_BUCKETS = ["room-images"] as const;
+export const UPLOAD_ROUTE_BUCKETS = ["room-images"] as const;
+
+/**
+ * Every bucket holding objects keyed `${userId}/…`, and therefore every bucket
+ * the purge must sweep. A superset of the upload route's list, because the
+ * native app does NOT go through `/api/upload`: mobile/src/app/results.tsx:95,106
+ * PUTs straight to Supabase Storage, into a bucket named `room-photos`, with the
+ * same `${userId}/` prefix. Sweeping only the web route's buckets would leave
+ * every photo taken in the native app — the platform whose store guidelines
+ * require the deletion in the first place — publicly fetchable after the account
+ * was deleted. A test derives that bucket name from the mobile source so a
+ * rename there fails here instead of silently un-purging it.
+ */
+export const USER_UPLOAD_BUCKETS = ["room-images", "room-photos"] as const;
 
 /** Bucket + key prefix that generated mockups are written to. */
 export const MOCKUP_BUCKET = "room-images";

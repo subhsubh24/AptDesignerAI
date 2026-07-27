@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@/lib/supabase/server";
-import { USER_UPLOAD_BUCKETS } from "@/lib/storage/user-storage";
+import { UPLOAD_ROUTE_BUCKETS } from "@/lib/storage/user-storage";
 import { apiError } from "@/lib/utils/api-error";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
@@ -28,10 +28,10 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("file") as File;
-  // Shared with the account-deletion purge, which sweeps `${user.id}/` in each
-  // of these buckets — a bucket cannot be accepted here without also being
-  // purged on deletion.
-  const ALLOWED_BUCKETS = new Set<string>(USER_UPLOAD_BUCKETS);
+  // Shared with the account-deletion purge, which sweeps `${user.id}/` in every
+  // bucket on its (super)set — a bucket cannot be accepted here without also
+  // being purged on deletion.
+  const ALLOWED_BUCKETS = new Set<string>(UPLOAD_ROUTE_BUCKETS);
   const rawBucket = (formData.get("bucket") as string) || "room-images";
   const bucket = ALLOWED_BUCKETS.has(rawBucket) ? rawBucket : "room-images";
 

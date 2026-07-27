@@ -15,6 +15,9 @@ stay consistent.
 | Name | Contact Info | Optional free-text field at signup, stored on the profile and shown back in the app's top bar | Yes |
 | Room photos (user-uploaded) | Photos or Videos | AI room analysis pipeline | Yes |
 | Design preferences & history | Other User Content | Saved designs, design direction history | Yes |
+| Floor plans (user-uploaded) | Photos or Videos / Other User Content | Uploaded image or PDF of the unit's floor plan, plus the layout extracted from it (`projects.building_research`) | Yes |
+| Free-text notes about a room | Other User Content | What the user types about how they use the room (`rooms.user_context`), fed to the AI as design context | Yes |
+| Refine-chat messages | Other User Content | The back-and-forth when a user asks for design changes (`refine_messages`, migration 012) | Yes |
 | Apartment building, neighborhood, city/state | Contact Info → Physical Address | The user types their building into an address autocomplete during project setup, so the AI can research the building's real layout, finishes and light | Yes |
 | Coordinates of the selected building | Location → Precise Location | Stored with the project (`projects.latitude` / `.longitude`) and passed to Gemini's Maps grounding for building orientation, view and neighbourhood context | Yes |
 | App interaction events | Usage Data | In-app navigation + feature usage (via Vercel Web Analytics — cookieless, no ad identifiers) | No |
@@ -29,9 +32,11 @@ Because the stored value is a latitude/longitude at full precision, Apple's
 definition puts it under **Precise Location** regardless of how it was obtained,
 so it is declared here rather than argued down to Coarse.
 
-**Not collected:** phone number, health data, financial info, browsing history,
-search history, sensitive info, contacts, user content beyond room photos,
-messages, third-party social IDs, device/GPS location, background location.
+**Not collected:** phone number, health data, financial info (card data goes
+straight to Stripe and never reaches our servers), browsing history, search
+history, sensitive info, contacts, third-party social IDs, device/GPS location,
+background location, and any content the user did not deliberately submit to the
+design pipeline.
 
 ---
 
@@ -70,7 +75,9 @@ by other companies?" question.
   by Google Gemini API; stored in Supabase under the user's account)
 
 **User Content**
-- Other User Content (design history, preferences, saved rooms) — *App Functionality*
+- Other User Content (design history, preferences, saved rooms; floor plans and
+  the layout extracted from them; free-text room notes; refine-chat messages) —
+  *App Functionality*
 
 ### Data Not Linked to You
 **Usage Data**
@@ -120,7 +127,8 @@ no advertising identifiers.
 | Personal info | Name (optional, entered at signup) | Optional (user-initiates) | Yes (TLS) | Yes — in-app account deletion |
 | Personal info | Address (apartment building / neighbourhood / city, user-entered) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | Location | Approximate & precise location (coordinates of the user-selected building; **not** device location — no location permission is requested) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
-| Photos & videos | Photos | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Photos & videos | Photos, floor-plan images/PDFs | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Messages | In-app refine-chat messages between the user and the design agent | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | App activity | App interactions | Yes | Yes (TLS) | Yes |
 
 ### Is the data shared with third parties? → **Yes**

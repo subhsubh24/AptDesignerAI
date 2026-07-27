@@ -53,6 +53,20 @@ function notCollectedBlock(doc: string): string {
   return match![1];
 }
 
+/**
+ * That paragraph split into its comma-separated ITEMS, lowercased, with any
+ * parenthetical aside dropped. Comparing items rather than searching the raw
+ * text keeps the assertions from firing on a word used legitimately inside a
+ * longer, truthful clause.
+ */
+function notCollectedItems(doc: string): string[] {
+  return notCollectedBlock(doc)
+    .replace(/\([^)]*\)/g, "")
+    .split(",")
+    .map((item) => item.replace(/\s+/g, " ").replace(/^and /, "").trim().replace(/\.$/, "").toLowerCase())
+    .filter(Boolean);
+}
+
 describe("privacy artifacts match what the code actually collects", () => {
   it("declares location collection, because projects store building coordinates", () => {
     const sql = migrationsText();
@@ -94,11 +108,28 @@ describe("privacy artifacts match what the code actually collects", () => {
     expect(/create table profiles[\s\S]{0,400}?full_name/i.test(sql)).toBe(true);
     expect(read("app/api/auth/signup/route.ts")).toMatch(/full_name/);
 
-    const notCollected = notCollectedBlock(read(APP_PRIVACY));
-    // Word-boundary match: "name" must not appear as a standalone item. Guarded
-    // against false hits from "full name" phrasing elsewhere by scoping to the
-    // Not-collected block only.
-    expect(notCollected).not.toMatch(/(^|[,\s])name([,.\s]|$)/i);
+    // Match LIST ITEMS, not the word anywhere. A bare /\bname\b/ would also fire
+    // on a truthful future sentence like "the building name field is stored",
+    // which would be a brittle false failure rather than a caught defect.
+    expect(notCollectedItems(read(APP_PRIVACY))).not.toContain("name");
+  });
+
+  it("does not claim the user content it actually stores is uncollected", () => {
+    // Floor plans, free-text room notes and refine-chat messages are all stored,
+    // so the blanket exclusions that used to cover them must be gone.
+    const sql = migrationsText();
+    expect(/rooms[\s\S]{0,200}?user_context/i.test(sql)).toBe(true);
+    expect(/create table[\s\S]{0,80}?refine_messages/i.test(sql)).toBe(true);
+
+    const items = notCollectedItems(read(APP_PRIVACY));
+    expect(items).not.toContain("messages");
+    expect(items.some((i) => /user content beyond room photos/.test(i))).toBe(false);
+
+    // ...and they are positively declared.
+    const doc = read(APP_PRIVACY);
+    expect(doc.toLowerCase()).toContain("floor plan");
+    expect(doc.toLowerCase()).toContain("refine-chat");
+    expect(doc.toLowerCase()).toContain("room notes");
   });
 
   it("does not describe Google Maps/Places as product-image search when it powers address autocomplete", () => {

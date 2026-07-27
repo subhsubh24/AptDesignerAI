@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   MOCKUP_BUCKET,
   MOCKUP_PREFIX,
   StoragePurgeError,
+  UPLOAD_ROUTE_BUCKETS,
   USER_UPLOAD_BUCKETS,
   purgeUserStorage,
   storagePathFromPublicUrl,
@@ -151,9 +154,33 @@ describe("purgeUserStorage", () => {
   it("sweeps every bucket the upload route accepts", async () => {
     const { admin, listCalls } = fakeAdmin({});
     await purgeUserStorage(admin, "u1");
-    // Structural guard: adding a bucket to USER_UPLOAD_BUCKETS (which
-    // app/api/upload uses as its allow-list) must also purge it.
     expect(listCalls.map((c) => c.bucket).sort()).toEqual([...USER_UPLOAD_BUCKETS].sort());
+    // Anything the upload route will write to must be swept.
+    for (const bucket of UPLOAD_ROUTE_BUCKETS) {
+      expect(USER_UPLOAD_BUCKETS as readonly string[]).toContain(bucket);
+    }
+  });
+
+  it("sweeps the bucket the NATIVE app uploads to, read from the mobile source", async () => {
+    // The native app bypasses /api/upload and PUTs straight to Supabase
+    // Storage, so the upload route's allow-list does not cover it. Derived from
+    // the mobile source rather than hardcoded: renaming the bucket there fails
+    // here instead of silently leaving every native photo unpurged.
+    const mobileSource = fs.readFileSync(
+      path.join(process.cwd(), "mobile/src/app/results.tsx"),
+      "utf8",
+    );
+    const buckets = [...mobileSource.matchAll(/storage\/v1\/object\/(?:public\/)?([\w-]+)\//g)].map(
+      (m) => m[1],
+    );
+    expect(buckets.length, "expected mobile results.tsx to upload to Supabase Storage").toBeGreaterThan(0);
+
+    for (const bucket of new Set(buckets)) {
+      expect(
+        USER_UPLOAD_BUCKETS as readonly string[],
+        `mobile uploads to "${bucket}" but the purge does not sweep it`,
+      ).toContain(bucket);
+    }
   });
 
   it("pages past the first list() page, and folder entries never desync the offset", async () => {
