@@ -42,6 +42,15 @@ export default function PrivacyPage() {
                 you upload, plus the AI-generated designs we produce for you.
               </li>
               <li>
+                <strong className="text-foreground">Where you live</strong> — the apartment building,
+                neighbourhood and city you pick from the address box when you set up a project, plus the
+                coordinates Google returns for that address. We use it to research your actual building
+                (its layout, finishes, orientation and light) instead of guessing. This is only ever an
+                address you type and choose — we never ask for a location permission, never read your
+                device&apos;s GPS, and never track where you go. Skip the address box and everything else
+                still works.
+              </li>
+              <li>
                 <strong className="text-foreground">Usage data</strong> — basic analytics (pages visited,
                 features used) to improve the product. No third-party ad trackers.
               </li>
@@ -126,9 +135,11 @@ export default function PrivacyPage() {
                 no personal data, to source furniture and décor recommendations.
               </li>
               <li>
-                <strong className="text-foreground">Google Maps / Places</strong> — product
-                image search terms, with no personal data, to fetch photos of recommended
-                products.
+                <strong className="text-foreground">Google Maps / Places</strong> — what you type
+                into the address box and the building you pick from it, so we can offer address
+                autocomplete and show a photo of your building. Google&apos;s Places script loads on
+                every page of this site, which means Google also sees your IP address and which page
+                you were on, whether or not you use the address box.
               </li>
               <li>
                 <strong className="text-foreground">Browserbase</strong> — screenshots of
@@ -192,6 +203,10 @@ export default function PrivacyPage() {
               <li>
                 <strong className="text-foreground">Design history</strong> — retained until you
                 delete your account.
+              </li>
+              <li>
+                <strong className="text-foreground">Address and building coordinates</strong> —
+                stored on the project and retained until you delete the project or your account.
               </li>
               <li>
                 <strong className="text-foreground">Server logs</strong> — 30-day rolling
