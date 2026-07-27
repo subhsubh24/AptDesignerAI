@@ -21,10 +21,21 @@
  *     into the room-images bucket. That key carries no user id, so the only way
  *     to attribute one is through the rows that reference it.
  *
- * The referenced sweep reads ONLY server-written URL columns and only removes a
- * path under `mockups/` or under the user's own prefix. Both restrictions are
- * load-bearing: without them a user could persist a URL pointing at another
- * tenant's object and have their own account deletion delete it.
+ * The referenced sweep is the dangerous half. `isPurgeablePath` has to admit the
+ * whole `mockups/` namespace — those keys carry no owner — so whatever feeds it
+ * is effectively a delete instruction. It therefore reads exactly ONE column,
+ * `mockup_jobs.result_image_url`, which is written only by the generation
+ * pipeline (app/api/mockups/route.ts:628,825) and never accepted from a request
+ * body.
+ *
+ * Two other columns hold image URLs and are deliberately NOT read here:
+ * `saved_designs.thumbnail_url` comes straight from the client
+ * (app/api/mobile/saved-designs/route.ts:107,171 — validated only for https and
+ * our Supabase host, which is public), and `projects.cover_image_url` is a
+ * client-settable PATCH field (app/api/projects/[projectId]/route.ts:47-56).
+ * Reading either would let a user persist a URL pointing at ANOTHER tenant's
+ * `mockups/<hash>` object and then delete it by deleting their own account —
+ * a cross-tenant delete. There is a test for exactly that.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -33,8 +44,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Buckets `app/api/upload` accepts, and therefore buckets a purge must sweep.
  * The upload route imports this same constant, so a bucket cannot be added to
  * one side without the other.
+ *
+ * `floor-plans` used to be on this allow-list and is gone: no migration ever
+ * creates that bucket (supabase/migrations/001_initial_schema.sql:408-410 makes
+ * room-images, product-images and mockups, and nothing adds a fourth), and both
+ * upload zones — including components/projects/floor-plan-upload-zone.tsx:83 —
+ * post `bucket=room-images`. Accepting it only meant a request naming it wrote
+ * to a bucket that does not exist instead of falling back to room-images.
  */
-export const USER_UPLOAD_BUCKETS = ["room-images", "floor-plans"] as const;
+export const USER_UPLOAD_BUCKETS = ["room-images"] as const;
 
 /** Bucket + key prefix that generated mockups are written to. */
 export const MOCKUP_BUCKET = "room-images";
@@ -146,9 +164,11 @@ async function removeAll(admin: SupabaseClient, bucket: string, paths: string[])
 /**
  * Collect the generated-mockup object paths this user's rows reference.
  *
- * Only columns the SERVER writes are read (`thumbnail_url`, `cover_image_url`,
- * `result_image_url`) — never free-form client JSON — and the result is filtered
- * to paths the user owns, so this cannot be steered at another tenant's object.
+ * Reads ONE column — `mockup_jobs.result_image_url` — reached by walking
+ * projects → rooms → mockup_jobs, all bound to `userId`. See the module header
+ * for why the other two image-URL columns are excluded: both are client-settable,
+ * and feeding a client-settable value into a delete over the shared `mockups/`
+ * namespace is a cross-tenant delete.
  */
 async function referencedMockupPaths(admin: SupabaseClient, userId: string): Promise<string[]> {
   const urls: string[] = [];
@@ -160,13 +180,8 @@ async function referencedMockupPaths(admin: SupabaseClient, userId: string): Pro
     }
   };
 
-  const saved = await admin.from("saved_designs").select("thumbnail_url").eq("user_id", userId);
-  if (saved.error) throw new StoragePurgeError(`read saved_designs: ${saved.error.message}`);
-  collect(saved.data, "thumbnail_url");
-
-  const projects = await admin.from("projects").select("id, cover_image_url").eq("user_id", userId);
+  const projects = await admin.from("projects").select("id").eq("user_id", userId);
   if (projects.error) throw new StoragePurgeError(`read projects: ${projects.error.message}`);
-  collect(projects.data, "cover_image_url");
 
   const projectIds = (projects.data ?? [])
     .map((p) => p.id)

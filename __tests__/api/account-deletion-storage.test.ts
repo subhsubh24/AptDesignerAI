@@ -47,9 +47,14 @@ function fakeAdmin(opts: {
       list: vi.fn(async (prefix: string, { limit, offset }: { limit: number; offset: number }) => {
         listCalls.push({ bucket, prefix, offset });
         if (opts.listError) return { data: null, error: opts.listError };
+        // Supabase returns folder entries with a null id alongside real
+        // objects; a path ending in "/" models one here.
         const all = (objects[bucket] ?? [])
           .filter((p) => p.startsWith(`${prefix}/`))
-          .map((p) => ({ id: p, name: p.slice(prefix.length + 1) }));
+          .map((p) => ({
+            id: p.endsWith("/") ? null : p,
+            name: p.slice(prefix.length + 1),
+          }));
         return { data: all.slice(offset, offset + limit), error: null };
       }),
       remove: vi.fn(async (paths: string[]) => {
@@ -131,18 +136,14 @@ describe("storagePathFromPublicUrl", () => {
 describe("purgeUserStorage", () => {
   it("removes every object under the user's prefix in each upload bucket", async () => {
     const { admin, removed } = fakeAdmin({
-      objects: {
-        "room-images": ["u1/a.png", "u1/b.png", "u2/other.png"],
-        "floor-plans": ["u1/plan.pdf"],
-      },
+      objects: { "room-images": ["u1/a.png", "u1/b.png", "u2/other.png"] },
     });
 
     const { removed: count } = await purgeUserStorage(admin, "u1");
 
-    expect(count).toBe(3);
+    expect(count).toBe(2);
     const roomImages = removed.find((r) => r.bucket === "room-images");
     expect(roomImages?.paths.sort()).toEqual(["u1/a.png", "u1/b.png"]);
-    expect(removed.find((r) => r.bucket === "floor-plans")?.paths).toEqual(["u1/plan.pdf"]);
     // Another tenant's object is never listed, let alone removed.
     expect(removed.flatMap((r) => r.paths)).not.toContain("u2/other.png");
   });
@@ -155,12 +156,17 @@ describe("purgeUserStorage", () => {
     expect(listCalls.map((c) => c.bucket).sort()).toEqual([...USER_UPLOAD_BUCKETS].sort());
   });
 
-  it("pages past the first list() page instead of stopping at 1000 objects", async () => {
+  it("pages past the first list() page, and folder entries never desync the offset", async () => {
+    // A folder entry (null id) is skipped as an object but still consumes a slot
+    // in the page, so the offset must advance by the RAW page length or the
+    // second page re-reads rows — or, worse, the loop never terminates.
     const many = Array.from({ length: 1200 }, (_, i) => `u1/f${i}.png`);
+    many.splice(500, 0, "u1/subfolder/");
     const { admin, removed, listCalls } = fakeAdmin({ objects: { "room-images": many } });
 
     const { removed: count } = await purgeUserStorage(admin, "u1");
 
+    // 1201 entries listed, 1200 of them real objects.
     expect(count).toBe(1200);
     expect(listCalls.filter((c) => c.bucket === "room-images").map((c) => c.offset)).toEqual([
       0, 1000,
@@ -173,37 +179,51 @@ describe("purgeUserStorage", () => {
   it("removes generated mockups, which carry no user prefix in their key", async () => {
     const { admin, removed } = fakeAdmin({
       rows: {
-        saved_designs: [
-          { thumbnail_url: `/uploads/${MOCKUP_BUCKET}/${MOCKUP_PREFIX}saved1.png` },
-          { thumbnail_url: null },
-        ],
-        projects: [{ id: "p1", cover_image_url: `/uploads/${MOCKUP_BUCKET}/${MOCKUP_PREFIX}cover.png` }],
+        projects: [{ id: "p1" }],
         rooms: [{ id: "r1" }],
-        mockup_jobs: [{ result_image_url: `/uploads/${MOCKUP_BUCKET}/${MOCKUP_PREFIX}job1.png` }],
+        mockup_jobs: [
+          { result_image_url: `/uploads/${MOCKUP_BUCKET}/${MOCKUP_PREFIX}job1.png` },
+          { result_image_url: null },
+        ],
       },
     });
 
     await purgeUserStorage(admin, "u1");
 
-    const mockupRemovals = removed
-      .filter((r) => r.bucket === MOCKUP_BUCKET)
-      .flatMap((r) => r.paths)
-      .sort();
-    expect(mockupRemovals).toEqual([
-      `${MOCKUP_PREFIX}cover.png`,
-      `${MOCKUP_PREFIX}job1.png`,
-      `${MOCKUP_PREFIX}saved1.png`,
-    ]);
+    expect(
+      removed.filter((r) => r.bucket === MOCKUP_BUCKET).flatMap((r) => r.paths),
+    ).toEqual([`${MOCKUP_PREFIX}job1.png`]);
   });
 
-  it("refuses to delete a referenced object belonging to someone else", async () => {
-    // A row that references another tenant's upload prefix must not become a
-    // delete instruction — otherwise deleting your own account could destroy
-    // another user's photo.
+  it("never reads a CLIENT-SETTABLE url column, so one tenant cannot delete another's mockup", async () => {
+    // `mockups/` keys carry no owner, so isPurgeablePath must admit the whole
+    // namespace — which makes whatever feeds it a delete instruction. Both
+    // saved_designs.thumbnail_url (app/api/mobile/saved-designs POST body) and
+    // projects.cover_image_url (projects PATCH allow-list) are client-settable.
+    // If either were read, a user could point their own row at ANOTHER tenant's
+    // mockup and delete it by deleting their own account.
+    const victim = `/uploads/${MOCKUP_BUCKET}/${MOCKUP_PREFIX}victims-design.png`;
     const { admin, removed } = fakeAdmin({
       rows: {
-        saved_designs: [{ thumbnail_url: `/uploads/${MOCKUP_BUCKET}/victim-user/private.png` }],
-        projects: [],
+        saved_designs: [{ thumbnail_url: victim }],
+        projects: [{ id: "p1", cover_image_url: victim }],
+        rooms: [{ id: "r1" }],
+        mockup_jobs: [],
+      },
+    });
+
+    await purgeUserStorage(admin, "u1");
+
+    expect(removed.flatMap((r) => r.paths)).not.toContain(`${MOCKUP_PREFIX}victims-design.png`);
+    expect(removed).toHaveLength(0);
+  });
+
+  it("refuses a referenced path outside the user's own prefix", async () => {
+    const { admin, removed } = fakeAdmin({
+      rows: {
+        projects: [{ id: "p1" }],
+        rooms: [{ id: "r1" }],
+        mockup_jobs: [{ result_image_url: `/uploads/${MOCKUP_BUCKET}/victim-user/private.png` }],
       },
     });
 
@@ -228,7 +248,7 @@ describe("purgeUserStorage", () => {
 
   it("throws when a row read fails rather than silently skipping mockups", async () => {
     const { admin } = fakeAdmin({
-      tableError: { table: "saved_designs", message: "relation missing" },
+      tableError: { table: "projects", message: "relation missing" },
     });
     await expect(purgeUserStorage(admin, "u1")).rejects.toBeInstanceOf(StoragePurgeError);
   });
