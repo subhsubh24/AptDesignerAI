@@ -40,6 +40,33 @@ Two reviewers ran `git stash` / `git checkout` to isolate a commit's tree for te
 ### Reviewer B rejected a commit purely on COHERENCE — and was right
 I bundled the gemini perf change with three store/D reviewer fixes into one commit. Reviewer B rejected it citing this repo's own five preceding commits, each a single atomic fix. Split into three; content unchanged. **Worth remembering: a technically-perfect diff can still be a REQUEST_CHANGES, and "the preceding commits establish the convention" is a legitimate, checkable argument.**
 
+### A change that FAILED three review cycles, and what I did instead of a fourth
+The `/api/products/evaluate-set` fan-out fix originally shipped TWO guards: a
+pLimit(5) on extraction (the thing the audit named) and a total-URL ceiling (my
+addition). The ceiling was rejected twice and I could not ground it either time.
+- At 40: below what the UI produces. ManualSourcingForm adds unlimited comparison
+  URLs per category and its own copy invites it.
+- At 100: the justification cited `category-planner.ts` `.min(1).max(20)` — the
+  WRONG ARRAY. That schema governs the automated search pipeline (consumed only by
+  orchestrator.ts via /api/search); the form is fed `areaAnalysis.what_it_needs`
+  from area-analysis Pass B, which enforces a MINIMUM count and no maximum, and
+  whose own ROOM_FURNISHING_TIERS target reaches [15,28] for a studio. A studio at
+  the top of its range with four options each is 112 URLs of ordinary use.
+**I dropped the ceiling rather than pick a third number.** Two rounds of guessing a
+bound that turned out to be under real usage IS the evidence that no defensible
+bound exists at that layer. Rejecting legitimate paid-feature requests to protect
+against a hypothetical is the wrong trade.
+**Generalisable rules:**
+- When a limit is contested twice, the problem is usually that you are bounding at
+  the WRONG LAYER. The real fix here is to cap `what_it_needs` at the source, where
+  the count is actually known and a cap is a product decision — not at the API edge,
+  where you can only guess. Named as follow-up, NOT built.
+- Before citing a schema/constant as a bound, TRACE ITS CONSUMERS. `.max(20)` was
+  real, in the repo, and about a completely different code path. A true constant
+  cited about the wrong path is more convincing than no citation, and therefore worse.
+- Cycle caps exist for this. Hitting cycle 3 is a signal to REDUCE SCOPE, not to
+  iterate — the reduced change shipped in one round.
+
 ### NOT done / carried forward
 - **ROADMAP A4 UN-TICKED** — "Accounts, data model, and RLS are correct and secure" cannot be claimed while the 26/26 policies never execute at runtime (DATA_BACKEND defaults to memory). First un-tick in a while; do NOT re-tick until the cutover lands.
 - **The deletion purge is PRE-CUTOVER preparation, not a live fix** — under the memory backend `/api/upload` writes to the fake store while `getAdminClient()` always targets real Supabase. Reviewer B flagged this; it does not diminish correctness but it must not be described as closing a currently-exploitable hole.
