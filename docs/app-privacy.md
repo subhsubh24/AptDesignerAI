@@ -12,13 +12,31 @@ stay consistent.
 | Data type | Category | Why collected | Linked to identity? |
 |---|---|---|---|
 | Email address | Contact Info | Account creation + authentication | Yes |
+| Name | Contact Info | Optional free-text field at signup, stored on the profile and shown back in the app's top bar | Yes |
 | Room photos (user-uploaded) | Photos or Videos | AI room analysis pipeline | Yes |
 | Design preferences & history | Other User Content | Saved designs, design direction history | Yes |
+| Floor plans (user-uploaded) | Photos or Videos / Other User Content | Uploaded image or PDF of the unit's floor plan, plus the layout extracted from it (`projects.building_research`) | Yes |
+| Free-text notes about a room | Other User Content | What the user types about how they use the room (`rooms.user_context`), fed to the AI as design context | Yes |
+| Refine-chat messages | Other User Content | The back-and-forth when a user asks for design changes (`refine_messages`, migration 012) | Yes |
+| Apartment building, neighborhood, city/state | Contact Info → Physical Address | The user types their building into an address autocomplete during project setup, so the AI can research the building's real layout, finishes and light | Yes |
+| Coordinates of the selected building | Location → Precise Location | Stored with the project (`projects.latitude` / `.longitude`) and passed to Gemini's Maps grounding for building orientation, view and neighbourhood context | Yes |
 | App interaction events | Usage Data | In-app navigation + feature usage (via Vercel Web Analytics — cookieless, no ad identifiers) | No |
 
-**Not collected:** name, phone number, physical address, precise or coarse location,
-health data, financial info, browsing history, search history, sensitive info,
-contacts, user content beyond room photos, messages, third-party social IDs.
+**About the location entry — read before filling either form.** This is *not*
+device location. The app never requests a location permission on any platform
+(see `mobile/app.json` — the only permission strings are camera and photo
+library), never reads GPS, and never tracks the user's movement. What is
+collected is a single address the user deliberately types and picks from an
+autocomplete, plus the coordinates Google Places returns for that address.
+Because the stored value is a latitude/longitude at full precision, Apple's
+definition puts it under **Precise Location** regardless of how it was obtained,
+so it is declared here rather than argued down to Coarse.
+
+**Not collected:** phone number, health data, financial info (card data goes
+straight to Stripe and never reaches our servers), browsing history, search
+history, sensitive info, contacts, third-party social IDs, device/GPS location,
+background location, and any content the user did not deliberately submit to the
+design pipeline.
 
 ---
 
@@ -41,13 +59,25 @@ by other companies?" question.
 
 **Contact Info**
 - Email address — *App Functionality* (authentication, account management)
+- Name — *App Functionality* (optional at signup; stored on the user's profile
+  and displayed back to them in the app)
+- Physical Address — *App Functionality* (the apartment building / neighbourhood /
+  city the user selects at project setup, used to research that specific building)
+
+**Location**
+- Precise Location — *App Functionality* (latitude/longitude of the
+  user-selected building, from Google Places; used for building orientation,
+  light and neighbourhood context). **No device location is used** — the app
+  requests no location permission and reads no GPS.
 
 **Photos or Videos**
 - Photos — *App Functionality* (submitted by user for AI room analysis; processed
   by Google Gemini API; stored in Supabase under the user's account)
 
 **User Content**
-- Other User Content (design history, preferences, saved rooms) — *App Functionality*
+- Other User Content (design history, preferences, saved rooms; floor plans and
+  the layout extracted from them; free-text room notes; refine-chat messages) —
+  *App Functionality*
 
 ### Data Not Linked to You
 **Usage Data**
@@ -64,7 +94,7 @@ by other companies?" question.
 | Tavily Search API | Product search query strings derived from AI design output (e.g. "mid-century oak bookshelf") — no PII | Product sourcing — web search for furniture and décor recommendations |
 | Stripe | Name, email address, payment card data (collected directly by Stripe; we never see raw card data) | Payment processing for Apartment ($29) and Pro plans |
 | RevenueCat | Account/user ID + subscription/purchase status | Cross-platform in-app subscription + entitlement management (mobile). Inert until REVENUECAT keys are set. |
-| Google (Maps/Places API) | Product image search queries — no PII | Product imagery — fetching photos of identified furniture products |
+| Google (Maps/Places API) | What the user types into the address box plus the selected building's place_id; Google's Places JS library is loaded on every page of the web app, so Google also sees each visitor's IP address and referring page | Address / building autocomplete at project setup, and fetching a photo of the selected building by place_id |
 | Browserbase | Screenshots of product pages — no PII; no user data transmitted | Product verification — computer-vision agent confirms product images match descriptions |
 | Resend | Email address | Transactional + account email delivery (waitlist confirmation, sign-in, billing notices). Runs in dry-run mode until RESEND_API_KEY is set. |
 | Cloudflare (Turnstile) | Bot-challenge token + IP address on the signup/waitlist forms — no account content | Bot / abuse protection on public forms. Inert until TURNSTILE_SECRET_KEY is set. |
@@ -73,9 +103,12 @@ by other companies?" question.
 | Margin | AI-usage telemetry only: token counts, latency, model name, per-request outcome quality score — no PII, photos, account identifiers, or prompt content | Cost-per-outcome economics. Inert until MARGIN_INGEST_KEY is set; never egresses in CI/E2E. |
 
 None of the above use this data to build ad profiles or track users across apps
-per their published data processing agreements. Tavily and Google Maps queries
-contain only design-derived product terms; no email, photo, or other personal
-data is included. Stripe processes payments under its own PCI-DSS certification.
+per their published data processing agreements. Tavily queries contain only
+design-derived product terms, with no email, photo, or other personal data.
+Google Maps/Places is the one exception to "no personal data in queries": the
+address the user types is personal data by definition, and Google's script runs
+on every page of the web app. Stripe processes payments under its own PCI-DSS
+certification.
 DeepSeek is used only for design text analysis, never for user-identifying data.
 Vercel Web Analytics is cookieless and collects only aggregate usage events with
 no advertising identifiers.
@@ -91,7 +124,11 @@ no advertising identifiers.
 | Category | Type | Required? | Encrypted? | Deletion on request? |
 |---|---|---|---|---|
 | Personal info | Email address | Required to use app | Yes (TLS) | Yes — in-app account deletion |
-| Photos & videos | Photos | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Personal info | Name (optional, entered at signup) | Optional (user-initiates) | Yes (TLS) | Yes — in-app account deletion |
+| Personal info | Address (apartment building / neighbourhood / city, user-entered) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Location | Approximate & precise location (coordinates of the user-selected building; **not** device location — no location permission is requested) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Photos & videos | Photos, floor-plan images/PDFs | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
+| Messages | In-app refine-chat messages between the user and the design agent | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | App activity | App interactions | Yes | Yes (TLS) | Yes |
 
 ### Is the data shared with third parties? → **Yes**
@@ -103,7 +140,7 @@ no advertising identifiers.
 | Tavily Search API | Product search query strings (no PII) | App functionality — product sourcing search |
 | Stripe | Email, payment data (Stripe-only; we do not store card numbers) | Financial info — payment processing |
 | RevenueCat | Account/user ID + subscription status | App functionality — mobile subscription/entitlement management |
-| Google (Maps/Places API) | Product search terms (no PII) | App functionality — product imagery |
+| Google (Maps/Places API) | User-typed address text, selected building's place_id, and (via the Places script loaded on every web page) visitor IP + referring page | App functionality — address/building autocomplete and building photo lookup |
 | Browserbase | Product page screenshots (no PII) | App functionality — product verification |
 | Resend | Email address | App functionality — transactional/account email (dry-run until RESEND_API_KEY set) |
 | Cloudflare (Turnstile) | Bot-challenge token + IP (signup/waitlist forms; no account content) | App functionality — bot/abuse protection (inert until TURNSTILE_SECRET_KEY set) |

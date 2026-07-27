@@ -213,6 +213,35 @@ else
   echo "$GTMOUT" | sed 's/^/    /'
 fi
 
+# ── GATE 1f: Lint and coverage floors are ENFORCED, not merely configured ─────
+# ROADMAP F1 claims lint is "ENFORCED" and F2 claims "a regression below the floor
+# fails the gate". Until now neither was true anywhere: `--coverage` appeared only
+# in a package.json script nothing called, and eslint ran with no --max-warnings,
+# so warnings passed silently. A ticked box asserting an enforcement mechanism that
+# exists nowhere is the exact thing the independent quality audit grades down — so
+# the gate that decides readiness runs both, here.
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  GATE 1f — Lint + coverage floors enforced"
+echo "════════════════════════════════════════════════════════════════"
+
+info "Running lint (zero errors AND zero warnings)..."
+if LINTOUT="$(npm run --silent lint 2>&1)"; then
+  pass "Lint — 0 errors, 0 warnings"
+else
+  fail "Lint FAILED — 'npm run lint' runs eslint with --max-warnings 0; a warning is a failure:"
+  echo "$LINTOUT" | tail -20 | sed 's/^/    /'
+fi
+
+info "Running coverage against the configured floors..."
+if COVOUT="$(npm run --silent test:coverage 2>&1)"; then
+  pass "Coverage — every floor in vitest.config.ts met"
+  echo "$COVOUT" | grep -E "^All files" | sed 's/^/    /' || true
+else
+  fail "Coverage FAILED — below a threshold in vitest.config.ts:"
+  echo "$COVOUT" | grep -E "ERROR|coverage threshold|^All files" | head -10 | sed 's/^/    /'
+fi
+
 # ── GATE 2: Required artifacts exist ─────────────────────────────────────────
 
 echo ""

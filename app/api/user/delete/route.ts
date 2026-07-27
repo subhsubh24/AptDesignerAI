@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { purgeUserStorage } from "@/lib/storage/user-storage";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
+
+// Listing + removing every object a user owns is more round trips than a plain
+// cascade delete; give it headroom over the platform default.
+export const maxDuration = 60;
 
 export async function DELETE() {
   const supabase = await createClient();
@@ -23,6 +28,26 @@ export async function DELETE() {
     return NextResponse.json(
       { error: "Account deletion is unavailable right now. Please contact support." },
       { status: 503 },
+    );
+  }
+
+  // Storage is NOT part of the Postgres cascade, and both buckets are public —
+  // so purge the user's objects FIRST. Order matters: the rows that reference a
+  // generated mockup are what attribute it to this user, and the cascade below
+  // destroys them. If the purge fails we must NOT delete the account: reporting
+  // success while the user's photos stay publicly fetchable is exactly the fake
+  // success this codebase treats as a release blocker. Failing here leaves the
+  // account intact and retryable, and the purge itself is idempotent.
+  try {
+    await purgeUserStorage(admin, user.id);
+  } catch (err) {
+    console.error("[user-delete] storage purge failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't remove your stored images, so your account was not deleted. Please try again or contact support.",
+      },
+      { status: 500 },
     );
   }
 

@@ -386,8 +386,12 @@ the READINESS AUDIT GATE (Functional reality must be an actual RUN).
   **(PRs #9 — Lucide icons; design system applied throughout; warm-editorial bar maintained)**
 - [x] A3. Performance: fast first-result ("time-to-wow"), no obvious latency leaks.
   **(PRs #7 #8 — Promise.all parallelization; dead pre-fetch removed)**
-- [x] A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
-  **(PRs #83 #84 — middleware public paths + RLS mismatch fixed; Run 27 deep audit resolved critical findings)**
+- [ ] A4. Accounts, data model, and RLS are correct and secure (see SECURITY & RLS).
+  **(PRs #83 #84 — middleware public paths + RLS mismatch fixed; Run 27 deep audit resolved critical findings.
+  UN-TICKED Run 120 on the independent quality audit's finding: the 26/26 RLS policies are written and
+  reviewed but NEVER EXECUTE at runtime, because `DATA_BACKEND` still defaults to the in-memory store
+  (`lib/supabase/server.ts:23`, PENDING_OPS `cutover-to-persistent-data` status:open). "Correct" is true;
+  "secure at runtime" is not yet demonstrable. Re-tick when the cutover lands and the policies actually run.)**
 - [x] A5. **Eval coverage — live suite exists across the core stages.** **(Refreshed
   Run 52 — the prior "structural scaffolding only / zero live evals / placeholder
   URL" text was stale.)** Five gated live `.eval.test.ts` files call the ACTUAL
@@ -584,14 +588,21 @@ web app where clean to do so — extract shared modules rather than copy-paste).
 The product must be demonstrably top-grade — not "tests pass," but rigorously
 validated so we KNOW the output is excellent. Build and ENFORCE these; each is a
 required gate or a recurring audit, not a nicety.
-- [x] F1. **Lint clean + ENFORCED.** Drive `npx eslint .` to ZERO errors and zero
-  new warnings, then keep it clean. Reviewer A rejects any change that introduces a
-  lint error/warning. (Owner promotes `lint` to a required CI check once it is green;
-  until then the loop keeps every new diff lint-clean and burns down the backlog.)
-- [x] F2. **Coverage floor.** Enforce a meaningful test-coverage threshold on the
-  critical paths (the validation/math/agents modules) via `vitest --coverage`; a
-  regression below the floor fails the gate. Cover real branch behavior, not lines-
-  for-lines' sake.
+- [x] F1. **Lint clean + ENFORCED.** `npx eslint .` is at ZERO errors and ZERO
+  warnings, and `npm run lint` passes `--max-warnings 0` so a warning is a failure.
+  Enforced by preflight GATE 1f and by the required `lint` CI job. Reviewer A rejects
+  any change that introduces a lint error/warning. **(Run 120 — the vendored
+  `.agents/**` tree, source of all 19 warnings, is eslint-ignored; before that
+  `--max-warnings 0` could not be turned on and the "ENFORCED" claim was hollow.
+  REMAINING: the CI lint step runs bare `npx eslint .`; adding `--max-warnings 0`
+  there is an owner step, see PENDING_OPS.)**
+- [x] F2. **Coverage floor.** A real threshold on `lib/**` via `vitest --coverage`;
+  a regression below it fails preflight GATE 1f. Cover real branch behavior, not
+  lines-for-lines' sake. **(Run 120 — floors were 40/30/42/40 against actual
+  64.01/53.18/68.58/65.15, ~24 points under and therefore untrippable; raised to
+  60/49/64/61 and wired into preflight, which previously ran no coverage at all.
+  REMAINING: the CI `verify` job still runs bare `vitest run`; pointing it at
+  `npm run test:coverage` is an owner step, see PENDING_OPS.)**
 - [ ] F3. **Eval coverage COMPLETE (extends A5).** A live `.eval.test.ts` for EVERY
   core pipeline stage — apartment/room understanding, diagnosis, product-sourcing
   relevance, mockup grounding — each calling the real pipeline (`RUN_EVALS=1`) and

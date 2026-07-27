@@ -7,6 +7,7 @@ import { evaluateBundle, type BundleContext } from "@/lib/agents/bundle-optimize
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { logServerError } from "@/lib/utils/api-error";
 import { validateExternalUrl } from "@/lib/utils/url-validator";
+import { pLimit } from "@/lib/utils/p-limit";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { CandidateProduct } from "@/lib/types/database";
@@ -17,6 +18,14 @@ import type { CandidateProduct } from "@/lib/types/database";
 // "builds green, request gets killed" failure on a paid path. 300s is the
 // Vercel Pro ceiling and covers the documented worst-case latency.
 export const maxDuration = 300;
+
+/**
+ * Extraction fan-out width. Matches SCORE_CONCURRENCY below: the scoring phase
+ * was already batched at 5 while extraction — the phase right above it, and
+ * equally an LLM call per URL — ran every URL at once straight off the request
+ * body. The asymmetry was an oversight, not a design.
+ */
+const EXTRACT_CONCURRENCY = 5;
 
 /**
  * POST /api/products/evaluate-set
@@ -147,8 +156,12 @@ export async function POST(request: Request) {
     error?: string;
   }> = [];
 
+  // Order is preserved by Promise.all's index mapping, not by completion order,
+  // so gating this changes throughput only — never the result sequence.
+  const extractLimit = pLimit(EXTRACT_CONCURRENCY);
   const extractionPromises = items.flatMap((item) =>
-    item.urls.map(async (url) => {
+    item.urls.map((url) =>
+      extractLimit(async () => {
       try {
         // SSRF guard: extractFromUrl fetches this URL server-side. Reject private
         // IPs / loopback / cloud-metadata / credentialed URLs before the fetch,
@@ -203,7 +216,8 @@ export async function POST(request: Request) {
           error: "Could not process this product URL.",
         };
       }
-    })
+      }),
+    ),
   );
 
   const extracted = await Promise.all(extractionPromises);

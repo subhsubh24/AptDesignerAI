@@ -42,6 +42,11 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vitest coverage output:
     "coverage/**",
+    // Vendored agent tooling — not application source, not ours to fix, and the
+    // only thing standing between `eslint .` and a clean 0/0. Every one of the
+    // 19 warnings the repo carried came from this tree; ignoring it is what lets
+    // `npm run lint` run with --max-warnings 0 and mean something.
+    ".agents/**",
   ]),
 ]);
 

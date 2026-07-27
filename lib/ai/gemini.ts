@@ -59,6 +59,26 @@ const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_CALL_TIMEOUT_MS) || 180
 const GEMINI_MAX_CONCURRENCY = Number(process.env.GEMINI_MAX_CONCURRENCY) || 8;
 const geminiConcurrencyLimit = pLimit(GEMINI_MAX_CONCURRENCY);
 
+/**
+ * Separate gate for pulling image bytes down before a vision call.
+ *
+ * Deliberately NOT `geminiConcurrencyLimit`: that one exists to keep model
+ * calls inside a per-minute API quota, and running fetches through it would
+ * make every image download compete with in-flight model calls for the same 8
+ * slots — turning a prefetch into a stall. These are plain HTTP GETs against
+ * our own storage, so they get their own, wider gate. Its only job is to stop a
+ * message carrying many photos from opening an unbounded number of sockets.
+ */
+const IMAGE_FETCH_CONCURRENCY = Number(process.env.GEMINI_IMAGE_FETCH_CONCURRENCY) || 6;
+const imageFetchLimit = pLimit(IMAGE_FETCH_CONCURRENCY);
+
+/**
+ * Placeholder occupying a part's slot while its image is fetched, so parts keep
+ * their authored order no matter what order the fetches finish in. Compared by
+ * identity, never serialized — every one is either replaced or dropped.
+ */
+const PENDING_IMAGE_PART: Record<string, unknown> = Object.freeze({ __pendingImage: true });
+
 let client: GoogleGenAI | null = null;
 
 /**
@@ -198,6 +218,9 @@ async function convertMessages(
   let totalImages = 0;
   let failedImages = 0;
 
+  /** URL-sourced images awaiting a fetch, each pinned to the slot it must fill. */
+  const pendingImages: Array<{ parts: Record<string, unknown>[]; index: number; url: string }> = [];
+
   // MEDIA_RESOLUTION_ULTRA_HIGH requires rasterized images (JPEG, PNG, WebP,
   // etc.). Applying it to PDFs or other non-image types causes
   // INVALID_ARGUMENT (400). Helper returns extras only for rasterized types.
@@ -250,16 +273,11 @@ async function convertMessages(
               failedImages++;
               continue;
             }
-            try {
-              const { data, mimeType } = await fetchImageAsBase64(imgUrl);
-              parts.push({
-                ...mediaResExtras(mimeType),
-                inlineData: { mimeType, data },
-              });
-            } catch (err) {
-              failedImages++;
-              log.warn(`Failed to fetch image (${failedImages}/${totalImages})`, { url: block.source.url, error: err instanceof Error ? err.message : String(err) });
-            }
+            // Reserve this slot and fetch later, all of them at once. Fetching
+            // inline made every photo on a message wait for the one before it,
+            // on the path in front of EVERY vision call in the app.
+            pendingImages.push({ parts, index: parts.length, url: imgUrl });
+            parts.push(PENDING_IMAGE_PART);
           }
         } else if (block.type === "text" && block.text) {
           parts.push({ text: block.text });
@@ -294,6 +312,43 @@ async function convertMessages(
       role: msg.role === "assistant" ? "model" : "user",
       parts,
     });
+  }
+
+  // Resolve every reserved slot together. Each result is written to the index it
+  // reserved, so part order is identical to the serial version regardless of
+  // which fetch finishes first — completion order never reaches the model.
+  if (pendingImages.length > 0) {
+    await Promise.all(
+      pendingImages.map((pending) =>
+        imageFetchLimit(async () => {
+          try {
+            const { data, mimeType } = await fetchImageAsBase64(pending.url);
+            pending.parts[pending.index] = {
+              ...mediaResExtras(mimeType),
+              inlineData: { mimeType, data },
+            };
+          } catch (err) {
+            failedImages++;
+            // No running "(n/total)" here: these callbacks race, so the number
+            // each failure printed would depend on which fetch lost first —
+            // nondeterministic log output for identical input. The final tally
+            // is logged once below, where it is stable.
+            log.warn("Failed to fetch image", {
+              url: pending.url,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }),
+      ),
+    );
+
+    // Drop the slots nothing filled. A left-behind placeholder would be sent to
+    // the model as an empty part.
+    for (const entry of result) {
+      if (entry.parts.includes(PENDING_IMAGE_PART)) {
+        entry.parts = entry.parts.filter((part) => part !== PENDING_IMAGE_PART);
+      }
+    }
   }
 
   // If ALL images failed, throw so the caller knows analysis would be blind
