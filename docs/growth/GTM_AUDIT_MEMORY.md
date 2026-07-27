@@ -192,3 +192,98 @@ honesty and experiment validity carry real-but-trivial nits below exemplary.
   2026-07-15 no-number-change note — benign, but keep an eye on it).
 - The real launch constraint is owner env-connect blockers (site gate / Resend / metrics token /
   migrations), not GTM quality — those are owner actions the GTM Factory correctly cannot resolve.
+
+---
+
+## Run 4 — 2026-07-27
+
+**Overall: C · ship_gate_met: FALSE** (was A / TRUE at Run 3 — but see the framing below, this is
+mostly an AUDIT CORRECTION, not a Factory regression)
+
+Graded GROWTH_STATUS (as_of 2026-07-25, Growth Agent Run 14) + BUSINESS_CASE (summary as_of
+2026-07-13, unchanged since commit a680327) with six fresh, independent, adversarial per-dimension
+graders, then re-verified every load-bearing finding myself before accepting it.
+
+### Grades
+| Dimension | R1 | R2 | R3 | R4 | Ship-critical | Δ vs R3 |
+|---|---|---|---|---|---|---|
+| Metric integrity | A | A+ | A+ | **A** | ★ | ↓ |
+| Business-case honesty | F | B | A | **B** | ★ | ↓ (gate-closing) |
+| Experiment validity | A | A | A | **C** | | ↓↓ |
+| Roadmap-steer justification | A+ | A+ | A+ | **A** | ★ | ↓ |
+| Self-validation honesty | A | A | A+ | **C** | ★ | ↓↓ (gate-closing) |
+| PMF read accuracy | A+ | A+ | A+ | **B** | | ↓ |
+| Compliance | A | A | A+ | **B** | | ↓ |
+| Artifact freshness | B | A | A+ | **C** | | ↓↓ |
+
+### THE HONEST FRAMING — I over-graded at Run 3
+Most of this drop is me correcting my own prior over-grade on **unchanged artifacts**:
+- `docs/BUSINESS_CASE.md` is byte-identical to when Run 3 graded it **A** (last commit a680327,
+  2026-07-16, which predates Run 3). It grades **B** now on defects that were present and missed.
+- The self-validation MRR overstatement has been in the file since **Run 9** and was missed by TWO
+  prior audits (Runs 2 and 3).
+- Run 3 asserted **"Zero findings"** on roadmap-steer, self-validation, PMF, compliance and
+  freshness. Five of those carry verified findings today. That assertion was too generous.
+- Genuinely NEW since 2026-07-20: only the OG-image and analytics-event freshness drifts.
+- The Factory's Runs 13–14 were clean — doc-only diffs, no steer, confidence honestly held at
+  `emerging` under five rounds of new evidence. **Do not report this as a Factory decline.**
+
+### The findings that matter (filed as issues)
+1. **Self-validation C (★).** (a) `GROWTH_STATUS:38` claims `internal_metrics_api` surfaces
+   "MRR/active-subscriber/churn" — `lib/growth/metrics.ts` has **no MRR field** (grep for `mrr`
+   across `lib/growth/` + `app/api/internal/` = zero hits) and only an APPROXIMATE `cancelled_30d`
+   count, not a churn rate. The false clause is load-bearing: it justifies keeping `stripe_reporting`
+   out of `owner_blockers`. (b) **Vercel Analytics** is live (`package.json:31`,
+   `app/layout.tsx:63`), named in `CONNECT.md:87`, backs `visitors_7d`/`organic_sessions_7d` — and is
+   declared **nowhere** in a validation block claiming to cover "every external source." Both err
+   self-servingly (they under-report the connect burden).
+2. **Business-case B (★).** Two sensitivity figures don't reproduce and sit outside the 4-figure
+   computation gate — churn 7→12% is **$93,556** (doc "~$85K"); annual churn →40% is **$103,214**
+   (doc "~$106K", flattering direction). `:118`'s "84% (7%/mo × 12)" is a rate/probability
+   conflation — true 12-month churn is **1−0.93¹² = 58.1%**, so the annual tier's "−59pp" edge is
+   really ~−33pp, overstating exactly the lever that lifts ARR from $99,926 to $122,956.
+3. **Compliance B.** `waitlist_welcome_1` is classified MARKETING by `lib/email/index.ts:70-73` but
+   `templates/waitlist-welcome.ts` renders **no unsubscribe link and no physical address** (greps
+   clean for `href`). The gate keys on the ENV VAR, not the email — so setting
+   `EMAIL_PHYSICAL_ADDRESS` makes a non-compliant email send LIVE. **This directly refutes Run 3's
+   "a non-compliant marketing email cannot leave the system."**
+4. **Freshness C.** `EARLY30`: the live `app/waitlist/page.tsx:33` promises "30% off … No promo code
+   required" with **no coupon in code**; PENDING_OPS itself calls it "a broken public promise," while
+   four GTM assets publicize a contradictory code. Plus `docs/analytics.md` missing 3 of 10 shipped
+   funnel events, a shipped OG image still marked "Owner to create", and two email docs describing a
+   pre-engine product against `engine_pct: 100`.
+5. **Experiment validity C.** Run 14's Decorist "0 complaints" *disconfirming* datum is **void** —
+   Decorist shut down Sept 2022 (Business of Home), so zero complaints is a dead-company artifact,
+   and its shutdown is actually **confirming** for theme 3 (a second concierge collapse beside Modsy).
+   Run 3's named sampling-frame fix was never implemented or acknowledged.
+
+### What genuinely survived refutation (do NOT re-litigate)
+- **No fabricated metric anywhere.** Twelve external citations independently re-fetched and
+  verbatim-accurate; every funnel/pmf/outreach value honestly 0/null; `engine_pct: 100` is
+  mechanically recomputed by `preflight.sh:444-458`, not a self-claim.
+- **No steer ever reached ROADMAP/VISION** — full guarded-file history reconstructed via the GitHub
+  API (69 ROADMAP + 5 VISION + 9 BUSINESS_CASE commits); zero GTM-authored steers.
+- **ARR core reproducible to the dollar** (A $46,109 / B $122,956 / C $276,652 / without-annual
+  $99,926), independent hand-reimplementation matched, nothing gamed to clear the floor,
+  `floor_met_year1:false` and the ~year-3 timing honest.
+- **Outbound provably hard-off** — nothing sent or posted; social publishing is unbuilt, not merely
+  unconfigured. Pro Annual quarantine and $29/$49 pricing consistency intact.
+- The Factory correctly reports the PRODUCT gate blocking **itself** (`QUALITY_SCORECARD`
+  ship_gate_met false) and states its own GTM grade does not unlock outreach.
+
+### METHODOLOGICAL NOTE FOR FUTURE RUNS (important)
+**This repo is a SHALLOW clone** (`.git/shallow` present, grafted at `a680327` / 2026-07-16). Local
+`git log --all` covers only ~11 days and will SILENTLY miss older commits — the roadmap-steer sweep
+must reconstruct guarded-file history via the GitHub API, or it will produce a false "no steer ever"
+on incomplete evidence. My Run 3 git verification may have been limited by this without my noticing.
+
+### Notes for next run
+- Re-check the two ship-critical gaps first: is `:38` corrected (MRR/churn claim honest) and is
+  `vercel_analytics` declared in the validation block? Is the stripe_reporting owner_blocker
+  exclusion still justified once the overstatement is removed?
+- Re-derive the two failing sensitivity bullets and confirm `84%` → `58.1%`; re-run all four ARR
+  scripts cold each run regardless of whether the doc changed — an unchanged doc is NOT a reason to
+  carry forward a grade (that error is what produced Run 3's inflated A).
+- Verify the CAN-SPAM fix guards the RENDERED email, not the env var, and that a test ratchets it.
+- Do not let the gate-met status of a prior run anchor the next grade. Grade the artifact, not the
+  history.
