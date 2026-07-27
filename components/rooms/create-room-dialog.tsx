@@ -123,8 +123,11 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
           </div>
           <div className="grid gap-2">
             <Label>Room Type</Label>
+            {/* aria-label, not the visible <Label>: SelectTrigger renders
+                role="combobox", which does not take its name from content, so
+                neither the trigger text nor a sibling <Label> names it. */}
             <Select value={roomType} onValueChange={setRoomType}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="Room Type">
                 <SelectValue placeholder="Select room type" />
               </SelectTrigger>
               <SelectContent>
@@ -140,7 +143,7 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
             <div className="grid gap-2">
               <Label>Budget</Label>
               <Select value={budgetMode} onValueChange={setBudgetMode}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Budget">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -155,7 +158,7 @@ export function CreateRoomDialog({ projectId }: CreateRoomDialogProps) {
             <div className="grid gap-2">
               <Label>Sourcing</Label>
               <Select value={sourcingMode} onValueChange={setSourcingMode}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Sourcing">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
