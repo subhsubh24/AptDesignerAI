@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import {
+  MIN_SHARE_TOKEN_LENGTH,
+  readSharedDesignByToken,
+} from "@/lib/supabase/public-share";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 
 // Public endpoint: no auth required.
@@ -27,38 +30,22 @@ export async function GET(
 
   const { token } = await params;
 
-  if (!token || token.length < 16) {
+  if (!token || token.length < MIN_SHARE_TOKEN_LENGTH) {
     return NextResponse.json({ error: "Invalid token" }, { status: 400 });
   }
 
-  // createClient() returns the memory store (or real Supabase) — no user_id
-  // filter here, so this path is intentionally public.
-  const supabase = await createClient();
-
-  const { data } = await supabase
-    .from("saved_designs")
-    .select(
-      "id, title, room_type, stage, thumbnail_url, snapshot, created_at, is_public"
-    )
-    .eq("share_token", token)
-    .eq("is_public", true)
-    .maybeSingle();
+  // Intentionally public — but the token is the credential, so the lookup runs
+  // through the one module that binds share_token AND is_public server-side.
+  // See lib/supabase/public-share.ts for why this cannot go through the anon
+  // client (its RLS policy could never require the token filter).
+  const data = await readSharedDesignByToken(token);
 
   if (!data) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Omit internal IDs and user_id from the public response
-  const { id, title, room_type, stage, thumbnail_url, snapshot, created_at } = data as {
-    id: string;
-    title: string;
-    room_type: string | null;
-    stage: string;
-    thumbnail_url: string | null;
-    snapshot: Record<string, unknown>;
-    created_at: string;
-    is_public: boolean;
-  };
+  // Already narrowed to the public column set (no user_id, no share_token).
+  const { id, title, room_type, stage, thumbnail_url, snapshot, created_at } = data;
 
   return NextResponse.json({ id, title, room_type, stage, thumbnail_url, snapshot, created_at });
 }
