@@ -76,7 +76,7 @@ beforeEach(() => {
 
 describe("POST /api/products/evaluate-set — request fan-out is bounded", () => {
   it("rejects an oversized request BEFORE doing any paid work", async () => {
-    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(41) }] }));
+    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(101) }] }));
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/too many products/i);
@@ -85,10 +85,11 @@ describe("POST /api/products/evaluate-set — request fan-out is bounded", () =>
   });
 
   it("counts URLs across ALL items, so splitting the list is not a way around it", async () => {
+    // 40 each is under the ceiling per item, 120 over it in total.
     const items = [
-      { category: "seating", urls: urls(20) },
-      { category: "lighting", urls: urls(20) },
-      { category: "rugs", urls: urls(20) },
+      { category: "seating", urls: urls(40) },
+      { category: "lighting", urls: urls(40) },
+      { category: "rugs", urls: urls(40) },
     ];
 
     const res = await POST(request({ room_id: "r1", items }));
@@ -97,7 +98,7 @@ describe("POST /api/products/evaluate-set — request fan-out is bounded", () =>
     expect(mockExtract).not.toHaveBeenCalled();
   });
 
-  it("accepts a request at the ceiling and never runs more than 5 extractions at once", async () => {
+  it("accepts a request AT the ceiling and never runs more than 5 extractions at once", async () => {
     let inFlight = 0;
     let peak = 0;
     mockExtract.mockImplementation(async () => {
@@ -108,13 +109,13 @@ describe("POST /api/products/evaluate-set — request fan-out is bounded", () =>
       return { success: false, error: "stubbed" };
     });
 
-    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(40) }] }));
+    const res = await POST(request({ room_id: "r1", items: [{ category: "seating", urls: urls(100) }] }));
 
     // 422 (nothing extracted) is the expected outcome for stubbed failures —
     // what matters is that it got past the ceiling check and did the work.
     expect(res.status).not.toBe(400);
-    expect(mockExtract).toHaveBeenCalledTimes(40);
-    // An unbounded Promise.all over the request body puts this at 40.
+    expect(mockExtract).toHaveBeenCalledTimes(100);
+    // An unbounded Promise.all over the request body puts this at 100.
     expect(peak).toBeLessThanOrEqual(5);
     expect(peak).toBeGreaterThan(1);
   });

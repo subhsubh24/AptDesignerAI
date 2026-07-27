@@ -2,9 +2,12 @@
 
 Records runtime functional coverage: which routes/flows have a spec, the **intended
 outcome** it asserts (not `status < 400`), and what is still uncovered. It does NOT
-claim every route is covered — 14 of the 35 `app/**/page.tsx` routes appear in the
-table below, and the rest are enumerated under "Tracked gaps" so the shortfall is
-counted rather than implied away. This is the
+claim every route is covered — **10 of the 35 `app/**/page.tsx` routes appear in the
+table below**, and all 25 that do not are listed under "Tracked gaps" so the
+shortfall is counted rather than implied away. (Counts derived from
+`find app -name page.tsx` against the backticked paths in the table; if you edit
+either, re-derive rather than adjusting by hand — a hand-count is how the previous
+version of this line came to be wrong.) This is the
 companion to the **BUILDS ≠ WORKS** guard in `ROADMAP.md` — a route/flow with no
 outcome-asserting runtime test is an UNVALIDATED GAP and may not be certified "works".
 
@@ -45,15 +48,22 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   UI). Needs Stripe test keys + a webhook stub in the test env; today only the upgrade entry
   screen is asserted.
 - **Save & share** (`/saved/[id]`, `/shared/[token]` happy path with a seeded design).
-- **Per-room design routes** (`/projects/[id]/rooms/[id]/{focus,diagnosis,products,mockups,bundles,compare}`)
-  once a seeded project fixture exists. These ARE axe-scanned with a seeded project by
-  `DESIGN_DENSE_A11Y_ROUTES` in `journeys.spec.ts`, which asserts each route's own `h1`;
-  what is missing is an outcome-asserting functional pass, not a smoke check.
-- **Routes with no spec at all** — counted here rather than left implied. Marketing/content:
-  `/faq`, `/gallery`, `/picks`, `/support`, `/guides` and its three article pages. Product:
-  `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`. Billing outcomes:
-  `/billing/checkout-success`, `/billing/checkout-cancel`. Sharing/waitlist:
-  `/saved/[id]`, `/shared/[token]`, `/waitlist/confirmed`.
+- **Per-room design routes.** Six of them — `setup`, `diagnosis`, `products`, `bundles`,
+  `mockups`, `compare` — ARE axe-scanned with a seeded project by
+  `DESIGN_DENSE_A11Y_ROUTES` (`journeys.spec.ts`), which asserts each route's OWN `h1` so a
+  404 cannot score clean. What they lack is an outcome-asserting FUNCTIONAL pass, not a
+  smoke check. `focus` is **not** in that scan and has no coverage of any kind: opening it
+  starts the room-analysis pipeline, so scanning it would be slow and dependent on live LLM
+  behaviour (`journeys.spec.ts:271-273`).
+- **The 25 routes absent from the table**, in full, so the number above is checkable:
+  - marketing / content (11): `/faq`, `/gallery`, `/picks`, `/support`, `/privacy`, `/terms`,
+    `/waitlist`, `/guides`, `/guides/ai-vs-professional-design`, `/guides/color-palette-guide`,
+    `/guides/material-coherence`
+  - product (9): `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`, and the seven
+    per-room routes above (`setup`, `focus`, `diagnosis`, `products`, `bundles`, `mockups`,
+    `compare`) — six a11y-scanned, none functionally asserted
+  - billing outcomes (2): `/billing/checkout-success`, `/billing/checkout-cancel`
+  - sharing / waitlist (3): `/saved/[id]`, `/shared/[token]`, `/waitlist/confirmed`
 
 ## Human-only (cannot run headlessly — verify manually, never assume working)
 - Real **payment capture** on a live card (Stripe live mode).

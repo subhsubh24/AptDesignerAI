@@ -20,10 +20,23 @@ import type { CandidateProduct } from "@/lib/types/database";
 export const maxDuration = 300;
 
 /**
- * Hardest cap on how much one request may ask for. Generous against real use —
- * a furnished room is a handful of categories with a few candidate URLs each.
+ * Hardest cap on how much one request may ask for. Sized against the REAL
+ * ceiling rather than a guess: the category list this form is built from is
+ * schema-capped at 20 (`lib/agents/category-planner.ts` `.min(1).max(20)`), and
+ * ManualSourcingForm lets the user add unlimited comparison URLs per category
+ * while its own copy invites "multiple options per category to compare". So a
+ * maximal legitimate session is 20 categories x a handful of options. 100
+ * clears that with room to spare and still refuses a payload that is plainly
+ * not a furnishing set. The first cut of this was 40 — under, not over, what
+ * the UI invites, which would have rejected ordinary use.
+ *
+ * NOTE what this does and does not buy. It bounds COST and turns a runaway
+ * payload into a clean 400 instead of a mid-flight maxDuration kill. It is not
+ * a latency guarantee: extraction, scoring and bundle evaluation run as
+ * sequential phases, so a request near this ceiling can still approach the
+ * route's 300s budget. That ceiling is unchanged by this commit.
  */
-const MAX_URLS_PER_REQUEST = 40;
+const MAX_URLS_PER_REQUEST = 100;
 
 /**
  * Extraction fan-out width. Matches SCORE_CONCURRENCY below: the scoring phase
