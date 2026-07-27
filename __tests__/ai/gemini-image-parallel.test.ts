@@ -140,9 +140,13 @@ describe("gemini converts URL image parts in parallel without reordering them", 
   });
 
   it("drops only the failed image's slot, leaving the others in place", async () => {
+    // Named for WHICH CALL fails, not which URL: mockImplementationOnce
+    // intercepts the chronologically first fetch, and pLimit invokes in
+    // authored order while under capacity — so it is this first URL that
+    // throws, not whichever one a "broken.png" name would suggest.
     const urls = [
+      "https://cdn.example.com/fails-first.png",
       "https://cdn.example.com/ok1.png",
-      "https://cdn.example.com/broken.png",
       "https://cdn.example.com/ok2.png",
     ];
     imageFetchesWithDelays({ [urls[0]]: 5, [urls[1]]: 1, [urls[2]]: 10 });
@@ -152,8 +156,8 @@ describe("gemini converts URL image parts in parallel without reordering them", 
 
     await chatWithImages(urls);
 
-    // The first fetch call is the one that throws, so image 1 goes missing and
-    // images 2 and 3 keep their positions relative to their labels.
+    // Image 1 goes missing; images 2 and 3 keep their positions relative to
+    // their labels rather than shifting up into the empty slot.
     const parts = sentParts();
     expect(parts.map((p) => ("text" in p ? p.text : "<image>"))).toEqual([
       "Photo 1:",

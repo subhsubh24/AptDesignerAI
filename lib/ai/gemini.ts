@@ -329,7 +329,11 @@ async function convertMessages(
             };
           } catch (err) {
             failedImages++;
-            log.warn(`Failed to fetch image (${failedImages}/${totalImages})`, {
+            // No running "(n/total)" here: these callbacks race, so the number
+            // each failure printed would depend on which fetch lost first —
+            // nondeterministic log output for identical input. The final tally
+            // is logged once below, where it is stable.
+            log.warn("Failed to fetch image", {
               url: pending.url,
               error: err instanceof Error ? err.message : String(err),
             });
