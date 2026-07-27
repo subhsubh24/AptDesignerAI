@@ -100,9 +100,26 @@
   --accent: #2e2a26;
   --accent-foreground: #ede9e3;
   --accent-warm: #d4733e;
-  /* Dark accent-warm already clears AA as text on the tinted pill (5.0:1); keep
-     the strong token equal so the shared utility renders identically in dark. */
-  --accent-warm-strong: #d4733e;
+  /* Lightened from #d4733e. The previous value set the strong token EQUAL to the
+     base accent on the claim that dark already cleared AA "(5.0:1)" — but 5.0:1
+     is the ratio against the page background, and these pills mostly render on
+     CARDS. Measured against every surface/tint pair actually used:
+
+                      plain   /10 pill   /15 pill
+       --background   5.00      4.61       4.64   (old #d4733e)
+       --card         4.61      4.32       4.28   ← below the 4.5:1 AA floor
+
+     So `Badge variant="warm"` inside a Card — the room-overview "Next" step
+     chip, the bundles chips, the landing-page score chip — shipped at 4.28:1.
+     #dd8351 clears AA on all six (worst case 5.04:1 on a /15 pill over a card)
+     while staying the nearest warm step to the brand accent, which is untouched
+     for fills, borders and focus rings. Guarded by
+     __tests__/design/warm-accent-contrast.test.ts.
+
+     Lesson worth keeping: always state WHICH surface a contrast number was
+     measured against — the old comment's number was real, just not for the
+     surface these components actually sit on. */
+  --accent-warm-strong: #dd8351;
   --destructive: #ef4444;
   --destructive-foreground: #ede9e3;
   --border: #2e2a26;
