@@ -4,6 +4,65 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-28 (Run 121) — scout-driven (no DEEP AUDIT, not due). 6 changes built, **5 shipped, 1 ABANDONED after both reviewers demolished its rationale**. 12 reviewer verdicts: 5 APPROVE, 7 REQUEST_CHANGES — and every single REQUEST_CHANGES was a real defect.
+
+### State on entry
+- Cold container. Branch `claude/sleepy-goldberg-ggmuon` == default tip `e217e95` (#728, Run 120), 0/0. Baseline GREEN: tsc, **2476 tests**/11 skip, determinism. Zero open PRs.
+- DEEP AUDIT not due (ran Run 119; next ~123) → 8-Haiku scout sweep.
+- **The scorecard was one run STALE in a new way:** `as_of: 2026-07-27` but Run 120 had already fixed four of its named gaps hours later. Scouting confirmed store_readiness, mobile, web-reliability and artifact-freshness are now CLEAN. Reading the scorecard without diffing it against the commits landed since its stamp would have re-shipped Run 120's work.
+
+### THE RUN'S CENTRAL LESSON: I raised the project's headline revenue over its own floor, and the thing that made it legitimate was a reviewer catching me banking an unclaimed discount
+The business case applied a flat 30% store commission to every line of every scenario — including the shippable-today figure, which is web/Stripe-only BY CONSTRUCTION (the only reason it zeroes annual is that Pro Annual is gated off in `stripe.ts`/migration 021, concerns with no store equivalent). 30% is also not the rate on either channel at this scale. Correcting it moved shippable-today from $99,926 (~$74 UNDER the $100K floor) to $121,339 — i.e. **the gap the auditor had been holding `business_case_strength` at B over was an artifact of a wrong input, not a real shortfall.**
+That is the single most gameable move available to this loop, so it was briefed adversarially — and the reviewer earned it. I wrote that new developers "qualify automatically" for Apple's 15%. **False, and load-bearing.** Apple separates ELIGIBILITY (automatic under $1M) from ENROLMENT (the Account Holder must accept Schedule 2 in App Store Connect; the rate then applies 15 days after the fiscal month enrolment is approved). Nothing in the repo committed the owner to enrolling. Without that catch the model would have banked a discount nobody had claimed — the exact species of gaming the correction was meant to avoid.
+**Rule: when a correction moves a number in your favour, the burden is not just "is the rate real" but "is it real FOR US, TODAY, without an unrecorded action". A rate that requires an owner step is a PENDING_OPS entry, not a model constant.**
+
+### ABANDONED: the analyze-apartment fan-out cap, and why abandoning was right
+I capped an ungated `Promise.all` over per-room vision calls. Both reviewers independently established that my entire justification was false: `geminiConcurrencyLimit` (gemini.ts:60, applied at :660) ALREADY caps concurrent model calls at 8 system-wide, and `imageFetchLimit` already bounds decoded image buffers — so "blows through the per-minute quota" was impossible before my change, and "lands on the user as a half-analysed apartment" was impossible too (the outer catch returns a clean 500 and the persistence loop runs strictly after the barrier, so nothing is persisted on failure). Reviewer B added that the cap defaulting to the SAME value as the global gate never creates headroom, so it doesn't deliver the isolation the message implied.
+**I dropped it rather than invent a third rationale.** Run 120's lesson was "when a limit is contested twice, you are bounding at the WRONG LAYER"; this is the same failure one layer up — I bounded something that was already bounded, and wrote a story about quota exhaustion to justify it. **Before claiming a fan-out is unbounded, TRACE THE CALL into the provider and check for an existing gate.** A cap whose only defensible benefit you discover *after* two reviewers refute your stated one is not a change that clears the bar.
+
+### The guard I wrote caught my own incomplete work — twice
+- The off-system colour ratchet in `verdicts.test.ts` failed on two `red-*` utilities my own 21-site conversion had missed. Writing the ratchet BEFORE declaring the conversion done is what found them.
+- Both reviewers found the product-reference site (capped at 10 images — HIGHER than the gate's own default of 6) resolving through a bare `Promise.all`, **bypassing the very gate that commit exists to add**. I had written it that way to preserve per-item failure isolation and never noticed I had routed around the limiter. Fixed by giving that semantic its own gated export, so isolating a failure no longer costs you the gate. Reviewer B also caught that my gate was a SECOND `pLimit` instance parsing the same env var as gemini.ts's — one name, two budgets, 2x the real sockets.
+**Rule: a limiter is only a ceiling if there is exactly ONE instance of it. Sharing the env var is not sharing the gate.**
+
+### Reviewers corrected THREE of my own evidence claims — a recurring pattern now in its third run
+1. "VERIFIED: 3 of the 4 script-contract cases fail" — recomputed as **2 of 4**; the directory-found and call-found guards pass either way.
+2. "the batched call threw inside the agent's catch and every assertion silently exercised the pass-through path" — overstated; the direct `verifyMockupImage` tests would have failed LOUDLY, only the `generateWithVerification` ones would have gone quiet.
+3. Four stale figures left behind in the business case after my own correction: Scenario C net profit still ~$168K against its own re-priced ~68% margin; "The honest statement" still said break-even; the model comment's "3.6x" was computed against the OLD Scenario C; LTV was ~$596 when it is exactly $595.
+**The pattern (Runs 119, 120, 121): the gate is green, the code is right, and the thing that is wrong is a CLAIM in my own message. Budget review effort for the prose, not just the diff.**
+
+### "A comment is not a ratchet"
+I left `thinkingLevel: HIGH` hardcoded on `computer_use` (not on the allowed-HIGH list) with an honest comment explaining why fixing it inside a seeding commit would silently degrade a live route. Reviewer B accepted the scope call but rejected the follow-through, quoting the repo's own founding principle back at me: this codebase's premise is mechanical enforcement, not vigilance. Replaced the comment with `__tests__/ai/high-thinking-exceptions.test.ts` — a DEBT REGISTER that fails if a second bypassing site appears, if this one moves, if an entry outlives its call site, or if an entry carries a placeholder reason. It deliberately does not bless the violation; it stops it multiplying while the escalation ladder is unbuilt.
+
+### Shipped — 5 file-disjoint
+1. **`design(A)`** — scoring colour system → one-hue ladder; ManualScorecardView converted wholesale (21 sites); dead `--score-*` tokens removed; contrast COMPUTED from real tokens in both themes, with `bg-muted/NN` tints read out of all seven consumers.
+2. **`perf(A)`** — `resolveImageBlocks()` adopted at all six serial sites, behind ONE shared gate.
+3. **`fix(security/A4)`** — bind-then-persist on saved-designs `project_id` and products `search_session_id`; the last two `security_rls` A+ items.
+4. **`fix(cost/determinism)`** — the two ratchet-invisible provider calls, + a scripts/ ratchet + the HIGH-thinking debt register.
+5. **`fix(business-case)`** — the take-rate correction.
+
+### Process notes
+- **Every new guard this run was verified by REVERTING the fix and watching it fail.** That caught a real defect: the products test expected 200 where the route returns 201, and the analyze-apartment test would have been meaningless without it.
+- **Scouts running concurrently with my edits reported on my IN-PROGRESS tree** (the tests scout reported `verdicts.test.ts` as "currently FAILING" — it was mid-edit). Treat scout file-state claims as time-stamped, not current.
+- **Commits came out UNSIGNED** despite `commit.gpgsign true`: the signing key lives at `/home/claude/.ssh/` while the session runs as root from `/root`. Fixed with `git rebase --exec 'git commit --amend --no-edit -S'`; verify with `git cat-file -p <sha> | grep gpgsig`, NOT with `%G?` (which reports `N` here because `gpg.ssh.allowedSignersFile` is unset, even on genuinely signed commits).
+- Held all fixes until every reviewer returned, so the tree was never mutated under a running reviewer. Zero contention incidents this run — a change from Run 120.
+
+### NOT done / carried forward
+- **A4 persistence cutover** — still the binding blocker, still owner-gated. Scouted: `docker` + `psql` exist in the container but there is NO `supabase` CLI and no `config.toml`, so a real cold-start proof would be a gated test contributing nothing per-PR.
+- **F7 visual baselines** — still zero. The scout's honest read: F7's DoD as written (every route/state/step, both widths, plus a recorded per-image verdict) is not achievable in CI without cassette work first.
+- **The computer-use escalation ladder** — the proper fix for the HIGH-thinking violation, now pinned by the debt register.
+- **BUSINESS_CASE.md still does not credit** the three post-07-20 conversion levers (724e138, 0ab361a, f4011f4).
+- **fit-scorer cassette test** — the tests scout's highest-value single coverage addition (2.42% stmts, hot path across ~6 routes).
+- Dropped as below-bar: `mockups` `readdirSync` (local-FS only; the prod dir does not exist, so it is one `existsSync`).
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 123.**
+- **Diff the scorecard's `as_of` against `git log` before treating its gaps as current** — this run, four of its named gaps were already fixed.
+- **Highest-value unbuilt:** the fit-scorer cassette test; crediting the three conversion levers in the business case; the computer-use escalation ladder.
+- **DO-NOT-RE-FLAG (carry all prior lists +):** the analyze-apartment per-room fan-out (already gated downstream by `geminiConcurrencyLimit` — do not "fix" it again); `maxDuration` on AI routes (all 19 have it); the `mockups` `readdirSync`.
+
+---
+
 ## Run 2026-07-27 (Run 120) — scout-driven off the FRESH scorecard (no DEEP AUDIT, ran Run 119). 6 file-disjoint changes, 12 reviewer rounds. Every REQUEST_CHANGES was a real defect; FOUR were mine, and two reviewers independently found the same security hole.
 
 ### State on entry
