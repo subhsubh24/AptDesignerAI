@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { thinkingFor } from "@/lib/ai/thinking";
-import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { resolveImageBlocks } from "@/lib/ai/resolve-image";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getDiagnosisAnalysisPrompt, getDiagnosisPlanPrompt } from "@/lib/prompts/diagnosis";
 import { fetchDiagnosisExamples, formatExamplesForPrompt } from "@/lib/db/diagnosis-examples";
@@ -108,17 +108,25 @@ export async function runRoomDiagnosis(ctx: AgentContext, profile?: DynamicDesig
   // them at the cheaper cached rate instead of paying full input cost N times.
   const cacheableBlocks: AIContentBlock[] = [];
 
+  // ONE parallel batch for the floor plan + every room photo. Resolving these
+  // serially put N fetch+upload round trips in front of the first model call on
+  // the diagnosis path. `resolveImageBlocks` returns by index, so the block
+  // order below is unchanged.
+  const floorPlanUrls = ctx.floorPlanImageUrl ? [ctx.floorPlanImageUrl] : [];
+  const resolved = await resolveImageBlocks(
+    [...floorPlanUrls, ...ctx.imageUrls],
+    { preferFilesApi: true },
+  );
+
   if (ctx.floorPlanImageUrl) {
     cacheableBlocks.push({
       type: "text",
       text: "AUTHORITATIVE FLOOR PLAN — exact dimensions, wall features (windows/doors/built-ins), and building orientation. Use this as the ground truth for all spatial facts. Do not infer or contradict any dimension readable from this plan.",
     });
-    cacheableBlocks.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
+    cacheableBlocks.push(resolved[0]);
   }
 
-  for (const url of ctx.imageUrls) {
-    cacheableBlocks.push(await resolveImageBlock(url, { preferFilesApi: true }));
-  }
+  cacheableBlocks.push(...resolved.slice(floorPlanUrls.length));
 
   const roomSessionKey = crypto
     .createHash("sha256")

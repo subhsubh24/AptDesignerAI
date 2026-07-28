@@ -1,6 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
-import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { resolveImageBlocks } from "@/lib/ai/resolve-image";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -61,9 +61,13 @@ export async function verifyMockupImage(
       text: `ORIGINAL ROOM PHOTOS — these show the actual apartment. Study the walls, flooring, windows, ceiling, and room proportions carefully:`,
     });
 
-    for (let i = 0; i < Math.min(roomImageUrls.length, 4); i++) {
+    // Batch the (at most 4) reference photos, then interleave their numbered
+    // captions. Index-preserving, so "Original photo 2" still names photo 2.
+    const shownUrls = roomImageUrls.slice(0, 4);
+    const shownBlocks = await resolveImageBlocks(shownUrls, { preferFilesApi: true });
+    for (let i = 0; i < shownUrls.length; i++) {
       content.push({ type: "text", text: `Original photo ${i + 1}:` });
-      content.push(await resolveImageBlock(roomImageUrls[i], { preferFilesApi: true }));
+      content.push(shownBlocks[i]);
     }
 
     content.push({

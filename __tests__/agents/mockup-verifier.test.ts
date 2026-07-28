@@ -7,12 +7,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/ai/gemini", () => ({
   geminiProvider: { chat: vi.fn() },
 }));
-vi.mock("@/lib/ai/resolve-image", () => ({
-  resolveImageBlock: vi.fn(async (url: string) => ({
+vi.mock("@/lib/ai/resolve-image", () => {
+  const resolveImageBlock = vi.fn(async (url: string) => ({
     type: "image",
     source: { type: "url", url },
-  })),
-}));
+  }));
+  return {
+    resolveImageBlock,
+    // The verifier batches its reference photos. Mirror the real module's
+    // index-preserving contract so the caption/photo pairing this suite relies
+    // on is exercised, not bypassed.
+    resolveImageBlocks: vi.fn(async (urls: string[]) =>
+      Promise.all(urls.map((u) => resolveImageBlock(u))),
+    ),
+  };
+});
 
 import {
   verifyMockupImage,

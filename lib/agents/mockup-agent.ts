@@ -3,7 +3,7 @@ import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
-import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { resolveImageBlock, resolveImageBlocks, resolveImageBlocksSettled } from "@/lib/ai/resolve-image";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
@@ -275,6 +275,12 @@ export async function generateMockupPrompt(
       for (const o of photoOrientations) captionByIndex.set(o.index, o);
     }
 
+    // Resolve the reference photos in ONE batch, then interleave their
+    // captions. Serially this was up to 4 fetch+upload round trips inside the
+    // prompt builder, on the mockup money path. Index-preserving, so
+    // "Photo 2" still names photo 2.
+    const usedBlocks = await resolveImageBlocks(usedUrls, { preferFilesApi: true });
+
     for (let i = 0; i < usedUrls.length; i++) {
       const orient = captionByIndex.get(i + 1);
       if (orient) {
@@ -288,7 +294,7 @@ export async function generateMockupPrompt(
       } else {
         cacheableBlocks.push({ type: "text", text: `Photo ${i + 1}:` });
       }
-      cacheableBlocks.push(await resolveImageBlock(usedUrls[i], { preferFilesApi: true }));
+      cacheableBlocks.push(usedBlocks[i]);
     }
 
     const summary = formatOrientationSummary(photoOrientations ?? []);
@@ -402,6 +408,9 @@ on the CORRECT walls — not mirrored versions of them.`,
         for (const o of photoOrientations) captionByIndex.set(o.index, o);
       }
 
+      // Same batch-then-interleave as the prompt builder above.
+      const photoBlocks = await resolveImageBlocks(roomImageUrls, { preferFilesApi: true });
+
       for (let i = 0; i < roomImageUrls.length; i++) {
         const orient = captionByIndex.get(i + 1);
         if (orient) {
@@ -415,7 +424,7 @@ on the CORRECT walls — not mirrored versions of them.`,
         } else {
           content.push({ type: "text", text: `Photo ${i + 1}:` });
         }
-        content.push(await resolveImageBlock(roomImageUrls[i], { preferFilesApi: true }));
+        content.push(photoBlocks[i]);
       }
 
       const summary = formatOrientationSummary(photoOrientations ?? []);
@@ -442,13 +451,20 @@ Use these real-world references to render furniture and materials accurately (co
         type: "text",
         text: `SELECTED PRODUCTS — these are the EXACT items that must appear in the rendered room. Each caption below is paired with its product photo. Render each item matching its photo: same silhouette, same material, same color, same proportions. Do NOT substitute generic lookalikes.`,
       });
-      for (const ref of options.productReferences.slice(0, 10)) {
-        content.push({ type: "text", text: ref.caption });
-        try {
-          content.push(await resolveImageBlock(ref.imageUrl, { preferFilesApi: true }));
-        } catch {
-          // Skip unresolvable image refs — the caption still guides the model.
-        }
+      const refs = options.productReferences.slice(0, 10);
+      // Resolved as a batch, but each failure is caught PER ITEM rather than by
+      // one try around the batch: a single unresolvable product photo must skip
+      // only its own block and leave the other nine attached, which is what the
+      // serial loop did. `Promise.all` would have failed all ten together.
+      const refBlocks = await resolveImageBlocksSettled(
+        refs.map((r) => r.imageUrl),
+        { preferFilesApi: true },
+      );
+      for (let i = 0; i < refs.length; i++) {
+        content.push({ type: "text", text: refs[i].caption });
+        // Skip unresolvable image refs — the caption still guides the model.
+        const block = refBlocks[i];
+        if (block) content.push(block);
       }
     }
 
