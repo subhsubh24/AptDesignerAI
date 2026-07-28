@@ -20,6 +20,7 @@
 
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { selectModel } from "@/lib/ai/models";
+import { resolveSeed } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 import { evaluateAction, DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "./safety";
 import type {
@@ -257,8 +258,25 @@ export async function runComputerUseAgent<T = unknown>(
         config: {
           systemInstruction: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
           tools: [computerUseTool],
-          // Higher thinking budget helps the model plan multi-step nav.
+          // OPEN COST-CONTRACT ITEM, recorded rather than quietly changed.
+          // `computer_use` is NOT on the contract's allowed-HIGH list
+          // (.claude/rules/llm-cost-contract.md), and this task does have the
+          // cheap deterministic verifier the contract asks for — product-
+          // verifier.ts parseFinal()/hasData. So the contract's answer is
+          // "run cheap, escalate on that signal", i.e. an escalation ladder,
+          // NOT a hardcoded HIGH. Building that ladder is a real change with
+          // its own review; silently dropping to the policy default instead
+          // would degrade a live route (/api/computer-use/product-verify) in a
+          // commit about seeding. Left AT ITS CURRENT VALUE and flagged, so the
+          // next audit sees a named item rather than an invisible bypass.
           thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+          // The determinism rule is "ALL LLM calls pass seed". This one did
+          // not. Because the loop bypasses geminiProvider.chat() (see the
+          // module docstring), neither the harness ratchet nor
+          // check:determinism can see this call — the omission was invisible
+          // by construction, not by exemption. resolveSeed() rather than a
+          // literal, so DETERMINISTIC_MODE=false still yields a stochastic run.
+          seed: resolveSeed(undefined),
         },
       });
 

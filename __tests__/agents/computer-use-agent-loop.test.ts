@@ -98,6 +98,31 @@ describe("runComputerUseAgent", () => {
     expect(driver.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it("seeds the model call, on EVERY turn", async () => {
+    // Determinism rule: all LLM calls pass a seed. This loop bypasses
+    // geminiProvider.chat(), so neither the harness ratchet nor
+    // check:determinism can see it — the omission was invisible by
+    // construction, which is why it survived. Asserted at RUNTIME on the SDK
+    // payload rather than by scanning source, and on every turn rather than
+    // the first, because the config object is rebuilt inside the loop.
+    const { DETERMINISTIC_SEED } = await import("@/lib/ai/determinism");
+    mockGenerate
+      .mockResolvedValueOnce(actionResponse())
+      .mockResolvedValue(finalResponse("Done."));
+    const driver = makeDriver();
+
+    await runComputerUseAgent(
+      driver,
+      { startUrl: "https://example.com/product", goal: "verify the product" },
+      {},
+    );
+
+    expect(mockGenerate.mock.calls.length).toBeGreaterThan(1);
+    for (const [args] of mockGenerate.mock.calls) {
+      expect((args as { config: { seed?: number } }).config.seed).toBe(DETERMINISTIC_SEED);
+    }
+  });
+
   it("stops with max_turns once the wall-clock budget is exceeded mid-run", async () => {
     // Model never finishes on its own — only the budget can stop it.
     mockGenerate.mockResolvedValue(actionResponse());

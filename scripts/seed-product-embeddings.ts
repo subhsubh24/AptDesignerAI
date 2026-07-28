@@ -29,6 +29,8 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { getSystemPrompt } from "@/lib/prompts/system";
+import { thinkingFor } from "@/lib/ai/thinking";
+import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbedding } from "@/lib/store/embedding-index";
@@ -103,6 +105,20 @@ Return ONLY JSON: { "products": [ ... ] }.`;
     messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
     max_tokens: 2500,
     tools: [{ googleSearch: {} as Record<string, never> }],
+    // The cost contract requires an explicit thinkingConfig on EVERY .chat(),
+    // and the determinism rule requires a seed. This call had neither, and the
+    // harness ratchet could not see it: __tests__/ai/harness-ratchet.test.ts
+    // scans lib/ and app/ only, so a live provider call under scripts/ is
+    // invisible to it by construction rather than by exemption.
+    //
+    // `search` is the honest task here — this is googleSearch-grounded
+    // retrieval of catalog rows, not reasoning — and it resolves to the
+    // minimal tier, which is what the contract prescribes for anything with a
+    // cheap verifier. There is one: every row is Zod-parsed
+    // (ProductsResponseSchema) and each image_url must resolve to a real
+    // embeddable image or the row is dropped.
+    thinkingConfig: thinkingFor("search"),
+    seed: DETERMINISTIC_SEED,
   });
 
   const raw = extractJsonObject(response.content);
