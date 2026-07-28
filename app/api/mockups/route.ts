@@ -20,6 +20,7 @@ import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-l
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
+import { uploadMockupImage } from "@/lib/storage/mockup-upload";
 
 /**
  * Canonical JSON stringify — keys sorted recursively. Used for building
@@ -851,43 +852,6 @@ RULES:
     verified: verificationResult.verified,
     verification_attempts: verificationResult.attempts,
   });
-}
-
-/**
- * Upload base64 image data to storage and return the public URL.
- *
- * The filename is content-addressed when `cacheKey` is provided so that
- * identical inputs produce identical paths (enables the mockup cache).
- * When omitted, falls back to a sha256 of the bytes themselves.
- */
-async function uploadMockupImage(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  base64Data: string,
-  mimeType?: string,
-  cacheKey?: string,
-): Promise<string> {
-  const mime = mimeType || "image/png";
-  const ext = mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : "png";
-  const buffer = Buffer.from(base64Data, "base64");
-  const stem = cacheKey ?? crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 32);
-  const fileName = `mockups/${stem}.${ext}`;
-
-  const { data, error } = await supabase.storage
-    .from("room-images")
-    .upload(fileName, buffer, {
-      contentType: mime,
-      upsert: false,
-    });
-
-  if (error) {
-    console.error("[mockup] Failed to upload image to storage:", error.message);
-    // Fall back to data URI if storage upload fails
-    return `data:${mime};base64,${base64Data}`;
-  }
-
-  const { data: urlData } = supabase.storage.from("room-images").getPublicUrl(data.path);
-  return urlData.publicUrl;
 }
 
 /**
