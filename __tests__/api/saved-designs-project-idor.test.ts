@@ -141,6 +141,35 @@ describe("saved-designs POST — project_id cross-tenant IDOR", () => {
     expect(JSON.stringify(captured.snapshot)).not.toContain("Victim");
   });
 
+  it("does NOT persist a project_id the ownership-bound fetch rejected", async () => {
+    // The metadata assertions above pass whether or not the raw project_id is
+    // written to the row, because the bind only ever gated the two metadata
+    // fields. The route stored `project_id ?? null` unconditionally, so the
+    // foreign id was persisted anyway — an unresolvable foreign key on the
+    // caller's own row. This asserts the column, not just the metadata.
+    const captured: { snapshot?: unknown } = {};
+    mockCreateClient.mockResolvedValue(makeClient([OWNED_PROJECT, OTHER_PROJECT], captured));
+
+    const res = await savedDesignsPost(
+      jsonReq({ room_id: "room-1", project_id: OTHER_PROJECT.id, stage: "assessment" }) as never,
+    );
+
+    expect(res.status).toBe(201);
+    expect((captured.snapshot as { project_id?: unknown }).project_id).toBeNull();
+  });
+
+  it("still persists the caller's OWN project_id", async () => {
+    const captured: { snapshot?: unknown } = {};
+    mockCreateClient.mockResolvedValue(makeClient([OWNED_PROJECT, OTHER_PROJECT], captured));
+
+    const res = await savedDesignsPost(
+      jsonReq({ room_id: "room-1", project_id: OWNED_PROJECT.id, stage: "assessment" }) as never,
+    );
+
+    expect(res.status).toBe(201);
+    expect((captured.snapshot as { project_id?: unknown }).project_id).toBe(OWNED_PROJECT.id);
+  });
+
   it("still records the caller's OWN project name/building into metadata", async () => {
     const captured: { snapshot?: unknown } = {};
     mockCreateClient.mockResolvedValue(makeClient([OWNED_PROJECT, OTHER_PROJECT], captured));

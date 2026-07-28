@@ -165,6 +165,17 @@ export async function POST(request: NextRequest) {
   // via GET /api/saved-designs/[id] (cross-tenant read IDOR). Mirrors the
   // userOwnsProject convention; a non-owned/absent project simply yields no
   // metadata (maybeSingle → null) rather than leaking or erroring.
+  //
+  // The SAME bound fetch decides what gets PERSISTED. Previously the row stored
+  // `project_id ?? null` unconditionally, so a project id the caller does not
+  // own was written onto their own saved_designs row even though the fetch just
+  // returned nothing for it. That is not a cross-tenant read — /api/projects/
+  // [projectId] 404s on the id, and the row itself is owner-scoped — but it
+  // stores a foreign key the owner cannot resolve, which breaks the app's
+  // invariant that a saved design's project_id is always one of the caller's
+  // own projects. Bind every client-supplied id, then persist what the binding
+  // returned; never persist the raw input alongside a check that rejected it.
+  let boundProjectId: string | null = null;
   if (project_id) {
     const { data: project } = await supabase
       .from("projects")
@@ -174,6 +185,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (project) {
+      boundProjectId = project_id;
       (snapshot.metadata as Record<string, unknown>).project_name = project.name;
       (snapshot.metadata as Record<string, unknown>).building_name = project.building_name;
     }
@@ -239,7 +251,7 @@ export async function POST(request: NextRequest) {
       .from("saved_designs")
       .insert({
         user_id: userId,
-        project_id: project_id ?? null,
+        project_id: boundProjectId,
         room_id,
         title,
         room_type: room?.room_type ?? null,
