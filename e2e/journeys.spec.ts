@@ -26,6 +26,7 @@ import {
   seedProEntitlement,
   uniqueEmail,
 } from "./helpers/seed";
+import { captureJourneyStep } from "./helpers/screenshot";
 
 /** The 8-byte PNG signature — the money-path render must return REAL image bytes. */
 const PNG_MAGIC_HEX = "89504e470d0a1a0a";
@@ -48,6 +49,7 @@ test.describe("public + structural journeys", () => {
     await expect(page.locator("#email")).toBeVisible();
     await expect(page.locator("#password")).toBeVisible();
     await expect(page.getByRole("button", { name: /create account/i })).toBeVisible();
+    await captureJourneyStep(page, "public-signup-form");
   });
 
   test("login page renders the real form", async ({ page }) => {
@@ -64,6 +66,7 @@ test.describe("public + structural journeys", () => {
       "href",
       "/forgot-password",
     );
+    await captureJourneyStep(page, "public-login-form");
   });
 
   test("forgot-password page renders the real form", async ({ page }) => {
@@ -71,6 +74,7 @@ test.describe("public + structural journeys", () => {
     await expectNoErrorBoundary(page);
     await expect(page.locator("#email")).toBeVisible();
     await expect(page.getByRole("button", { name: /send reset link/i })).toBeVisible();
+    await captureJourneyStep(page, "public-forgot-password-form");
   });
 
   test("submitting the reset form reaches a real outcome, never a silent no-op", async ({
@@ -107,6 +111,7 @@ test.describe("public + structural journeys", () => {
       page.getByText(/choose a new password|that link has expired/i).first(),
     ).toBeVisible();
     await expectNoErrorBoundary(page);
+    await captureJourneyStep(page, "public-reset-password-resolved");
   });
 
   for (const path of ["/dashboard", "/account", "/saved"]) {
@@ -128,6 +133,7 @@ test.describe("public + structural journeys", () => {
     expect(res?.status() ?? 0).toBeLessThan(400);
     await expectNoErrorBoundary(page);
     await expect(page.getByRole("heading").first()).toBeVisible();
+    await captureJourneyStep(page, "public-pricing");
   });
 });
 
@@ -184,6 +190,7 @@ test.describe("authenticated journeys", () => {
     // Signed-in-only content proves the screen actually rendered:
     await expect(page.getByRole("heading", { name: /welcome to aptdesigner/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /start designing/i })).toBeVisible();
+    await captureJourneyStep(page, "authed-dashboard-after-signin");
   });
 
   test("REAL UI signup creates a usable account and lands on the dashboard (no email verification)", async ({
@@ -202,12 +209,14 @@ test.describe("authenticated journeys", () => {
     await expectNoErrorBoundary(page);
     await expect(page.getByText(/check your email/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /start designing/i })).toBeVisible();
+    await captureJourneyStep(page, "authed-dashboard-after-ui-signup");
   });
 
   test("core product flow entry: onboarding starts without error", async ({ page }) => {
     await signIn(page);
     await page.getByRole("button", { name: /start designing/i }).click();
     await expectNoErrorBoundary(page);
+    await captureJourneyStep(page, "authed-onboarding-start");
   });
 
   test("logged-in visitor hitting /login is redirected to the dashboard", async ({ page }) => {
@@ -222,6 +231,7 @@ test.describe("authenticated journeys", () => {
     await expect(page).toHaveURL(/\/account/);
     await expectNoErrorBoundary(page);
     await expect(page.getByRole("heading").first()).toBeVisible();
+    await captureJourneyStep(page, "authed-account");
   });
 
   // Authed a11y GATE (design_taste): the public-page axe scan (e2e/a11y.spec.ts)
@@ -336,6 +346,8 @@ test.describe("authenticated journeys", () => {
           `renamed heading, not a scannable surface`,
       ).toBeVisible();
 
+      await captureJourneyStep(page, `authed-room-${segment}`);
+
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
         .analyze();
@@ -360,6 +372,7 @@ test.describe("authenticated journeys", () => {
     await expect(
       page.getByRole("button", { name: /continue to checkout/i }),
     ).toBeVisible();
+    await captureJourneyStep(page, "authed-paywall-upgrade");
   });
 
   test("paywall GATE: a free-tier user sees the upgrade CTA on /saved", async ({ page }) => {
@@ -374,6 +387,7 @@ test.describe("authenticated journeys", () => {
         name: /unlock unlimited designs|reached your free save limit/i,
       }),
     ).toBeVisible();
+    await captureJourneyStep(page, "authed-saved-free-tier-gate");
   });
 
   test("paywall UNLOCK: a seeded Pro entitlement removes the free-tier upgrade CTA", async ({
