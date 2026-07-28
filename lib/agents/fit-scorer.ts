@@ -31,6 +31,55 @@ import { MATH_VETO } from "@/lib/config/pipeline";
 
 const log = createLogger("fit-scorer");
 
+/** AI dimension scores (0-10) subject to the deterministic math veto. */
+export interface VetoableScores {
+  scale_fit_score: number;
+  palette_fit_score: number;
+  material_fit_score: number;
+}
+
+/**
+ * Cap AI dimension scores where the deterministic math found a violation.
+ *
+ * The model can talk itself into a 9 for a sofa that physically does not fit,
+ * or whose colours fight the recommended palette. `computeProductMathScores`
+ * already knows better, so where math is confident-bad (< MATH_VETO.threshold)
+ * and the model is confident-good (> threshold * 10), math wins and the AI
+ * score is pulled down to the math score.
+ *
+ * This is the deterministic quality gate on the product-scoring money path, and
+ * it ran as two verbatim copies — one in `scoreProduct`, one in the batch loop
+ * of `scoreProducts` — so a product could be scored differently depending on
+ * whether it went through the batch or the per-product fallback if the copies
+ * ever drifted. One implementation, one set of tests.
+ *
+ * Returns a NEW object; the input is not mutated.
+ */
+export function applyMathVeto<T extends VetoableScores>(
+  scores: T,
+  math: Pick<ProductMathScores, "scale_fit" | "palette_fit" | "material_fit">,
+  productTitle?: string,
+): T {
+  const capped = { ...scores };
+  const t = MATH_VETO.threshold;
+
+  const dims = [
+    ["scale_fit", "scale_fit_score"],
+    ["palette_fit", "palette_fit_score"],
+    ["material_fit", "material_fit_score"],
+  ] as const;
+
+  for (const [mathKey, scoreKey] of dims) {
+    if (math[mathKey] < t && capped[scoreKey] > t * 10) {
+      const to = Math.round(math[mathKey] * 10);
+      log.info(`Math capping ${mathKey}: AI=${capped[scoreKey]} → ${to}`, { product: productTitle });
+      capped[scoreKey] = to;
+    }
+  }
+
+  return capped;
+}
+
 /** Pre-computed Gemini-compatible schema for quick-score responses. */
 const QUICK_SCORE_GEMINI_SCHEMA = zodToGeminiSchema(QuickScoreResponseSchema);
 
@@ -288,22 +337,8 @@ async function scoreProductImpl(
       }
     );
 
-    const scores = { ...combinedRes.data.scores };
-
     // Math veto: cap AI dimension scores where deterministic math found violations.
-    const VETO_THRESHOLD = MATH_VETO.threshold;
-    if (mathScores.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
-      log.info(`Math capping scale_fit: AI=${scores.scale_fit_score} → ${Math.round(mathScores.scale_fit * 10)}`, { product: product.title });
-      scores.scale_fit_score = Math.round(mathScores.scale_fit * 10);
-    }
-    if (mathScores.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
-      log.info(`Math capping palette_fit: AI=${scores.palette_fit_score} → ${Math.round(mathScores.palette_fit * 10)}`, { product: product.title });
-      scores.palette_fit_score = Math.round(mathScores.palette_fit * 10);
-    }
-    if (mathScores.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
-      log.info(`Math capping material_fit: AI=${scores.material_fit_score} → ${Math.round(mathScores.material_fit * 10)}`, { product: product.title });
-      scores.material_fit_score = Math.round(mathScores.material_fit * 10);
-    }
+    const scores = applyMathVeto(combinedRes.data.scores, mathScores, product.title ?? undefined);
 
     const finalScore = computeFinalItemScore(scores, product.category || undefined);
     // Ground the LLM confidence against objective data-quality signals so
@@ -657,18 +692,7 @@ Return JSON ONLY matching this shape (no prose, no markdown fences):
       }
 
       const math = perProductMath[idx];
-      const scores = { ...entry.scores };
-
-      const VETO_THRESHOLD = MATH_VETO.threshold;
-      if (math.scale_fit < VETO_THRESHOLD && scores.scale_fit_score > VETO_THRESHOLD * 10) {
-        scores.scale_fit_score = Math.round(math.scale_fit * 10);
-      }
-      if (math.palette_fit < VETO_THRESHOLD && scores.palette_fit_score > VETO_THRESHOLD * 10) {
-        scores.palette_fit_score = Math.round(math.palette_fit * 10);
-      }
-      if (math.material_fit < VETO_THRESHOLD && scores.material_fit_score > VETO_THRESHOLD * 10) {
-        scores.material_fit_score = Math.round(math.material_fit * 10);
-      }
+      const scores = applyMathVeto(entry.scores, math, product.title ?? undefined);
 
       const finalScore = computeFinalItemScore(scores, product.category || undefined);
       const hasProductImage =
