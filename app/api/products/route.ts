@@ -84,6 +84,30 @@ export async function POST(request: Request) {
     }
   }
 
+  // search_session_id is client-supplied and was only length-validated, never
+  // bound to anything the caller owns — so a product could be filed under
+  // ANOTHER tenant's search session. No read path joins the two today, so this
+  // is not a cross-tenant read; it is a foreign key pointing outside the
+  // caller's data, which silently corrupts any future "products from this
+  // search" query. Bind it to the SAME room the ownership check above already
+  // cleared (search_sessions.room_id, indexed since 001), and reject rather
+  // than nulling: a caller sending a session from a different room has a bug,
+  // and quietly dropping the field would hide it.
+  if (body.search_session_id) {
+    const { data: session } = await supabase
+      .from("search_sessions")
+      .select("id")
+      .eq("id", body.search_session_id)
+      .eq("room_id", body.room_id)
+      .maybeSingle();
+    if (!session) {
+      return NextResponse.json(
+        { error: "search_session_id does not belong to this room" },
+        { status: 400 },
+      );
+    }
+  }
+
   const row = {
     room_id: body.room_id,
     title: body.title,

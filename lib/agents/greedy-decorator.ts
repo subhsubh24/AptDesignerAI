@@ -12,7 +12,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { extractJsonObject } from "@/lib/ai/extract-json";
-import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { resolveImageBlocks } from "@/lib/ai/resolve-image";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { createLogger } from "@/lib/logging/logger";
@@ -212,15 +212,16 @@ export async function runDiagnosisExpansion(
   // single room, each sending the same floor plan + photos. Uploading once
   // here kills the per-iteration fetch + base64 encoding overhead. Any
   // upload failure degrades gracefully back to URL blocks (the old path).
-  const visualBlocks: AIContentBlock[] = [];
-  if (ctx.floorPlanImageUrl) {
-    visualBlocks.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
-  }
-  if (ctx.roomPhotos?.length) {
-    for (const url of ctx.roomPhotos) {
-      visualBlocks.push(await resolveImageBlock(url, { preferFilesApi: true }));
-    }
-  }
+  // ONE parallel batch — these were resolved serially, so the "upload once"
+  // saving above was still paid for as N sequential round trips before the
+  // first iteration could start. Order is by index, so the block order holds.
+  const visualBlocks: AIContentBlock[] = await resolveImageBlocks(
+    [
+      ...(ctx.floorPlanImageUrl ? [ctx.floorPlanImageUrl] : []),
+      ...(ctx.roomPhotos ?? []),
+    ],
+    { preferFilesApi: true },
+  );
 
   for (let i = 0; i < maxIterations; i++) {
     // Build prompt

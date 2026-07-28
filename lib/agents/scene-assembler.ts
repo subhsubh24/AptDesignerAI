@@ -18,7 +18,7 @@ import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
 import { thinkingFor } from "@/lib/ai/thinking";
-import { resolveImageBlock } from "@/lib/ai/resolve-image";
+import { resolveImageBlocks } from "@/lib/ai/resolve-image";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSceneAssemblyPrompt } from "@/lib/prompts/scene-graph";
 import { RoomSceneGraphResponseSchema } from "@/lib/types/schemas";
@@ -53,16 +53,27 @@ export async function assembleRoomSceneGraph(ctx: AgentContext): Promise<AgentRe
   const photoOffset = hasFloorPlan ? 1 : 0;
 
   const cacheableBlocks: AIContentBlock[] = [];
+
+  // Resolve every image in ONE parallel batch, THEN interleave the captions.
+  // The captions are positional ("IMAGE 0", "IMAGE 3"), so index-preserving
+  // resolution is not an optimisation detail here — a block in the wrong slot
+  // would mislabel which photo the model is looking at.
+  const floorPlanUrls = ctx.floorPlanImageUrl ? [ctx.floorPlanImageUrl] : [];
+  const resolved = await resolveImageBlocks(
+    [...floorPlanUrls, ...ctx.imageUrls],
+    { preferFilesApi: true },
+  );
+
   if (ctx.floorPlanImageUrl) {
     cacheableBlocks.push({
       type: "text",
       text: "IMAGE 0 is the AUTHORITATIVE FLOOR PLAN — ground truth for room shape, wall directions, and dimensions.",
     });
-    cacheableBlocks.push(await resolveImageBlock(ctx.floorPlanImageUrl, { preferFilesApi: true }));
+    cacheableBlocks.push(resolved[0]);
   }
   for (let i = 0; i < ctx.imageUrls.length; i++) {
     cacheableBlocks.push({ type: "text", text: `IMAGE ${i + photoOffset}:` });
-    cacheableBlocks.push(await resolveImageBlock(ctx.imageUrls[i], { preferFilesApi: true }));
+    cacheableBlocks.push(resolved[floorPlanUrls.length + i]);
   }
 
   const sessionKey = crypto

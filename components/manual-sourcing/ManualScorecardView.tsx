@@ -20,7 +20,7 @@ import {
   DollarSign,
   Shield,
 } from "lucide-react";
-import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor } from "@/lib/scoring/verdicts";
+import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreSurface } from "@/lib/scoring/verdicts";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 
@@ -135,12 +135,7 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
   return (
     <div className="space-y-6">
       {/* ── Overall Score ─── */}
-      <Card className={cn(
-        "border-2",
-        result.overall_score >= 8 ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/30" :
-        result.overall_score >= 6 ? "border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/30" :
-        "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30"
-      )}>
+      <Card className={cn("border-2", getScoreSurface(result.overall_score))}>
         <CardContent className="pt-6 pb-5">
           <div className="flex items-center gap-6">
             <div className="text-center">
@@ -173,9 +168,9 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
 
       {/* ── Gaps ─── */}
       {result.gaps.length > 0 && (
-        <Card className="border-amber-200">
+        <Card className="border-accent-warm/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 text-amber-700">
+            <CardTitle className="text-base flex items-center gap-2 text-accent-warm-strong">
               <AlertTriangle className="h-4 w-4" />
               Gaps to close for a perfect 10
             </CardTitle>
@@ -183,8 +178,8 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
           <CardContent>
             <ul className="space-y-1.5">
               {result.gaps.map((gap, i) => (
-                <li key={i} className="text-sm text-amber-800 flex items-start gap-2">
-                  <span className="text-amber-400 mt-1 shrink-0">-</span>
+                <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                  <span className="text-muted-foreground mt-1 shrink-0">-</span>
                   {gap}
                 </li>
               ))}
@@ -195,12 +190,12 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
 
       {/* ── Failed Extractions ─── */}
       {result.failed_extractions.length > 0 && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 space-y-1">
-          <p className="text-sm font-medium text-red-700">
+        <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 space-y-1">
+          <p className="text-sm font-medium text-destructive">
             {result.failed_extractions.length} URL{result.failed_extractions.length !== 1 ? "s" : ""} could not be extracted
           </p>
           {result.failed_extractions.map((f, i) => (
-            <p key={i} className="text-xs text-red-600 break-all">
+            <p key={i} className="text-xs text-destructive break-all">
               {f.url}: {f.error}
             </p>
           ))}
@@ -209,10 +204,10 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
 
       {/* ── Best Combination ─── */}
       {result.best_combination && (
-        <Card className="border-emerald-200">
+        <Card className="border-accent-warm/40">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
+              <Trophy className="h-4 w-4 text-accent-warm" />
               Best Combination
               {result.best_combination.final_bundle_score && (
                 <Badge className={cn("ml-auto", getScoreColor(result.best_combination.final_bundle_score))}>
@@ -249,23 +244,23 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
 
             {result.best_combination.analysis && (
               <div className="grid sm:grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40">
-                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Strongest: </span>
+                <div className="p-2 rounded bg-muted/50">
+                  <span className="font-medium text-foreground">Strongest: </span>
                   {result.best_combination.analysis.strongest_aspect}
                 </div>
-                <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/40">
-                  <span className="font-medium text-amber-700 dark:text-amber-300">Weakest: </span>
+                <div className="p-2 rounded bg-muted/50">
+                  <span className="font-medium text-foreground">Weakest: </span>
                   {result.best_combination.analysis.weakest_aspect}
                 </div>
                 {result.best_combination.analysis.what_feels_missing !== "Nothing" && (
-                  <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/40">
-                    <span className="font-medium text-blue-700 dark:text-blue-300">Missing: </span>
+                  <div className="p-2 rounded bg-muted/50">
+                    <span className="font-medium text-foreground">Missing: </span>
                     {result.best_combination.analysis.what_feels_missing}
                   </div>
                 )}
                 {result.best_combination.analysis.what_should_be_swapped_first !== "Nothing" && (
-                  <div className="p-2 rounded bg-slate-100 dark:bg-slate-900/50">
-                    <span className="font-medium text-slate-700 dark:text-slate-300">Swap first: </span>
+                  <div className="p-2 rounded bg-muted/50">
+                    <span className="font-medium text-foreground">Swap first: </span>
                     {result.best_combination.analysis.what_should_be_swapped_first}
                   </div>
                 )}
@@ -330,10 +325,10 @@ export function ManualScorecardView({ result, onBack }: ManualScorecardViewProps
                       key={idx}
                       className={cn(
                         "rounded-lg border p-3 flex items-center gap-3",
-                        isBest && "border-emerald-300 bg-emerald-50/30"
+                        isBest && "border-accent-warm/40 bg-accent-warm/5"
                       )}
                     >
-                      {isBest && <Trophy className="h-4 w-4 text-amber-500 shrink-0" />}
+                      {isBest && <Trophy className="h-4 w-4 text-accent-warm shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap gap-1">
                           {bundle.products.map((p) => (
@@ -380,9 +375,9 @@ function ProductScorecard({
 }) {
   if (product.error && !product.scores) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
         <p className="text-sm font-medium">{product.title || "Unknown product"}</p>
-        <p className="text-xs text-red-600">Scoring failed: {product.error}</p>
+        <p className="text-xs text-destructive">Scoring failed: {product.error}</p>
       </div>
     );
   }
@@ -390,7 +385,7 @@ function ProductScorecard({
   return (
     <Card className={cn(
       "transition-all",
-      isBestPick && "border-emerald-300 ring-1 ring-emerald-200"
+      isBestPick && "border-accent-warm/40 ring-1 ring-accent-warm/30"
     )}>
       <div
         className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/30 transition-colors"
@@ -408,7 +403,7 @@ function ProductScorecard({
           <div className="flex items-center gap-2">
             <p className="font-medium text-sm truncate">{product.title || "Unknown"}</p>
             {isBestPick && (
-              <Badge className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] shrink-0">
+              <Badge className="bg-accent-warm/10 text-accent-warm-strong text-[10px] shrink-0">
                 Best Pick
               </Badge>
             )}
@@ -487,7 +482,7 @@ function ProductScorecard({
             <div className="grid sm:grid-cols-2 gap-3 text-xs">
               {product.reasoning.top_reasons?.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-medium text-emerald-700 dark:text-emerald-400">Strengths</p>
+                  <p className="font-medium text-foreground">Strengths</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.top_reasons.map((r, i) => (
                       <li key={i}>+ {r}</li>
@@ -497,7 +492,7 @@ function ProductScorecard({
               )}
               {product.reasoning.risks?.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-medium text-amber-700 dark:text-amber-400">Risks</p>
+                  <p className="font-medium text-foreground">Risks</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.risks.map((r, i) => (
                       <li key={i}>- {r}</li>
@@ -507,7 +502,7 @@ function ProductScorecard({
               )}
               {product.reasoning.suggestions?.length > 0 && (
                 <div className="space-y-1 sm:col-span-2">
-                  <p className="font-medium text-blue-700 dark:text-blue-400">Suggestions</p>
+                  <p className="font-medium text-foreground">Suggestions</p>
                   <ul className="space-y-0.5 text-muted-foreground">
                     {product.reasoning.suggestions.map((s, i) => (
                       <li key={i}>{s}</li>

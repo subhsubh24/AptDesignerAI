@@ -6,6 +6,10 @@ import pLimit from "p-limit";
 import { createLogger } from "@/lib/logging/logger";
 import { getInputBudget } from "@/lib/ai/context-truncation";
 import { isBaseTier, TEXT_TIERS } from "@/lib/ai/models";
+// The image-fetch gate lives in its own module so THIS path and the Files API
+// path in resolve-image.ts share ONE limiter instance. Two instances reading
+// the same env var let real concurrency reach 2x the named ceiling.
+import { imageFetchLimit } from "./image-fetch-gate";
 import { resolveSeed, resolveTemperature, DETERMINISTIC } from "./determinism";
 import { computeRetryDelay } from "./retry-delay";
 import { getOrCreateSystemCache } from "./system-cache";
@@ -58,19 +62,6 @@ const GEMINI_CALL_TIMEOUT_MS = Number(process.env.GEMINI_CALL_TIMEOUT_MS) || 180
  */
 const GEMINI_MAX_CONCURRENCY = Number(process.env.GEMINI_MAX_CONCURRENCY) || 8;
 const geminiConcurrencyLimit = pLimit(GEMINI_MAX_CONCURRENCY);
-
-/**
- * Separate gate for pulling image bytes down before a vision call.
- *
- * Deliberately NOT `geminiConcurrencyLimit`: that one exists to keep model
- * calls inside a per-minute API quota, and running fetches through it would
- * make every image download compete with in-flight model calls for the same 8
- * slots — turning a prefetch into a stall. These are plain HTTP GETs against
- * our own storage, so they get their own, wider gate. Its only job is to stop a
- * message carrying many photos from opening an unbounded number of sockets.
- */
-const IMAGE_FETCH_CONCURRENCY = Number(process.env.GEMINI_IMAGE_FETCH_CONCURRENCY) || 6;
-const imageFetchLimit = pLimit(IMAGE_FETCH_CONCURRENCY);
 
 /**
  * Placeholder occupying a part's slot while its image is fetched, so parts keep

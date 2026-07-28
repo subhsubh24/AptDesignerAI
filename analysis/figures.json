@@ -3,45 +3,51 @@
     {
       "id": "business_case_scenario_a_arr",
       "script": "analysis/business_case_scenario_a_arr.mjs",
-      "value": 46109,
+      "value": 55989,
       "tolerance": 200,
-      "cites": "docs/BUSINESS_CASE.md Scenario A (conservative), 'ARR: ~$46,200/year' and BUSINESS_CASE_SUMMARY.arr_year1.conservative (46200) -- tolerance covers the doc's nearest-hundred prose rounding"
+      "cites": "docs/BUSINESS_CASE.md Scenario A (conservative), '~$56,000/year' and BUSINESS_CASE_SUMMARY.arr_year1.conservative -- RE-PRICED 2026-07-28 from $46,109 when the model's flat 30% store commission was corrected to the 15% rate this business actually pays (Apple Small Business Program / Google Play first-$1M). No behavioural input changed."
     },
     {
       "id": "business_case_scenario_b_arr",
       "script": "analysis/business_case_scenario_b_arr.mjs",
-      "value": 122956,
+      "value": 149304,
       "tolerance": 200,
-      "cites": "docs/BUSINESS_CASE.md Scenario B / planning case (base), 'ARR: ~$122,900/year' and BUSINESS_CASE_SUMMARY.arr_year1.base (122900) -- tolerance covers the doc's nearest-hundred prose rounding"
+      "cites": "docs/BUSINESS_CASE.md Scenario B / planning case (base), '~$149,300/year' and BUSINESS_CASE_SUMMARY.arr_year1.base -- RE-PRICED 2026-07-28 from $122,956 by the same take-rate correction. STEADY-STATE, not year 1."
     },
     {
       "id": "business_case_scenario_c_arr",
       "script": "analysis/business_case_scenario_c_arr.mjs",
-      "value": 276652,
+      "value": 335934,
       "tolerance": 200,
-      "cites": "docs/BUSINESS_CASE.md Scenario C (optimistic), 'ARR: ~$276,800/year' and BUSINESS_CASE_SUMMARY.arr_year1.optimistic (276800) -- tolerance covers the doc's nearest-hundred prose rounding"
+      "cites": "docs/BUSINESS_CASE.md Scenario C (optimistic), '~$335,900/year' and BUSINESS_CASE_SUMMARY.arr_year1.optimistic -- RE-PRICED 2026-07-28 by the same take-rate correction. Still far below the $1M proceeds threshold at which the store rate reverts to 30%."
     },
     {
       "id": "business_case_without_annual_arr",
       "script": "analysis/business_case_without_annual_arr.mjs",
-      "value": 99926,
+      "value": 121339,
       "tolerance": 1,
-      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual mix stays at 0%: ARR is ~$99.9K' -- the shippable-TODAY figure both GTM_SCORECARD.md and QUALITY_SCORECARD.md (business_case_strength) cite precisely as $99,926, ~$74 below the $100K floor. Tight tolerance: this is the figure under active auditor scrutiny."
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual mix stays at 0%' -- the shippable-TODAY figure, on the CONSERVATIVE store channel. RE-PRICED 2026-07-28 from $99,926: that reading was ~$74 below the floor purely because it applied a 30% commission this business pays on neither channel at this scale. Now clears the floor on the store channel at $121,339 and on web/Stripe at $136,762 (business_case_web_channel_arr). Tight tolerance: the figure under active auditor scrutiny."
     },
     {
       "id": "business_case_sensitivity_monthly_churn12_arr",
       "script": "analysis/business_case_sensitivity_monthly_churn12_arr.mjs",
-      "value": 93556,
+      "value": 113604,
       "tolerance": 1,
-      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%: ARR ~$93,556' -- added Run 15 (GTM Auditor Run 4 found the prior '~$85K' prose figure did not reproduce and sat outside this gate; this script + registration closes that gap)."
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%' -- RE-PRICED 2026-07-28 from $93,556 by the take-rate correction. This downside now clears the floor; before the correction it did not."
     },
     {
       "id": "business_case_sensitivity_annual_churn40_arr",
       "script": "analysis/business_case_sensitivity_annual_churn40_arr.mjs",
-      "value": 103214,
+      "value": 125331,
       "tolerance": 1,
-      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%: ARR ~$103,214' -- added Run 15 (GTM Auditor Run 4 found the prior '~$106K' prose figure did not reproduce, erring in the flattering direction, and sat outside this gate; this script + registration closes that gap)."
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%' -- RE-PRICED 2026-07-28 from $103,214 by the take-rate correction."
+    },
+    {
+      "id": "business_case_web_channel_arr",
+      "script": "analysis/business_case_web_channel_arr.mjs",
+      "value": 136762,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'Channel economics' -- the WEB/Stripe reading of the shippable-TODAY case (Scenario B inputs, annual gated off), priced at Stripe's published 2.9% + $0.30 (+0.7% Billing on recurring) instead of a store commission. Registered 2026-07-28 alongside the store reading so BOTH ends of the channel band are mechanically verified, not just the one that is quoted."
     }
   ]
 }
-

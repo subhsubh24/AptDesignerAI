@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-07-27
+  as_of: 2026-07-28
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -60,6 +60,13 @@ OWNER_ACTIONS:
       why: "The app's DATA layer is currently the in-memory store (lib/store/memory-store.ts); real Supabase is used for AUTH only. Data 'persists only for the lifetime of the server process', so on Vercel serverless (or any restart / multi-replica host) a user's projects/rooms/diagnoses/saved-designs do NOT survive across instances — the retention-critical 'revisit your saved designs' journey is broken in production, and the 26/26 RLS policies never execute at runtime. This is why QUALITY_SCORECARD.functional_reality is C and DoD Track A stays unchecked. The persistent path is now BUILT + code-reviewed behind a flag (PR #531): setting DATA_BACKEND=supabase routes ALL data ops through a real user-scoped Supabase client with RLS enforced. It ships INERT (default = memory) so the cutover is a deliberate owner step, not a blind flip."
       how: "1) Apply ALL pending migrations to the prod Supabase project (`supabase db push`, or run the numbered supabase/migrations/*.sql in order — see the other apply-migration-* items). 2) Confirm NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY (+ SUPABASE_SERVICE_ROLE_KEY) are set on the deployment. 3) Set DATA_BACKEND=supabase on the deployment (Vercel env) and redeploy. 4) VERIFY the money path survives a cold start: create a project/room, run a diagnosis, save a design, then redeploy (or restart) and confirm the saved design is still there and RLS blocks another user from reading it. If creds are missing while DATA_BACKEND=supabase, the app FAILS LOUD by design (no silent fallback to the non-persistent store). Do NOT flip this until the migrations are applied — an un-migrated schema will error on first query."
       blocks: launch
+    - id: enroll-apple-small-business-program
+      title: "Enroll in the Apple App Store Small Business Program (15% commission instead of 30%) — the business case now PRICES this rate"
+      priority: high
+      status: open
+      why: "Run 121 corrected docs/BUSINESS_CASE.md to price the store channel at 15% rather than a flat 30%, which is what moves the shippable-today figure from $99,926 (~$74 UNDER the $100K floor) to $121,339. That rate is REAL but it is NOT automatic, and an independent reviewer caught the loop asserting that it was: Apple separates ELIGIBILITY (automatic under $1M in proceeds) from ENROLMENT (a deliberate act by the Account Holder). Un-enrolled, the rate is 30% and the store column of the model is wrong. This entry exists so the model is not banking a discount nobody has claimed — the same reason every other conditional owner action is tracked here."
+      how: "1) As the Account Holder in the Apple Developer Program, go to App Store Connect -> Business -> App Store Small Business Program and start enrolment (https://developer.apple.com/app-store/small-business-program/enroll/). 2) Review and ACCEPT the latest Paid Apps agreement (Schedule 2 to the Apple Developer Program License Agreement) — enrolment cannot complete without it. 3) List all Associated Developer Accounts, if any. 4) NOTE THE TIMING: the reduced rate applies 15 days after the end of the fiscal calendar month in which enrolment is APPROVED, so enrol well before launch rather than at launch. 5) Google Play needs no equivalent action — its 2026 structure (10% service fee on the first $1M for auto-renewing subscriptions + 5% billing fee, ~15% effective) applies without enrolment. VERIFY: App Store Connect shows the program as active, and the first payout statement after the effective date reflects 15%."
+      blocks: business-case-store-channel
     - id: apply-migration-021
       title: "Apply migration 021_stripe_customers_annual_tier.sql AND set ANNUAL_BILLING_ENABLED=true to enable annual billing"
       priority: normal

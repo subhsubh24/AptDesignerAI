@@ -74,10 +74,6 @@
   --gradient-warm-end: #d4733e;
   --glow-warm: rgba(180, 80, 30, 0.15);
   --surface-elevated: #ffffff;
-  --score-excellent: #059669;
-  --score-good: #0d9488;
-  --score-fair: #d97706;
-  --score-poor: #dc2626;
   --shadow-warm-color: rgba(180, 80, 30, 0.08);
 }
 
@@ -118,10 +114,6 @@
   --gradient-warm-end: #e8935e;
   --glow-warm: rgba(212, 115, 62, 0.2);
   --surface-elevated: #222019;
-  --score-excellent: #34d399;
-  --score-good: #2dd4bf;
-  --score-fair: #fbbf24;
-  --score-poor: #f87171;
   --shadow-warm-color: rgba(212, 115, 62, 0.12);
 }
 

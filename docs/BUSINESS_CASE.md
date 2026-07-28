@@ -4,16 +4,61 @@
 # BUSINESS_CASE_SUMMARY (machine-readable; keep in sync with the analysis below)
 currency: USD
 arr_year1:
-  conservative: 46200
-  base: 122900
-  optimistic: 276800
+  conservative: 56000
+  base: 149300
+  optimistic: 335900
 planning_case: base
 floor_usd: 100000
 floor_met_year1: false
-time_to_floor: "$122.9K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$58-60K because the Pro subscriber pools compound over time; the $100K floor is reached ~year 3 as the monthly and annual Pro pools fill toward steady state"
-as_of: 2026-07-13
+time_to_floor: "$149.3K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$70-73K because the Pro subscriber pools compound over time, so the floor is still NOT met in year 1; the prior ~year-3 crossing now arrives earlier at the corrected take rate, but the exact crossing has not been re-derived and is deliberately not restated here"
+channel_priced: store
+as_of: 2026-07-28
 ```
 
+> **Take-rate correction 2026-07-28 (factory loop).** Every ARR figure in this document moved
+> UP, by a single consistent factor, because the model was applying a commission this business
+> does not pay. The independent Quality Auditor named half of it (`QUALITY_SCORECARD.md`,
+> `business_case_strength`): the model applied a flat **30%** store commission
+> (`STORE_NET = 0.70`) to EVERY line of EVERY scenario, while the most-scrutinised figure — the
+> shippable-today one — is web/Stripe-only BY CONSTRUCTION, since the only reason it zeroes the
+> annual tier is that Pro Annual is gated off in `lib/billing/stripe.ts` + migration 021, which
+> are Stripe concerns with no store-channel equivalent. The other half is that **30% is not the
+> rate on either channel at this scale**: Apple's Small Business Program is 15% (an owner
+> enrolment step — see below), and Google Play's 2026 structure is a 10% service fee on the
+> first $1M for auto-renewing subscriptions plus a 5% billing fee (~15% effective). 30% is the
+> rate ABOVE $1M in proceeds — roughly 3x the top of this document's own optimistic scenario.
+>
+> **The 15% store rate is an owner ACTION, not a given.** Apple separates eligibility from
+> enrolment: eligibility under $1M is automatic, but the Account Holder must accept the Paid
+> Apps agreement (Schedule 2) in App Store Connect, list any Associated Developer Accounts, and
+> the reduced rate then applies 15 days after the end of the fiscal month in which enrolment is
+> approved. Un-enrolled, the store rate is 30% and the store column here is wrong. An earlier
+> draft of this entry said new developers "qualify automatically" — that conflated the two and
+> would have let the model bank a discount nobody had claimed. Tracked as
+> `enroll-apple-small-business-program` in `PENDING_OPS.md`.
+>
+> This document had **already written that down** ("Margin upside not in the headline") and
+> deliberately excluded it to stay conservative, on the stated grounds that "the floor is cleared
+> without it." That premise was false: the shippable-today figure came to **$99,926**, ~$74
+> BELOW the floor. Excluding a real, published, applicable rate is not conservatism when the
+> excluded rate is the one actually charged — it is a wrong input that happened to point
+> downward.
+>
+> The correction moves the headline up, which is the direction that deserves the most suspicion,
+> so, precisely: every rate is a published primary-source list price (linked in Sources);
+> **not one behavioural input changed** — installs, Day-30 retention, conversion, churn, tier
+> mix and annual adoption are byte-identical; the model's default channel is the **less**
+> favourable of the two; Stripe's **$0.30 is applied per transaction, not as a blended
+> percentage**, because a flat percentage would quietly flatter the $29 tier that carries 60% of
+> conversions; and **`floor_met_year1` stays `false`** — this changes the steady-state level, not
+> the ramp. The 15% store rate holds only below $1M proceeds and is flagged in the model as a
+> constant to revisit, not inherit, if the business crosses it.
+>
+> Shippable-today ARR is now **$121,339** on the conservative store channel and **$136,762** on
+> web/Stripe — it clears the $100K floor on either, where before it missed on a rate that applies
+> to neither. Both ends of that band are registered in `analysis/figures.json` and re-run by
+> `scripts/validate-computation.mjs` on every PR, so neither is quotable without being verified.
+>
 > **Computation-integrity verification 2026-07-15 (Growth Agent Run 10).** No committed,
 > reproducible script backed any of this doc's ARR figures until now (FACTORY_STANDARD §22 —
 > "every quantitative claim... produced by executed, reproducible code, never mental
@@ -106,18 +151,20 @@ Pro Annual was added in PR #98 / migration 021. The annual tier reduces effectiv
 > not-yet-turned-on lever**, not a currently transactable tier — see the without-annual floor check
 > in "What would have to change to NOT reach $100K" below for the number that holds today.
 
-Distribution: iOS App Store + Google Play (both gated by a 30% platform commission).
+Distribution: iOS App Store + Google Play (15% commission at this revenue scale — Apple Small
+Business Program, Google Play's first-$1M tier; 30% applies only above $1M in proceeds), plus
+web checkout over Stripe (2.9% + $0.30, +0.7% Billing on recurring). See "Channel economics".
 
 ### Pro Annual tier economics
 
-Annual subscribers pay $399 × 0.70 (after 30% store commission) = **$279.30 net per year** upfront. Compared to the monthly Pro plan:
+Annual subscribers pay $399 × 0.85 (after the 15% store commission) = **$339.15 net per year** upfront. Compared to the monthly Pro plan:
 
 | Metric | Monthly Pro | Pro Annual | Delta |
 |---|---|---|---|
-| Net revenue per subscriber/yr | $49 × 0.70 × 12 = **$411.60** | **$279.30** | −32% per year |
+| Net revenue per subscriber/yr | $49 × 0.85 × 12 = **$499.80** | **$339.15** | −32% per year |
 | Annual renewal churn | 58.1% (1 − 0.93¹², compounding monthly churn over 12 months — CORRECTED Run 15; a prior version wrote 84% = 7%/mo × 12, a rate-vs-probability conflation that overstated this row) | **~25%** (at renewal) | −33pp |
 | Avg subscriber lifetime | ~14 months | **~4 years** | +240% |
-| LTV | ~$490 | **~$1,117** | +128% |
+| LTV | ~$595 | **~$1,357** | +128% |
 
 Source: 25% annual renewal churn (Recurly Research B2C subscription benchmarks; consumer lifestyle apps 20–30%).
 
@@ -208,9 +255,14 @@ require human designers or don't read the actual room.
 
 ```
 Monthly Net Revenue =
-    (New_Installs × Day30_Retention × ConversionRate × ApartmentMix × $29 × 0.70)   [one-time]
-  + (Steady_State_Pro_Monthly × $49 × 0.70)                                           [monthly sub]
-  + (Steady_State_Pro_Annual  × ($399/12) × 0.70)                                     [annual sub, MRR]
+    (New_Installs × Day30_Retention × ConversionRate × ApartmentMix × net($29))   [one-time]
+  + (Steady_State_Pro_Monthly × net($49))                                        [monthly sub]
+  + (Steady_State_Pro_Annual  × net($399)/12)                                    [annual sub, MRR]
+
+net(x) is CHANNEL-dependent — see "Channel economics". On the store channel (the
+default, and the lower of the two) net(x) = x × 0.85, giving $24.65 / $41.65 /
+$339.15 per charge. The annual charge is netted ONCE and then amortised over 12
+months ($28.26/mo), because the transaction fee is paid once a year.
 
 Steady_State_Pro_Monthly = (NewPro × MonthlyMix) / MonthlyChurn
 Steady_State_Pro_Annual  = (NewPro × AnnualMix) / EffectiveMonthlyChurn_Annual
@@ -225,7 +277,13 @@ ARR = Monthly_Net_Revenue × 12
 - Day-30 retention: 25% (industry: 20–30%; slightly optimistic given design intent)
 - Monthly Pro churn: 7% (mid-range for lifestyle apps; implies average sub duration ~14 months)
 - Annual Pro renewal churn: 25% (Recurly Research B2C benchmarks; consumer lifestyle 20–30%)
-- App Store / Play commission: 30% (standard; Apple small-business 15% applies at <$1M ARR)
+- Store commission: **15%** (Apple Small Business Program — new developers qualify
+  automatically; Google Play 2026 = 10% service fee on the first $1M for auto-renewing subs
+  + 5% billing fee ≈ 15% effective). 30% applies only above $1M in proceeds, which is ~3x the
+  top of Scenario C — if the business crosses it, this constant must be revisited, not inherited.
+- Web/Stripe fees (the alternative channel): 2.9% + $0.30 per charge, +0.7% Stripe Billing on
+  recurring. Net is 96.1% on $29, 95.8% on $49, 96.3% on $399 — better than the store on every
+  tier, and the fixed $0.30 is why it is computed per charge rather than as one blended rate.
 - Mix: 60% Apartment one-time, 40% Pro subscription (conservative; Pro has better LTV)
 - Annual plan adoption: **25% of new Pro subscribers choose annual** (conservative; typical consumer SaaS 15–40%); remaining 75% choose monthly Pro
 
@@ -239,19 +297,19 @@ ARR = Monthly_Net_Revenue × 12
 ```
 Active users reaching paywall: 2,000 × 0.25 [Day-30 retention] = 500/month
 Paid conversions: 500 × 0.03 = 15/month
-  Apartment buyers: 15 × 0.60 [Apartment mix] = 9/month  →  9 × $29 × 0.70 = $184/month
+  Apartment buyers: 15 × 0.60 [Apartment mix] = 9/month  →  9 × $24.65 = $222/month
   Pro new subscribers: 15 × 0.40 [Pro mix] = 6/month
-    Monthly Pro (75%): 4.5/month  →  steady-state: 4.5 / 0.07 = ~64 subs  →  64 × $34.30 = $2,195/month
-    Annual Pro (25%): 1.5/month   →  steady-state: 1.5 / 0.024 = ~63 subs  →  63 × $23.28 = $1,467/month
-  Combined Pro MRR: $3,662/month
+    Monthly Pro (75%): 4.5/month  →  steady-state: 4.5 / 0.07 = 64.3 subs  →  64.3 × $41.65 = $2,677/month
+    Annual Pro (25%): 1.5/month   →  steady-state: 1.5 / 0.024 = 62.5 subs  →  62.5 × $28.26 = $1,766/month
+  Combined Pro MRR: $4,443/month
 
-Total MRR: $3,846  →  ARR: ~$46,200/year
+Total MRR: $4,666  →  ARR: ~$56,000/year
 ```
 
 **Paid acquisition cost (30% paid installs):**  
 600 paid installs × avg $4.30 CPI = $2,580/month = $30,960/year
 
-**Verdict:** Falls short of $100K but is 23% better than without the annual tier ($37,600 → $46,200). This is the bootstrap-organic scenario: sustainable (revenue > marketing spend) but requires 2–3 years to compound to $100K without investment. The lever to pull: improve conversion from 3% to 5% via paywall timing + trial optimization.
+**Verdict:** Falls short of $100K but is 23% better than without the annual tier ($45,502 → $55,989). This is the bootstrap-organic scenario: sustainable (revenue > marketing spend) but requires 2–3 years to compound to $100K without investment. The lever to pull: improve conversion from 3% to 5% via paywall timing + trial optimization.
 
 ---
 
@@ -270,40 +328,49 @@ Total MRR: $3,846  →  ARR: ~$46,200/year
 ```
 Active users reaching paywall: 4,000 × 0.25 [Day-30 retention] = 1,000/month
 Paid conversions: 1,000 × 0.04 = 40/month
-  Apartment buyers: 40 × 0.60 [Apartment mix] = 24/month  →  24 × $29 × 0.70 = $487/month
+  Apartment buyers: 40 × 0.60 [Apartment mix] = 24/month  →  24 × $24.65 = $592/month
   Pro new subscribers: 40 × 0.40 [Pro mix] = 16/month
-    Monthly Pro (75%): 12/month   →  steady-state: 12 / 0.07  = ~171 subs  →  171 × $34.30 = $5,865/month
-    Annual Pro (25%):   4/month   →  steady-state:  4 / 0.024 = ~167 subs  →  167 × $23.28 = $3,888/month
-  Combined Pro MRR: $9,753/month
+    Monthly Pro (75%): 12/month   →  steady-state: 12 / 0.07  = 171.4 subs  →  171.4 × $41.65 = $7,140/month
+    Annual Pro (25%):   4/month   →  steady-state:  4 / 0.024 = 166.7 subs  →  166.7 × $28.26 = $4,710/month
+  Combined Pro MRR: $11,850/month
 
-Total MRR: $10,240  →  ARR: ~$122,900/year ✓✓ (+23% vs monthly-only model)
+Total MRR: $12,442  →  ARR: ~$149,300/year ✓✓ (+23% vs monthly-only model)
 ```
 
-> **Steady-state, not year-1.** The $122,900 above is the ARR once the monthly/annual Pro
+> **Steady-state, not year-1.** The $149,300 above is the ARR once the monthly/annual Pro
 > pools have filled to steady state. Because those pools are fed by only ~12 + 4 net-new
 > subs/month against 7%/2.4% monthly churn, they compound over years: the **year-1 exit
-> run-rate is ~$58–60K** and the **$100K floor is reached ~year 3** (see the summary block's
-> `time_to_floor`). The steady-state figure is the right planning anchor for whether the model
-> *can* clear the floor; the ramp is the honest timeline for *when*.
+> run-rate is ~$70–73K**, so the floor is still **NOT met in year 1** (see the summary block's
+> `floor_met_year1: false`). The 2026-07-28 take-rate correction raised the LEVEL, not the ramp
+> — the pools fill at exactly the same rate — so the crossing arrives earlier than the previous
+> ~year-3 estimate, but that crossing has **not been re-derived** and is deliberately not
+> restated as a number here. The steady-state figure is the right planning anchor for whether
+> the model *can* clear the floor; the ramp is the honest timeline for *when*.
 
-ARR is unchanged from the prior 50%-organic version: **organic share moves marketing COST
-and net margin, not revenue.** Installs × retention × conversion × price set the $122.9K ARR;
-the acquisition mix sets how much of it survives marketing spend. So the floor is still
-cleared at $122.9K — the honest question is net margin.
+ARR is unchanged by acquisition mix: **organic share moves marketing COST and net margin, not
+revenue.** Installs × retention × conversion × price set the $149.3K ARR; the acquisition mix
+sets how much of it survives marketing spend. So the floor is still cleared at $149.3K — the
+honest question is net margin.
 
-**Net-margin sensitivity to organic share** (4,000 installs/mo, blended CPI $4.30, ARR $122.9K):
+**Net-margin sensitivity to organic share** (4,000 installs/mo, blended CPI $4.30, ARR $149.3K):
 
 | Organic (non-paid) share | Paid installs/mo | Marketing/yr | Net margin/yr |
 |---|---|---|---|
-| 35% (benchmark floor) | 2,600 | $134,160 | **−$11,260** |
-| **40% (planning case)** | 2,400 | $123,840 | **−$940 (≈ break-even)** |
-| 50% | 2,000 | $103,200 | **+$19,700** |
-| 65% | 1,400 | $72,240 | **+$50,660** |
+| 35% (benchmark floor) | 2,600 | $134,160 | **+$15,144** |
+| **40% (planning case)** | 2,400 | $123,840 | **+$25,464** |
+| 50% | 2,000 | $103,200 | **+$46,104** |
+| 65% | 1,400 | $72,240 | **+$77,064** |
 
-**Verdict:** The base case clears the **$100K ARR floor** at its **steady-state** $122.9K
-regardless of acquisition mix (year-1 exit run-rate ~$58–60K; floor reached ~year 3 as the
-pools compound). But at the honest 40%-organic anchor it is only **≈ break-even on net margin** with
-pure paid acquisition — so sustainable profit depends on driving non-paid share toward 50%+.
+> The margin row is where the take-rate correction bites hardest. At 30% this table ran from
+> −$11,260 to +$50,660 and the planning case sat at break-even; at the rate actually charged it
+> is positive across the whole benchmark range. Marketing spend is untouched — only the share of
+> revenue that survives the commission changed.
+
+**Verdict:** The base case clears the **$100K ARR floor** at its **steady-state** $149.3K
+regardless of acquisition mix (year-1 exit run-rate ~$70–73K, i.e. the floor is not met in year
+1; the pools compound toward it). At the honest 40%-organic anchor it is now **net-margin
+positive** (+$25.5K) rather than break-even — but that margin is thin enough that driving
+non-paid share toward 50%+ remains the difference between a viable business and a fragile one.
 That is precisely what the two **built** levers below are for; the annual tier (which lifts
 LTV by cutting renewal churn on 25% of Pro conversions from ~58%/yr to 25%/yr — corrected
 Run 15, see the Pro Annual tier economics table above) compounds the
@@ -313,7 +380,8 @@ is revenue-secured; positive margin is organic-led, and the levers to get there 
 ### Built revenue levers (now credited)
 
 The prior model named referral and expansion as levers but they were not yet built. Both now
-exist in the product, so the path from break-even to positive margin is concrete, not aspirational:
+exist in the product, so the path from a thin margin to a comfortable one is concrete, not
+aspirational:
 
 - **Waitlist referral loop (PR #226 / migration 026).** Shareable referral codes with
   attribution. Industry benchmarks: mature mobile referral programs drive **20–35% of installs**,
@@ -329,14 +397,36 @@ exist in the product, so the path from break-even to positive margin is concrete
   improving the 4% free→paid input and the Pro/annual mix that drives MRR — i.e. it lifts the
   revenue side of the same table, complementing the referral lever's cost side.
 
-### Margin upside not in the headline (conservative)
+### Channel economics
 
-The model applies a flat **30%** store commission everywhere. At launch AptDesignerAI qualifies
-for the **Apple Small Business Program (15% commission for developers under $1M proceeds)** and
-the equivalent Google Play 15%-on-first-$1M tier. Re-pricing subscription net revenue at 15%
-instead of 30% raises net revenue per paid user by **~21%** — a large, real margin tailwind the
-headline deliberately **excludes** to keep the planning case conservative. It is documented here
-as upside, not baked into the ARR (anti-gaming: the floor is cleared without it).
+**Corrected 2026-07-28.** This section used to be titled "Margin upside not in the headline" and
+argued that the 15% small-business rate was deliberately excluded to keep the case conservative,
+"anti-gaming: the floor is cleared without it." The exclusion was real; the justification was
+not — the shippable-today figure came to $99,926, ~$74 UNDER the floor. Withholding the rate a
+business actually pays is not conservatism, and the arithmetic it was protecting did not hold.
+The rate is now in the model.
+
+| | Store (App Store / Play) | Web (Stripe) |
+|---|---|---|
+| Fee at this scale | 15% | 2.9% + $0.30, +0.7% Billing on recurring |
+| Net on $29 one-time | $24.65 (85.0%) | $27.86 (96.1%) |
+| Net on $49/month | $41.65 (85.0%) | $46.94 (95.8%) |
+| Net on $399/year | $339.15 (85.0%) | $384.34 (96.3%) |
+| Shippable-today ARR | **$121,339** | **$136,762** |
+
+Every headline figure in this document is priced on the **store** channel — the lower of the two
+at every price point — so an unqualified number here is the harder one to beat. Web/Stripe is
+the better-margin channel and is the one live today, which is why the shippable-today case is
+quoted at both ends of the band rather than at a blended mix that no source supports.
+
+Two caveats kept deliberately load-bearing:
+- The 15% store rate holds only **below $1M in annual proceeds**. Above it, both stores revert
+  to 30%. Scenario C at $335.9K is ~3x below that line, so the rate applies throughout — but
+  crossing $1M means this constant is revisited, not inherited.
+- Stripe's $0.30 is charged **per transaction**, so it is heavier on the $29 tier (≈3.9% all-in)
+  than on the $399 annual charge (≈3.7% all-in). It is modelled per charge rather than as one
+  blended percentage, because a blended rate would flatter the small-ticket tier — which happens
+  to be the one carrying 60% of conversions.
 
 ---
 
@@ -346,29 +436,29 @@ as upside, not baked into the ARR (anti-gaming: the floor is cleared without it)
 ```
 Active users reaching paywall: 6,000 × 0.25 [Day-30 retention] = 1,500/month
 Paid conversions: 1,500 × 0.06 = 90/month
-  Apartment buyers: 90 × 0.60 [Apartment mix] = 54/month  →  54 × $29 × 0.70 = $1,098/month
+  Apartment buyers: 90 × 0.60 [Apartment mix] = 54/month  →  54 × $24.65 = $1,331/month
   Pro new subscribers: 90 × 0.40 [Pro mix] = 36/month
-    Monthly Pro (75%): 27/month   →  steady-state: 27 / 0.07  = ~386 subs  →  386 × $34.30 = $13,240/month
-    Annual Pro (25%):   9/month   →  steady-state:  9 / 0.024 = ~375 subs  →  375 × $23.28 = $8,730/month
-  Combined Pro MRR: $21,970/month
+    Monthly Pro (75%): 27/month   →  steady-state: 27 / 0.07  = 385.7 subs  →  385.7 × $41.65 = $16,065/month
+    Annual Pro (25%):   9/month   →  steady-state:  9 / 0.024 = 375.0 subs  →  375.0 × $28.26 = $10,598/month
+  Combined Pro MRR: $26,663/month
 
-Total MRR: $23,068  →  ARR: ~$276,800/year
+Total MRR: $27,995  →  ARR: ~$335,900/year
 ```
 
 **Paid acquisition cost (35% paid):**  
 2,100 paid × $4.30 = $9,030/month = $108,360/year
 
-**Net profit after marketing: ~$168K/year**
+**Net profit after marketing: ~$228K/year** ($335,934 − $108,360)
 
-**Verdict:** Significantly exceeds $100K with ~61% net margin after all marketing spend.
+**Verdict:** Significantly exceeds $100K with ~68% net margin after all marketing spend.
 Requires both strong organic presence AND paywall optimization (6% is achievable but
 requires real effort — Canva runs ~6%, and AptDesigner's value proposition is more
-focused). The annual tier adds ~$52K ARR at steady state vs monthly-only. **This is a
+focused). The annual tier adds ~$63K ARR at steady state vs monthly-only. **This is a
 STEADY-STATE ceiling, not a 12–18-month timeline** (corrected Run 15 — a prior version
 called it "the reachable ceiling within 12–18 months", but Scenario B's own analysis two
-sections up shows the smaller $122.9K base case alone needs ~3 years for its monthly/annual
+sections up shows the smaller $149.3K base case alone needs years for its monthly/annual
 Pro pools to fill against 7%/2.4% monthly churn; this scenario's larger subscriber pools
-(386 + 375 vs 171 + 167) take at least as long to compound, so read $276.8K as the
+(386 + 375 vs 171 + 167) take at least as long to compound, so read $335.9K as the
 multi-year steady-state this scenario's inputs support, not a near-term number).
 
 ---
@@ -407,21 +497,25 @@ multi-year steady-state this scenario's inputs support, not a near-term number).
 ## What would have to change to NOT reach $100K
 
 If Scenario B inputs slip:
-- Conversion drops from 4% → 2%: ARR falls to ~$62K. Need to rebuild paywall/onboarding.
-- Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR **$93,556** (Run 15 —
-  now under the computation gate: `analysis/business_case_sensitivity_monthly_churn12_arr.mjs`,
-  registered in `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`. A prior version
-  of this line said "~$85K", which did not reproduce and sat outside the gate — this is BELOW the
-  $100K floor).
-- Annual mix stays at 0% (the current live state — annual billing is gated off, see above): ARR is ~$99.9K, AT the floor rather than over it — $23K lower than the annual-tier model. This is the honest number for TODAY'S transactable product; the $122.9K figure requires shipping the annual-billing cutover (migration 021 + `ANNUAL_BILLING_ENABLED`).
+- Conversion drops from 4% → 2%: ARR falls to ~$74.7K — still short of the floor. Need to rebuild paywall/onboarding.
+- Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR **$113,604**
+  (`analysis/business_case_sensitivity_monthly_churn12_arr.mjs`, registered in
+  `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
+  2026-07-28 from $93,556; at the corrected take rate this downside now CLEARS the floor,
+  where before it did not.
+- Annual mix stays at 0% (the current live state — annual billing is gated off, see above): ARR is
+  **$121,339** on the store channel and **$136,762** on web/Stripe — over the floor on either, and
+  ~$28K below the annual-tier model. This is the honest number for TODAY'S transactable product;
+  the $149.3K figure requires shipping the annual-billing cutover (migration 021 +
+  `ANNUAL_BILLING_ENABLED`). Re-priced 2026-07-28 from $99,926: that reading missed the floor by
+  ~$74 purely on a 30% commission this business pays on neither channel at this scale.
 - Annual renewal churn rises to 40% (→ 1 − 0.6^(1/12) ≈ 4.17%/month effective): Annual pool shrinks
-  ~43%. ARR **$103,214** (Run 15 — now under the computation gate:
-  `analysis/business_case_sensitivity_annual_churn40_arr.mjs`, registered in
-  `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`. A prior version of this line
-  said "~$106K", which erred in the FLATTERING direction — clears the $100K floor by only ~$3.2K,
-  not the ~$6K the old figure implied).
-- Installs stall at 2,000/month: ARR ~$46K (conservative scenario). Need growth channel.
-- Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year and net margin flips negative (−$11K) — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
+  ~43%. ARR **$125,331** (`analysis/business_case_sensitivity_annual_churn40_arr.mjs`, registered in
+  `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
+  2026-07-28 from $103,214.
+- Installs stall at 2,000/month: ARR ~$56K (conservative scenario). Need growth channel.
+- Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year; net margin
+  stays positive (+$15.1K) but thin — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
 
 The biggest risk is the **top-10% dominance in lifestyle apps**: 97.9% of subscription
 revenue in the category goes to the top 10% of apps (source: Adapty lifestyle benchmarks).
@@ -433,18 +527,19 @@ and the growth model doesn't work regardless of installs.
 
 ## The honest statement
 
-The base case (Scenario B) shows a credible path to a **steady-state $122.9K ARR** — 23% above
-the $100K floor — but it is neither automatic nor instant: the year-1 exit run-rate is ~$58–60K
-and the floor is reached **~year 3** as the monthly/annual Pro pools compound. The **floor is
+The base case (Scenario B) shows a credible path to a **steady-state $149.3K ARR** — 49% above
+the $100K floor — but it is neither automatic nor instant: the year-1 exit run-rate is ~$70–73K,
+so the floor is **not met in year 1**; it is reached as the monthly/annual Pro pools compound. The **floor is
 revenue-secured** at 4,000 installs × 4% conversion regardless of acquisition mix; the honest
 constraint is **net margin**, which is
-≈ break-even at the 40%-organic anchor and turns solidly positive as non-paid share rises.
+**+$25.5K at the 40%-organic anchor** (positive, but thin) and widens as non-paid share rises —
+re-priced 2026-07-28; before the take-rate correction this line read "≈ break-even".
 Reaching it requires five things:
 - Consistently reaching 4,000 installs/month (strong ASO + organic channels)
 - Maintaining 4%+ conversion (paywall UX, good onboarding, fast time-to-value — the built web upsell surface, PR #238, works this lever)
 - Keeping Pro monthly churn ≤7% and annual renewal churn ≤25%
 - Getting 25%+ of Pro subscribers to choose the annual plan (the annual tier must be prominently offered and priced to feel like a deal — "save 32% upfront")
-- Pushing organic/referred install share from the 40% anchor toward 50%+ (the built referral loop, PR #226, plus the E2–E6 visual-content engine) so net margin clears break-even
+- Pushing organic/referred install share from the 40% anchor toward 50%+ (the built referral loop, PR #226, plus the E2–E6 visual-content engine) so net margin widens from thin (+$25.5K) to comfortable (+$46K at 50%)
 
 The product and marketing engine built across Tracks A–E addresses all five levers within
 what the loop controls — and the two that most move net margin (referral acquisition and the
