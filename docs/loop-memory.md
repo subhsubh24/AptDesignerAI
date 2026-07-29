@@ -4,6 +4,145 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-29 (Run 124) — scout-driven (no DEEP AUDIT, ran Run 123). 3 file-disjoint changes, all 3 shipped, 4 scout candidates killed on a trace. 8 reviewer verdicts: 6 APPROVE, 2 REQUEST_CHANGES — both real, both about a RATIONALE rather than broken code.
+
+### State on entry
+- Cold container, `node_modules` absent at root AND `/mobile` — installed both before the baseline gate.
+- Branch reset to default tip `5e28664` (#740, Growth Agent Run 16). Zero open PRs.
+- Baseline GREEN: web tsc, **2529 tests** / 11 skip, determinism, `eslint . --max-warnings 0` clean, mobile tsc clean, production build exit 0.
+- DEEP AUDIT **not due** — Run 123 ran the 8-lens sweep hours earlier; next due ~Run 127. Leaned on an 8-Haiku-scout sweep + the scorecard.
+
+### THE SCORECARD IS THREE RUNS STALE, AND MOST OF ITS NAMED BLOCKERS ARE ALREADY CLOSED
+`as_of: 2026-07-27`, but Runs 120–123 all landed after it. Diffing it against the tree before treating
+its gaps as current is the single highest-leverage orientation step — it stopped this run from
+re-shipping four already-merged fixes. Verified closed at HEAD by dedicated scouts:
+- **store_readiness F1** (account deletion never purged storage) — CLOSED. `purgeUserStorage()`
+  (`lib/storage/user-storage.ts:169`) is awaited and result-checked in BOTH delete routes BEFORE
+  `deleteUser`, and a storage failure 500s without deleting the account. Pinned by
+  `__tests__/api/account-deletion-storage.test.ts` (13 tests).
+- **store_readiness F2** (privacy labels false in both directions) — CLOSED. Location collection is
+  declared in `docs/app-privacy.md:21-23` and `app/privacy/page.tsx:45-51`; the Maps/Places purpose is
+  corrected to address autocomplete; "loads on every page" is disclosed. Pinned by
+  `__tests__/compliance/privacy-disclosure.test.ts`.
+- **artifact_integrity** (F1 lint / F2 coverage ticks asserting enforcement that existed nowhere) —
+  CLOSED. `npm run lint` carries `--max-warnings 0`, `vitest.config.ts` thresholds are 60/49/64/61
+  against a measured 64.31/53.45/68.98/65.46, and preflight GATE 1f runs both.
+- **performance** items (1), (2), (4) — CLOSED by Run 120: `gemini.ts` image fetches batch through
+  `imageFetchLimit` inside the concurrency gate; `resolveImageBlocks`/`resolveImageBlocksSettled` are
+  adopted at every agent call site; `evaluate-set` caps total URLs at 40 and gates extraction at pLimit(5).
+- **security_rls** — a fresh whole-repo sweep (31 migrations, 27 tables, 55 routes) came back a clean
+  no-op. A successful no-op, not a miss.
+The remaining ship-critical gaps are the known owner-gated ones (functional_reality persistence cutover;
+business_case annual gating) plus design_taste, which is where this run put its F7 work.
+
+### FOUR OF EIGHT SCOUT HEADLINES DISSOLVED ON A TRACE — the valuable half of the sweep
+Each read as a specific, file:line-grounded defect. Recording the refutations so no future run pays to
+re-derive them.
+1. **"Mobile offers Annual with no `isAnnualBillingEnabled` gate → charged but no entitlement (migration
+   021 CHECK violation)." FALSE — and worth stating precisely, because it will be re-proposed.**
+   The two billing channels are fully independent. `stripe_customers` has exactly ONE writer, the Stripe
+   webhook (`app/api/billing/webhook/route.ts:121`); **no route under `app/api/mobile/` touches that
+   table at all**. Mobile entitlement resolves through `hasProEntitlement()` → the RevenueCat REST API
+   (`lib/entitlements/server.ts`), which never reads a tier column. So a mobile Annual purchase has NO
+   dependency on migration 021 or `ANNUAL_BILLING_ENABLED` — those gate the WEB Stripe path only.
+   (The scorecard's *observation* that mobile does not gate annual is accurate; the inferred failure mode
+   is not.) **DO NOT RE-FLAG.**
+2. **"`computeQuickScore`'s `minDim <= 2` gate is untested."** FALSE —
+   `__tests__/agents/quick-score-gate.test.ts` already covers the boundary at exactly 2, the below-gate
+   cases and negatives.
+3. **"`computeFinalItemScore`'s `if (category)` calibration branch is untested."** FALSE —
+   `__tests__/integration/scoring-pipeline.test.ts` calls it with "rug" and "sofa" at four sites and
+   asserts the calibrated-vs-raw difference.
+4. **"`app/api/mockups/route.ts:106` `fs.readdirSync` is an O(n) hot-path scan."** REFRAMED, and below
+   the bar either way: **nothing in the repo ever WRITES to `public/uploads/room-images/mockups`**
+   (`grep -rn "room-images/mockups" app/ lib/` returns only the read at :108). The directory does not
+   exist in any deployment, so `fs.existsSync` short-circuits and the readdir never runs. It is not a
+   perf bug — it is a lookup against a cache nothing populates. **DO NOT RE-FLAG as perf.**
+
+### BOTH REQUEST_CHANGES WERE ABOUT A RATIONALE, NOT BROKEN CODE — the pattern is now five runs old
+Zero reviewer findings this run were "this code fails a gate". Both were claims.
+- **F7 guard (Reviewer A).** My call-site parser matched only double-quoted literals, so
+  `` captureJourneyStep(page, `authed-room-${segment}`) `` (journeys.spec.ts:349) was invisible to it.
+  The reviewer built a real, correctly-sized, unique `authed-room-diagnosis-desktop.png` and showed the
+  orphan check would reject it — **the guard would have sabotaged the exact completion path F7 is
+  waiting on**, and it directly contradicted my own sentence that any committed authed PNG "still has to
+  pass (1), (2) and (4)". Fixed by matching dynamic captures on their static PREFIX. More importantly I
+  added the guard the finding implies: the parser now asserts it understood EVERY call in the spec, so a
+  future unparseable argument form fails loudly and names itself, instead of silently shrinking coverage.
+  **Rule: when a guard parses source, the parse itself needs a guard — a regex that quietly matches
+  nothing is how a test goes hollow without anyone editing it.**
+- **Orchestrator coverage (Reviewer B).** I justified an exact-order assertion on `cartesian` by claiming
+  "callers read `combo[k]` as the pick from category k, so a reversal puts the lamp in the sofa slot."
+  The reviewer falsified it end to end: `grep -rn "combo\["` over lib/ and app/ returns **nothing**, both
+  call sites hand the whole array to `evaluateBundle`/`prefilterBundleCombos` which read each product's
+  own `.category`/`.id`, and `tiebreakBundle` (orchestrator.ts:79-83) **sorts a combo's URLs before
+  joining** — it is deliberately order-insensitive. So my test was a change-detector: a refactor breaks
+  it, a real bug does not. Replaced with an order-insensitive completeness check; dropped the
+  `cartesian([["sofa"], [], ["lamp"]])` case as unreachable (both call sites build input with
+  `if (tierFiltered.length > 0) topByCategory.push(...)`).
+  **Rule, and the harder half: I did NOT invent a replacement mechanism to save the test. The temptation
+  was to reach for "well, ordering matters for determinism via the capped sort" — I checked instead, and
+  it does not, because `tiebreakBundle` totally orders any two combos. Only completeness survived, so
+  only completeness is asserted.** (This loop has a recorded history of replacing one refuted confident
+  mechanism with a second confident mechanism; the fix is to check before writing, not after.)
+
+### A false claim I inherited from THIS FILE and shipped into a commit before catching it
+Run 123's rotation guide said the merged F7 screenshots have "no test holding them accountable —
+`__tests__` contains nothing matching screenshot/visual". The second half is FALSE:
+`git grep -l screenshot <parent> -- __tests__/` returns three computer-use test files. The true claim is
+narrower — nothing referenced `e2e/__screenshots__` or `captureJourneyStep`. I restated the inherited
+wording verbatim in a commit message and caught it only while re-verifying my own claims ahead of review.
+**Rule: a claim inherited from loop-memory is NOT pre-verified. Re-run the grep that produced it before
+restating it — the ledger's prose is the least-tested artifact in the repo, and it propagates.**
+
+### Shipped — 3 file-disjoint, 2/2 APPROVE each
+1. **`test(F7)`** — the screenshot manifest guard Run 123 named as the highest-value non-duplicate
+   follow-up. Preflight GATE 1c (`scripts/preflight.sh:177`) only counted PNGs with `-size +0c`; a 1x1
+   placeholder, an orphan, a missing capture and a byte-identical duplicate all passed. Now each fails,
+   verified by mutation (both reviewers independently reproduced the mutations).
+2. **`fix(focus)`** — a thrown products `fetch` during post-search hydration was absorbed by the SSE
+   branch's "Skip malformed JSON" catch; the search had succeeded and the user landed on an empty
+   results page with no error and no retry after minutes of waiting. #730 closed the non-OK case here
+   and left the thrown one — a reviewer named the asymmetry at the time (Run 122 "NOT done / carried
+   forward"). Both hydration sites now share a `loadRoomProducts` seam that returns a result instead of
+   throwing, so they cannot drift apart again.
+3. **`test(F2)`** — first coverage of the orchestrator's TokenBudget spend brake (17 call sites gate on
+   `exceeded`; `>` instead of `>=` buys one more round of model calls past the cap) and `cartesian`'s
+   enumeration completeness. Module coverage 2.97% → 3.87%, independently re-measured by a reviewer.
+
+### Merge outcome + gate
+- Single branch per this run's git constraint → ONE PR to default (code + this bookkeeping).
+- Gate GREEN on the merged tree: web tsc clean, **2552 tests** (2529 +23) / 11 skip, determinism green,
+  `eslint . --max-warnings 0` clean, production build exit 0, `/mobile` tsc clean. Coverage
+  64.31/53.45/68.98/65.46, above the 60/49/64/61 floors.
+- **No ROADMAP box ticked.** F7 stays `[ ]` — this closes the *enforcement* half of its artifact DoD, not
+  the coverage half (only 5 public states are committed; the authed and design-dense tiers still need
+  CI's seeded backend) and not the dual-axis vision verdict. No migrations, no secrets, no new PENDING_OPS.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 127** (last ran Run 123).
+- **Diff `QUALITY_SCORECARD.as_of` against `git log` before believing any of its gaps** — it was three
+  runs stale this time and five of its named blockers were already closed.
+- **Highest-value unbuilt, named and file-disjoint:**
+  (a) `/focus` confidence badge (`app/projects/[projectId]/rooms/[roomId]/focus/page.tsx:846-847`)
+  encodes ORDINAL confidence with emerald-vs-amber — the three-competing-accent pattern VISION forbids,
+  on the core-journey flagship, and `/focus` is the ONE route deliberately excluded from the axe sweep.
+  Deferred this run ONLY because it collides with the focus-page fix above (disjoint rule). The
+  single-hue ladder in `lib/utils/tier-colors.ts` is the proven fix.
+  (b) Three `div[role="button"]` lightbox triggers (focus:1034, mockups:245, products:404) that should
+  be real `<button>`s.
+  (c) F3 gold-fixture diversity; the computer-use escalation ladder.
+- **Residual limitation a reviewer flagged on the new F7 guard (not a defect today):** dynamic captures
+  are matched by static prefix, so if someone ever adds a capture like `` `authed-${segment}` `` the
+  prefix becomes broad enough to hide a genuine orphan behind it. The one real prefix (`authed-room-`)
+  is as specific as it mechanically can be. Worth a specificity check only if a broader one appears.
+- **DO-NOT-RE-FLAG (carry all prior lists +):** mobile annual "ungated" → not a defect, channels are
+  independent (see above); `computeQuickScore` gate coverage (exists); `computeFinalItemScore` category
+  branch coverage (exists); mockups `readdirSync` (dead cache, not perf); `cartesian` element order
+  (deliberately order-insensitive — `tiebreakBundle` sorts before comparing).
+
+---
+
 ## Run 2026-07-29 (Run 123) — DEEP AUDIT (8-lens, due) + 3 shipped, 1 built-then-DROPPED as a duplicate of a concurrently-merged PR. 13 reviewer verdicts across 2 cycles: 4 APPROVE, 9 REQUEST_CHANGES — every one a real defect, and three of them were inside my own cycle-1 FIXES.
 
 ### TWO SESSIONS RAN THE SAME RUN AT THE SAME TIME — read this first
