@@ -52,6 +52,10 @@ npx next start -p 3100          # with the app's required env set
 CI=1 PLAYWRIGHT_BASE_URL=http://localhost:3100 bash scripts/run-journeys.sh --public-only
 ```
 
-Captures are deterministic by construction — animations disabled, caret hidden,
-fonts awaited — so re-running against an unchanged app should not produce a
-diff for its own sake.
+Captures are near-deterministic — animations disabled, caret hidden, fonts
+awaited (all bounded; see `e2e/helpers/screenshot.ts`). "Near", not "perfectly":
+re-running against an unchanged app reproduced 9 of these 10 files byte-for-byte,
+while `public-pricing-mobile.png` moved by 7 bytes on a sub-pixel antialiasing
+difference at one rounded corner. Expect the occasional few-byte churn; treat a
+LARGE diff, or a diff on many files at once, as a real visual change worth
+looking at.

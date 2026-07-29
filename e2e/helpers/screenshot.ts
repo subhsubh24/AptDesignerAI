@@ -38,18 +38,27 @@ const WIDTHS = [
  * the preflight F7 guard is what fails when they are missing.
  */
 /**
- * Every wait inside a capture is HARD-BOUNDED, and this is not defensive
- * padding — an unbounded one already failed CI.
+ * The waits inside a capture are bounded, and this is not defensive padding —
+ * an unbounded one already failed CI.
  *
  * The first version settled with `waitForLoadState("networkidle")`, whose own
  * default timeout (30s) is the SAME as Playwright's per-test timeout. On the
- * public pages that is invisible: nothing polls, so networkidle resolves at
- * once. On the AUTHED screens it never settles — the dashboard polls
- * `/api/billing/status` — so two captures per step consumed the entire test
- * budget and timed out `onboarding starts without error` outright. `.catch()`
- * does not help: a wait that is still PENDING never rejects.
+ * public pages it resolves at once; on the AUTHED tier it did not settle, so
+ * two captures per step consumed the entire test budget and timed out
+ * `onboarding starts without error` outright. `.catch()` does not help: a wait
+ * that is still PENDING never rejects.
  *
- * So the rule is: evidence capture gets a small, fixed slice of the budget and
+ * WHY it fails to settle on the authed tier is NOT established. An earlier
+ * version of this comment blamed a `/api/billing/status` poll; that was wrong
+ * (it is a one-shot fetch in app/saved/page.tsx, and the dashboard never calls
+ * it). Do not re-derive a mechanism from this comment — the empirical facts are
+ * that unbounded it failed and bounded it is 24/24 in 40s.
+ *
+ * NOT everything here is bounded: `page.setViewportSize` takes no timeout in
+ * Playwright's API. It is a local CDP call, so the risk is small, but the
+ * coverage is not total. See issue #736 for the residual timing budget.
+ *
+ * The rule is: evidence capture gets a small, fixed slice of the budget and
  * shoots whatever is on screen when it expires. A slightly-early screenshot is
  * a far better outcome than a red journey.
  */
