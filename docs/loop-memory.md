@@ -4,6 +4,57 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-29 (Run 122) — scout-driven (no DEEP AUDIT, due ~123). 4 changes shipped, 0 abandoned, 3 scout candidates killed on verification. 10 reviewer verdicts: 8 APPROVE, 2 REQUEST_CHANGES — both real, both mine, both about CLAIMS rather than code.
+
+### State on entry
+- Cold container, **`node_modules` absent** — `npm test` failed with `vitest: not found` before anything else. Install root + `/mobile` FIRST on a cold start; the baseline gate is meaningless until then.
+- Branch at default tip `38a79b5` (#729, Run 121). Baseline GREEN after install: tsc clean, **2503 tests**/11 skip, determinism. Zero open PRs.
+- DEEP AUDIT not due (ran Run 119; next ~123) → 8-Haiku scout sweep.
+- Scorecard `as_of: 2026-07-27` is TWO runs stale: Runs 120/121 already closed store_readiness F1+F2, the lint/coverage artifact_integrity nits, the design_taste ManualScorecardView finding, and the security_rls A+ items. Diffing it against `git log` before treating its gaps as current is now a standing step.
+
+### THE RUN'S CENTRAL LESSON: three of eight scout candidates were plausible stories that dissolved on a five-minute trace
+Not one of these was cheap to disbelieve from the report alone; each read as a specific, file:line-grounded defect.
+1. **Mobile "unvalidated deep-link injection"** — the scout described an allowlist bypass and quoted the TODO. The handler is **empty**: `addNotificationResponseReceivedListener(() => {})` with a comment describing what a FUTURE implementation must validate. Nothing navigates, so there is nothing to exploit.
+2. **Focus-page "stuck vision spinner"** — real leak on paper (`setGeneratingVision(true)` then an early `return` when `areaAnalysis` is falsy). Unreachable: the button only renders inside the `step === "analysis" && areaAnalysis` block (page.tsx:829), and the falsy case renders a different branch entirely (:819).
+3. **Bundle-evaluate "fake success"** — the code already carries a comment weighing exactly this tradeoff, and the evaluation IS persisted before the status flip. A prior run considered and settled it.
+**Rule (extends Run 121's "trace the call into the provider"): a scout's file:line citation proves the LINE exists, not that the PATH reaches it. Before accepting a UI defect, find where the control is RENDERED; before accepting a security defect, find the sink.** The security scout returning "clean — no findings" was, by contrast, a successful no-op and cost nothing to accept.
+
+### The two REQUEST_CHANGES were both about my prose, for the fourth run running
+- **F7:** my commit message said the dual-axis vision verdict "was recorded" and that a pricing design-bar fix "is a separate change". I had *dropped* that change, and loop-memory (where the verdict belongs) can't be touched from a code branch — so the message asserted two things that were not true of the repo. Reviewer B checked for the artifact, found nothing, and rejected.
+- **mockups:** my code comment confidently explained that supabase-js reports a duplicate as HTTP 409. It does not. `StorageApiError.statusCode` is populated from the response BODY's `statusCode`/`code` (`storage-js` 2.99.1: `err?.statusCode || err?.code || status + ''`), so a duplicate is `KeyAlreadyExists` (current) or `already_exists` (legacy). My primary branch was **dead code**; detection worked only by accident through the message-text regex.
+**The pattern is now four runs old and worth stating as a rule: the gate does not read English. Budget a verification pass over every claim in a commit message and code comment, especially the confident ones about third-party behaviour — those are the ones no test covers.**
+
+### Shipped — 4 file-disjoint
+1. **`fix(mockups)`** (#733) — re-rendering any mockup returned the whole image as a `data:` URI instead of its URL, persisted into `mockups.result_image_url`. Deterministic paths mean the second render of the same mockup ALWAYS collides; `findCachedMockup` can't save it (local FS, empty on serverless); the memory-store mock overwrites instead of rejecting, which is why no test ever saw it. Detection now matches documented codes, with a negative test proving a bare 409 does NOT match — `getPublicUrl` never verifies existence, so a false positive would fabricate a dead link.
+2. **`fix(focus)`** (#730) — a successful search whose product hydration failed left the user on an empty results page with no error and no retry, after minutes of waiting. The rarely-taken batch-fallback branch already handled this correctly; the branch nearly every real search takes did not.
+3. **`test(fit-scorer)`** (#731) — the math veto had zero tests behind an 88-line type-only file, and ran as two verbatim copies. One tested `applyMathVeto`; both boundary mutants and a rounding mutant confirmed caught.
+4. **`feat(F7)`** (#732) — journey screenshot capture at both required widths; 10 committed PNGs from an actual suite run. **Approved 2/2 but still QUEUED at bookkeeping time** (the journeys job ran >60min on both open PRs, including one touching no e2e file, so the latency is CI infrastructure rather than this change); it is recorded here as queued, not merged.
+
+### F7: what it cost and what it bought
+The capture mechanism was the easy half. Two things are worth carrying forward:
+- **The vision review found something the DOM could not** — `app/pricing/page.tsx:158` renders non-highlighted tiers' checkmarks in `text-emerald-600` while the highlighted tier uses `text-accent-warm`: one meaning, two hues, on the primary conversion surface. **I did NOT ship a fix, deliberately.** Emerald is an established affirmative semantic across 20+ sites in this repo (keep / best / done), and accenting only the featured tier is a defensible deliberate pattern. Which hue is right is a design decision, not a defect to settle unilaterally at 2am. An independent reviewer looked at the same screenshot and reached the same conclusion (page renders cleanly; the ternary reads as intentional). **Recorded as an open design question, not a bug.**
+- **Byte-identical screenshots are not evidence.** My first cut committed 18 PNGs; a reviewer hashed them and found the five "resolves to /login" states are byte-identical — 2.1MB, five filenames, one screen. Cut to 10 distinct images. What those journeys prove is the REDIRECT, which their URL assertions already cover. **Rule: before committing a visual artifact, hash the set — a duplicate adds bytes and zero evidence.**
+
+### NOT done / carried forward
+- **F7 stays UNTICKED.** Authed + design-dense capture sites are wired and run with the suite, but committing those PNGs needs the seeded Supabase-local backend CI has and a plain container does not. `e2e/__screenshots__/README.md` states the shortfall rather than implying coverage.
+- **A4 persistence cutover** — still the binding blocker, still owner-gated. Confirmed this run: there is **no `supabase` CLI and no `supabase/config.toml`** in the container (an earlier scout claimed otherwise — it was wrong), so supabase-local cannot be stood up locally. Worth noting the CI journeys job starts the app BEFORE calling `scripts/run-journeys.sh`, so setting `DATA_BACKEND` inside that script would NOT affect the already-running server — the cutover genuinely needs the workflow env block, which the loop may not edit.
+- **Focus-page follow-up (named by a reviewer, real):** in the SSE `done` branch, if the products `fetch` itself THROWS rather than resolving non-OK, the inner catch labelled "Skip malformed JSON" still swallows it without setting `searchError`. The batch-fallback branch's equivalent sits in the outer try and does set it. Pre-existing asymmetry, out of scope for #730, worth closing.
+- **Deferred with reasons:** a `/mobile` RN component test harness (new deps + CI wiring the loop can't add; mobile LOGIC is already covered by 4 root test files, so the scout's "zero coverage" was overstated); F3 gold fixtures (defensible expected outputs need real domain grounding — capturing pipeline output would be circular and is forbidden); annual billing + Studio tier (owner-gated migration/env, or a pricing decision needing research).
+
+### Process notes
+- **Commits came out UNSIGNED and that is now expected**: `user.signingkey` points at `/home/claude/.ssh/commit_signing_key.pub`, which is a **0-byte file**; `/root/.ssh` is empty. Signing cannot succeed. Set `commit.gpgsign false` locally rather than fighting it.
+- Inline `VAR=x npm run ...` env prefixes did NOT reach the child process under backgrounded bash; the app failed its boot env check three times before I switched to a script file with `export`. Use a script.
+- Reviewers behaved: every one used a disposable `git worktree add --detach` and left the main tree clean. Zero contention incidents — the explicit read-only briefing is working, keep it verbatim.
+- Held the working tree on the default branch while reviewers ran, so their `git show <sha>` reads were always valid.
+
+### Rotation guide for next run
+- **DEEP AUDIT DUE (~Run 123).** Run the 8-lens holistic audit before scouting.
+- **Diff the scorecard's `as_of` against `git log`** before treating its gaps as current — it was two runs stale this time.
+- **Highest-value unbuilt:** the focus-page thrown-fetch asymmetry above; F3 gold-set diversity; the computer-use escalation ladder (still pinned by the debt register).
+- **DO-NOT-RE-FLAG (carry all prior lists +):** mobile notification deep-link "injection" (handler is empty — not a vuln); focus-page `handleGenerateVision` spinner leak (unreachable branch); bundles/evaluate status-flip "fake success" (already settled in-code); the pricing checkmark hue split (open DESIGN QUESTION, not a defect — do not unilaterally "fix" it).
+
+---
+
 ## Run 2026-07-28 (Run 121) — scout-driven (no DEEP AUDIT, not due). 6 changes built, **5 shipped, 1 ABANDONED after both reviewers demolished its rationale**. 12 reviewer verdicts: 5 APPROVE, 7 REQUEST_CHANGES — and every single REQUEST_CHANGES was a real defect.
 
 ### State on entry
