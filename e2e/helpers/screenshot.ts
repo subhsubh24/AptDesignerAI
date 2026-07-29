@@ -21,7 +21,16 @@ import type { Page } from "@playwright/test";
 /** Committed artifact directory — read by the F7 preflight guard (GATE 1c). */
 export const SCREENSHOT_DIR = path.join("e2e", "__screenshots__");
 
-const WIDTHS = [
+/**
+ * The two widths every journey step is captured at.
+ *
+ * Exported because `__tests__/design/screenshot-manifest.test.ts` decodes each
+ * committed PNG's IHDR and asserts its pixel width against this table — that is
+ * what makes a 1x1 or truncated placeholder fail instead of quietly counting as
+ * an artifact. Change a width here and the guard follows automatically; it can
+ * never drift from what the suite actually shoots.
+ */
+export const WIDTHS = [
   { label: "desktop", width: 1280, height: 800 },
   { label: "mobile", width: 390, height: 844 },
 ] as const;
