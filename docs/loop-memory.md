@@ -4,6 +4,55 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-29 (Run 123) — DEEP AUDIT (8-lens, due) + 3 shipped, 1 built-then-DROPPED as a duplicate of a concurrently-merged PR. 13 reviewer verdicts across 2 cycles: 4 APPROVE, 9 REQUEST_CHANGES — every one a real defect, and three of them were inside my own cycle-1 FIXES.
+
+### TWO SESSIONS RAN THE SAME RUN AT THE SAME TIME — read this first
+I started from default tip `25cbe33` (#731) and built four changes. While I was building, a CONCURRENT session shipped its own "Run 122" (#732-#737) and moved the default branch five commits ahead. One of its PRs, `feat(F7): capture journey screenshots` (#732), is the same feature as my flagship change. I discovered this only at push time, when `git fetch` showed `25cbe33..b2bef18`.
+**I dropped my F7 work rather than re-land it.** Their version is merged; mine would have been a duplicate with conflicting filenames (`public-login--desktop.png` vs their `public-login-form-desktop.png`) and a guaranteed conflict in every shared ledger file.
+**Two hard lessons:**
+1. **`git fetch` at the START of a run is not enough — the default branch can move WHILE you build.** Re-fetch before implementing each change, not just at orientation. A four-hour run against a stale base risks exactly this.
+2. **Run numbers are not a lock.** Their entry and mine were both "Run 122". Mine is renumbered 123. If two sessions can overlap, the run number cannot be treated as a mutex — only the merged git history is authoritative.
+
+### What survived, and one thing genuinely lost
+Kept (all three verified untouched upstream, re-gated on the new base): the preflight ship-bar enforcement, the analyze-apartment fake-success fix, and the business-case lever credit.
+**Lost with the dropped F7 work, and worth rebuilding: the manifest GUARD.** Their merged F7 has 10 committed PNGs and a README but **no test holding them accountable** (`__tests__` contains nothing matching screenshot/visual). Mine decoded every PNG's IHDR to reject 0-byte AND 1x1 placeholders, caught orphaned files from removed journeys, and caught a required-but-uncaptured slug. F7's own DoD says "preflight enforces the artifact half" — that half is currently unenforced on the default branch, so those PNGs can silently rot into placeholders. **This is the single highest-value F7 follow-up and it is NOT a duplicate.** Deliberately not shipped this run: adapting it to their naming is a rewrite, my review budget was spent, and shipping unreviewed code violates maker != checker.
+
+### DEEP AUDIT (8 lenses, whole-codebase, Haiku scouts) — mostly a clean bill
+The concurrent session recorded the audit as "not due"; it WAS due (last ran Run 119 / 07-27, >24h), so I ran it. Five lenses came back clean or refuted. **The false positives are the valuable output** — recording them so the next run does not pay to re-derive them:
+1. **security/RLS — FALSE.** "`FOR ALL` policies without `WITH CHECK` fail open on INSERT." Postgres uses the USING expression AS the WITH CHECK expression when FOR ALL omits it. Not a hole. DO NOT RE-FLAG.
+2. **design/a11y — OVER-REACHED.** Claimed `rose-*` is in VISION's forbidden family; VISION forbids "purple-gradient-on-white slop", not rose. Its WCAG 1.4.1 "colour-only encoding" finding on `diagnosis/page.tsx:353,374` is FALSE — both cards carry text headings ("What's Working" / "What's Not Working") plus distinct lucide icons, so the bullet hue is decorative. DO NOT RE-FLAG.
+3. **deps/config — FALSE.** "mobile tsc: 158 errors" was purely an uninstalled-`mobile/node_modules` artifact; it exits 0. **Scouts must install (root AND mobile) before they typecheck**, or their headline finding is the install state.
+4. **tests — REFUTED.** "room-diagnostician judge `best_index` is unvalidated" — `lib/agents/self-consistency.ts:115` already range-checks (`Number.isFinite && >=0 && < len`).
+5. **perf — CLEAN.** Run 121's `resolveImageBlocks` adoption and image-fetch batching hold up.
+Its one real finding (preflight never enforces the scorecard) became the run's best change.
+
+### Cycle 2 found defects inside my own cycle-1 FIXES — three for three
+The re-reviews were not a formality:
+- **preflight:** I closed the quoted-`"false"` bypass on `ship_gate_met` and reopened the identical hole one type over — `is_false` returned False for any non-bool/non-str, so a bare `ship_gate_met: 0` sailed through. Deleted the helper: readiness is now ASSERTED (only a recognisable `true` passes), so false/0/0.0/""/null/"nope" all block without a case each. Also fail-open on a missing `dimensions` key, free-riding on a sibling parse check. 11 shapes verified.
+- **analyze-apartment:** my guard caught only ONE of the two roads to zero saved rooms. If every per-room analysis came back null the attempt counter stayed 0, the guard never fired, and it still returned 200 with `rooms: {}`. The reviewer reproduced it.
+- **business case:** four passes on ONE sentence — "the only" -> "the second" -> "non-ASO", each contradicted by a different passage in the same file.
+
+**Rule: when a fix combines two mechanisms, remove one and re-measure before claiming which fixed it.** (In the dropped F7 work I added a `networkidle` wait AND a double-rAF to fix a blank capture, credited the wait, and a reviewer timed it: the wait never resolved early under `next dev`'s HMR socket, burning its full timeout twice per step for a 5x suite slowdown. The rAF pair was doing all the work.)
+
+### The claim-vs-code pattern, now quantified
+Across both cycles, ZERO reviewer findings were about broken code that failed a gate. Every one was an unenforced guard (a test that could not fail), a fail-open gate, an untested branch of my own stated invariant, or a false sentence in my own prose. **The gates catch broken code; they cannot catch a hollow guard or a wrong claim. Budget review effort for the assertions and the prose, not the implementation.**
+
+### A self-inflicted wound
+I verified two fixes by reverting them with `git checkout -- <file>` — on files whose fixes were **uncommitted**. The revert discarded the real work and left the tests expecting behaviour the source no longer had. **Never `git checkout --` to undo an experiment on a file with uncommitted work; copy to /tmp and back, or commit first.**
+
+### Shipped — 3 file-disjoint
+1. **`fix(readiness)`** — preflight enforces the independent ship bar. It had only ever checked that the YAML parsed.
+2. **`fix(analyze-apartment)`** — a run that persisted nothing returned 200 and the dashboard advanced the user into a flow with no data.
+3. **`docs(business-case)`** — credits three built levers WITHOUT banking uplift. No figure, no input moved; computation gate 7/7.
+
+### Rotation guide for next run
+- **DEEP AUDIT ran this run (Run 123). Next due ~Run 127.**
+- **Re-fetch the default branch before implementing EACH change**, not just at orientation — a concurrent session moved it 5 commits mid-run.
+- **Highest-value non-duplicate F7 follow-up: the artifact manifest guard** (decode IHDR, reject 0-byte/1x1 placeholders, catch orphans + uncaptured slugs) against the merged `e2e/__screenshots__/` naming. Currently nothing holds those PNGs accountable.
+- **Carry the 5 refuted audit findings above into DO-NOT-RE-FLAG.**
+
+---
+
 ## Run 2026-07-29 (Run 122) — scout-driven (no DEEP AUDIT, due ~123). 4 changes shipped, 0 abandoned, 3 scout candidates killed on verification. 10 reviewer verdicts: 8 APPROVE, 2 REQUEST_CHANGES — both real, both mine, both about CLAIMS rather than code.
 
 ### State on entry

@@ -12,7 +12,7 @@ floor_usd: 100000
 floor_met_year1: false
 time_to_floor: "$149.3K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$70-73K because the Pro subscriber pools compound over time, so the floor is still NOT met in year 1; the prior ~year-3 crossing now arrives earlier at the corrected take rate, but the exact crossing has not been re-derived and is deliberately not restated here"
 channel_priced: store
-as_of: 2026-07-28
+as_of: 2026-07-29
 ```
 
 > **Take-rate correction 2026-07-28 (factory loop).** Every ARR figure in this document moved
@@ -396,6 +396,35 @@ aspirational:
   **expansion/conversion at the post-value moment** (after a free user has seen real output),
   improving the 4% free→paid input and the Pro/annual mix that drives MRR — i.e. it lifts the
   revenue side of the same table, complementing the referral lever's cost side.
+
+Three further levers shipped after 2026-07-20 and were missing from this section until
+2026-07-29. **None of them is credited with any uplift in the figures above** — the model's
+4% free→paid and its churn inputs are unchanged, and the floor is cleared without them. They
+are recorded because a "built revenue levers" section that omits built revenue levers
+understates what the product already does, which is its own kind of dishonesty:
+
+- **Free-tier save-limit paywall (commit 724e138, Run 105).** Hitting the free save quota used
+  to return a bare 403 and a dead-end retry toast. It now opens a real upgrade Dialog carrying
+  the `UpgradeCtaCard`, and emits a `save_limit_paywall_shown` funnel event
+  (`lib/analytics.ts`, `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx`). It fires at a
+  post-value moment — the user has already seen a finished design — rather than at a cold gate.
+  It ADDS a second web conversion surface alongside the PR #238 upgrade CTA credited above; it
+  did not create the first one, and no uplift is claimed for it over that existing surface.
+- **Save→share viral nudge (commit 0ab361a, Run 106).** After a save, the user is nudged to the
+  public share link, with funnel events on the path. It is an acquisition lever sitting on a
+  retention surface — a user's own saved work becomes the distribution. It adds to the organic
+  acquisition this document already credits (the waitlist referral loop above; the Tracks E2–E6
+  engine cited in the channel-mix sections). Deliberately carrying no rank and no category
+  exclusion: three earlier drafts of this sentence claimed "the only", then "the second", then
+  "non-ASO", and each was contradicted by another passage in this same file.
+- **`past_due` grace window (commit f4011f4).** A failed renewal no longer revokes Pro
+  instantly; access persists for `PAST_DUE_GRACE_DAYS = 14` (`lib/entitlements/web.ts:41`) and
+  then lapses, so a dropped webhook or a temporarily declined card does not read to the user as
+  cancellation. This is involuntary-churn recovery: the user has not decided to leave, so the
+  subscription is retained without a discount or a win-back offer. The churn inputs above are
+  NOT reduced to reflect it, and no claim is made about how it ranks against other retention
+  work: reducing churn without a cited dunning-recovery benchmark for this product would be
+  exactly the input-nudging this document refuses.
 
 ### Channel economics
 

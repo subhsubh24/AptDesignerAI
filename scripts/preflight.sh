@@ -526,6 +526,96 @@ PY
 then pass "QUALITY_SCORECARD: valid, parseable YAML block"
 else fail "QUALITY_SCORECARD: missing or UNPARSEABLE"; fi
 
+# ── Quality BAR: the independent grade must actually clear the ship bar ────────
+# Parsing the scorecard proved only that it is well-formed — a scorecard reading
+# straight C could satisfy the check above and preflight would still exit 0 on
+# that gate. That is a self-certification hole: the readiness harness exists so
+# the loop cannot talk its way past the independent auditor's verdict, and a
+# grade nobody enforces is not a gate.
+#
+# The bar (FACTORY_STANDARD / the readiness routine): every ship_critical
+# dimension is A or A+, every other dimension is B or better. `null` is NOT a
+# pass — an ungraded ship-critical dimension is an unanswered question, and
+# treating it as acceptable is exactly how an un-audited dimension would sail
+# through. `ship_gate_met: false` is respected as the auditor's own explicit
+# "not ready", independent of the arithmetic below.
+#
+# maker != checker: this reads the grade, it never writes it. Only the separate
+# Quality Auditor routine may edit QUALITY_SCORECARD.md.
+if python3 - "$REPO_ROOT/docs/quality/QUALITY_SCORECARD.md" <<'PY'
+import sys, re, yaml
+try: txt = open(sys.argv[1]).read()
+except OSError: print("QUALITY_SCORECARD.md missing"); sys.exit(1)
+m = re.search(r"ya?ml\s*\n(.*?QUALITY_SCORECARD.*?)\n```", txt, re.S)
+if not m: print("no QUALITY_SCORECARD block"); sys.exit(1)
+try:
+    d = (yaml.safe_load(m.group(1)) or {}).get("QUALITY_SCORECARD") or {}
+except Exception as e:
+    print("UNPARSEABLE:", e); sys.exit(1)
+
+# Validate our OWN input shape rather than free-riding on the parse gate above.
+# A gate that only enforces the bar when a SEPARATE, separately-maintained check
+# happens to have validated the structure first is not the un-gameable backstop
+# this block claims to be: reorder or extract that check and a scorecard with no
+# `dimensions` at all would sail through here reporting "ok".
+if not isinstance(d, dict):
+    print("QUALITY_SCORECARD is not a mapping"); sys.exit(1)
+dims = d.get("dimensions")
+if not isinstance(dims, dict) or not dims:
+    print("QUALITY_SCORECARD.dimensions missing or not a map — cannot verify the ship bar")
+    sys.exit(1)
+
+SHIP_OK = {"A+", "A"}          # ship_critical dimensions
+OTHER_OK = {"A+", "A", "B"}    # everything else
+problems = []
+
+def is_true(v):
+    """YAML type drift must not silently reclassify a dimension.
+
+    `bool(v)` is wrong here: an accidentally-quoted `ship_critical: "false"` is a
+    non-empty string, so bool() reports True. Accept only real booleans and the
+    obvious string spellings; anything else falls back to plain truthiness.
+
+    There is deliberately NO matching `is_false`. An earlier version had one, and
+    its "return False for anything that is not a bool or a str" fallback meant a
+    bare `ship_gate_met: 0` was treated as "not false" and sailed through the
+    NOT-READY check — the exact asymmetric-coercion hole the helper existed to
+    close, reopened one type over. Readiness is asserted, never inferred: the
+    only value that clears the gate is a recognisable TRUE, so every other
+    shape — false, 0, "", "nope", null — blocks it without needing its own case.
+    """
+    if isinstance(v, bool): return v
+    if isinstance(v, str): return v.strip().lower() in {"true", "yes", "1"}
+    return bool(v)
+
+for name, dim in sorted(dims.items()):
+    dim = dim if isinstance(dim, dict) else {}
+    grade = dim.get("grade")
+    critical = is_true(dim.get("ship_critical"))
+    allowed = SHIP_OK if critical else OTHER_OK
+    if grade not in allowed:
+        shown = grade if grade is not None else "ungraded"
+        problems.append(
+            f"{name}: {shown} (ship_critical)" if critical else f"{name}: {shown}"
+        )
+
+if "ship_gate_met" in d and not is_true(d.get("ship_gate_met")):
+    problems.append(
+        f"ship_gate_met: {d.get('ship_gate_met')!r} is not true (the auditor has not declared ready)"
+    )
+
+if problems:
+    print("quality bar NOT met — the independent grade blocks readiness:")
+    for p in problems:
+        print(f"    - {p}")
+    print("  ship_critical must be A/A+, others >= B. Drive the named top_gaps up;")
+    print("  the Quality Auditor owns the grade — never edit it to clear this gate.")
+    sys.exit(1)
+print("ok — all ship_critical A/A+, others >= B")
+PY
+then pass "QUALITY_SCORECARD: ship_critical dimensions A/A+, others >= B"
+else fail "QUALITY_SCORECARD: independent quality grade is BELOW the ship bar"; fi
+
 # ── GATE 6: Security invariants (RLS coverage + client-secret leak) ────────────
 # Supabase exposes the ENTIRE public schema via PostgREST to the anon key; RLS is
 # THE security boundary. Every public table a migration CREATEs must also ENABLE
