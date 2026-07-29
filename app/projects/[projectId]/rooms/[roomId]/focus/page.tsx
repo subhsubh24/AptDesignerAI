@@ -675,9 +675,19 @@ export default function FocusPage() {
               } else if (currentEvent === "done") {
                 if (data.stats) setSearchStats(data.stats);
                 if (data.validation) setValidationInfo(data.validation);
-                // Load final products
+                // Load final products. The search itself SUCCEEDED here, so a
+                // failure to hydrate must not read as "no results": without
+                // this, `setStep("results")` below still runs and the user —
+                // who has been waiting minutes — lands on an empty results
+                // page with no error and no retry. Mirrors the batch-fallback
+                // branch above, which already handles this.
                 const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-                if (prodRes.ok) setProducts(await prodRes.json());
+                const prods = prodRes.ok ? await prodRes.json().catch(() => null) : null;
+                if (Array.isArray(prods)) {
+                  setProducts(prods);
+                } else {
+                  setSearchError("We found matches but couldn't load them. Please try again.");
+                }
               } else if (currentEvent === "error") {
                 console.error("Search stream error:", data.error);
                 setSearchError(data.error || "Search failed");
