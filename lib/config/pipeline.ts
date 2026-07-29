@@ -92,6 +92,25 @@ export const ORCHESTRATOR = {
   /** Tavily max results per search query (default 5; was 10) */
   maxResultsPerQuery: Number(process.env.MAX_RESULTS_PER_QUERY || "5"),
 
+  /**
+   * Hard cap on correction re-search queries per tier.
+   *
+   * The query lists come from an LLM — `queries_by_tier` in
+   * `lib/agents/correction-planner.ts` and `queries_*` in the coordinator's
+   * tool schema — and NEITHER schema bounds the array; both only ask for "2-4
+   * queries" in prose. That was survivable while the correction path awaited
+   * each query in turn and re-checked the token budget between them, because an
+   * oversized list got cut off partway. Now that the tier's queries fan out
+   * together, prompt guidance is the only thing standing between a
+   * misbehaving plan and an arbitrarily wide burst of Tavily calls — so the
+   * bound is enforced in code, at the point of use, rather than trusted.
+   *
+   * Enforced by truncation rather than schema `.max()` on purpose: rejecting
+   * the whole action on overflow would throw away a valid correction plan over
+   * a formatting slip.
+   */
+  maxCorrectionQueriesPerTier: Number(process.env.MAX_CORRECTION_QUERIES_PER_TIER || "4"),
+
   /** Max URLs to extract per (category, tier) — default 12; was 20 */
   maxExtractPerCatTier: Number(process.env.MAX_EXTRACT_PER_CAT_TIER || "12"),
 

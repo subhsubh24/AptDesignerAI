@@ -4,6 +4,63 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-29 (Run 125) — scout-driven (no DEEP AUDIT, due ~127). 4 file-disjoint changes, all 4 shipped, 6 scout headlines refuted on verification. 10 reviewer verdicts across 2 cycles: 7 APPROVE, 3 REQUEST_CHANGES — every one real, and two of them found defects in code the gate had already passed GREEN.
+
+### State on entry
+- Cold container, `node_modules` absent at root and `/mobile`. Branch reset to default tip `bec84d8` (#741, Run 124). Zero open PRs.
+- Baseline GREEN: web tsc, **2552 tests** / 11 skip, determinism, production build exit 0.
+- DEEP AUDIT **not due** (ran Run 123, next ~127) → 8-Haiku-scout sweep + the scorecard.
+- Scorecard still `as_of: 2026-07-27` and still stale in the way Run 124 recorded. Targeted the one ship-critical dimension that is headlessly buildable: design_taste, whose named gap is exactly the ordinal-colour work below.
+
+### SIX OF EIGHT SCOUT HEADLINES DIED ON VERIFICATION — recording the refutations so no run re-derives them
+1. **"mobile/app.json is missing a `notificationsPermission` usage string → App Store rejection." FALSE, and the proposed fix invents an API.** iOS has no Info.plist usage-description key for notifications (the prompt copy is system-supplied), and `expo-notifications`' config plugin exposes only `icon`/`color`/`defaultChannel`/`sounds`/`enableBackgroundRemoteNotifications` — there is no `notificationsPermission` prop to set. Verified against Expo's own SDK docs, which state "No usage description is required" for iOS. Android's POST_NOTIFICATIONS is added by the plugin. **DO NOT RE-FLAG.**
+2. **"mockups bundle_id path doesn't bind products to the room → cross-tenant render." FALSE.** The bundle IS bound (`app/api/mockups/route.ts` checks `.eq("room_id", room_id)` on `product_bundles` before reading its items), and the ONLY writer of `product_bundle_items` (`app/api/bundles/route.ts:116`) binds every product id to the room before insert. The invariant holds at the sole write site; a second read-side check is redundant, not defence.
+3. **"Free tier allows 1 room analysis, enforced silently with no upgrade prompt → build a second-room paywall."** The premise is false: there is no analysis limit anywhere. `FREE_SAVE_LIMIT_WEB = 3` gates SAVES only. Building one would be a pricing decision that gates the aha moment — owner territory, not a loop change.
+4. **"Habit email B1 pitches the Apartment plan but its CTA routes to /dashboard."** Mischaracterised — B1's CTA reads "View your analysis →" and /dashboard is where the analysis is. B3 does pitch the plan and routes to /pricing, which is a defensible plan-comparison step, not a leak.
+5. **Toast + Badge success/warning/info variants (emerald/amber/blue).** Real off-system colour, deliberately NOT converted. These are CATEGORICAL status feedback, not an ordinal ladder; the repo's single-hue doctrine does not apply, and monochroming a success/error toast would cost a genuine affordance. The honest fix (semantic status tokens in globals.css) contradicts the direction tier-colors/verdicts established. Left alone rather than guessed at.
+6. **"Domain-stats sort has no deterministic tiebreaker."** True but logging-only; below the bar.
+
+### THE PATTERN THIS RUN: THREE GREEN-GATE DEFECTS, ALL FOUND BY REVIEWERS
+Nothing below was catchable by tsc, eslint, the test suite or the build. All three passed every one of them.
+- **A contrast guard that measured the wrong surface.** The new palette's accent pill measured 4.61:1 on a dark card and passed. A reviewer found the priority row wraps it in `bg-muted/50` inside a `bg-card` Card, so a translucent pill composites TWICE — the real number is **4.49:1**, under AA. The guard was reporting the passing number while the failing one shipped. Fixed on both sides: the pill went OPAQUE (nesting can no longer reach it) and the guard now derives nested wrappers from the consumer sources. A SECOND round found the same blind spot from the other direction — `<Card variant="elevated">` swaps the base from INSIDE components/ui/card.tsx, where no regex over the consumer file can ever see it. **Rule: a contrast test that composites over a flat base is testing a fiction. The base is whatever the DOM ancestor chain paints, and part of that chain lives in components the consumer merely renders.**
+- **A spend brake I removed while claiming it was still bounded.** Parallelising the correction re-search dropped the per-query `tokenBudget.exceeded` check. I wrote that the overshoot was "bounded by ONE tier's queries — single digits." A reviewer checked: `queries_by_tier` is unbounded in BOTH producing schemas (`correction-planner.ts` Zod, and the coordinator tool JSON schema) — "2-4 queries" is prompt guidance only. The old serial loop survived that because it re-checked between queries. So my change made a misbehaving plan strictly MORE expensive than before, and my justification was the thing hiding it. Now capped in code at the point of use. **Rule: before asserting a fan-out is bounded, find the line that ENFORCES the bound. Prompt guidance in a schema description is not a bound.**
+- **An equivalence claim that was almost true.** I claimed swapping `extractFromUrl` for `extractFromUrlBatch` left extraction behaviour unchanged, having verified the wrapper forwards identical arguments. It does — but the batch retries failed URLs at advanced depth when `failedUrls.length >= 2`, which at the wrapper's batch size of one is structurally unreachable. Correction extractions can now trigger a retry they never could. Favourable, and now named instead of claimed away.
+
+### A REVIEWER TALKED ME OUT OF HALF A CHANGE, CORRECTLY
+The entitlement commit also tested the `past_due` no-anchor guard. Reviewer B established the branch is unreachable — `updated_at` is `NOT NULL` (migration 018), the sole writer stamps it on every upsert, and `stripe_customers` has no memory-store path — and cited this repo rejecting the identical move twice before for bundle-scorer. My defence ("being wrong here grants unbounded access") was a severity argument answering a reachability question. Dropped. The other reviewer had APPROVED those same tests; the rejection was the better-evidenced verdict, and severity is not a carve-out from the impossible-case rule.
+
+### Shipped — 4 file-disjoint (all reached 2/2 APPROVE)
+1. **`design(assessment)`** — `lib/utils/assessment-colors.ts` + 4 consumers + a computed-contrast/ratchet guard. Third application of the single-hue-ladder doctrine (after tier-colors and verdicts). Folded in three duplicated call-site details (sort order, the `confidence >= 7` threshold written out 4x, the `?? .low` fallback) and a third priority-pill treatment on /focus that collapsed medium and low.
+2. **`perf(orchestrator)`** — correction re-search now fans out searches and batches extractions like the main pipeline; index-keyed so candidate order is unchanged; queries capped at 4/tier in code.
+3. **`test(entitlements)`** — the fail-OPEN-on-outage branch, mutation-verified (plain fail-closed kills 3 cases; the subtler `!isProduction` collapse kills 2).
+4. **`test(spatial-math)`** — the dimensional half, never executed before because no case supplied a floor plan. Branch coverage 61.81% -> 72.28%.
+
+### Merge outcome + gate
+- Single branch per this run's git constraint → ONE PR (code + this bookkeeping).
+- Gate GREEN: web tsc, **2580 tests** (2552 +28), determinism, `eslint . --max-warnings 0` exit 0, production build exit 0, `/mobile` tsc clean, `validate-capabilities` OK.
+- **No ROADMAP box ticked** — nothing completed a phase; F2 is already `[x]` and design_taste is a scorecard dimension, not a checkbox. No migrations, no secrets, no PENDING_OPS change.
+- Definition of Done NOT met and no readiness attempt made: A4, D3, E7, F3, F4, F4.1, F5, F7, G4 and the track-completion boxes all remain unchecked.
+
+### Lessons learned
+1. **A green gate is evidence about syntax and assertions, not about surfaces or bounds.** All three reviewer-found defects survived tsc + 2552 tests + a production build. Two of them were in code whose entire PURPOSE was verification (a contrast guard, a spend brake).
+2. **`eslint .` counts reviewer worktrees.** With `isolation: worktree` reviewers, `.claude/worktrees/` sits inside the repo and lints as project source — 28 phantom problems from copied mobile files. Remove the worktrees before the final lint, or the run ends chasing errors it did not write. (Worktree isolation was otherwise a clear win: reviewers mutation-tested freely and my tree was never touched, which is the failure Runs 104/105 had to guard by hand.)
+3. **When two reviewers split, weigh the evidence, not the verdict count.** A→APPROVE and B→REQUEST_CHANGES on the same commit; B had schema-level proof of unreachability and repo precedent, A had only verified the tests worked. B was right.
+4. **Restating a mutation count from a truncated grep is how a small false claim gets into a ledger.** I reported 5 failing pairs from a `head -6`; a reviewer re-ran it and found 8. Harmless direction (the guard is stronger than claimed) but it is the same class of error this file keeps recording.
+5. **`git commit --amend` after the follow-up commits exist amends the WRONG commit.** It rewrote the spatial-math commit with the design message. Recovered by `reset --soft` to base and rebuilding all four groups; the authored messages were recovered from the reflog via `git log --format=%B`. Rebuild the stack, do not amend into the middle of it.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 127** (last ran Run 123). Run 126 can lean on scouts + scorecard.
+- **Diff `QUALITY_SCORECARD.as_of` against `git log` before believing any gap** — still `2026-07-27`, now five runs stale.
+- **Highest-value unbuilt, named and file-disjoint:**
+  (a) The remaining raw-palette surfaces the new ratchet does NOT cover — `components/manual-sourcing/ManualScorecardView.tsx:140-142` (three-hue ordinal, named by the scorecard itself, renders on /focus) is the strongest single candidate now that the four assessment consumers are clean.
+  (b) Three `div[role="button"]` lightbox triggers (focus:~1034, mockups:245, products:404) that should be real `<button>`s.
+  (c) F3 gold-fixture diversity; the computer-use escalation ladder.
+  (d) `reSearchCategoryForCorrection` has no test at all — the new concurrency + cap behaviour (skip-all-and-trace-all above 85%, truncation at 4/tier) is unguarded.
+- **Known-unclosed, named by a reviewer, NOT a defect today:** the aggregate spend overshoot across up to 8 concurrent `re_search_category` actions (`correction-planner.ts` allows `actions.max(8)`, fanned out at orchestrator ~3139) is larger than any single invocation's bound, because each action's budget check only sees committed spend. Pre-existing at the call site; the per-tier cap shrinks it but does not close it.
+- **DO-NOT-RE-FLAG (carry all prior lists +):** notifications usage string (no such iOS key, no such Expo prop); mockups bundle→room binding (enforced at the sole writer); "free tier allows 1 analysis" (no analysis limit exists); habit-email B1 CTA (matches its label); toast/badge categorical status hues (deliberate — not an ordinal ladder); domain-stats sort tiebreaker (logging-only).
+
+---
+
 ## Run 2026-07-29 (Run 124) — scout-driven (no DEEP AUDIT, ran Run 123). 3 file-disjoint changes, all 3 shipped, 4 scout candidates killed on a trace. 8 reviewer verdicts: 6 APPROVE, 2 REQUEST_CHANGES — both real, both about a RATIONALE rather than broken code.
 
 ### State on entry

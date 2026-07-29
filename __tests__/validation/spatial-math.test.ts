@@ -216,3 +216,177 @@ describe("computeSpatialConstraints", () => {
     expect(pair).toEqual(["dining_chair", "vase"]);
   });
 });
+
+/**
+ * Everything above runs WITHOUT a floor plan, so `parseRoomDimensions` returns
+ * null and the whole dimensional half of `computeSpatialConstraints` is skipped:
+ * coverage keeps its 0.7 default and every clearance rule takes the
+ * "can't verify → neutral pass" branch. These cases supply a real floor plan so
+ * that half actually executes.
+ *
+ * Room dimensions are given in inches to match the module's internal unit, so
+ * the arithmetic below is legible rather than unit-converted behind the scenes.
+ */
+describe("computeSpatialConstraints — room coverage bands (floor plan present)", () => {
+  // 100" x 100" = 10,000 sq in. living_room ideal coverage is [0.45, 0.65],
+  // so the ideal band is a 4,500–6,500 sq in footprint. "armoire" is deliberate:
+  // it carries the default footprint weight of 1.0 AND has no clearance rules,
+  // so these cases isolate coverage from the clearance maths below.
+  const room = { roomType: "living_room", floorPlan: { room_dimensions: "100x100 in" } };
+  const withFootprint = (specs: string) =>
+    computeSpatialConstraints({ what_it_needs: [{ category: "armoire", specs }] }, room);
+
+  it("treats the LOWER edge of the ideal band as ideal, and never scores above 1", () => {
+    // 90 x 50 = 4,500 = exactly idealMin (0.45).
+    //
+    // The `>=` here is load-bearing in a way worth spelling out, because the
+    // obvious guess about how it fails is wrong. Weakening it to `>` does NOT
+    // route this case to the under-furnished branch — `ratio < idealMin` is
+    // false at the edge too, so it falls all the way through to the
+    // OVER-furnished formula, which at ratio 0.45 computes
+    // 1 - (0.45 - 0.65)/0.65 = 1.31. The clamp there is a Math.max, so nothing
+    // catches it: a room with textbook-ideal coverage scores 1.31 on a scale
+    // documented as 0-1, and every downstream score inherits the overflow.
+    const r = withFootprint("90x50").room_coverage_ratio;
+    expect(r).toBe(1.0);
+    // Both assertions independently catch the mutation (1.31 is neither 1.0 nor
+    // ≤ 1), and since the first to fail throws, this one is not what halts the
+    // test in practice. It is here to state the invariant the interface promises
+    // — a coverage RATIO must never exceed 1 — so the range is pinned in its own
+    // right rather than only as a side effect of one fixture's exact value.
+    expect(r).toBeLessThanOrEqual(1);
+  });
+
+  it("treats the UPPER edge of the ideal band as ideal", () => {
+    // 100 x 65 = 6,500 = exactly idealMax (0.65).
+    //
+    // Stated honestly: unlike the lower edge, this case does NOT discriminate
+    // `<=` from `<`. The over-furnished formula is continuous at idealMax —
+    // 1 - (0.65 - 0.65)/0.65 is exactly 1.0 — so both spellings return the same
+    // answer here, and so does every ratio just above it. The boundary is
+    // behaviourally inert, and no fixture can make it otherwise.
+    //
+    // The assertion is kept anyway because the VALUE is worth pinning (a room at
+    // the top of its ideal band must score a clean 1.0, not a penalty), but it
+    // is not claimed as a guard on the comparison operator.
+    expect(withFootprint("100x65").room_coverage_ratio).toBe(1.0);
+  });
+
+  it("scales the penalty for an under-furnished room, and floors it at 0.5", () => {
+    // 60 x 50 = 3,000 → ratio 0.30 → 0.30/0.45 = 0.67, above the floor, so this
+    // measures the FORMULA.
+    expect(withFootprint("60x50").room_coverage_ratio).toBe(0.67);
+    // 50 x 40 = 2,000 → ratio 0.20 → 0.20/0.45 = 0.44, below the floor, so this
+    // measures the CLAMP. An empty room is sparse, not worthless — dropping the
+    // Math.max would let a nearly-empty room score arbitrarily near zero.
+    expect(withFootprint("50x40").room_coverage_ratio).toBe(0.5);
+  });
+
+  it("scales the penalty for an over-furnished room, and floors it at 0.3", () => {
+    // 95 x 100 = 9,500 → ratio 0.95 → 1 - (0.95-0.65)/0.65 = 0.54. The formula.
+    expect(withFootprint("95x100").room_coverage_ratio).toBe(0.54);
+    // 200 x 100 = 20,000 → ratio 2.0 → 1 - (2.0-0.65)/0.65 = -1.08. Without the
+    // Math.max this goes NEGATIVE and poisons every score downstream; the clamp
+    // is what keeps the result inside 0-1.
+    expect(withFootprint("200x100").room_coverage_ratio).toBe(0.3);
+  });
+
+  it("penalises over-furnishing HARDER than under-furnishing", () => {
+    // The two floors are 0.5 (under) and 0.3 (over) and they are NOT
+    // interchangeable: a room you can't walk through is a worse design outcome
+    // than a room with space left. Swapping the two constants is a silent
+    // inversion of that judgement that every individual assertion above would
+    // still... not catch, because each only pins its own branch. This pins the
+    // RELATIONSHIP.
+    const under = withFootprint("50x40").room_coverage_ratio;
+    const over = withFootprint("200x100").room_coverage_ratio;
+    expect(over).toBeLessThan(under);
+  });
+
+  it("keeps the default when nothing in the list has parseable dimensions", () => {
+    // `totalFootprint > 0` guards the whole block: a needs-list of accessories
+    // with no specs must not compute a 0% coverage ratio and score the room as
+    // catastrophically under-furnished.
+    const r = computeSpatialConstraints(
+      { what_it_needs: [{ category: "armoire" }, { category: "vase", specs: "not-a-size" }] },
+      room,
+    );
+    expect(r.room_coverage_ratio).toBe(0.7);
+  });
+
+  it("gives wall- and surface-mounted items zero floor footprint", () => {
+    // wall_art has weight 0, so a huge one must not read as over-furnishing.
+    // Without the weight this 200x100 piece would floor the room at 0.3.
+    const r = computeSpatialConstraints(
+      { what_it_needs: [{ category: "wall_art", specs: "200x100" }] },
+      room,
+    );
+    expect(r.room_coverage_ratio).toBe(0.7);
+  });
+});
+
+describe("computeSpatialConstraints — hard vs soft clearance (floor plan present)", () => {
+  // 120" x 200". A sofa carries two rules: 36" "main walkway in front" (HARD)
+  // and 18" "to coffee table" (SOFT). Allowed spans work out to:
+  //   hard rule → ≤48" on the short wall, ≤128" on the long wall
+  //   soft rule → ≤84" on the short wall, ≤164" on the long wall
+  const room = { roomType: "living_room", floorPlan: { room_dimensions: "120x200 in" } };
+  const withSofa = (specs: string) =>
+    computeSpatialConstraints({ what_it_needs: [{ category: "sofa", specs }] }, room);
+
+  it("flags a HARD rule but passes a SOFT one when the item fits only the long wall", () => {
+    // A 100" span sits between the short- and long-wall limits for BOTH rules,
+    // so both take the "fits long, not short" branch and the ONLY thing
+    // separating them is rule.hard. That makes this the case that actually
+    // exercises the distinction.
+    const r = withSofa("100x36");
+
+    // The hard rule reports; the soft one does not. Asserting the constraint
+    // TEXT (not just the count) is what catches an inverted `if (rule.hard)` —
+    // a flip still produces exactly one violation, just the wrong one.
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0].constraint).toBe("main walkway in front");
+    expect(r.violations[0].actual).toBe('100"');
+
+    // Partial credit: the hard rule scores 0.5 (it does fit one wall), the soft
+    // rule a full 1 → 1.5 of 2. Dropping the 0.5 to 0 gives 0.5; treating soft
+    // as hard gives 0.5 as well — this exact value rules out both.
+    expect(r.clearance_score).toBe(0.75);
+  });
+
+  it("flags BOTH rules when the item fits along no wall at all", () => {
+    // A 200" span exceeds even the long-wall limit for both rules, so both take
+    // the definite-violation branch and neither earns partial credit.
+    const r = withSofa("200x36");
+    expect(r.violations).toHaveLength(2);
+    expect(r.violations.map((v) => v.constraint).sort()).toEqual([
+      "main walkway in front",
+      "to coffee table",
+    ]);
+    // Note the required text differs from the case above ("leaves 36\"
+    // clearance" vs "on short wall") — the two branches produce genuinely
+    // different guidance, which is the point of keeping them separate.
+    expect(r.violations[0].required).toContain("leaves 36\" clearance");
+    expect(r.clearance_score).toBe(0);
+  });
+
+  it("passes both rules cleanly when the item fits every wall", () => {
+    const r = withSofa("40x36");
+    expect(r.violations).toEqual([]);
+    expect(r.clearance_score).toBe(1);
+  });
+
+  it("carries the clearance outcome through to the per-item spatial score", () => {
+    // The per-item score is what actually reaches product ranking, so a
+    // clearance result that never propagates would be invisible in the UI.
+    const fits = withSofa("40x36").per_item_spatial.get("sofa")!;
+    const partial = withSofa("100x36").per_item_spatial.get("sofa")!;
+    const fitsNothing = withSofa("200x36").per_item_spatial.get("sofa")!;
+    expect(fits).toBeGreaterThan(partial);
+    expect(partial).toBeGreaterThan(fitsNothing);
+    for (const s of [fits, partial, fitsNothing]) {
+      expect(s).toBeGreaterThanOrEqual(0);
+      expect(s).toBeLessThanOrEqual(1);
+    }
+  });
+});

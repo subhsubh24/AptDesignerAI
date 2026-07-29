@@ -11,6 +11,7 @@ import { getScoreColor } from "@/lib/scoring/verdicts";
 import { PageTransition, ScrollReveal } from "@/components/ui/motion";
 import { SkeletonBundleCard } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
+import { ASSESSMENT_PANEL } from "@/lib/utils/assessment-colors";
 
 // Pure SVG radar chart component
 function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
@@ -401,12 +402,12 @@ export default function BundlesPage() {
 
                       {evaluation.analysis && (
                         <div className="grid gap-3 md:grid-cols-2">
-                          <div className="text-sm rounded-xl bg-emerald-50 dark:bg-emerald-950/50 p-4 border border-emerald-200/50 dark:border-emerald-800/50">
-                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">Strongest: </span>
+                          <div className={cn("text-sm rounded-xl p-4 border", ASSESSMENT_PANEL.keep.surface)}>
+                            <span className={cn("font-semibold", ASSESSMENT_PANEL.keep.heading)}>Strongest: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.strongest_aspect}</span>
                           </div>
-                          <div className="text-sm rounded-xl bg-amber-50 dark:bg-amber-950/50 p-4 border border-amber-200/50 dark:border-amber-800/50">
-                            <span className="font-semibold text-amber-700 dark:text-amber-300">Weakest: </span>
+                          <div className={cn("text-sm rounded-xl p-4 border", ASSESSMENT_PANEL.replace.surface)}>
+                            <span className={cn("font-semibold", ASSESSMENT_PANEL.replace.heading)}>Weakest: </span>
                             <span className="text-muted-foreground">{evaluation.analysis.weakest_aspect}</span>
                           </div>
                           <div className="text-sm rounded-xl bg-muted/50 p-4">
