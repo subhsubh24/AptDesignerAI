@@ -212,4 +212,62 @@ describe("hasProEntitlementWeb", () => {
     mockGetAdminClient.mockReturnValue(chain as never);
     expect(await hasProEntitlementWeb("user-1")).toBe(false);
   });
+
+  /**
+   * The two null-returning paths out of getWebBillingStatus are NOT the same
+   * failure and must not be treated the same:
+   *
+   *   credentials absent  → misconfiguration → deny in production (covered above)
+   *   query errored       → outage           → GRANT, always
+   *
+   * The suite above proves getWebBillingStatus returns null on a query error,
+   * but nothing proved what hasProEntitlementWeb then does with that null — the
+   * `if (result === null) return true` at web.ts:80 was the one branch in this
+   * module with no coverage. Turning it fail-closed logs out every paying
+   * subscriber for the duration of a Supabase blip, on a path where the app
+   * stores expect uninterrupted access, and it would do so SILENTLY: every
+   * assertion above still passes, because they all run with a healthy client.
+   */
+  it("fails OPEN (returns true) when the query errors, even in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const chain = makeSupabaseChain(null, { message: "DB connection failed" });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // The client IS configured here — this is an outage, not a misconfiguration,
+    // so the production fail-CLOSED rule above must not reach it.
+    expect(await hasProEntitlementWeb("user-1")).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  it("fails OPEN on a query error in development too", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const chain = makeSupabaseChain(null, { message: "DB connection failed" });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await hasProEntitlementWeb("user-1")).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  /**
+   * Distinguishes the outage grant from the misconfiguration grant. Without
+   * this, replacing the outage branch with `return !isProduction` would still
+   * pass the development case above — the two branches only diverge in
+   * production, which is exactly where getting it wrong costs subscribers.
+   */
+  it("grants on an outage but denies on a misconfiguration — same env, opposite answers", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    mockGetAdminClient.mockReturnValue(null as never);
+    const misconfigured = await hasProEntitlementWeb("user-1");
+
+    mockGetAdminClient.mockReturnValue(
+      makeSupabaseChain(null, { message: "DB connection failed" }) as never,
+    );
+    const outage = await hasProEntitlementWeb("user-1");
+
+    expect({ misconfigured, outage }).toEqual({ misconfigured: false, outage: true });
+    consoleSpy.mockRestore();
+  });
 });
