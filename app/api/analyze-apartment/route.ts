@@ -380,10 +380,14 @@ ${synthInput}
     // room's analysis — persisting the wrong keep/replace/add recommendations
     // for the other. (analysisRooms stays room_type-keyed for the coarse
     // apartment-level overview only.)
+    let roomsToPersist = 0;
+    let roomsPersisted = 0;
+
     for (let i = 0; i < rooms.length; i++) {
       const room = rooms[i];
       const roomAnalysis = roomResults[i]?.analysis;
       if (!roomAnalysis) continue;
+      roomsToPersist++;
 
       // Persist the diagnosis first, then only flip the room to "diagnosed"
       // once it actually landed. The old Promise.all ran both writes
@@ -402,6 +406,7 @@ ${synthInput}
         logServerError("analyze-apartment room_diagnoses insert", diagInsertError);
         continue;
       }
+      roomsPersisted++;
       const { error: roomStatusError } = await supabase
         .from("rooms")
         .update({ status: "diagnosed" })
@@ -420,6 +425,45 @@ ${synthInput}
     }
 
     const totalTokens = roomResults.reduce((s, r) => s + r.tokensUsed, 0) + synthTokens;
+
+    // SIDE-EFFECT INTEGRITY: a 200 here is not cosmetic. The dashboard treats it
+    // as success — it fires `analysis_complete` and advances the user to room
+    // selection (app/dashboard/page.tsx:374-379), a step that depends on the
+    // per-room diagnosis rows this loop writes. With zero rows written we would
+    // be walking the user into a flow whose data does not exist, having told
+    // them it worked.
+    //
+    // The trigger is `roomsPersisted === 0`, NOT "an insert was attempted and
+    // failed". Both roads lead to the same empty result: the inserts can all
+    // fail, or every per-room analysis can come back null (an empty model
+    // response, a parse failure, a safety block) so nothing is ever attempted —
+    // and that second road is not hypothetical, the `firstArray` note below
+    // records a shape bug that took out every room in an apartment at once.
+    // Gating on the attempt count would have caught only the first.
+    //
+    // Individual room failures stay non-fatal on purpose: persisting 4 of 5
+    // rooms is a better outcome than discarding all five, the partial result is
+    // real, and an unpersisted room self-heals when opened. Note the
+    // project-level `apartment_analysis` write above is independent and may well
+    // have succeeded — what is missing is the room-level rows the next screen
+    // actually reads.
+    if (rooms.length > 0 && roomsPersisted === 0) {
+      const message =
+        roomsToPersist === 0
+          ? `apartment analysis produced no per-room result to save (0 of ${rooms.length} rooms analyzed)`
+          : `apartment analysis completed but no room diagnosis could be saved (0 of ${roomsToPersist})`;
+      logServerError("analyze-apartment persistence", new Error(message));
+      await completeAgentRun(supabase, agentRun.id, {
+        status: "failed",
+        error_message: message,
+        tokens_used: totalTokens,
+      });
+      return NextResponse.json(
+        { error: "We analyzed your apartment but couldn't save the results. Please try again." },
+        { status: 500 },
+      );
+    }
+
     await completeAgentRun(supabase, agentRun.id, {
       status: "completed",
       output_json: analysis,
