@@ -1572,3 +1572,146 @@ functional-journeys/DoD gates, unchanged by this run.
   ~29 days elapsed since Run 1). One NEW blocker added this run: apply migration 031 (required for
   the corrected waitlist unsubscribe link to actually record an opt-out). Highest-leverage pair
   unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min).
+
+---
+
+## Run 16 — 2026-07-29
+
+### Branch/PR housekeeping (before any GTM work)
+This run's designated branch (`claude/beautiful-cori-ux3sl6`) carried only Run 15's PR (#722),
+which had already merged into the default branch. Per the scheduler's merged-PR protocol, reset
+the branch from the latest default (`git fetch origin <default> && git checkout -B <branch>
+origin/<default>`) before starting new work — no unmerged commits existed to preserve, so this
+was a clean fast-forward, not a rebase.
+
+### What we found
+- **GTM_SCORECARD.md is unchanged since Run 15** — still `auditor_run: 4`, `as_of: 2026-07-27`,
+  `overall: C`, `ship_gate_met: false`. No new GTM Auditor pass has landed in the ~2 days since
+  Run 15 merged all 8 named top_gap fixes (fe1d4bc, #722). This is expected under maker≠checker
+  (the auditor re-grades on its own schedule) and is explicitly NOT read as "the fixes didn't
+  work" — there is simply nothing new from that routine to react to yet. Recorded plainly in the
+  `gtm_scorecard` validation entry rather than assumed-fixed.
+- **The independent Quality Auditor's QUALITY_SCORECARD.md (ninth grade, as_of 2026-07-27) is now
+  itself one day stale on `business_case_strength`.** It grades that dimension B, citing the
+  shippable-today ARR at $99,926 (~$74 under the $100K floor). But the Product Factory's Run 121
+  (commit 38a79b5, 2026-07-28 — after both scorecards graded) found and corrected a real modeling
+  defect: `docs/BUSINESS_CASE.md` had been applying a flat 30% store commission on every scenario,
+  when the real rate at this revenue scale is 15% (Apple Small Business Program below $1M
+  proceeds; Google Play's first-$1M tier is ~15% effective — 30% only applies above $1M, ~3x the
+  top of the model's own optimistic scenario). The corrected shippable-today figure is $121,339
+  (store channel) / $136,762 (web/Stripe) — both clear the floor. Independently spot-checked
+  rather than trusting the commit message: re-ran `node analysis/business_case_without_annual_arr.mjs`
+  and `node scripts/validate-computation.mjs` (7/7 figures PASS -- figures.json has carried 7
+  entries since commit 38a79b5 itself, not 6), and read the cited sources in
+  the doc (Apple SBP page, Google Play's 2026 fee structure) — both are real, primary, and dated.
+  Anti-gaming check: the same commit also moved two downside-sensitivity figures the LESS
+  flattering way (churn-12% scenario $85K→$93,556; churn-40% scenario $106K→$103,214), which is
+  the opposite of what a gamed correction would do. This is Product Factory work (business case
+  recompute is a shared-ownership artifact both factories can correct), not something this run
+  needed to build — but it does mean the Quality Auditor's next pass should re-derive
+  `business_case_strength` against the corrected number, flagged in next_actions.
+- **A new, business-case-relevant owner blocker appeared in PENDING_OPS.md since Run 15**:
+  `enroll-apple-small-business-program` (added by Run 121). The 15% store rate the corrected
+  business case now prices is real but not automatic — Apple separates automatic ELIGIBILITY
+  (under $1M proceeds) from a deliberate ENROLMENT step by the Account Holder (accepting the Paid
+  Apps agreement, listing associated developer accounts). Un-enrolled, the real rate is 30% and
+  the store-channel figure needs re-deriving downward. Added to `owner_blockers` as PRIORITY 6 —
+  this is the first owner blocker directly gating the business-case number's honesty, not just
+  growth execution, so it earned a higher slot than the DB-migration backlog.
+- **Two validation-block entries (`web_research`, `gtm_scorecard`) had gone stale** — both still
+  read as if Run 14 were "this run" and referenced `auditor_run: 3`, despite Run 15 having landed
+  in between and touched neither entry's prose. Caught by re-reading the doc's own self-validation
+  text against the actual current file states rather than assuming it was current — a freshness
+  gap in the doc's own self-description, the same class of defect GTM_STANDARD S4 exists to catch.
+  Rewrote both to reflect Run 16's actual findings and the correct auditor_run number.
+- Funnel remains 0/null across every metric. All 5 core owner blockers from Run 1 remain open
+  (re-verified directly against `PENDING_OPS.md`, `as_of: 2026-07-28`, every relevant item still
+  `status: open`).
+
+### Demand-signal research this run (implementing Run 15's deferred next_action)
+The GTM Auditor Run 4 (`experiment_validity`) named a real methodology gap: every demand-signal
+search across 15 runs had been confirmation-seeking by construction (complaint aggregates, BBB
+*complaints* pages), so the `disconfirming` block was thin and mostly incidental. This run paired
+a confirmation-seeking search with a deliberate disconfirming one for the first time:
+- **Confirmation-seeking**: searched for AI interior-design app complaints about fake/non-buyable
+  furniture, which led to RoomGPT (a distinct app from the already-cited Interium) and a direct
+  WebFetch of its App Store review page (`apps.apple.com/us/app/roomgpt-ai-interior-design/id6446314875`).
+  VERBATIM-VERIFIED: five different 1-star reviewers (Kristen C, 2026-07-20; Deezy16, 2026-03-01;
+  Leviana Grace, 2026-04-07; Cellicat, 2026-04-22; Blue ski10000, 2026-03-08) describing
+  architectural/instruction-following failures — "the app does stupid things like add another
+  section to the room, eliminate a doorway", "it sends me a picture of a completely different
+  room", "the app returned a rendering that was identical to the original image" (i.e. it
+  silently no-ops). This is a DIFFERENT failure mode than Interium's (which fabricates whole new
+  furniture) — corroborates theme 2 from a second independent app + review population. Theme 2
+  moves from cited_count 5/verbatim_count 3 to cited_count 6/verbatim_count 4, now the strongest
+  of the 4 themes and clearing S10's per-theme DEMAND-DRIVEN AUTO-STEER evidence bar on its own —
+  though no new steer is warranted, because the positioning it would justify ("ground mockups in
+  the user's actual room, honor the actual request") is already the live positioning in
+  store-listing.md/press-kit.md (established Run 7), so this is corroboration, not a new direction.
+- **Disconfirming (paired)**: re-fetched RoomGPT's own App Store summary page and found it holds a
+  **4.6/5 average across 6,000 ratings** despite the quoted failure-mode complaints — recorded
+  honestly in `disconfirming` rather than treating only the negative half as evidence. Read: the
+  failure mode is real and verbatim-quoted, but a strong aggregate rating means it likely affects
+  a vocal minority of sessions, not most users of competing apps. This tempers theme 2's severity
+  without contradicting its existence.
+- **A second disconfirming-angle search** ("AI room design app satisfied happy customers") surfaced
+  only unattributed promotional "best AI app" round-up blogs (decor8.ai, remodelai.io, genroom.io,
+  meltflexai.com, interior-design.app) — not usable as genuine user testimony (the same
+  conflict-of-interest problem already flagged for First Chair, arguably worse: no bylines, reads
+  as SEO/AI-generated content itself). Correctly NOT cited. An honest negative result, not padding.
+- **Reddit reachability changed but the exclusion did not**: a direct `curl` through the
+  agent-proxy this run returned HTTP 200 for reddit.com — a change from the WebFetch-tool-level
+  refusal this doc had cited across 8+ prior runs. Deliberately did NOT use it for demand-mining:
+  re-read GTM_STANDARD S10 and confirmed the gate is Reddit's own Responsible Builder Policy
+  (sanctioned commercial Data API approval required), which is independent of whether a fetch
+  technically succeeds. Corrected the doc's disconfirming entry, which had been attributing the
+  exclusion to a tooling block that is no longer accurate as stated — the real reason is a policy
+  choice, and stating it correctly matters for anyone reading this doc to decide whether to
+  connect Reddit access later.
+- Held `confidence` at "emerging" (unchanged) — S10's bar is source count + independence PER
+  THEME, and only theme 2 strengthened this run; themes 1/3/4 are unchanged since Run 14/15.
+  Flagged them (not theme 2) as next run's demand-signal target.
+
+### What we did NOT do (and why)
+- Did not attempt outreach: `site_gate_up: false` AND the independent QUALITY_SCORECARD still
+  reports `ship_gate_met: false` (ninth grade, five ship-critical dimensions below A) — HARD BLOCK
+  per GTM_STANDARD S6/S13 Gate 1. Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md, VISION.md, or BUSINESS_CASE.md — the business-case correction this run
+  found was already made by the Product Factory (Run 121); nothing here met the S3 bar for a new
+  steer, and re-deriving an already-correct figure a second time would be redundant, not honest
+  verification.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads competition data from this agent; no new information since Run 3.
+- Did not enqueue social drafts or touch the email lifecycle: `awaiting_connect: true`, no channel
+  connected; nothing changed here since Run 1.
+
+### Independent review (maker ≠ checker)
+Spawned a fresh reviewer subagent before committing, given this run's edits include factual claims
+(the RoomGPT quotes/rating, the business-case staleness read, the Reddit reachability change) —
+told to adversarially re-verify each one against the primary source rather than trust the prose.
+See its findings and resolution below (recorded after the review completes).
+
+### Verification (before committing)
+`node scripts/validate-gtm.mjs` OK · GROWTH_STATUS YAML block re-parsed with `js-yaml` and spot
+-checked (theme 2 fields, owner_blockers count, all keys present) · re-probed aptdesignerai.com
+(still `connect_rejected`/502, unchanged) and trustpilot.com/review/havenly.com (still 403,
+unchanged) directly via curl and `/__agentproxy/status` · `node scripts/validate-computation.mjs`
+7/7 figures PASS (unchanged by this run — no BUSINESS_CASE.md edits, only cited as data).
+
+### Independent review findings (resolved before merge)
+The maker≠checker reviewer independently re-fetched the RoomGPT App Store pages, confirmed all
+five reviewer names/dates/quotes and the 4.6/5-across-6K-ratings figure, confirmed the
+`enroll-apple-small-business-program` PENDING_OPS entry, confirmed the Reddit HTTP 200 finding and
+that no Reddit content was cited as evidence, confirmed the aptdesignerai.com/Trustpilot
+unreachability, and confirmed the GROWTH_STATUS YAML re-parses cleanly with internally-consistent
+theme-2 counts. It found ONE real factual error: this doc and GROWTH_STATUS.md both said
+`validate-computation.mjs` verifies "6/6 figures" when it has verified 7 (figures.json grew to 7
+entries in the very commit, 38a79b5, this run cites as its source) — fixed both occurrences to
+7/7 before committing. No fabrication, no overstated confidence, no false channel/outreach claim.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-15? YES — circuit breaker remains FIRED (16th consecutive run,
+  ~31 days elapsed since Run 1). One new blocker this run: enrol in the Apple Small Business
+  Program (the business case's floor-clearing figure now depends on the 15% rate this grants).
+  Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
+  (15 min) — neither requires code, both are pure Vercel environment variable sets.
