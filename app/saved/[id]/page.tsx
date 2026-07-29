@@ -23,6 +23,11 @@ import {
 import { PageTransition } from "@/components/ui/motion";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import {
+  PRIORITY_ORDER,
+  priorityBadge,
+  ASSESSMENT_PANEL,
+} from "@/lib/utils/assessment-colors";
 
 interface SavedDesignFull {
   id: string;
@@ -70,13 +75,6 @@ interface SavedDesignFull {
   created_at: string;
   updated_at: string;
 }
-
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
-const PRIORITY_COLORS: Record<string, string> = {
-  high: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
-  medium: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-};
 
 export default function SavedDesignDetailPage() {
   const params = useParams();
@@ -285,7 +283,7 @@ export default function SavedDesignDetailPage() {
             <div className="space-y-2">
               {sortedItems.map((item, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <Badge className={cn("text-[10px] shrink-0 mt-0.5", PRIORITY_COLORS[item.priority] || PRIORITY_COLORS.low)}>
+                  <Badge className={cn("text-[10px] shrink-0 mt-0.5", priorityBadge(item.priority))}>
                     {item.priority}
                   </Badge>
                   <div className="min-w-0 flex-1">
@@ -301,13 +299,13 @@ export default function SavedDesignDetailPage() {
           {/* Keep / Remove */}
           {assessment.what_works.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Keep
+              <h3 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.keep.heading)}>
+                <CheckCircle2 className="h-3.5 w-3.5" /> Keep
               </h3>
               <ul className="space-y-1">
                 {assessment.what_works.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1">·</span> {item}
+                    <span className={cn("mt-1", ASSESSMENT_PANEL.keep.marker)}>·</span> {item}
                   </li>
                 ))}
               </ul>
@@ -316,13 +314,13 @@ export default function SavedDesignDetailPage() {
 
           {assessment.what_should_go.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                <XCircle className="h-3.5 w-3.5 text-rose-500" /> Replace or remove
+              <h3 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.replace.heading)}>
+                <XCircle className="h-3.5 w-3.5" /> Replace or remove
               </h3>
               <ul className="space-y-1">
                 {assessment.what_should_go.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                    <span className="text-rose-400 mt-1">·</span> {item}
+                    <span className={cn("mt-1", ASSESSMENT_PANEL.replace.marker)}>·</span> {item}
                   </li>
                 ))}
               </ul>

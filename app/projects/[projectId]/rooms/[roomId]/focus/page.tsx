@@ -37,6 +37,12 @@ import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
 import { loadRoomProducts, ROOM_PRODUCTS_LOAD_ERROR } from "@/lib/products/load-room-products";
 import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-colors";
+import {
+  ASSESSMENT_PANEL,
+  confidenceBanner,
+  isHighConfidence,
+  priorityBadge,
+} from "@/lib/utils/assessment-colors";
 import { PageTransition, StaggerList, StaggerItem, ScrollReveal } from "@/components/ui/motion";
 import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
@@ -847,15 +853,13 @@ export default function FocusPage() {
           {/* Validation banner */}
           {areaAnalysis.validation && (
             <div className={cn(
-              "flex items-center gap-3 p-3 rounded-xl text-sm",
-              areaAnalysis.validation.confidence >= 7
-                ? "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
-                : "bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
+              "flex items-center gap-3 p-3 rounded-xl border text-sm",
+              confidenceBanner(areaAnalysis.validation.confidence).surface
             )}>
-              {areaAnalysis.validation.confidence >= 7 ? (
-                <ShieldCheck className="h-5 w-5 shrink-0" />
+              {isHighConfidence(areaAnalysis.validation.confidence) ? (
+                <ShieldCheck className={cn("h-5 w-5 shrink-0", confidenceBanner(areaAnalysis.validation.confidence).icon)} />
               ) : (
-                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <AlertTriangle className={cn("h-5 w-5 shrink-0", confidenceBanner(areaAnalysis.validation.confidence).icon)} />
               )}
               <div>
                 <span className="font-medium">Confidence: {areaAnalysis.validation.confidence}/10</span>
@@ -943,7 +947,7 @@ export default function FocusPage() {
                     return (
                       <StaggerItem key={i} className="rounded-xl bg-muted/50 overflow-hidden">
                         <div className="flex items-start gap-3 p-3">
-                          <Badge variant={item.priority === "high" ? "default" : "secondary"} className="shrink-0 mt-0.5">{item.priority}</Badge>
+                          <Badge className={cn("shrink-0 mt-0.5", priorityBadge(item.priority))}>{item.priority}</Badge>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm">{item.search_title || item.category.replace(/_/g, " ")}</p>
                             <p className="text-sm text-muted-foreground">{item.description}</p>
@@ -999,18 +1003,18 @@ export default function FocusPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-emerald-700 dark:text-emerald-400">Keep</h3>
+                  <h3 className={cn("font-semibold text-sm mb-2", ASSESSMENT_PANEL.keep.heading)}>Keep</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {(areaAnalysis.what_works || []).map((item, i) => (
-                      <li key={i} className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />{item}</li>
+                      <li key={i} className="flex items-start gap-2"><CheckCircle2 className={cn("h-4 w-4 shrink-0 mt-0.5", ASSESSMENT_PANEL.keep.marker)} />{item}</li>
                     ))}
                   </ul>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm mb-2 text-amber-700 dark:text-amber-400">Replace or remove</h3>
+                  <h3 className={cn("font-semibold text-sm mb-2", ASSESSMENT_PANEL.replace.heading)}>Replace or remove</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {(areaAnalysis.what_should_go || []).map((item, i) => (
-                      <li key={i} className="flex items-start gap-2"><ThumbsDown className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />{item}</li>
+                      <li key={i} className="flex items-start gap-2"><ThumbsDown className={cn("h-4 w-4 shrink-0 mt-0.5", ASSESSMENT_PANEL.replace.marker)} />{item}</li>
                     ))}
                   </ul>
                 </div>
@@ -1167,7 +1171,7 @@ export default function FocusPage() {
             disabled={saving || savedStage === "assessment" || savedStage === "full"}
           >
             {savedStage ? (
-              <><BookmarkCheck className="h-4 w-4 mr-1.5 text-emerald-600" /> Design saved</>
+              <><BookmarkCheck className="h-4 w-4 mr-1.5" /> Design saved</>
             ) : saving ? (
               <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Saving...</>
             ) : (
@@ -1267,7 +1271,7 @@ export default function FocusPage() {
                   )}>
                     <div className="w-5 flex justify-center">
                       {isDone ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle2 className="h-4 w-4 text-foreground" />
                       ) : isActive ? (
                         <Loader2 className="h-4 w-4 animate-spin text-accent-warm" />
                       ) : (
@@ -1277,7 +1281,7 @@ export default function FocusPage() {
                     <div className="flex-1 min-w-0">
                       <span className={cn(
                         "text-sm",
-                        isDone && "text-emerald-700 dark:text-emerald-400 font-medium",
+                        isDone && "text-foreground font-medium",
                         isActive && "text-foreground font-medium",
                         !isDone && !isActive && "text-muted-foreground"
                       )}>
@@ -1345,12 +1349,12 @@ export default function FocusPage() {
           {/* Validation banner */}
           {validationInfo && (
             <div className={cn(
-              "flex items-center gap-3 p-3 rounded-xl text-sm",
-              validationInfo.confidence >= 7
-                ? "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
-                : "bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
+              "flex items-center gap-3 p-3 rounded-xl border text-sm",
+              confidenceBanner(validationInfo.confidence).surface
             )}>
-              {validationInfo.confidence >= 7 ? <ShieldCheck className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
+              {isHighConfidence(validationInfo.confidence)
+                ? <ShieldCheck className={cn("h-5 w-5 shrink-0", confidenceBanner(validationInfo.confidence).icon)} />
+                : <AlertTriangle className={cn("h-5 w-5 shrink-0", confidenceBanner(validationInfo.confidence).icon)} />}
               <div>
                 <span className="font-medium">Confidence: {validationInfo.confidence}/10</span>
                 {validationInfo.issues?.length > 0 && (
@@ -1389,7 +1393,7 @@ export default function FocusPage() {
               className="w-full sm:w-auto"
             >
               {savedStage === "full" ? (
-                <><BookmarkCheck className="h-4 w-4 mr-2 text-emerald-600" /> Saved</>
+                <><BookmarkCheck className="h-4 w-4 mr-2" /> Saved</>
               ) : saving ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
               ) : (

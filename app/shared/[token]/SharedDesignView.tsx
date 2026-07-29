@@ -9,12 +9,11 @@ import { CheckCircle2, XCircle, ArrowRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { SharedDesign } from "./page";
 
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
-const PRIORITY_STYLES: Record<string, string> = {
-  high: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
-  medium: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-};
+import {
+  PRIORITY_ORDER,
+  priorityBadge,
+  ASSESSMENT_PANEL,
+} from "@/lib/utils/assessment-colors";
 
 export function SharedDesignView({ design }: { design: SharedDesign }) {
   const { assessment, products, metadata } = design.snapshot;
@@ -111,7 +110,7 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
                   <Badge
                     className={cn(
                       "text-[10px] shrink-0 mt-0.5 font-semibold",
-                      PRIORITY_STYLES[item.priority] ?? PRIORITY_STYLES.low
+                      priorityBadge(item.priority)
                     )}
                   >
                     {item.priority}
@@ -132,14 +131,14 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
         {/* Keep / Remove */}
         <div className="grid sm:grid-cols-2 gap-4">
           {assessment.what_works?.length > 0 && (
-            <div className="p-4 rounded-xl border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-800/40">
-              <h3 className="text-sm font-semibold mb-2.5 flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+            <div className={cn("p-4 rounded-xl border", ASSESSMENT_PANEL.keep.surface)}>
+              <h3 className={cn("text-sm font-semibold mb-2.5 flex items-center gap-1.5", ASSESSMENT_PANEL.keep.heading)}>
                 <CheckCircle2 className="h-4 w-4" /> Keep
               </h3>
               <ul className="space-y-1.5">
                 {assessment.what_works.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                    <span className="text-emerald-500 mt-1 shrink-0">·</span>
+                    <span className={cn("mt-1 shrink-0", ASSESSMENT_PANEL.keep.marker)}>·</span>
                     {item}
                   </li>
                 ))}
@@ -147,14 +146,14 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
             </div>
           )}
           {assessment.what_should_go?.length > 0 && (
-            <div className="p-4 rounded-xl border bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-800/40">
-              <h3 className="text-sm font-semibold mb-2.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+            <div className={cn("p-4 rounded-xl border", ASSESSMENT_PANEL.replace.surface)}>
+              <h3 className={cn("text-sm font-semibold mb-2.5 flex items-center gap-1.5", ASSESSMENT_PANEL.replace.heading)}>
                 <XCircle className="h-4 w-4" /> Replace or remove
               </h3>
               <ul className="space-y-1.5">
                 {assessment.what_should_go.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                    <span className="text-rose-400 mt-1 shrink-0">·</span>
+                    <span className={cn("mt-1 shrink-0", ASSESSMENT_PANEL.replace.marker)}>·</span>
                     {item}
                   </li>
                 ))}
