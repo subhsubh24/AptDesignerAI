@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { RefineChat } from "@/components/refine/RefineChat";
 import { getScoreColor } from "@/lib/scoring/verdicts";
+import { loadRoomProducts, ROOM_PRODUCTS_LOAD_ERROR } from "@/lib/products/load-room-products";
 import { TIER_COLORS, TIER_LABELS, type PriceTier } from "@/lib/utils/tier-colors";
 import { PageTransition, StaggerList, StaggerItem, ScrollReveal } from "@/components/ui/motion";
 import type { Verdict } from "@/lib/types/scoring";
@@ -619,14 +620,15 @@ export default function FocusPage() {
           const data = await batchRes.json().catch(() => ({}));
           if (data.stats) setSearchStats(data.stats);
           if (data.validation) setValidationInfo(data.validation);
-          const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-          const prods = prodRes.ok ? await prodRes.json().catch(() => null) : null;
-          if (Array.isArray(prods)) {
-            setProducts(prods);
+          // Surface the failure on the results step (the only place searchError
+          // renders), not a blank sourcing page. `loadRoomProducts` never
+          // throws, so this cannot be swallowed by the outer network catch and
+          // reported as a generic search failure.
+          const loaded = await loadRoomProducts<ProductResult>(roomId);
+          if (loaded.ok) {
+            setProducts(loaded.products);
           } else {
-            // Surface the failure on the results step (the only place searchError
-            // renders), not a blank sourcing page — mirrors the SSE-catch path.
-            setSearchError("We found matches but couldn't load them. Please try again.");
+            setSearchError(ROOM_PRODUCTS_LOAD_ERROR);
           }
         } else {
           setSearchError("Product search failed. Please try again.");
@@ -679,14 +681,18 @@ export default function FocusPage() {
                 // failure to hydrate must not read as "no results": without
                 // this, `setStep("results")` below still runs and the user —
                 // who has been waiting minutes — lands on an empty results
-                // page with no error and no retry. Mirrors the batch-fallback
-                // branch above, which already handles this.
-                const prodRes = await fetch(`/api/products?room_id=${roomId}`);
-                const prods = prodRes.ok ? await prodRes.json().catch(() => null) : null;
-                if (Array.isArray(prods)) {
-                  setProducts(prods);
+                // page with no error and no retry.
+                //
+                // This runs inside the "Skip malformed JSON" catch below, which
+                // is why the load must not THROW: a dropped connection here
+                // used to be caught by a handler meant for a bad `data:` line
+                // and discarded silently. `loadRoomProducts` returns a result
+                // instead, so the failure has to be looked at.
+                const loaded = await loadRoomProducts<ProductResult>(roomId);
+                if (loaded.ok) {
+                  setProducts(loaded.products);
                 } else {
-                  setSearchError("We found matches but couldn't load them. Please try again.");
+                  setSearchError(ROOM_PRODUCTS_LOAD_ERROR);
                 }
               } else if (currentEvent === "error") {
                 console.error("Search stream error:", data.error);
