@@ -167,8 +167,18 @@ function getSearchTiers(budgetMode: string): PriceTier[] {
 
 // ─── Cartesian Product ────────────────────────────────────────
 
-/** Generate all combinations by picking one element from each array. */
-function cartesian<T>(arrays: T[][]): T[][] {
+/**
+ * Generate all combinations by picking one element from each array.
+ *
+ * Exported for tests only (mirrors `computeQuickScore` in fit-scorer.ts). What
+ * matters here is COMPLETENESS: this enumerates the candidate bundles, and a
+ * dropped combination is a product pairing that is never scored and can never
+ * be recommended — silently, since the caller only ever sees the combos it is
+ * handed. Element ORDER inside a combo is NOT load-bearing: nothing reads a
+ * combo positionally, and `tiebreakBundle` sorts a combo's URLs before
+ * comparing, so it is deliberately order-insensitive.
+ */
+export function cartesian<T>(arrays: T[][]): T[][] {
   if (arrays.length === 0) return [[]];
   const [first, ...rest] = arrays;
   const restCombos = cartesian(rest);
@@ -183,8 +193,14 @@ function cartesian<T>(arrays: T[][]): T[][] {
 
 // ─── Token Budget ─────────────────────────────────────────────
 
-/** Track cumulative token usage and enforce a hard cap. */
-class TokenBudget {
+/**
+ * Track cumulative token usage and enforce a hard cap.
+ *
+ * Exported for tests only. `exceeded` is the pipeline's spend brake — seventeen
+ * call sites bail out on it — so its boundary is the difference between
+ * stopping AT the cap and running one more round of model calls past it.
+ */
+export class TokenBudget {
   used = 0;
   readonly cap: number;
 
