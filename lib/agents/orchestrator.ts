@@ -358,17 +358,53 @@ async function reSearchCategoryForCorrection(
   let addedCount = 0;
   const newCandidates: CandidateProduct[] = [];
 
+  // Tavily rate limit: same knob the main search phase uses, so the two phases
+  // share one ceiling rather than each inventing their own.
+  const correctionSearchLimit = pLimit(Number(process.env.TAVILY_SEARCH_CONCURRENCY || "20"));
+
   // Phase 1: search every new query, per active tier only
   for (const tier of activeTiers) {
-    const queries = queriesByTier[tier] || [];
+    // Truncate before fanning out. These lists are LLM-authored and neither
+    // producing schema bounds their length (see the config constant), so
+    // without this the concurrent burst below is as wide as a plan says it is.
+    const queries = (queriesByTier[tier] || []).slice(
+      0,
+      ORCHESTRATOR.maxCorrectionQueriesPerTier,
+    );
     if (queries.length === 0) continue;
     if (tokenBudget.exceeded) break;
 
     const allRawCandidates: Array<{ url: string; title: string; snippet: string; tier: PriceTier }> = [];
 
-    for (const query of queries) {
-      if (tokenBudget.exceeded) break;
-      const searchRes = await searchProducts(query, ORCHESTRATOR.maxResultsPerQuery, tier, correctionCategory, ctx.imageUrls, input.domainExtractionStats);
+    // Fan the tier's queries out instead of awaiting them one at a time. The
+    // main search phase has always worked this way (`searchLimit`, ~line 798);
+    // this correction path was the one place left serial, so every correction
+    // round paid one full Tavily round-trip (~1-3s) PER QUERY, in series, on a
+    // request the user is sitting in front of.
+    //
+    // Results are collected BY QUERY INDEX, never by completion order. The
+    // dedupe + `slice(0, maxResultsPerQuery)` below is order-sensitive, and
+    // .claude/rules/determinism.md requires a fan-out to be keyed back to a
+    // stable order. Reassembled in index order, the candidate list this
+    // produces is identical to the serial loop's.
+    //
+    // The per-query `tokenBudget.exceeded` check collapses into the single
+    // pre-flight check above. The main extract phase makes the same SHAPE of
+    // trade — gate once per tier, then batch the whole tier (see its own gate
+    // further down this file, which fires at 70% of cap) — though the two
+    // thresholds differ and this path keeps its pre-existing 85%. The overshoot
+    // is bounded by ONE tier's queries — single digits — and the per-tier check
+    // still stops every tier after it — and that bound is now code-enforced by
+    // the truncation above, not merely a prompt asking for 2-4 queries.
+    const perQueryResults = await Promise.all(
+      queries.map((query) =>
+        correctionSearchLimit(() =>
+          searchProducts(query, ORCHESTRATOR.maxResultsPerQuery, tier, correctionCategory, ctx.imageUrls, input.domainExtractionStats),
+        ),
+      ),
+    );
+
+    for (const searchRes of perQueryResults) {
       if (searchRes.tokensUsed) {
         tokenBudget.add(searchRes.tokensUsed);
         stats.tokensUsed += searchRes.tokensUsed;
@@ -394,14 +430,55 @@ async function reSearchCategoryForCorrection(
     const topCandidates = uniqueCandidates.slice(0, ORCHESTRATOR.maxResultsPerQuery);
 
     // Phase 2: extract
-    for (const cand of topCandidates) {
-      if (tokenBudget.exceeded) break;
-      if (tokenBudget.used / tokenBudget.cap > 0.85) {
+    //
+    // One batch call instead of `topCandidates.length` serial ones. Each
+    // extraction is a Tavily Extract plus a model call, so at the configured
+    // `maxResultsPerQuery` of 5 this was up to five round-trips in series per
+    // tier — the dominant cost of a correction round, on a route bounded by a
+    // 300s serverless budget.
+    //
+    // `extractFromUrl` was never anything but a wrapper: product-extractor.ts
+    // :686 forwards a single URL straight into `extractFromUrlBatch`. So the
+    // arguments below are chosen to reproduce it EXACTLY rather than to
+    // improve on it — in particular the category stays the literal "general"
+    // the wrapper hardcodes, NOT `correctionCategory`. That string is
+    // interpolated into the Tavily Extract query (product-extractor.ts:480),
+    // so passing the real category here would silently change what gets
+    // extracted. (The wrapper's third argument is `_roomImageUrls`, unused.)
+    //
+    // One behaviour DOES change, and it is worth naming rather than claiming
+    // equivalence: `extractFromUrlBatch` retries failed URLs at advanced depth
+    // when `failedUrls.length >= 2 && successRate < 0.7`. At the wrapper's
+    // batch size of one, `>= 2` was unreachable, so correction extractions
+    // could never trigger that retry. Batched, they can. The effect is to
+    // recover URLs that a first pass left behind, at the cost of Tavily
+    // credits rather than model tokens (product-extractor.ts:503-505), which
+    // is the same trade the main extract phase already makes — but it is a
+    // real difference, not a no-op.
+    //
+    // The per-candidate budget checks become one pre-flight gate for the tier,
+    // the same shape as the main extract phase's own gate (which uses a 70%
+    // threshold against a larger batch; this path keeps the 85% it already had).
+    // Where the old loop traced only the FIRST skipped URL and silently dropped
+    // the rest, every skipped URL is now traced.
+    const budgetGated = tokenBudget.exceeded || tokenBudget.used / tokenBudget.cap > 0.85;
+    if (budgetGated) {
+      for (const cand of topCandidates) {
         tracer.traceFilter("correction_extract", "", cand.url, "budget > 85%");
-        break;
       }
+    }
 
-      const extractRes = await extractFromUrl(cand.url, ctx.designProfile, ctx.imageUrls);
+    const batchResults = budgetGated
+      ? new Map<string, Awaited<ReturnType<typeof extractFromUrl>>>()
+      : await extractFromUrlBatch(
+          topCandidates.map((c) => c.url),
+          "general",
+          ctx.designProfile,
+        );
+
+    for (const cand of topCandidates) {
+      const extractRes = batchResults.get(cand.url);
+      if (!extractRes) continue;
       if (extractRes.tokensUsed) {
         tokenBudget.add(extractRes.tokensUsed);
         stats.tokensUsed += extractRes.tokensUsed;

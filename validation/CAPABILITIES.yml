@@ -73,6 +73,7 @@ non_credential_allowlist:
   - MAX_BACKFILL_TIERS
   - MAX_BUNDLE_COMBOS
   - MAX_BUNDLE_EVALS
+  - MAX_CORRECTION_QUERIES_PER_TIER  # hard cap on LLM-authored correction re-search queries per tier (default 4); the schemas that produce those lists are unbounded, so this is the code-enforced bound on the fan-out
   - MAX_EXTRACT_PER_CAT_TIER
   - MAX_RESULTS_PER_QUERY
   - RERANK_TOP_K
