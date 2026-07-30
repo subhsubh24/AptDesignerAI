@@ -4,6 +4,46 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-30 (Run 128) — scout-driven (no DEEP AUDIT, not due). 3 changes, **all three rejected on the first pass and again on the second**. 10 reviewer verdicts: 2 APPROVE, 8 REQUEST_CHANGES, every rejection real. The run's lesson is Run 127's lesson, unlearned: **I keep verifying the thing I changed and not the world around it.**
+
+### State on entry
+- Cold container; `node_modules` absent at root AND `/mobile`. Branch at default tip `a4fbcf4` (#745, Run 127), 0/0 divergence, zero open PRs.
+- Baseline GREEN: web tsc, **2674 tests** / 11 skip, determinism, `/mobile` tsc.
+- DEEP AUDIT **NOT due** — Run 126's ran 2026-07-30 ~01:49, two runs back. Went with an 8-Haiku-scout sweep.
+
+### The scout sweep's real finding: the QUALITY_SCORECARD was 8 commits stale
+The independent scorecard (as_of 2026-07-27) named five ship-critical dimensions below A. Targeted verification scouts found **most of it already fixed** by Runs 120–127:
+- **store_readiness (C, "critical")** — BOTH findings fixed in `e217e95`. Account deletion purges storage via `lib/storage/user-storage.ts` before `deleteUser`, and both privacy artifacts now declare location collection and describe the Maps/Places purpose correctly.
+- **performance (C)** — 3 of 5 findings fixed. `gemini.ts` batches image fetches behind `imageFetchLimit`; `resolveImageBlocks` has 8 real call sites, not zero; `evaluate-set` is capped at `EXTRACT_CONCURRENCY = 5`. Only the `readdirSync` mockup-cache probe (negligible on Vercel) and the deliberately-deferred pgvector RPC remain.
+- **security_rls (A)** — a fresh 31-migration / 56-route sweep came back **CLEAN, zero findings**. Both prior integrity nits (saved-designs `project_id`, products `search_session_id`) are genuinely fixed.
+- **design_taste (B)** — the `ManualScorecardView` three-hue finding is fixed; it now uses the single-hue ladder in `lib/scoring/verdicts.ts`.
+- **artifact_integrity (B)** — the F1/F2 "enforcement" complaints are stale: `npm run lint` IS `--max-warnings 0` and passes at 0/0, coverage IS gated in preflight GATE 1f, and the ROADMAP text already discloses the remaining CI-only gap honestly.
+- **business_case_strength (B)** — the channel-consistency error is corrected; shippable-today is **$121,339** (store) / **$136,762** (web), honestly clearing the $100K floor. `validate-computation.mjs` → 7 figures PASS.
+**Takeaway: verify the scorecard against HEAD before working off it.** Eight runs of fixes had landed since it was written. Working the list blind would have produced six re-fixes of already-fixed things — the purest possible churn.
+
+### What shipped (3)
+1. **`fix(floor-plan)`** — ten sites where a room type was mistaken for a room, in five syntactic shapes, all routed through a new `lib/floor-plan/room-dimensions` and a `matchSingleRoom` rule: when we cannot say WHICH room a number belongs to, say nothing. Worst instances were in the deterministic math layer (a bedroom chair sized against whichever room serialised first) and in `scene-reconciliation`, which handed Bedroom 2 the living room's walls and printed them as "Unseen areas (no photo)". 22 tests.
+2. **`fix(diagnosis)`** — `design_direction_label` was never written, so the few-shot exact-direction query (`.in(...)`, and SQL IN never matches NULL) returned zero rows for every label, for every diagnosis ever run. The direction-blind fallback masked it completely. 8 tests, incl. a route-parity ratchet.
+3. **`test(diagnosis)`** — a hermetic cassette-style integration test driving the real two-pass diagnosis agent, which had NO test that ran it in CI (its only caller is an eval gated behind `RUN_EVALS=1`). 9 tests.
+
+### Lessons learned
+1. **THE RUN'S LESSON, and it is Run 127's verbatim: I verified the mechanism and never the consumers.** Run 127 wrote "before claiming a fix, enumerate every consumer of the thing you changed." I read that at the start of this run and then fixed `app/api/diagnosis/route.ts` — which **no user reaches**. The UI calls `/api/diagnosis/stream`. A reviewer grepped for callers, found zero for the plain route, and the entire fix would have shipped believing itself done. **Reading the lesson is not learning it. The check has to be a step, not a resolution.**
+2. **A bug-class inventory out-ran my completeness claim TWICE MORE — sites 9 and 10, both found by reviewers, in shapes my enumeration could not see.** Run 127 lost three rounds to this exact thing. Site 9 (`format-floor-plan`, `.find()` on the structured array) and site 10 (`scene-reconciliation`, `.find() ?? rooms[0]`) were invisible to every grep I ran because they never mention `room_dimensions`. **The fix was to stop claiming completeness at all**: the commit now states the class BEHAVIOURALLY ("code that resolves a single room from a type-keyed structure and substitutes something when the type is absent or duplicated"), names the method for finding more, and lists the adjacent cases left alone with reasons. A scoped honest claim beats a broad false one — and this is now a 3-run pattern, so it went to a harness-improvement issue rather than another resolution.
+3. **"Hermetic" is a claim to be TESTED, not asserted.** My integration test mocked `@/lib/ai/gemini` and called itself sealed. `classifyStyleLabelLLM` routes through `getProvider()`, which defaults to **DeepSeek** — two reviewers independently reproduced a real outbound request to api.deepseek.com with `DEEPSEEK_API_KEY` set, whose 401 fallback then injected an untracked call into the gemini mock. It passed in CI only because the verify job sets no keys — an accident. **Mock every provider ENTRY POINT, not the one module you happened to import, and prove it by running under the env that would break it** (I now do: the suite passes with a fake key set).
+4. **A mock whose shape diverges from the module it replaces makes every assertion built on it fiction.** My `resolveImageBlocks` stub returned a flat `{mimeType, data}`; the real `AIContentBlock` is `{source: {...}}`. It "worked" because nothing downstream of the mocked provider read `.source`, and `vi.mock` factories are **not type-checked against the real export**. Reviewer-caught.
+5. **A test count in a commit message is a factual claim.** I wrote "31 tests"; it was 22. Counted by eye, off by nine, caught by a reviewer who ran them. Same class as Run 127's fabricated PENDING_OPS citation. **Count by running, then subtract the pre-existing count with `git show <commit>^:<path>`.**
+6. **A test that asserts the message instead of the effect proves nothing.** My room-type-gate test checked the error text but not that Pass B was skipped — the whole point of a gate that exists to save tokens. It now asserts the call count.
+7. **Reviewers ran in the LIVE tree this run, not worktrees** (contrast Run 127, which isolated them). Nothing was corrupted, but one `Edit` failed transiently mid-run and reviewers reported "untracked scratch file" noise from work in flight. **Go back to worktree isolation** — the cost is trivial and the failure mode is silent.
+8. **Killing a no-op is a better response to a review than defending it.** I added an `industrial` direction bucket; a reviewer showed it was behaviourally identical to the existing unbucketed fallback. It is reverted, with a comment recording that the absence is deliberate. The regex entry beside it was a real fix and stayed.
+
+### Carry-forward + audit cadence
+- **DEEP AUDIT next due ~Run 130** (last ran Run 126, 2026-07-30 ~01:49). Run 129 can lean on scouts + the scorecard — but re-verify the scorecard against HEAD first (see above).
+- **The QUALITY_SCORECARD is 8+ commits stale in the factory's favour.** Five ship-critical dims are graded below A on findings that are now fixed. Do NOT re-fix them; the next Quality Auditor pass should move most of these up on its own.
+- **Known and deliberately deferred (re-confirmed this run, do not re-flag):** `app/api/analyze-apartment/route.ts` builds a room_type-keyed `analysisRooms` map with last-write-wins, but every live consumer JSON.stringifies the WHOLE map (attribute-nothing pattern) and the per-room response field is dead code — so it drops data in an aggregate rather than misattributing one room's data as fact about another. Different, lesser bug; already noted at loop-memory Run 12x.
+- **Remaining unbuilt revenue lever named by scouting:** a higher Pro/Studio tier is ROADMAP-named and Gate-2 relevant, but it was NOT built this run on purpose — there is no entitlement differentiator to sell at a higher price today, so building it would be a price bump with no value behind it (a guess, and the brakes say prefer an FYI over an architectural guess). Building it properly means first deciding what Studio GETS.
+
+---
+
 ## Run 2026-07-30 (Run 127) — 6 changes built, **2 merged and 4 ABANDONED**. 26 reviewer verdicts across 3 rounds: 6 APPROVE, 20 REQUEST_CHANGES. **Every single rejection was real.** The run's lesson is one sentence: I verified the MECHANISM and never the CONSUMERS.
 
 ### State on entry
