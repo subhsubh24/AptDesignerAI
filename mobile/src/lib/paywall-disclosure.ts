@@ -92,7 +92,14 @@ export function classifyProductShape(product: {
 
   // Only a CONSUMABLE is definitively non-restorable; UNKNOWN is treated as
   // non-restorable too, so the copy never promises a restore we cannot prove.
-  const isRestorable = type === 'NON_CONSUMABLE' || type === 'NON_RENEWABLE_SUBSCRIPTION';
+  // Everything else — including both SUBSCRIPTION types, which Apple requires a
+  // working restore path for — is restorable. The first draft listed the two
+  // one-time types explicitly and so reported an ACTIVE subscription as
+  // non-restorable, contradicting the sentence directly above it. Inert today
+  // (the copy only reads this on the non-recurring branch) but the field lied
+  // about what it computes, and DisplayOption carries it unqualified.
+  const isRestorable =
+    type !== null && type !== 'CONSUMABLE' && type !== 'UNKNOWN';
 
   return { isRecurring, isRestorable };
 }

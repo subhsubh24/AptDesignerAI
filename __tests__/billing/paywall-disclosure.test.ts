@@ -253,4 +253,30 @@ describe("classifyProductShape", () => {
       expect(classifyProductShape(product).isRestorable, JSON.stringify(product)).toBe(false);
     }
   });
+
+  it("reports an ACTIVE SUBSCRIPTION as restorable — Apple requires that path", () => {
+    // The first draft listed the two one-time types explicitly, so it answered
+    // "not restorable" for a live auto-renewing subscription while the comment
+    // above it said only consumables were excluded. Inert in today's copy, but
+    // the field is carried on DisplayOption with an unqualified meaning.
+    for (const type of ["AUTO_RENEWABLE_SUBSCRIPTION", "PREPAID_SUBSCRIPTION"]) {
+      expect(classifyProductShape({ productType: type }).isRestorable, type).toBe(true);
+    }
+  });
+
+  it("keeps isRestorable consistent with its own stated rule", () => {
+    // The rule: everything is restorable EXCEPT a consumable and the unknowns.
+    const known = [
+      "CONSUMABLE",
+      "NON_CONSUMABLE",
+      "NON_RENEWABLE_SUBSCRIPTION",
+      "AUTO_RENEWABLE_SUBSCRIPTION",
+      "PREPAID_SUBSCRIPTION",
+      "UNKNOWN",
+    ];
+    for (const type of known) {
+      const expected = type !== "CONSUMABLE" && type !== "UNKNOWN";
+      expect(classifyProductShape({ productType: type }).isRestorable, type).toBe(expected);
+    }
+  });
 });

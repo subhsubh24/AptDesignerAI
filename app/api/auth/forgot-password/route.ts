@@ -107,12 +107,18 @@ function isRateLimited(ip: string): boolean {
 //
 // What makes it not a denial is that a claim is RELEASED whenever no mail
 // actually went out. So the quota only ever counts messages genuinely delivered
-// to that address, which means being over quota carries a guarantee: three
-// working recovery links were sent to this inbox in the last 15 minutes. The
-// owner is not locked out — they are holding a valid link already (Supabase
-// recovery links outlive this window several times over), and it reached THEIR
-// inbox regardless of who asked for it. "Check your email" stays TRUE, which is
-// the only reason the neutral body is not a fake success.
+// to that address, which means being over quota carries a real guarantee: three
+// recovery links for this address were ACCEPTED BY THE PROVIDER in the last 15
+// minutes, addressed to the owner's own inbox regardless of who asked for them.
+// So "check your email" is not a fake success.
+//
+// TWO LIMITS ON THAT GUARANTEE, stated rather than glossed. (1) `delivered`
+// means Resend returned 200, not that the message cleared the recipient's spam
+// filter. (2) Whether an earlier link is still VALID when the owner asks depends
+// on the Supabase project's OTP expiry — an owner-controlled dashboard setting
+// this codebase never reads, so no claim is made about it here. If that expiry
+// is ever configured at or below 15 minutes, MAX_SENDS_PER_EMAIL should move
+// below it; PENDING_OPS carries that as an owner verification step.
 //
 // Without the release this would be exactly the DoS described: three failed
 // `generateLink` calls would burn the quota having delivered nothing, and the
