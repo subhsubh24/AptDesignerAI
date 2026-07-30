@@ -15,9 +15,7 @@
  * The tests are written around those two, not around the happy path.
  */
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import {
   hasActiveEntitlement,
@@ -28,6 +26,7 @@ import {
   ERROR_CODE_PRODUCT_ALREADY_PURCHASED,
   purchaseResultAction,
   purchaseErrorAction,
+  performPurchaseAction,
 } from "@/mobile/src/lib/purchase-outcome";
 
 const PRO = "pro";
@@ -271,72 +270,123 @@ describe("purchaseErrorAction — what the user is told when it throws", () => {
     expect(action.body).toMatch(/if the payment has cleared/i);
     expect(action.body).toMatch(/still\s+processing/i);
   });
+});
 
-  it("every alert carries both a title and a non-empty body", () => {
-    for (const err of [{ code: ERROR_CODE_PAYMENT_PENDING }, { code: ERROR_CODE_PRODUCT_ALREADY_PURCHASED }, { code: "2" }]) {
+/**
+ * Every outcome gets its OWN answer — the property a deleted grep test used to
+ * assert, re-established where it can actually hold.
+ *
+ * `purchaseErrorAction` has no `default:` branch, so a new member of
+ * `classifyPurchaseError`'s return union stops the build at the `never`
+ * assignment. That is the real guard, and it is a compile-time one: it cannot be
+ * renamed, aliased or commented around, which is how all three previous
+ * source-text versions of this guard were defeated.
+ *
+ * These tests cover what the compiler cannot: that the four outcomes map to four
+ * DISTINCT answers, and specifically that none of them quietly collapses into the
+ * "Purchase failed. Please try again." copy. A `default:` branch reintroduced
+ * alongside a missing case would compile fine and be caught here instead.
+ */
+describe("every purchase-error outcome has its own answer", () => {
+  const BY_OUTCOME = {
+    cancelled: { code: ERROR_CODE_PURCHASE_CANCELLED },
+    pending: { code: ERROR_CODE_PAYMENT_PENDING },
+    "already-owned": { code: ERROR_CODE_PRODUCT_ALREADY_PURCHASED },
+    failed: { code: "10" },
+  } as const;
+
+  it("maps the four outcomes to four distinct actions", () => {
+    const rendered = Object.entries(BY_OUTCOME).map(([outcome, err]) => {
       const action = purchaseErrorAction(err);
-      if (action.kind !== "alert") throw new Error("expected an alert");
-      expect(action.title.length).toBeGreaterThan(0);
-      expect(action.body.length).toBeGreaterThan(0);
+      return `${outcome}:${action.kind}:${action.kind === "alert" ? action.title : ""}`;
+    });
+    // Four inputs, four different answers — no two outcomes share a response.
+    expect(new Set(rendered).size).toBe(4);
+  });
+
+  it("only the genuine-failure outcome may show the failure copy", () => {
+    // The regression this replaces a grep test for: a new or mis-wired outcome
+    // inheriting "Purchase failed. Please try again." Everything that is NOT a
+    // real failure must say something else.
+    for (const [outcome, err] of Object.entries(BY_OUTCOME)) {
+      const action = purchaseErrorAction(err);
+      const showsFailureCopy = action.kind === "alert" && /try again/i.test(action.body);
+      expect(showsFailureCopy, `${outcome} must${outcome === "failed" ? "" : " NOT"} show the failure copy`).toBe(
+        outcome === "failed",
+      );
     }
+  });
+
+  it("the resolved-pending and thrown-pending paths give the SAME message", () => {
+    // One user-facing state, one string. They were two near-identical strings
+    // until a reviewer pointed out a user only ever sees one of them.
+    const fromResolve = purchaseResultAction({ customerInfo: { entitlements: { active: {} } } }, PRO);
+    const fromThrow = purchaseErrorAction({ code: ERROR_CODE_PAYMENT_PENDING });
+    expect(fromResolve).toEqual(fromThrow);
   });
 });
 
 /**
- * ONE structural backstop, and its limit stated plainly.
+ * DISPATCH — which effect fires for which action.
  *
- * The behavioural tests above pin the DECISION: `purchaseResultAction` cannot
- * return `unlock` without a confirmed entitlement. They cannot pin whether the
- * component honours it — a caller can compute the action and then unlock anyway.
- * That is exactly the refactor a reviewer used to defeat the previous grep-based
- * tests, so it is not hypothetical.
- *
- * The invariant that closes it is narrow and real: inside `handlePurchase`, the
- * word `onPurchaseSuccess` must not appear AT ALL. Every unlock on that path has
- * to route through `applyPurchaseAction`, which is the single place the `unlock`
- * action is performed. (`handleRestore` has its own legitimate call site, after
- * its own `hasActiveEntitlement` check — hence slicing to one function rather
- * than counting occurrences file-wide.)
- *
- * This is still a source-text assertion, which is why it is ONE assertion about
- * ONE identifier's absence from ONE function, rather than a set of substring
- * checks standing in for behaviour.
+ * The negative assertions are the point. A reviewer showed that adding
+ * `onPurchaseSuccess?.()` to the component's `alert` branch unlocked Pro on every
+ * alert, INCLUDING a genuine purchase failure, with every test still green. That
+ * was invisible because the switch lived in a React component the web runner
+ * cannot import. It lives in the module now, so the question is answerable.
  */
-describe("the only unlock path in handlePurchase is the action dispatcher", () => {
-  const source = readFileSync(
-    path.join(path.resolve(__dirname, "../.."), "mobile/src/components/paywall-sheet.tsx"),
-    "utf8",
-  );
+describe("performPurchaseAction — only an unlock action may unlock", () => {
+  const spies = () => ({ unlock: vi.fn(), alert: vi.fn() });
 
-  function functionBody(name: string): string {
-    const start = source.indexOf(`const ${name} = useCallback(`);
-    expect(start, `${name} not found — renamed?`).toBeGreaterThan(-1);
-    // useCallback bodies in this file end at the dependency array.
-    const end = source.indexOf("\n  }, [", start);
-    expect(end, `could not find the end of ${name}`).toBeGreaterThan(start);
-    return source.slice(start, end);
-  }
-
-  it("handlePurchase never touches onPurchaseSuccess directly", () => {
-    expect(
-      functionBody("handlePurchase"),
-      "handlePurchase must route every outcome through applyPurchaseAction — a direct " +
-        "onPurchaseSuccess call there is an unlock that bypasses the entitlement check",
-    ).not.toContain("onPurchaseSuccess");
+  it("unlocks, and does not alert, on an unlock action", () => {
+    const h = spies();
+    performPurchaseAction({ kind: "unlock" }, h);
+    expect(h.unlock).toHaveBeenCalledTimes(1);
+    expect(h.alert).not.toHaveBeenCalled();
   });
 
-  it("handlePurchase does dispatch both the resolved and thrown outcomes", () => {
-    const body = functionBody("handlePurchase");
-    expect(body).toContain("applyPurchaseAction(purchaseResultAction(result, ENTITLEMENT_ID))");
-    expect(body).toContain("applyPurchaseAction(purchaseErrorAction(err))");
+  it("alerts WITHOUT unlocking, and passes the title and body through", () => {
+    const h = spies();
+    performPurchaseAction({ kind: "alert", title: "T", body: "B" }, h);
+    expect(h.alert).toHaveBeenCalledWith("T", "B");
+    expect(h.unlock, "an alert must never unlock Pro").not.toHaveBeenCalled();
   });
 
-  it("the dispatcher gates the unlock on the unlock action", () => {
-    const body = functionBody("applyPurchaseAction");
-    expect(body).toContain("case 'unlock':");
-    // The unlock call must sit after the 'unlock' case and before the next one.
-    const afterUnlock = body.slice(body.indexOf("case 'unlock':"));
-    const unlockBranch = afterUnlock.slice(0, afterUnlock.indexOf("case 'alert':"));
-    expect(unlockBranch).toContain("onPurchaseSuccess?.()");
+  it("does neither on a silent action", () => {
+    const h = spies();
+    performPurchaseAction({ kind: "silent" }, h);
+    expect(h.unlock).not.toHaveBeenCalled();
+    expect(h.alert).not.toHaveBeenCalled();
+  });
+
+  it("never unlocks for ANY action a real purchase outcome can produce", () => {
+    // End to end over the module: every outcome the two classifiers can yield,
+    // dispatched for real, asserting the unlock fires ONLY where an entitlement
+    // was confirmed. This is the property the whole change exists to hold.
+    const entitled = { customerInfo: { entitlements: { active: { pro: { isActive: true } } } } };
+    const cases: Array<[string, () => void, boolean]> = [
+      ["resolved + entitled", () => {}, true],
+      ["resolved, not entitled", () => {}, false],
+      ["thrown: cancelled", () => {}, false],
+      ["thrown: pending", () => {}, false],
+      ["thrown: already-owned", () => {}, false],
+      ["thrown: failed", () => {}, false],
+    ];
+    const actions = [
+      purchaseResultAction(entitled, PRO),
+      purchaseResultAction({ customerInfo: { entitlements: { active: {} } } }, PRO),
+      purchaseErrorAction({ code: ERROR_CODE_PURCHASE_CANCELLED }),
+      purchaseErrorAction({ code: ERROR_CODE_PAYMENT_PENDING }),
+      purchaseErrorAction({ code: ERROR_CODE_PRODUCT_ALREADY_PURCHASED }),
+      purchaseErrorAction({ code: "10" }),
+    ];
+    actions.forEach((action, i) => {
+      const h = spies();
+      performPurchaseAction(action, h);
+      const [label, , shouldUnlock] = cases[i];
+      expect(h.unlock.mock.calls.length > 0, `${label} should${shouldUnlock ? "" : " NOT"} unlock`).toBe(
+        shouldUnlock,
+      );
+    });
   });
 });

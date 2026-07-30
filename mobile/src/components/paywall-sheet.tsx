@@ -13,6 +13,7 @@ import { resolveFreeTrial } from '@/lib/paywall-trial';
 import {
   classifyPurchaseError,
   hasActiveEntitlement,
+  performPurchaseAction,
   purchaseErrorAction,
   purchaseResultAction,
   type PurchaseAction,
@@ -191,17 +192,16 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   // sync and no branch for a new outcome to fall through.
   const applyPurchaseAction = useCallback(
     (action: PurchaseAction) => {
-      switch (action.kind) {
-        case 'unlock':
+      // Wiring only. WHICH handler fires for which action lives in
+      // lib/purchase-outcome's performPurchaseAction, where it is tested —
+      // including the negative, that an alert never reaches the unlock.
+      performPurchaseAction(action, {
+        unlock: () => {
           onPurchaseSuccess?.();
           onDismiss();
-          return;
-        case 'alert':
-          Alert.alert(action.title, action.body);
-          return;
-        case 'silent':
-          return;
-      }
+        },
+        alert: (title, body) => Alert.alert(title, body),
+      });
     },
     [onDismiss, onPurchaseSuccess],
   );

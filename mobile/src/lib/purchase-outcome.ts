@@ -155,6 +155,16 @@ export type PurchaseAction =
   /** Say nothing — the user cancelled on purpose. */
   | { readonly kind: "silent" };
 
+/**
+ * ONE pending message for ONE user-facing state.
+ *
+ * Both paths that reach it — a purchase that RESOLVED with the entitlement still
+ * inactive, and one that THREW `PAYMENT_PENDING_ERROR` — mean the same thing to
+ * the person holding the phone: the purchase was made, payment has not cleared,
+ * Pro will arrive on its own. They previously carried two near-identical strings;
+ * a reviewer pointed out that a user only ever sees one of them, so the variation
+ * bought nothing and only risked drift.
+ */
 const PENDING_ALERT = {
   kind: "alert",
   title: "Payment processing",
@@ -173,26 +183,40 @@ export function purchaseResultAction(
     : PENDING_ALERT;
 }
 
-/** What to do with a THROWN purchase error. */
+/**
+ * What to do with a THROWN purchase error.
+ *
+ * EXHAUSTIVE BY CONSTRUCTION — no `default:` branch. That is deliberate and it is
+ * the third attempt at guarding this, so the reasoning is worth keeping:
+ *
+ * The first guard grepped the component for `case 'x':` per outcome. A reviewer
+ * defeated it. The second replaced it with a source-slicing assertion; another
+ * reviewer defeated THAT three ways (adding the unlock to a different branch,
+ * aliasing the callback past a substring check, and hiding code behind a comment
+ * containing the slicer's own end-of-function marker). A third grep would have
+ * been the same mistake in a smaller box.
+ *
+ * A `default:` branch is what made those tests necessary: it silently absorbs a
+ * newly-added outcome into "Purchase failed. Please try again" — the one piece of
+ * copy this module exists to keep away from non-failures. Removing it hands the
+ * job to the compiler: add a member to `classifyPurchaseError`'s return union and
+ * the `never` assignment below stops compiling. That cannot be renamed, aliased
+ * or commented around.
+ */
 export function purchaseErrorAction(err: unknown): PurchaseAction {
-  switch (classifyPurchaseError(err)) {
+  const outcome = classifyPurchaseError(err);
+  switch (outcome) {
     case "cancelled":
       return { kind: "silent" };
     case "pending":
-      return {
-        kind: "alert",
-        title: "Payment pending",
-        body:
-          "Your payment is still being processed by the store. Pro unlocks as soon " +
-          "as it clears — there is no need to buy again.",
-      };
+      return PENDING_ALERT;
     case "already-owned":
       // Deliberately HEDGED, and a reviewer was right to insist on it. The
-      // primary way a user reaches this code is by tapping Subscribe again while
-      // the first purchase is still PENDING — in which case Restore will find no
-      // active entitlement and answer "No active subscription was found",
-      // contradicting us. Promising "Restore will unlock Pro" is only true once
-      // payment has cleared, so both branches are named instead.
+      // primary way a user reaches this is by tapping Subscribe again while the
+      // first purchase is still PENDING — in which case Restore finds no active
+      // entitlement and answers "No active subscription was found",
+      // contradicting us. Restore only helps once payment has cleared, so both
+      // branches are named rather than promising the happier one.
       return {
         kind: "alert",
         title: "Already subscribed",
@@ -201,11 +225,63 @@ export function purchaseErrorAction(err: unknown): PurchaseAction {
           "has cleared, Restore Purchases below will unlock Pro; if it is still " +
           "processing, Pro unlocks on its own shortly. Either way, do not buy again.",
       };
-    default:
+    case "failed":
       return {
         kind: "alert",
         title: "Purchase failed",
         body: "Please try again or restore your purchases below.",
       };
   }
+  // If this stops compiling, `classifyPurchaseError` grew an outcome that has no
+  // user-facing answer. Give it one above rather than deleting this line.
+  const unhandled: never = outcome;
+  throw new Error(`unhandled purchase outcome: ${String(unhandled)}`);
+}
+
+/**
+ * PERFORM an action — the dispatch half, extracted so it can be tested.
+ *
+ * Keeping the switch inside the React component left one real hole, which a
+ * reviewer demonstrated: adding `onPurchaseSuccess?.()` to the component's
+ * `alert` branch unlocked Pro on every alert — including a genuine purchase
+ * FAILURE — and no test noticed, because the component cannot be imported into
+ * the web runner (no React Native test runner in this repo) and the source-text
+ * guard standing in for one only checked that the `unlock` branch CONTAINED the
+ * call, never that the others did not.
+ *
+ * Injecting the two effects instead makes that a behavioural question: "which
+ * handler fires for which action kind" is now asserted directly, including the
+ * negative — `alert` and `silent` must never reach `unlock`. The component keeps
+ * only the wiring.
+ *
+ * Also exhaustive by construction, for the same reason as `purchaseErrorAction`:
+ * a new `PurchaseAction` member stops the build here rather than silently doing
+ * nothing.
+ *
+ * RESIDUAL GAP, stated rather than papered over: nothing prevents a future edit
+ * from calling `onPurchaseSuccess` directly in the component instead of routing
+ * through here. That surface is now four lines of wiring rather than a switch,
+ * and closing it properly needs a React Native test runner (jest-expo) that this
+ * repo does not have — a real, separate piece of work, not something a fourth
+ * source-text assertion should pretend to cover.
+ */
+export function performPurchaseAction(
+  action: PurchaseAction,
+  handlers: {
+    readonly unlock: () => void;
+    readonly alert: (title: string, body: string) => void;
+  },
+): void {
+  switch (action.kind) {
+    case "unlock":
+      handlers.unlock();
+      return;
+    case "alert":
+      handlers.alert(action.title, action.body);
+      return;
+    case "silent":
+      return;
+  }
+  const unhandled: never = action;
+  throw new Error(`unhandled purchase action: ${JSON.stringify(unhandled)}`);
 }
