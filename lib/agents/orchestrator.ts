@@ -345,7 +345,16 @@ const DEPENDENT_CATEGORIES_SET = new Set([
   "wall_art", "mirror", "plant", "vase",
 ]);
 
-async function reSearchCategoryForCorrection(
+/**
+ * Exported for `__tests__/agents/correction-research.test.ts` only — it has two
+ * internal call sites in this file and no other consumer. The behaviour worth
+ * guarding is deterministic and does not need a live model: the per-tier query
+ * CAP, the index-keyed reassembly of the concurrent fan-out (a determinism
+ * requirement, not an optimisation), the 85%-of-cap extraction gate, and the
+ * quick-score survivor threshold. Mirrors the four primitives above, which are
+ * exported for the same reason.
+ */
+export async function reSearchCategoryForCorrection(
   input: ReSearchCategoryInput
 ): Promise<{ added: number; products: CandidateProduct[] }> {
   const { category, queriesByTier, activeTiers, ctx, brief, tokenBudget, stats, tracer, anchorSpecs, harmonyNeighbors, evaluations } = input;
