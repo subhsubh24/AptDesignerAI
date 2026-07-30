@@ -4,6 +4,156 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-30 (Run 126) — DEEP AUDIT (8-lens, DUE) + 3 file-disjoint value-bar changes, plus 2 reviewer-driven fixes. __VERDICT_LINE__
+
+### State on entry
+- Cold container, `node_modules` absent at root AND `/mobile` — installed both before the baseline gate.
+- Branch reset to default tip `9149bad` (#742, Run 125). Zero open PRs, 0/0 divergence.
+- Baseline GREEN: web tsc, **2580 tests** / 11 skip, determinism, `/mobile` tsc clean.
+- DEEP AUDIT **DUE**: Run 123's ran at `bd795f9` on 2026-07-28 20:07, >24h ago. The rotation guide said "due ~Run 127", but the DATE rule fires first — went with the date.
+
+### DEEP AUDIT — 8 lenses, and the headline is how much the scorecard has ALREADY been overtaken
+`QUALITY_SCORECARD.as_of: 2026-07-27` is now six runs stale, and this time it is stale in the
+GOOD direction. Of the six performance items it named, FOUR are already fixed; security,
+artifact-freshness and accessibility all came back with ZERO findings. Diffing it against HEAD
+before treating a gap as current is again the single highest-leverage orientation step — it
+stopped roughly four changes of re-work. (Run 124 recorded this same lesson; now confirmed twice.)
+
+| lens | outcome |
+|------|---------|
+| correctness & dead code | 1 finding (below the bar, see REFUTED); 6 scorecard items verified CLOSED at HEAD |
+| security & RLS | **CLEAN — zero findings.** 19 user-owned tables with `auth.uid()` policies + `WITH CHECK`; 4 deliberate policy-less service-role-only tables; `handle_new_user` hardened with `set search_path = ''`; all 54 `app/api/**/route.ts` swept for cross-tenant read/write, auth bypass, admin-client misuse — none; SSRF + open-redirect guards intact; no secret in any `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` |
+| performance | 4 of 6 scorecard items ALREADY FIXED; 2 remain and both are below the bar (see REFUTED) |
+| a11y & design bar | a11y **CLEAN**; design found 5 raw-palette ordinal ladders → became this run's headline change |
+| tests & evals | coverage 64.66/53.80/68.98/65.84 against live floors 60/49/64/61. Weakest load-bearing: `room-diagnostician` 0.93%, `scene-assembler` 1.53%, `fit-scorer` 6.27%, `orchestrator` 3.86%, `validation-agent` 13.06%. `reSearchCategoryForCorrection` at literally zero → became this run's test change |
+| artifact freshness | **CLEAN.** Pricing consistent across all 7 surfaces; `BUSINESS_CASE.as_of: 2026-07-29` fresh, `validate-computation.mjs` PASS (7 figures), $121,339 on the conservative store channel; 25 ticked ROADMAP boxes sampled, all verified to real artifacts; privacy docs match what the code collects |
+| mobile / billing / store | paywall disclosures complete; deletion purges storage on BOTH platforms; entitlements server-side and un-spoofable; icons real PNGs at correct sizes; EAS build+submit profiles real; no dead nav; `/mobile` tsc clean. One real gap is owner-gated (below) |
+| functional reality (ACTUAL RUN) | public journey tier RAN GREEN — 10 passed / 14 skipped, `E2E_JOURNEYS_PASSED=1`. `scripts/preflight.sh` **exits 1 at GATE 1b**: the authed journeys need `E2E_AUTH_STACK` + a seeded Supabase-local, which this container does not have. Side-effect sweep found NO fake success in web routes (`forgot-password` is exemplary — it refuses to claim mail was sent in dry-run). Still no email ROUND-TRIP test (F4.1 open) |
+
+### REFUTED / BELOW-BAR — recording these so no future run re-derives them
+1. **The three `div[role="button"]` lightbox triggers are FINE.** Rotation-guide item (b) is closed:
+   focus/page.tsx:1044, mockups/page.tsx:245 and products/page.tsx:404 each carry `tabIndex={0}`, an
+   `aria-label`, an `onKeyDown` handling Enter+Space, and `focus-visible:ring-2`. products even guards
+   `e.target !== e.currentTarget` so nested controls are not hijacked. **DO NOT RE-FLAG.**
+2. **`ManualScorecardView` three-hue ordinal — ALREADY FIXED.** It calls `getScoreColor()`
+   (`lib/scoring/verdicts.ts`), the single-hue ladder. The scorecard names it and two audit lenses
+   parroted it; the file at HEAD does not have the defect. **DO NOT RE-FLAG.**
+3. **Four perf items the scorecard lists as live are FIXED:** `gemini.ts` image fetches are batched
+   inside `imageFetchLimit` (:311-334); `resolveImageBlocks` has 6 real call sites, not zero;
+   `evaluate-set` extraction is capped at `pLimit(5)`; the typeahead `select("*")` is narrowed to 5
+   columns with `.limit(500)`. **DO NOT RE-FLAG.**
+4. **"Annual billing is not gated on mobile" — FALSE.** The web gate exists because
+   `stripe_customers.tier` has a CHECK constraint that migration 021 extends. Mobile entitlement is
+   read from the **RevenueCat REST API** (`lib/entitlements/server.ts`, `RC_API_BASE`) and never
+   touches `stripe_customers`, so that constraint is unreachable from mobile and there is nothing for
+   an `EXPO_PUBLIC_ANNUAL_BILLING_ENABLED` flag to protect. The asymmetry is correct by construction.
+   **DO NOT RE-FLAG.**
+5. **"The privacy policy contradicts stored location" — FALSE.** `docs/app-privacy.md:21-23` and
+   `app/privacy/page.tsx:45-51` BOTH declare city / neighborhood / building_name / coordinates, and
+   correctly distinguish a typed-and-picked address from device GPS (no location permission is ever
+   requested). Closed by Run 124. **DO NOT RE-FLAG.**
+6. **`analyze-apartment`'s sequential per-room persistence is NOT a perf bug to fix.** It looks like
+   an obvious ~500ms `Promise.all` win, and a perf lens proposed exactly that. The comment above the
+   loop records why it is sequential: Run 101 (`1c09a72`) replaced a `Promise.all` there *because* it
+   ran both writes concurrently and ignored their errors, leaving rooms marked `"diagnosed"` with no
+   diagnosis behind them. Dropped — re-parallelising would undo a deliberate correctness fix for
+   latency at the tail of a multi-minute operation. **DO NOT RE-FLAG without addressing that.**
+7. **`findCachedMockup`'s `fs.readdirSync` (app/api/mockups/route.ts:106) is real but below the bar.**
+   It is O(every mockup ever) — but only where the LOCAL uploads dir exists. In production with
+   Supabase storage the directory is absent, so `fs.existsSync` short-circuits and the scan never
+   runs. Genuine dev/CI-only cost. Recorded, not shipped.
+8. **F3 gold-set growth is BLOCKED in this container, not skipped.** ROADMAP F3 requires every added
+   fixture to run GREEN in the live-eval job before merge; that needs `GEMINI_API_KEY`, which is not
+   set here. Shipping an unverified gold fixture would be worse than shipping none — a fixture whose
+   expected output nobody validated passes by definition. Needs either the owner running the eval or
+   a cassette-backed variant.
+
+### Shipped — 3 file-disjoint changes + 2 reviewer-driven fixes
+1. **`design(diagnosis)`** `5bd375b` — the Keep/Replace pair had a FOURTH palette, on `/diagnosis`,
+   the step where the user meets it FIRST. `assessment-colors.ts` claimed it had "finished the job";
+   it had not, so one list read emerald on /diagnosis, amber on /focus, rose on /saved. Converted
+   that pair plus the 3-hue issue rails, the scene-coverage verdict, the floor-plan confidence traffic
+   light, the refine `medium` rung, the product pill, the topbar marks and the emerald/teal confetti —
+   48 off-system utilities across 6 files → 0. Added the repo-wide off-system ratchet the sibling
+   guard's docstring honestly said did not exist (ceiling 82, toast/badge categorical exemptions
+   pinned by count).
+2. **`fix(mobile/billing)`** `4e260c0` — `await purchasePackage(); onPurchaseSuccess()` treated the
+   promise SETTLING as the answer. A resolved purchase is not an entitlement (Play asynchronous
+   payment methods, iOS Ask to Buy, or a product mis-mapped in RevenueCat all resolve with it
+   inactive), and a thrown `PAYMENT_PENDING_ERROR` was reported as "Purchase failed. Please try
+   again" — inviting a second charge on a charge already in flight. New pure `purchase-outcome.ts`
+   answers both; 17 tests, mutation-verified.
+3. **`test(orchestrator)`** `d564348` — `reSearchCategoryForCorrection` had ZERO tests, including the
+   concurrency + per-tier cap + 85% budget gate that Run 125 had *just* added. 18 tests over the four
+   deterministic brakes; 8 mutations, 8 killed, including collecting the fan-out in completion order.
+4. **`fix(a11y/topbar)`** `2d30d5f` — reviewer-driven, see lesson 2.
+5. **`fix(mobile/billing)` follow-up** `3ef45fa` — reviewer-driven: the second-tap loop (code "6"
+   fell through to "please try again"), the inline entitlement read in `use-entitlements`, and the
+   "Play prepaid" terminology (prepaid grants immediately; the pending case is Play's ASYNCHRONOUS
+   payment methods).
+
+### Merge outcome + gate
+- Single branch per this run's git constraint → ONE PR (code + this bookkeeping).
+- Gate GREEN: web tsc, **2629 tests** (2580 +49), determinism, `eslint . --max-warnings 0` exit 0,
+  `/mobile` tsc clean.
+- **No ROADMAP box ticked.** Nothing completed a phase: the design work is a scorecard dimension not
+  a checkbox, F2 is already `[x]`, and F5 (the periodic deep audit) is a standing recurring task that
+  stays open by design. No migrations, no secrets, no PENDING_OPS change.
+- **Definition of Done NOT met, no readiness attempt made.** 9 DoD boxes remain unchecked and
+  `scripts/preflight.sh` exits 1 at GATE 1b (authed journeys cannot run here).
+
+### Lessons learned
+1. **RUN EVERY REVIEWER IN AN ISOLATED WORKTREE. Always.** The first four reviewers ran in the SHARED
+   tree, and two of them reached for git to inspect the parent commit: one ran `git stash` (silently
+   swallowing an entire uncommitted change — recovered from `stash@{0}`), and another left a
+   mutation-test edit BEHIND in `purchase-outcome.ts`, which I then nearly committed as my own work.
+   Run 125's memory already said worktree isolation "was otherwise a clear win"; I didn't apply it and
+   paid for it twice in one run. The four reviewers spawned afterwards used `isolation: worktree` and
+   nothing touched my tree. Corollary: **`git diff HEAD` a file before committing it** — a reviewer's
+   leftover mutation is indistinguishable from your own edit, and a "file was modified" notice reads
+   the same either way.
+2. **A guard that proves a colour is ON-SYSTEM proves nothing about whether it can be SEEN.** My
+   one-hue conversion put the topbar "done" mark on an `accent-warm/40` wash. The new repo-wide
+   ratchet went green (no raw palette present) and the palette's computed-contrast guard doesn't cover
+   that file — so both guards passed. A reviewer computed the actual ratio: **1.44:1** against the
+   not-yet-reached mark, in both modes, under even the 3:1 non-text floor. The `bg-emerald-500` it
+   replaced had passed in dark mode at 5.61:1 — purely because an off-system hue happened to sit far
+   from the border token. Removing the hue was right; what replaced it was a real regression.
+   Absence-of-raw-palette and legibility are different properties needing different tests.
+3. **Where colour cannot carry a distinction, assert the compensating signal IN CODE.** `current` and
+   `done` sit at ~1.05:1 — the differentiator is WIDTH. A comment saying so rots silently. The guard
+   now fails if the widths are equalised, and says why.
+4. **"Perf finding" is sometimes "a prior correctness fix".** See REFUTED #6. Read the comment above
+   a serial loop before parallelising it; in this repo it often records the bug that made it serial.
+5. **A number in a commit message is a claim, and reviewers check it.** I wrote "25 usages across six
+   files"; a reviewer recounted 48 and was right. I wrote "Google Play prepaid and deferred"; prepaid
+   is a distinct RevenueCat concept that grants access IMMEDIATELY. Both corrected in follow-ups.
+
+### Rotation guide for next run
+- **DEEP AUDIT ran this run (2026-07-30)** → next due ~2026-07-31, roughly 4 runs out.
+- **`QUALITY_SCORECARD.as_of` is still `2026-07-27`, now six runs stale and demonstrably behind the
+  tree.** Diff every named gap against HEAD before believing it (see REFUTED #2, #3).
+- **Highest-value unbuilt, named and file-disjoint:**
+  (a) `lib/agents` coverage — the maker/checker core: `room-diagnostician` 0.93%, `scene-assembler`
+      1.53%, `fit-scorer`'s `scoreProducts` path 6.27%, `validation-agent` 13.06%. The proven way in
+      is the cassette pattern (`lib/ai/cassette-provider.ts` +
+      `__tests__/integration/render-pipeline-cassette.test.ts`), which mocks only the Gemini boundary
+      and drives the real chain.
+  (b) F4.1's email ROUND-TRIP (Mailpit capture of signup/reset, follow the link) — the one part of
+      F4/F4.1 that needs NO `.github/` edit and no live key.
+  (c) The remaining 82 off-system palette utilities. Biggest clusters: `app/gallery/page.tsx` (20
+      chromatic + 16 neutral), `app/dashboard/page.tsx` (16), `app/page.tsx` (12 + 4). The ratchet now
+      stops growth; lowering it is next-run work.
+  (d) The `$29` Apartment tier is absent from the mobile paywall while the business case credits it
+      with 60% of conversions. The paywall renders RevenueCat offerings dynamically, so the missing
+      half is an OWNER step (add the product to the RC offering). What IS loop-buildable: a
+      non-subscription package currently renders with `pkg.identifier` as its label and inherits the
+      auto-renew disclosure — wrong for a one-time purchase (Apple 3.1.2). Worth building BEFORE the
+      owner adds the product, not after.
+- **DO-NOT-RE-FLAG (carry all prior lists + the 8 items above).**
+
+---
+
 ## Run 2026-07-29 (Run 125) — scout-driven (no DEEP AUDIT, due ~127). 4 file-disjoint changes, all 4 shipped, 6 scout headlines refuted on verification. 10 reviewer verdicts across 2 cycles: 7 APPROVE, 3 REQUEST_CHANGES — every one real, and two of them found defects in code the gate had already passed GREEN.
 
 ### State on entry

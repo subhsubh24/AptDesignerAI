@@ -410,14 +410,34 @@ describe("assessment palette — computed contrast", () => {
       // version of the one-hue conversion gave `done` an `accent-warm/40` wash,
       // which measures 1.44:1 against the not-reached mark in BOTH modes, and
       // nothing in the suite looked at topbar.tsx to notice.
+      // COMPOSITING BASE, stated precisely because a reviewer checked it: the
+      // topbar paints `.glass` (globals.css:378 — rgba(255,255,255,0.75) light,
+      // rgba(20,18,17,0.75) dark over blurred content), NOT the flat
+      // `--background` token. In dark mode the two are numerically identical; in
+      // light mode measuring against `--background` differs from the real glass
+      // surface by <0.05 in the resulting ratio, which changes no pass/fail
+      // outcome here. It is moot for the values that actually ship, because all
+      // three STEP_MARK entries are OPAQUE — there is no alpha to composite, so
+      // whatever is underneath is painted over. The base only matters if someone
+      // reintroduces a translucent mark, and this assertion refuses that outright
+      // so the approximation can never become load-bearing.
+      for (const [name, classes] of Object.entries(STEP_MARK)) {
+        const spec = bgSpec(classes);
+        expect(spec, `STEP_MARK.${name} paints no background`).not.toBeNull();
+        expect(
+          spec!.alpha,
+          `STEP_MARK.${name} = "${classes}" is TRANSLUCENT. These marks composite over ` +
+            `the topbar's .glass surface, which this guard approximates with --background; ` +
+            `a translucent mark makes that approximation load-bearing, and an ` +
+            `accent-warm/40 wash is exactly how this ladder measured 1.44:1 before. ` +
+            `Use an opaque token.`,
+        ).toBe(1);
+      }
+
       const bgOf = (classes: string): RGB => {
         const spec = bgSpec(classes);
         if (!spec) throw new Error(`no bg-* class in "${classes}"`);
-        const rgb = parseHex(token(spec.name, mode));
-        // The marks sit on the page background, not a card.
-        return spec.alpha === 1
-          ? rgb
-          : composite(rgb, spec.alpha, parseHex(token("background", mode)));
+        return parseHex(token(spec.name, mode));
       };
 
       const done = bgOf(STEP_MARK.done);
@@ -439,15 +459,33 @@ describe("assessment palette — computed contrast", () => {
       expect(contrastRatio(current, upcoming)).toBeGreaterThanOrEqual(AA_NON_TEXT);
 
       // `current` vs `done` is the pair colour CANNOT carry — they sit within
-      // ~1.1:1 of each other by design. State the compensating signal as a hard
-      // requirement rather than a comment: the current mark must differ in SIZE.
-      // If someone later equalises the widths, this fails and points at why.
+      // ~1.1:1 of each other by design. So the compensating signal is SIZE, and
+      // it is asserted numerically against the BASE width read out of the
+      // consumer, not merely as "some w-* class is present".
+      //
+      // That distinction is the whole point. A bare /\bw-\d/ check passes on
+      // `current: "bg-accent-warm w-4"` — the same width the other two marks
+      // inherit — which would collapse this pair to NO differentiator at all
+      // (~1.02:1 in colour AND identical width) while the guard stayed green.
+      const topbar = fs.readFileSync(path.join(ROOT, "components/layout/topbar.tsx"), "utf8");
+      const baseWidth = /"h-1\.5 (w-\d+) rounded-full/.exec(topbar)?.[1];
+      expect(baseWidth, "could not read the step mark's base width from topbar.tsx").toBeDefined();
+
+      const widthOf = (classes: string): string =>
+        classes.split(/\s+/).find((c) => /^w-\d+$/.test(c)) ?? baseWidth!;
+
       expect(
-        STEP_MARK.current,
-        "current and done are near-identical in luminance, so the current mark " +
-          "must be distinguished by width (w-6) — colour cannot do it",
-      ).toMatch(/\bw-\d/);
-      expect(STEP_MARK.done).not.toMatch(/\bw-\d/);
+        widthOf(STEP_MARK.current),
+        `current (${STEP_MARK.current}) and done (${STEP_MARK.done}) are ` +
+          `near-identical in luminance, so the current mark must differ in WIDTH — ` +
+          `but it resolves to the same ${baseWidth} the other marks inherit, leaving ` +
+          `the pair with no differentiator at all`,
+      ).not.toBe(widthOf(STEP_MARK.done));
+
+      // And the override must be WIDER, not narrower: the active step is the one
+      // that should draw the eye.
+      const num = (w: string) => Number(w.slice("w-".length));
+      expect(num(widthOf(STEP_MARK.current))).toBeGreaterThan(num(widthOf(STEP_MARK.done)));
     });
   }
 

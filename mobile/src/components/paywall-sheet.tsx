@@ -10,7 +10,13 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
-import { classifyPurchaseError, classifyPurchaseResult, hasActiveEntitlement } from '@/lib/purchase-outcome';
+import {
+  classifyPurchaseError,
+  hasActiveEntitlement,
+  purchaseErrorAction,
+  purchaseResultAction,
+  type PurchaseAction,
+} from '@/lib/purchase-outcome';
 import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
@@ -179,6 +185,27 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const selectedOption = options[selectedIndex] ?? null;
   const trialAvailable = selectedOption?.hasFreeTrial ?? false;
 
+  // The ONE place an unlock can happen. Every purchase outcome — resolved or
+  // thrown — is turned into a PurchaseAction by lib/purchase-outcome and then
+  // performed here, so there is no second path to onPurchaseSuccess to keep in
+  // sync and no branch for a new outcome to fall through.
+  const applyPurchaseAction = useCallback(
+    (action: PurchaseAction) => {
+      switch (action.kind) {
+        case 'unlock':
+          onPurchaseSuccess?.();
+          onDismiss();
+          return;
+        case 'alert':
+          Alert.alert(action.title, action.body);
+          return;
+        case 'silent':
+          return;
+      }
+    },
+    [onDismiss, onPurchaseSuccess],
+  );
+
   const handlePurchase = useCallback(async () => {
     const pkg = selectedOption?.pkg;
     if (!RC_KEY) {
@@ -199,51 +226,19 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     }
     setPurchasing(true);
     try {
+      // A resolved purchase is NOT an entitlement, and a thrown error is not
+      // necessarily a failure — lib/purchase-outcome decides which, and carries
+      // the copy, so the ONLY unlock path in this component runs through
+      // `action.kind === 'unlock'`, which that module can only return for a
+      // genuinely active entitlement.
       const result = await Purchases.purchasePackage(pkg);
-      // A resolved purchase is NOT an entitlement — see lib/purchase-outcome.
-      // Google Play prepaid/deferred transactions and iOS Ask to Buy resolve
-      // here with the entitlement still INACTIVE, and unlocking on that would
-      // hand out Pro against a payment that has not happened. Ask the payload
-      // the same question handleRestore below already asks.
-      if (classifyPurchaseResult(result, ENTITLEMENT_ID) === 'unlocked') {
-        onPurchaseSuccess?.();
-        onDismiss();
-      } else {
-        Alert.alert(
-          'Payment processing',
-          "Your purchase went through, but the store hasn't confirmed payment yet. Pro unlocks automatically as soon as it does — no need to buy again.",
-        );
-      }
+      applyPurchaseAction(purchaseResultAction(result, ENTITLEMENT_ID));
     } catch (err: unknown) {
-      switch (classifyPurchaseError(err)) {
-        case 'cancelled':
-          // The user dismissed the OS dialog. They meant to; say nothing.
-          break;
-        case 'pending':
-          // The charge is legitimately in flight. "Purchase failed — try again"
-          // here invites a SECOND purchase for the same subscription.
-          Alert.alert(
-            'Payment pending',
-            'Your payment is still being processed by the store. Pro unlocks as soon as it clears — there is no need to buy again.',
-          );
-          break;
-        case 'already-owned':
-          // Reached by tapping Subscribe again after a pending purchase — the CTA
-          // re-enables, so this is the second tap. Point at Restore; retrying
-          // cannot help, and the generic "please try again" copy would be exactly
-          // the advice the pending branch above exists to avoid.
-          Alert.alert(
-            'Already subscribed',
-            'The store says this subscription is already active on your account. Tap Restore Purchases below to unlock Pro.',
-          );
-          break;
-        default:
-          Alert.alert('Purchase failed', 'Please try again or restore your purchases below.');
-      }
+      applyPurchaseAction(purchaseErrorAction(err));
     } finally {
       setPurchasing(false);
     }
-  }, [onDismiss, onPurchaseSuccess, selectedOption]);
+  }, [applyPurchaseAction, onDismiss, selectedOption]);
 
   const handleRestore = useCallback(async () => {
     if (!RC_KEY) return;

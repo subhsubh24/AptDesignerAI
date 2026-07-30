@@ -686,6 +686,55 @@ Verify:
 2. Server: Pro subscriber with ≥3 saves → POST `/api/mobile/saved-designs` succeeds (HTTP 201)
 3. Server: Free user with ≥3 saves → POST returns HTTP 403 `{ subscription_required: true }`
 
+### RevenueCat OFFERING contents — the $29 Apartment tier is absent from the mobile paywall (added 2026-07-30, Run 126 DEEP AUDIT — owner step, blocks mobile revenue parity)
+
+**status: open**
+
+The RevenueCat KEYS entry above covers credentials. This is about what is IN the offering.
+
+`mobile/src/components/paywall-sheet.tsx` renders `offerings.current.availablePackages`
+dynamically, so whatever the dashboard offering contains is what a mobile buyer sees. Today that
+means the paywall can only ever show the packages you configure — and the web product has THREE
+tiers while mobile shows two:
+
+| tier | price | web | mobile |
+|------|-------|-----|--------|
+| Apartment | $29 one-time | yes (`/pricing`, `/billing/upgrade`) | **NO — no store product exists** |
+| Pro Monthly | $49 / month | yes | yes |
+| Pro Annual | $399 / year | gated off until migration 021 (see `apply-migration-021`) | yes (no gate needed — see below) |
+
+Why this matters commercially: `docs/BUSINESS_CASE.md` credits the $29 Apartment tier with ~60% of
+conversions. A mobile buyer currently cannot reach the entry-price path at all, so every mobile
+visitor is asked for $49/month or nothing.
+
+**What the OWNER must do:**
+1. App Store Connect: create a NON-CONSUMABLE in-app purchase, $29.00 USD, matching the web
+   Apartment tier. Google Play: create the equivalent one-time in-app product.
+2. RevenueCat dashboard → Products: add both store products.
+3. RevenueCat dashboard → Entitlements: attach them to an entitlement the app reads. NOTE the app
+   currently reads exactly ONE entitlement id, `'pro'` (`mobile/src/hooks/use-entitlements.ts`),
+   so decide deliberately: either attach Apartment to `pro` (a $29 one-time buys full Pro — probably
+   not what you want) or introduce a second entitlement, which is a CODE change, not config.
+   **Tell the loop which, and it will build the second-entitlement path.**
+4. RevenueCat dashboard → Offerings → current: add the Apartment package alongside the monthly/annual ones.
+
+**Verify:** open the paywall on a device with `EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY` set — three options
+render, the Apartment one shows $29, and its disclosure does NOT say "renewing automatically".
+
+**KNOWN CODE GAP the loop should close BEFORE you add the product** (recorded so it is not discovered
+by a store reviewer): `packagesToOptions` labels any package that is neither ANNUAL nor MONTHLY with
+its raw `pkg.identifier` (an internal id like `$rc_lifetime`), and the legal disclosure below the CTA
+says "You'll be charged …, renewing automatically until you cancel" for every package. Both are wrong
+for a one-time purchase, and the second is a false subscription-terms statement at the point of
+purchase (Apple App Store Review 3.1.2). The web side already models this correctly via
+`isRecurringTier` in `lib/billing/stripe.ts`; mobile has no equivalent yet.
+
+**Why mobile needs no `ANNUAL_BILLING_ENABLED` equivalent** (checked this run, recording it so it is
+not "fixed" by mistake): the web annual gate exists solely because `stripe_customers.tier` has a
+CHECK constraint that migration 021 extends. Mobile entitlement is read from the RevenueCat REST API
+(`lib/entitlements/server.ts`) and never writes `stripe_customers`, so that constraint is unreachable
+from mobile. The asymmetry is correct by construction.
+
 ### Mobile env vars — Supabase + API URL (added 2026-06-24, updated PR #32 — set before EAS build or local dev on device)
 PR #28 (B2 mobile auth) and PR #32 (B2 photo upload + AI analysis) require these env vars.
 Create `mobile/.env.local` (gitignored) with:

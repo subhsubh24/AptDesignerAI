@@ -130,3 +130,82 @@ export function classifyPurchaseError(
   if (e.userCancelled === true) return "cancelled";
   return "failed";
 }
+
+/**
+ * What the paywall should DO — the copy included.
+ *
+ * This exists because the alternative was a test that GREPPED the component's
+ * source for `case 'pending':` and for the gating expression, and a reviewer
+ * showed that grep is defeated by a one-line refactor: hoist
+ * `classifyPurchaseResult(...)` into an unused variable, then call
+ * `onPurchaseSuccess()` unconditionally, and every assertion still passed while
+ * the original unlock-on-resolve bug was fully restored. A structural test over
+ * source text cannot see whether a call is INSIDE a branch.
+ *
+ * So the decision moves here, where it can be tested behaviourally: these
+ * functions return the action, the component's only remaining job is to perform
+ * it, and "does an unlock ever happen without an active entitlement?" becomes a
+ * question about a return value rather than about text in a file.
+ */
+export type PurchaseAction =
+  /** Fire onPurchaseSuccess + dismiss. Reachable ONLY with an active entitlement. */
+  | { readonly kind: "unlock" }
+  /** Tell the user something, and leave the sheet open. */
+  | { readonly kind: "alert"; readonly title: string; readonly body: string }
+  /** Say nothing — the user cancelled on purpose. */
+  | { readonly kind: "silent" };
+
+const PENDING_ALERT = {
+  kind: "alert",
+  title: "Payment processing",
+  body:
+    "Your purchase went through, but the store hasn't confirmed payment yet. " +
+    "Pro unlocks automatically as soon as it does — there is no need to buy again.",
+} as const;
+
+/** What to do with a RESOLVED `purchasePackage`. */
+export function purchaseResultAction(
+  result: { readonly customerInfo?: EntitlementProbeInfo | null } | null | undefined,
+  entitlementId: string,
+): PurchaseAction {
+  return classifyPurchaseResult(result, entitlementId) === "unlocked"
+    ? { kind: "unlock" }
+    : PENDING_ALERT;
+}
+
+/** What to do with a THROWN purchase error. */
+export function purchaseErrorAction(err: unknown): PurchaseAction {
+  switch (classifyPurchaseError(err)) {
+    case "cancelled":
+      return { kind: "silent" };
+    case "pending":
+      return {
+        kind: "alert",
+        title: "Payment pending",
+        body:
+          "Your payment is still being processed by the store. Pro unlocks as soon " +
+          "as it clears — there is no need to buy again.",
+      };
+    case "already-owned":
+      // Deliberately HEDGED, and a reviewer was right to insist on it. The
+      // primary way a user reaches this code is by tapping Subscribe again while
+      // the first purchase is still PENDING — in which case Restore will find no
+      // active entitlement and answer "No active subscription was found",
+      // contradicting us. Promising "Restore will unlock Pro" is only true once
+      // payment has cleared, so both branches are named instead.
+      return {
+        kind: "alert",
+        title: "Already subscribed",
+        body:
+          "The store says this subscription is already on your account. If the payment " +
+          "has cleared, Restore Purchases below will unlock Pro; if it is still " +
+          "processing, Pro unlocks on its own shortly. Either way, do not buy again.",
+      };
+    default:
+      return {
+        kind: "alert",
+        title: "Purchase failed",
+        body: "Please try again or restore your purchases below.",
+      };
+  }
+}
