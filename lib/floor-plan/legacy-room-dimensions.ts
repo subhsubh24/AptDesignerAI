@@ -15,11 +15,23 @@
  * the size of a different room — wrong furniture scale in its mockup, wrong
  * sizing in its product search, and a confidently wrong number on screen.
  *
- * The exact per-room data lives in `extracted_floor_plan.rooms` and every
- * reader prefers it; this map is only the fallback. So the fix is not a new
- * key shape (that would break all four readers) — it is for the fallback to
- * stay SILENT where it cannot be attributed. Omitting a type costs a hint;
- * keeping it costs a wrong answer presented as a fact.
+ * So the fix is not a new key shape (that would break every reader) — it is for
+ * the map to stay SILENT where it cannot attribute an answer. Omitting a type
+ * costs a hint; keeping it costs a wrong answer presented as a fact.
+ *
+ * OMISSION IS ONLY SAFE IF ABSENCE MEANS SILENCE, and it did not. Three of the
+ * readers above ran `dims?.[roomType] || dims?.living_room`, so removing the
+ * `bedroom` entry sent BOTH bedrooms to the LIVING ROOM's size — trading a
+ * same-room-type error for a cross-room-type one, and making the two-bedroom
+ * case worse rather than better. A reviewer caught this. Those fallbacks are
+ * gone in the same change; without that, this module is a regression.
+ *
+ * KNOWN, DELIBERATELY OUT OF SCOPE: `getRoomFromFloorPlan`
+ * (`lib/agents/format-floor-plan.ts`) resolves the "exact" per-room data with
+ * `rooms.find(r => r.room_type === roomType)` — first match by type — so it has
+ * the SAME ambiguity for two bedrooms. Fixing it needs a room identity its
+ * callers do not currently thread through, which is its own change. This module
+ * therefore does NOT claim the exact path is already correct.
  */
 
 export interface LegacyDimensionsSource {

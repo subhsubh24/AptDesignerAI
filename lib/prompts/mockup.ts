@@ -50,7 +50,13 @@ export function getMockupPrompt(
     const fp = buildingResearch.floor_plan as Record<string, unknown> | undefined;
     if (fp) {
       const dims = fp.room_dimensions as Record<string, string> | undefined;
-      const roomDim = dims?.[roomType] || dims?.living_room;
+      // NEVER fall back to another room's size. `dims` is keyed by room TYPE,
+      // so `|| dims.living_room` answered a bedroom's question with the living
+      // room's dimensions — a cross-room-type misattribution that is worse than
+      // saying nothing, and it fires precisely when this room's own entry is
+      // absent (including when lib/floor-plan/legacy-room-dimensions.ts omits an
+      // ambiguous type on purpose). No hint beats a confidently wrong one.
+      const roomDim = dims?.[roomType];
       if (roomDim) lines.push(`Room dimensions: ~${roomDim}`);
     }
 
