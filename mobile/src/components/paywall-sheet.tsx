@@ -10,6 +10,7 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
+import { classifyPurchaseError, classifyPurchaseResult, hasActiveEntitlement } from '@/lib/purchase-outcome';
 import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
@@ -198,15 +199,36 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     }
     setPurchasing(true);
     try {
-      await Purchases.purchasePackage(pkg);
-      onPurchaseSuccess?.();
-      onDismiss();
+      const result = await Purchases.purchasePackage(pkg);
+      // A resolved purchase is NOT an entitlement — see lib/purchase-outcome.
+      // Google Play prepaid/deferred transactions and iOS Ask to Buy resolve
+      // here with the entitlement still INACTIVE, and unlocking on that would
+      // hand out Pro against a payment that has not happened. Ask the payload
+      // the same question handleRestore below already asks.
+      if (classifyPurchaseResult(result, ENTITLEMENT_ID) === 'unlocked') {
+        onPurchaseSuccess?.();
+        onDismiss();
+      } else {
+        Alert.alert(
+          'Payment processing',
+          "Your purchase went through, but the store hasn't confirmed payment yet. Pro unlocks automatically as soon as it does — no need to buy again.",
+        );
+      }
     } catch (err: unknown) {
-      // RC throws { userCancelled: true } when the user taps Cancel in the OS dialog
-      const userCancelled =
-        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
-      if (!userCancelled) {
-        Alert.alert('Purchase failed', 'Please try again or restore your purchases below.');
+      switch (classifyPurchaseError(err)) {
+        case 'cancelled':
+          // The user dismissed the OS dialog. They meant to; say nothing.
+          break;
+        case 'pending':
+          // The charge is legitimately in flight. "Purchase failed — try again"
+          // here invites a SECOND purchase for the same subscription.
+          Alert.alert(
+            'Payment pending',
+            "Your payment is still being processed by the store. Pro unlocks as soon as it clears — please don't purchase again.",
+          );
+          break;
+        default:
+          Alert.alert('Purchase failed', 'Please try again or restore your purchases below.');
       }
     } finally {
       setPurchasing(false);
@@ -218,7 +240,10 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     setPurchasing(true);
     try {
       const info = await Purchases.restorePurchases();
-      const restoredPro = info.entitlements.active[ENTITLEMENT_ID]?.isActive === true;
+      // Same guarded read as the purchase path, so the two cannot drift and
+      // neither throws on a payload missing `entitlements` (the RC types promise
+      // it; the network response is not runtime-checked).
+      const restoredPro = hasActiveEntitlement(info, ENTITLEMENT_ID);
       if (restoredPro) {
         onPurchaseSuccess?.();
         onDismiss();
@@ -229,10 +254,10 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         Alert.alert('Restore purchases', 'No active subscription was found for this account.');
       }
     } catch (err: unknown) {
-      // RC throws { userCancelled: true } when the user backs out of the OS dialog.
-      const userCancelled =
-        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
-      if (!userCancelled) {
+      // Cancellation is read from the error CODE, not the deprecated (and
+      // nullable) `userCancelled` flag — a null there would surface a "Restore
+      // failed" alert over a dialog the user closed deliberately.
+      if (classifyPurchaseError(err) !== 'cancelled') {
         // A genuine failure (network / store error) — don't claim "no purchases
         // found", which would stop the user retrying a transient error.
         Alert.alert(
