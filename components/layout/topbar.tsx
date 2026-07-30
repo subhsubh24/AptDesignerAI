@@ -151,8 +151,14 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
                   key={i}
                   className={cn(
                     "h-1.5 w-4 rounded-full transition-all duration-300",
+                    // One-hue progress ladder: completed steps carry a lighter
+                    // wash of the SAME accent the current (wider) step paints
+                    // solid, and steps not yet reached stay on the border token.
+                    // Emerald for "done" made this row read as two unrelated
+                    // colour systems — the only three-mark ladder in the product
+                    // that was not already a single hue.
                     i < activeStepIndex
-                      ? "bg-emerald-500"
+                      ? "bg-accent-warm/40"
                       : i === activeStepIndex
                       ? "bg-accent-warm w-6"
                       : "bg-border"

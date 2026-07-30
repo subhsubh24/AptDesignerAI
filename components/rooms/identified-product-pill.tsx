@@ -116,7 +116,12 @@ export function IdentifiedProductPill({
 
   return (
     <>
-      <Card className="p-3 flex flex-wrap items-center gap-2 border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20">
+      {/* "We think this might be a X — is that right?" is a request for ACTION,
+          so it takes the house accent rail + tint, the same treatment the
+          Replace-or-remove half of the assessment pair uses
+          (lib/utils/assessment-colors.ts). The raw amber it replaced also needed
+          hand-paired light/dark weights; the token carries both. */}
+      <Card className="p-3 flex flex-wrap items-center gap-2 border-l-4 border-l-accent-warm bg-accent-warm/5">
         <div className="flex-1 min-w-[220px] text-sm">
           <span className="text-muted-foreground">We think this might be a </span>
           <span className="font-medium">{label}</span>

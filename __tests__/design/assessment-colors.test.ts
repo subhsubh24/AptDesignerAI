@@ -21,15 +21,20 @@ import {
  * 2. CONTRAST, COMPUTED — ratios are calculated here from the token values
  *    parsed out of app/globals.css, so a token edit re-runs the maths instead
  *    of leaving a stale number in a comment.
- * 3. A CONSUMER RATCHET — the four routes this palette serves are asserted to
- *    contain no off-system Tailwind palette family at all.
+ * 3. A CONSUMER RATCHET — every surface this palette serves is asserted to
+ *    contain no off-system Tailwind palette family at all, and to actually
+ *    import the palette.
  *
- * SCOPE, stated plainly: guard 3 covers the FOUR consumer files listed in
- * CONSUMERS. It is NOT a repo-wide off-system-colour ratchet and does not claim
- * to be one — other surfaces still carry raw palette utilities. What it does
- * claim is that these four cannot silently regress, which is the failure mode
- * that produced this palette in the first place: the same `what_should_go` list
- * was amber on /focus and rose on /saved because nothing was watching.
+ * SCOPE, stated plainly: guard 3 covers exactly the files listed in CONSUMERS —
+ * a ZERO bar, on the surfaces that render this palette. It is deliberately
+ * stricter and narrower than the repo-wide ceiling in
+ * `__tests__/design/off-system-palette-ratchet.test.ts`, which caps total
+ * off-system usage everywhere but cannot demand zero (many surfaces still carry
+ * raw palette utilities). The two work together: the ceiling stops new drift
+ * anywhere, this one holds a hard zero where the doctrine has actually landed.
+ * That drift is the failure mode which produced this palette in the first place —
+ * the same `what_should_go` list was amber on /focus and rose on /saved because
+ * nothing was watching.
  */
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -45,11 +50,25 @@ const CONSUMERS = [
   "app/projects/[projectId]/rooms/[roomId]/bundles/page.tsx",
   "app/saved/[id]/page.tsx",
   "app/shared/[token]/SharedDesignView.tsx",
+  // /diagnosis is where the user FIRST meets the Keep / Replace pair, and it
+  // rendered a fourth palette for it (emerald cards + amber cards) until this
+  // ratchet was extended to cover it. The scene-coverage card renders inside
+  // that same card stack and carried the matching emerald/amber pair.
+  "app/projects/[projectId]/rooms/[roomId]/diagnosis/page.tsx",
+  "components/rooms/scene-coverage-card.tsx",
 ];
 
-/** Tailwind palette families that are NOT part of the warm-editorial system. */
+/**
+ * Tailwind palette families that are NOT part of the warm-editorial system.
+ *
+ * The utility prefix list includes the DIRECTIONAL border variants
+ * (`border-l-…`, `border-t-…`) deliberately: without them this regex did not
+ * match `border-l-amber-400`, which is exactly the class the /diagnosis issue
+ * rails and the identified-product pill used. A guard that cannot see the
+ * class the violation is written in reports clean while the violation ships.
+ */
 const OFF_SYSTEM_FAMILY =
-  /\b(?:bg|text|border|ring|from|to|via)-(purple|violet|indigo|fuchsia|emerald|blue|sky|cyan|teal|green|pink|rose|amber|yellow|lime|orange|slate|gray|zinc|neutral|stone)-\d{2,3}\b/;
+  /\b(?:bg|text|border|border-[lrtbxy]|ring|from|to|via|fill|stroke|divide|outline|decoration)-(purple|violet|indigo|fuchsia|emerald|blue|sky|cyan|teal|green|pink|rose|amber|yellow|lime|orange|slate|gray|zinc|neutral|stone)-\d{2,3}\b/;
 
 // ── token parsing ────────────────────────────────────────────────────────────
 // globals.css declares light tokens in `:root` and dark overrides under `.dark`.

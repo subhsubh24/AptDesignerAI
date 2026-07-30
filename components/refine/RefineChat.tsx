@@ -233,7 +233,9 @@ export function RefineChat({ roomId, onAnalysisUpdate, onVisionShouldRegen }: Re
             <div
               role="status"
               aria-live="polite"
-              className="px-4 py-2 border-t text-xs bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200"
+              // Same accent rung as the `medium` warning card below — one hue for
+              // "worth noticing, not an error", with dark-mode parity from the token.
+              className="px-4 py-2 border-t text-xs bg-accent-warm/10 border-accent-warm/30 text-accent-warm-strong"
             >
               {warning}
             </div>
@@ -297,9 +299,15 @@ function ChatMessage({ message }: { message: RefineMessage }) {
 }
 
 function DesignerWarningCard({ warning }: { warning: DesignerWarning }) {
+  // Three rungs, all design-system tokens: destructive → house accent → muted.
+  // `high` and `low` were already on-system; `medium` was the one rung hand-paired
+  // out of the raw amber palette, so the ladder changed colour SYSTEM halfway up
+  // and needed its own light/dark weights kept in sync by hand. accent-warm gives
+  // dark-mode parity for free and puts the middle rung on the same hue as every
+  // other middle rung in the product (lib/utils/assessment-colors.ts).
   const styles = {
     high: "bg-destructive/10 border-destructive/30 text-destructive dark:bg-destructive/20 dark:border-destructive/40",
-    medium: "bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+    medium: "bg-accent-warm/10 border-accent-warm/30 text-accent-warm-strong",
     low: "bg-muted border-border text-muted-foreground",
   } as const;
 

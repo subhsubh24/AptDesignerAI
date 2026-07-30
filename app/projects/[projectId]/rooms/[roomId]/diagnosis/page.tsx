@@ -14,6 +14,7 @@ import { PageTransition } from "@/components/ui/motion";
 import type { DiagnosisData, DesignDirection, ActionItem, RoomSceneGraph } from "@/lib/types/database";
 import { IdentifiedProductPill } from "@/components/rooms/identified-product-pill";
 import { SceneCoverageCard } from "@/components/rooms/scene-coverage-card";
+import { ASSESSMENT_PANEL } from "@/lib/utils/assessment-colors";
 
 interface DiagnosisStep {
   step: string;
@@ -21,7 +22,23 @@ interface DiagnosisStep {
   detail?: string;
 }
 
-const CONFETTI_COLORS = ["#b4501e", "#d4733e", "#059669", "#0d9488", "#d97706"];
+/**
+ * Confetti burst for the "diagnosis complete" moment.
+ *
+ * Five warm hues, all of them neighbours of the house accent (#b4501e) and its
+ * gradient end (#d4733e) — the two values `--gradient-warm-start` /
+ * `--gradient-warm-end` already define in app/globals.css. The previous set
+ * mixed emerald (#059669) and teal (#0d9488) into the burst, which put two
+ * unrelated hue families on the warm-editorial celebration, and did it in raw
+ * hex rather than a token.
+ *
+ * These stay literal hex rather than reading the tokens: a canvas-style particle
+ * burst needs opaque paint values, the burst is decorative (aria-hidden), and
+ * the intermediate shades between accent and gradient-end do not exist as
+ * tokens. They are pinned in __tests__/design/off-system-palette-ratchet.test.ts
+ * so a cool hue cannot creep back in.
+ */
+const CONFETTI_COLORS = ["#b4501e", "#c25c26", "#d4733e", "#e08c52", "#a3441a"];
 
 function ConfettiParticle({ delay, x, y, colorIndex }: { delay: number; x: number; y: number; colorIndex: number }) {
   return (
@@ -236,7 +253,11 @@ export default function DiagnosisPage() {
                     {step.status === "running" ? (
                       <Loader2 className="h-4 w-4 text-accent-warm animate-spin shrink-0" aria-hidden="true" />
                     ) : step.status === "done" ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" aria-hidden="true" />
+                      // A finished step RECEDES so the running one (accent-warm,
+                      // spinning) is the only thing pulling the eye down the
+                      // list. Which state a row is in stays legible without
+                      // colour — CheckCircle2 vs Loader2 vs AlertCircle.
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                     ) : (
                       <AlertCircle className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
                     )}
@@ -337,12 +358,14 @@ export default function DiagnosisPage() {
 
             {/* What's Working / Not Working */}
             <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-l-4 border-l-emerald-500 animate-fade-in-up">
+              {/* The SAME pair the user meets again on /focus, /saved, /shared
+                  and /bundles — so it reads out of the shared palette rather
+                  than a fourth local one. "Keep" recedes (it needs nothing);
+                  the list to act on takes the house accent. */}
+              <Card className={cn("border-l-4 animate-fade-in-up", ASSESSMENT_PANEL.keep.rail)}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2.5 text-base">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    </div>
+                    <CheckCircle2 className={cn("h-4 w-4 shrink-0", ASSESSMENT_PANEL.keep.heading)} />
                     What&apos;s Working
                   </CardTitle>
                 </CardHeader>
@@ -350,7 +373,10 @@ export default function DiagnosisPage() {
                   <ul className="space-y-2.5">
                     {d.what_is_working.map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
+                        {/* `bg-muted-foreground`, not the panel's `chip` tint: a
+                            1.5px dot needs the ink weight of the marker, not the
+                            surface weight of the chip behind an icon. */}
+                        <span className="h-1.5 w-1.5 rounded-full mt-2 shrink-0 bg-muted-foreground" />
                         {item}
                       </li>
                     ))}
@@ -358,12 +384,10 @@ export default function DiagnosisPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-l-4 border-l-amber-500 animate-fade-in-up">
+              <Card className={cn("border-l-4 animate-fade-in-up", ASSESSMENT_PANEL.replace.rail)}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2.5 text-base">
-                    <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
-                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    </div>
+                    <AlertCircle className={cn("h-4 w-4 shrink-0", ASSESSMENT_PANEL.replace.heading)} />
                     What&apos;s Not Working
                   </CardTitle>
                 </CardHeader>
@@ -371,7 +395,7 @@ export default function DiagnosisPage() {
                   <ul className="space-y-2.5">
                     {d.what_is_not_working.map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
+                        <span className="h-1.5 w-1.5 rounded-full mt-2 shrink-0 bg-accent-warm" />
                         {item}
                       </li>
                     ))}
@@ -435,25 +459,40 @@ export default function DiagnosisPage() {
             {/* Issues Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 animate-stagger-children">
               {([
-                { title: "Color Issues", items: d.color_issues, severity: "amber" as const },
-                { title: "Texture & Material", items: d.texture_material_issues, severity: "amber" as const },
-                { title: "Scale & Proportion", items: d.scale_proportion_issues, severity: "rose" as const },
-                { title: "Layout", items: d.layout_issues, severity: "rose" as const },
-                { title: "Lighting", items: d.lighting_issues, severity: "amber" as const },
-                { title: "Clutter & Editing", items: d.clutter_editing_issues, severity: "amber" as const },
+                { title: "Color Issues", items: d.color_issues },
+                { title: "Texture & Material", items: d.texture_material_issues },
+                { title: "Scale & Proportion", items: d.scale_proportion_issues },
+                { title: "Layout", items: d.layout_issues },
+                { title: "Lighting", items: d.lighting_issues },
+                { title: "Clutter & Editing", items: d.clutter_editing_issues },
               ]).map((section) => {
-                // Static class map so Tailwind's JIT actually emits these utilities.
-                // Do not use `border-l-${severity}-400` template strings — the JIT
-                // scanner cannot see dynamic class names and will purge them.
-                const BORDER_CLASS: Record<"amber" | "rose", { light: string; strong: string }> = {
-                  amber: { light: "border-l-amber-400", strong: "border-l-amber-500" },
-                  rose: { light: "border-l-rose-400", strong: "border-l-rose-500" },
-                };
+                // One-hue rail, three rungs by ISSUE COUNT — the same
+                // muted → accent tint → accent ladder as the priority pill in
+                // lib/utils/assessment-colors.ts. Clear sections recede; the
+                // section with the most to fix carries the heaviest rail.
+                //
+                // This replaced a rail that crossed TWO signals: a per-section
+                // `severity` of "amber" or "rose" times a light/strong weight by
+                // count, plus emerald for clear. The category half was not
+                // decodable — nothing on the page ever told a user that rose
+                // outranks amber, and the two read as near-neighbours anyway —
+                // and two independent dimensions cannot be encoded on one hue.
+                // Count is the half the user acts on, so count is what the rail
+                // now says; the Badge beside each title still names it in words.
+                //
+                // Static strings, not `border-l-${...}` template literals: the
+                // Tailwind JIT scanner cannot see a dynamic class name and would
+                // purge these utilities out of the build.
+                const RAIL_BY_DENSITY = {
+                  clear: "border-l-border",
+                  some: "border-l-accent-warm/40",
+                  many: "border-l-accent-warm",
+                } as const;
                 const borderColor = section.items.length === 0
-                  ? "border-l-emerald-400"
+                  ? RAIL_BY_DENSITY.clear
                   : section.items.length <= 2
-                  ? BORDER_CLASS[section.severity].light
-                  : BORDER_CLASS[section.severity].strong;
+                  ? RAIL_BY_DENSITY.some
+                  : RAIL_BY_DENSITY.many;
 
                 return (
                   <Card key={section.title} className={cn("border-l-4 animate-fade-in-up", borderColor)}>
@@ -479,7 +518,7 @@ export default function DiagnosisPage() {
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">No issues found</p>
+                        <p className="text-xs text-muted-foreground font-medium">No issues found</p>
                       )}
                     </CardContent>
                   </Card>
