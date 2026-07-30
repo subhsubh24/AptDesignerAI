@@ -199,6 +199,81 @@ export const STEP_MARK = {
   upcoming: "bg-border",
 } as const;
 
+/**
+ * The room-card STATUS badge on /dashboard — done / in progress / outstanding.
+ *
+ * What it replaced was the traffic light in its purest form: `bg-emerald-700`
+ * for done, `bg-primary` for in progress, `bg-amber-700` for outstanding. Three
+ * fills for three rungs of ONE ordinal state, two of them off-system, on the
+ * flagship surface where the user picks which room to design. The middle rung
+ * was already a token, which is what makes the other two obviously drift rather
+ * than design.
+ *
+ * The ladder runs by WHERE THE WORK IS, matching PRIORITY_BADGE's shape
+ * (solid ink → accent → muted fill):
+ *
+ *   in progress   solid ink       where the user already is; the strongest call
+ *   outstanding   house accent    queued, and the thing to act on next
+ *   done          muted fill      finished, so it recedes
+ *
+ * Colour is not the sole carrier — each badge prints its own word ("Done",
+ * "In Progress", "Outstanding") and `done` also carries a CheckCircle2.
+ *
+ * Every fill is OPAQUE, and that is required rather than tidy: these badges are
+ * absolutely positioned over the room PHOTO, so a tinted fill would composite
+ * against whatever pixels that photo happens to have there. An opaque fill makes
+ * the pair independent of the image underneath — the same reasoning
+ * PRIORITY_BADGE.medium records for a different nesting problem.
+ *
+ * Measured in `__tests__/design/assessment-colors.test.ts` against the real
+ * token values: these are 10px semibold labels, so the AA floor for NORMAL text
+ * (4.5:1) applies, not the large-text 3:1.
+ */
+export const ROOM_STATUS_BADGE = {
+  done: "bg-muted text-muted-foreground",
+  in_progress: "bg-primary text-primary-foreground",
+  outstanding: "bg-accent-warm text-background",
+} as const;
+
+/**
+ * `StepIndicator` on /dashboard — the analysis-progress list.
+ *
+ * Same three rungs as STEP_MARK, but as TEXT+icon rather than bare marks, so
+ * unlike STEP_MARK this one does not depend on colour alone: the icon switches
+ * between CheckCircle2, a spinner and an empty ring. `done` was
+ * `text-emerald-600 dark:text-emerald-400` sitting directly beside
+ * `text-accent-warm` (active) and `text-muted-foreground` (upcoming) — a third
+ * hue introduced for the one rung that needed it least.
+ *
+ *   done      full-strength ink   finished and legible at a glance
+ *   active    house accent        the rung in flight
+ *   upcoming  muted ink           not started
+ */
+export const WORKFLOW_STEP_TEXT = {
+  done: "text-foreground",
+  active: "text-accent-warm font-medium",
+  upcoming: "text-muted-foreground",
+} as const;
+
+/**
+ * A completed-step confirmation note ("Building researched — …", "Apartment
+ * analyzed · ready to design").
+ *
+ * Both surfaces are the same thing: a success acknowledgement the user reads
+ * once and moves past. Both rendered it as an emerald tint on emerald with an
+ * emerald border and hand-paired `dark:` weights — a fourth palette for a
+ * message whose meaning is already carried by a CheckCircle2 and the sentence
+ * itself.
+ *
+ * Like CONFIDENCE_BANNER.high, success is the EXPECTED case here, so it
+ * RECEDES: quiet muted surface, neutral ink, muted icon. Nothing is lost —
+ * a confirmation nobody has to act on does not need an accent.
+ */
+export const COMPLETION_NOTE = {
+  surface: "bg-muted/40 border-border text-foreground",
+  icon: "text-muted-foreground",
+} as const;
+
 export const CONFIDENCE_BANNER = {
   high: {
     surface: "bg-muted/40 border-border text-foreground",

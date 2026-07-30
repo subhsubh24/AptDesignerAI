@@ -67,12 +67,18 @@ const OFF_SYSTEM = new RegExp(
 /**
  * Current committed count OUTSIDE the categorical exemptions. Only ratchet DOWN.
  *
- * Established at 82 after this run converted the /diagnosis assessment pair and
- * issue rails, the scene-coverage verdict, the floor-plan confidence ladder, the
- * refine warning rungs, the identified-product pill and the topbar step ladder —
- * 25 usages across those six files, all of them ordinal or action ladders.
+ * Established at 82 after a prior run converted the /diagnosis assessment pair
+ * and issue rails, the scene-coverage verdict, the floor-plan confidence ladder,
+ * the refine warning rungs, the identified-product pill and the topbar step
+ * ladder — all of them ordinal or action ladders.
+ *
+ * Lowered to 66 when /dashboard joined the system: the room-card status badge
+ * (emerald / primary / amber for ONE ordinal state), the analysis StepIndicator's
+ * emerald `done` rung, and the two emerald completion notes — 16 usages, now
+ * ROOM_STATUS_BADGE, WORKFLOW_STEP_TEXT and COMPLETION_NOTE in
+ * lib/utils/assessment-colors.ts. app/dashboard/page.tsx is at zero.
  */
-const MAX_OFF_SYSTEM = 82;
+const MAX_OFF_SYSTEM = 66;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's
