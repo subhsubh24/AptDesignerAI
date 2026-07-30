@@ -8,11 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Camera, ArrowRight, CheckCircle2, X, Building2, ChevronRight, MapPin, FileImage, Home, Sofa, UtensilsCrossed, BedDouble, Bath, type LucideIcon } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { cn } from "@/lib/utils/cn";
-import {
-  COMPLETION_NOTE,
-  ROOM_STATUS_BADGE,
-  WORKFLOW_STEP_TEXT,
-} from "@/lib/utils/assessment-colors";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { PlaceAutocomplete, type PlaceResult } from "@/components/ui/place-autocomplete";
 import { FloorPlanUploadZone } from "@/components/projects/floor-plan-upload-zone";
@@ -835,8 +830,8 @@ export default function DashboardPage() {
                   const fp = br.floor_plan as Record<string, unknown> | undefined;
                   const hasFloorPlan = fp?.found === true;
                   return (
-                    <div className={cn("mt-3 flex items-center gap-2 text-xs rounded-xl px-3 py-2.5 border", COMPLETION_NOTE.surface)}>
-                      <CheckCircle2 className={cn("h-3.5 w-3.5 shrink-0", COMPLETION_NOTE.icon)} />
+                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         Building researched — {String(br.building_style || "style identified")}
                         {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
@@ -975,8 +970,8 @@ export default function DashboardPage() {
     return (
       <PageTransition className="max-w-3xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
-          <div className={cn("inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium mb-4", COMPLETION_NOTE.surface)}>
-            <CheckCircle2 className={cn("h-3.5 w-3.5", COMPLETION_NOTE.icon)} />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium mb-4">
+            <CheckCircle2 className="h-3.5 w-3.5" />
             Apartment analyzed · ready to design
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Pick a room to start with</h1>
@@ -1031,15 +1026,15 @@ export default function DashboardPage() {
                 {/* Status badge — top-left */}
                 <div className="absolute top-3 left-3">
                   {isDone ? (
-                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shadow", ROOM_STATUS_BADGE.done)}>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-semibold shadow">
                       <CheckCircle2 className="h-3 w-3" /> Done
                     </span>
                   ) : isInProgress ? (
-                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shadow", ROOM_STATUS_BADGE.in_progress)}>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold shadow">
                       In Progress
                     </span>
                   ) : isOutstanding ? (
-                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shadow", ROOM_STATUS_BADGE.outstanding)}>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-semibold shadow">
                       Outstanding
                     </span>
                   ) : null}
@@ -1153,9 +1148,9 @@ function StepIndicator({ done, active, label }: { done?: boolean; active?: boole
   return (
     <div className={cn(
       "flex items-center gap-3 py-1",
-      done && WORKFLOW_STEP_TEXT.done,
-      active && WORKFLOW_STEP_TEXT.active,
-      !done && !active && WORKFLOW_STEP_TEXT.upcoming
+      done && "text-emerald-600 dark:text-emerald-400",
+      active && "text-accent-warm font-medium",
+      !done && !active && "text-muted-foreground"
     )}>
       {done ? (
         <CheckCircle2 className="h-4.5 w-4.5" />

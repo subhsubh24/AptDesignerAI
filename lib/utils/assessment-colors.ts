@@ -199,105 +199,6 @@ export const STEP_MARK = {
   upcoming: "bg-border",
 } as const;
 
-/**
- * The room-card STATUS badge on /dashboard — done / in progress / outstanding.
- *
- * What it replaced was the traffic light in its purest form: `bg-emerald-700`
- * for done, `bg-primary` for in progress, `bg-amber-700` for outstanding. Three
- * fills for three rungs of ONE ordinal state, two of them off-system, on the
- * flagship surface where the user picks which room to design. The middle rung
- * was already a token, which is what makes the other two obviously drift rather
- * than design.
- *
- * The ladder runs in the SAME DIRECTION as every other one in this file, which
- * is the property that matters more than any local argument about which state
- * "deserves" the accent. STEP_MARK and WORKFLOW_STEP_TEXT both read
- * done → strongest, in-flight → accent, not-yet-reached → faintest; an earlier
- * draft of this constant inverted that (muted `done`, ink `in_progress`) and put
- * TWO ladders running opposite ways on the same screen, in the same commit.
- * A user who has learned the direction on the step list would have had to
- * un-learn it two inches away.
- *
- *   done          solid ink       finished, and the same weight STEP_MARK gives it
- *   in progress   house accent    the rung in flight, exactly as .active is
- *   outstanding   muted fill      not started, so it recedes
- *
- * Colour is not the sole carrier — each badge prints its own word ("Done",
- * "In Progress", "Outstanding") and `done` also carries a CheckCircle2.
- *
- * Every fill is OPAQUE, and that is required rather than tidy: these badges are
- * absolutely positioned over the room PHOTO, so a tinted fill would composite
- * against whatever pixels that photo happens to have there. An opaque fill makes
- * the TEXT-ON-FILL pair independent of the image underneath — the same reasoning
- * PRIORITY_BADGE.medium records for a different nesting problem.
- *
- * Opacity does NOT settle the second question, and a reviewer caught that it had
- * been mistaken for an answer: the CHIP'S OWN EDGE against the photo. The first
- * draft gave `outstanding` a near-white `bg-muted` fill, which measures
- * 1.12:1 against a white wall and 1.05:1 against an off-white one — so on the
- * bright interiors that dominate this product the badge simply dissolved into
- * the image, while its TEXT contrast still reported as passing. Fill contrast
- * and boundary contrast are different properties, and measuring one while
- * assuming the other is exactly how the topbar step mark shipped at 1.44:1.
- *
- * So the quiet rung is `bg-muted-foreground` — a mid-tone ink, not a tint. It
- * reads 5.63 / 4.82 / 3.65 against white / off-white / light-grey content while
- * still being the faintest of the three.
- *
- * The honest limit: NO fixed opaque colour can clear 3:1 against every possible
- * photograph — a mid-grey wall defeats any mid-tone chip, and that was equally
- * true of the `emerald-700` / `amber-700` fills this replaced. The claim here is
- * bounded to the common case (bright rooms), and `border-border` was measured and
- * REJECTED as a fix: at 1.30:1 against white it draws no edge at all.
- *
- * Measured in `__tests__/design/assessment-colors.test.ts` against the real
- * token values: these are 10px semibold labels, so the AA floor for NORMAL text
- * (4.5:1) applies, not the large-text 3:1.
- */
-export const ROOM_STATUS_BADGE = {
-  done: "bg-primary text-primary-foreground",
-  in_progress: "bg-accent-warm text-background",
-  outstanding: "bg-muted-foreground text-background",
-} as const;
-
-/**
- * `StepIndicator` on /dashboard — the analysis-progress list.
- *
- * Same three rungs as STEP_MARK, but as TEXT+icon rather than bare marks, so
- * unlike STEP_MARK this one does not depend on colour alone: the icon switches
- * between CheckCircle2, a spinner and an empty ring. `done` was
- * `text-emerald-600 dark:text-emerald-400` sitting directly beside
- * `text-accent-warm` (active) and `text-muted-foreground` (upcoming) — a third
- * hue introduced for the one rung that needed it least.
- *
- *   done      full-strength ink   finished and legible at a glance
- *   active    house accent        the rung in flight
- *   upcoming  muted ink           not started
- */
-export const WORKFLOW_STEP_TEXT = {
-  done: "text-foreground",
-  active: "text-accent-warm font-medium",
-  upcoming: "text-muted-foreground",
-} as const;
-
-/**
- * A completed-step confirmation note ("Building researched — …", "Apartment
- * analyzed · ready to design").
- *
- * Both surfaces are the same thing: a success acknowledgement the user reads
- * once and moves past. Both rendered it as an emerald tint on emerald with an
- * emerald border and hand-paired `dark:` weights — a fourth palette for a
- * message whose meaning is already carried by a CheckCircle2 and the sentence
- * itself.
- *
- * It is the SAME treatment as CONFIDENCE_BANNER.high, for the same reason —
- * success is the expected case, so it RECEDES — and it is therefore an ALIAS
- * rather than a second copy of the same two strings. Declaring the literal twice
- * is exactly the drift this file's CONFIDENCE_THRESHOLD note warns about: two
- * values that mean one thing and can silently diverge. The separate name earns
- * its place by saying what the surface IS at the call site; it must never earn
- * its own values.
- */
 export const CONFIDENCE_BANNER = {
   high: {
     surface: "bg-muted/40 border-border text-foreground",
@@ -308,8 +209,6 @@ export const CONFIDENCE_BANNER = {
     icon: "text-accent-warm-strong",
   },
 } as const;
-
-export const COMPLETION_NOTE = CONFIDENCE_BANNER.high;
 
 export function confidenceBanner(confidence: number) {
   return isHighConfidence(confidence) ? CONFIDENCE_BANNER.high : CONFIDENCE_BANNER.low;

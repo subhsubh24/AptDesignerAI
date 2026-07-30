@@ -8,10 +8,7 @@ import {
   ASSESSMENT_PANEL,
   CONFIDENCE_BANNER,
   CONFIDENCE_THRESHOLD,
-  COMPLETION_NOTE,
-  ROOM_STATUS_BADGE,
   STEP_MARK,
-  WORKFLOW_STEP_TEXT,
   confidenceBanner,
   isHighConfidence,
   type AssessmentPriority,
@@ -60,11 +57,6 @@ const CONSUMERS = [
   // that same card stack and carried the matching emerald/amber pair.
   "app/projects/[projectId]/rooms/[roomId]/diagnosis/page.tsx",
   "components/rooms/scene-coverage-card.tsx",
-  // /dashboard is the flagship room-selection surface. It carried the traffic
-  // light in its purest form — emerald "Done" / primary "In Progress" / amber
-  // "Outstanding" for ONE ordinal state — plus an emerald StepIndicator rung and
-  // two emerald completion notes. Now at zero, and pinned here so it stays there.
-  "app/dashboard/page.tsx",
 ];
 
 /**
@@ -278,26 +270,6 @@ function pairs(): Array<{ label: string; fg: string; bg: string | null }> {
     { label: "confidence.high icon", fg: CONFIDENCE_BANNER.high.icon, bg: CONFIDENCE_BANNER.high.surface },
     { label: "confidence.low text", fg: CONFIDENCE_BANNER.low.surface, bg: CONFIDENCE_BANNER.low.surface },
     { label: "confidence.low icon", fg: CONFIDENCE_BANNER.low.icon, bg: CONFIDENCE_BANNER.low.surface },
-
-    // Room-card status badge — fg and bg both live in the same class string,
-    // like the priority pill. These are 10px labels, so they are measured at
-    // the AA NORMAL-text floor, not the large-text one.
-    ...(Object.keys(ROOM_STATUS_BADGE) as Array<keyof typeof ROOM_STATUS_BADGE>).map((k) => ({
-      label: `roomStatus.${k}`,
-      fg: ROOM_STATUS_BADGE[k],
-      bg: ROOM_STATUS_BADGE[k],
-    })),
-
-    // StepIndicator text — rendered directly on the page, no surface of its own.
-    ...(Object.keys(WORKFLOW_STEP_TEXT) as Array<keyof typeof WORKFLOW_STEP_TEXT>).map((k) => ({
-      label: `workflowStep.${k}`,
-      fg: WORKFLOW_STEP_TEXT[k],
-      bg: null,
-    })),
-
-    // Completion note — the surface class carries its own text colour.
-    { label: "completion text", fg: COMPLETION_NOTE.surface, bg: COMPLETION_NOTE.surface },
-    { label: "completion icon", fg: COMPLETION_NOTE.icon, bg: COMPLETION_NOTE.surface },
   ];
 }
 
@@ -312,9 +284,6 @@ describe("assessment palette — design system", () => {
       ...Object.entries(CONFIDENCE_BANNER).flatMap(([band, v]) =>
         Object.entries(v).map(([k, val]) => [`confidence.${band}.${k}`, val] as [string, string]),
       ),
-      ...Object.entries(ROOM_STATUS_BADGE).map(([k, v]) => [`roomStatus.${k}`, v] as [string, string]),
-      ...Object.entries(WORKFLOW_STEP_TEXT).map(([k, v]) => [`workflowStep.${k}`, v] as [string, string]),
-      ...Object.entries(COMPLETION_NOTE).map(([k, v]) => [`completion.${k}`, v] as [string, string]),
     ];
     for (const [name, value] of all) {
       const hit = value.match(OFF_SYSTEM_FAMILY);
@@ -346,9 +315,6 @@ describe("assessment palette — design system", () => {
       ...Object.values(PRIORITY_BADGE),
       ...Object.values(ASSESSMENT_PANEL).flatMap((v) => Object.values(v)),
       ...Object.values(CONFIDENCE_BANNER).flatMap((v) => Object.values(v)),
-      ...Object.values(ROOM_STATUS_BADGE),
-      ...Object.values(WORKFLOW_STEP_TEXT),
-      ...Object.values(COMPLETION_NOTE),
     ];
     const accents = new Set<string>();
     for (const v of values) {
@@ -406,7 +372,7 @@ describe("assessment palette — computed contrast", () => {
       const all = pairs();
       // Guard the enumeration itself: it is derived, so assert it did not
       // silently degrade to a handful of pairs.
-      expect(all.length).toBe(23);
+      expect(all.length).toBe(15);
       // And guard the NESTED half specifically. `bg-muted/50` is the wrapper in
       // app/saved/[id]/page.tsx that made a passing pill actually fail; if the
       // scan stops finding wrappers, every translucent surface silently reverts
