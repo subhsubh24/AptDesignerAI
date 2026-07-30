@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
 import {
+  classifyProductShape,
   planLabel,
   purchaseAgreementLead,
   purchaseCtaLabel,
@@ -59,6 +60,11 @@ type DisplayOption = {
    * which told a one-time buyer their purchase renews automatically.
    */
   isRecurring: boolean;
+  /**
+   * Whether the store can hand this purchase back on another device. A
+   * CONSUMABLE cannot be restored, so it must not be offered the restore path.
+   */
+  isRestorable: boolean;
 };
 
 // Shown when RC offerings haven't loaded yet or RC is not configured. These
@@ -73,6 +79,7 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
     badge: 'Best value',
     hasFreeTrial: false,
     isRecurring: true,
+    isRestorable: true,
   },
   {
     pkg: null,
@@ -82,6 +89,7 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
     badge: null,
     hasFreeTrial: false,
     isRecurring: true,
+    isRestorable: true,
   },
 ];
 
@@ -111,17 +119,10 @@ function packagesToOptions(
         isIOS,
         eligibility?.[pkg.product.identifier],
       );
-      // Anything that is not a recognised renewing period is treated as a
-      // ONE-TIME purchase. Erring this way is the safe direction: describing a
-      // subscription as one-off understates the commitment, whereas the reverse
-      // tells a one-time buyer they are on a recurring charge (Apple 3.1.2).
-      const isRecurring =
-        isAnnual ||
-        isMonthly ||
-        pkg.packageType === PACKAGE_TYPE.WEEKLY ||
-        pkg.packageType === PACKAGE_TYPE.TWO_MONTH ||
-        pkg.packageType === PACKAGE_TYPE.THREE_MONTH ||
-        pkg.packageType === PACKAGE_TYPE.SIX_MONTH;
+      // Read the PRODUCT, not the offering slot it happens to sit in — see
+      // classifyProductShape. `packageType` would misread a CUSTOM-slot
+      // subscription as a one-time purchase and drop its renewal disclosure.
+      const { isRecurring, isRestorable } = classifyProductShape(pkg.product);
       const trialNote = hasFreeTrial
         ? 'Free trial included'
         : isRecurring
@@ -143,6 +144,7 @@ function packagesToOptions(
         badge: isAnnual ? 'Best value' : null,
         hasFreeTrial,
         isRecurring,
+        isRestorable,
       };
     });
 }
@@ -441,6 +443,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
                 nested ternary here that assumed every package renews. */}
             {purchaseDisclosure({
               isRecurring: recurring,
+              isRestorable: selectedOption?.isRestorable ?? true,
               hasFreeTrial: trialAvailable,
               price: selectedOption?.price ?? null,
             })}

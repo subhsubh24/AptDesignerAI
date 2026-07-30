@@ -35,6 +35,16 @@
 export interface PurchaseTerms {
   /** True for a subscription (renews); false for a one-time purchase. */
   isRecurring: boolean;
+  /**
+   * Whether the store can actually give this purchase back on another device.
+   * NOT the same question as `isRecurring`: a CONSUMABLE (a credit pack) is a
+   * one-time purchase that is NOT restorable, because StoreKit keeps no
+   * persistent record of a consumed transaction. Telling that buyer to "Use
+   * Restore Purchases" is a promise the store cannot keep — the first draft of
+   * this module made exactly that substitution, replacing one false statement
+   * with another, on the very product type the module was written for.
+   */
+  isRestorable: boolean;
   /** A free trial this buyer can actually still take. See `paywall-trial`. */
   hasFreeTrial: boolean;
   /** Display price as rendered, e.g. "$49 / month" — null when unknown. */
@@ -42,19 +52,74 @@ export interface PurchaseTerms {
 }
 
 /**
+ * Decide the two shape questions from what RevenueCat actually reports about
+ * the PRODUCT.
+ *
+ * The first draft read `pkg.packageType`, which is wrong: `packageType` only
+ * says which OFFERING SLOT the product was placed in, not what the product is.
+ * A CUSTOM-slot package wrapping an auto-renewable subscription is an ordinary
+ * RevenueCat configuration (a promo tier outside the six predefined periods),
+ * and reading the slot classified it as a one-time purchase — omitting the
+ * renewal amount, period and cancellation method for a charge that really does
+ * auto-renew. `productCategory` / `productType` / `subscriptionPeriod` are the
+ * fields that describe the product itself.
+ *
+ * WHEN IN DOUBT, ASSUME IT RENEWS. Both errors are misrepresentations, but they
+ * are not symmetric: an undisclosed auto-renewal is the negative-option billing
+ * that Apple 3.1.2 and the FTC actively enforce, while over-disclosing a
+ * commitment on a one-off is corrected by the store's own purchase sheet
+ * seconds later. So UNKNOWN and absent both fall to recurring.
+ *
+ * Restorability defaults the other way, for the same reason in mirror image:
+ * an unproven restore path is a promise we should not make.
+ */
+export function classifyProductShape(product: {
+  productCategory?: string | null;
+  productType?: string | null;
+  subscriptionPeriod?: string | null;
+} | null | undefined): Pick<PurchaseTerms, 'isRecurring' | 'isRestorable'> {
+  const category = product?.productCategory ?? null;
+  const type = product?.productType ?? null;
+
+  const isRecurring =
+    category === 'SUBSCRIPTION' ||
+    type === 'AUTO_RENEWABLE_SUBSCRIPTION' ||
+    type === 'PREPAID_SUBSCRIPTION' ||
+    (product?.subscriptionPeriod ?? null) !== null ||
+    // Nothing conclusive said "one-time", so assume the commitment.
+    (category !== 'NON_SUBSCRIPTION' && type !== 'CONSUMABLE' && type !== 'NON_CONSUMABLE' &&
+      type !== 'NON_RENEWABLE_SUBSCRIPTION');
+
+  // Only a CONSUMABLE is definitively non-restorable; UNKNOWN is treated as
+  // non-restorable too, so the copy never promises a restore we cannot prove.
+  const isRestorable = type === 'NON_CONSUMABLE' || type === 'NON_RENEWABLE_SUBSCRIPTION';
+
+  return { isRecurring, isRestorable };
+}
+
+/**
  * The legal sentence(s) shown directly above the Terms/Privacy links.
  *
  * Recurring copy is unchanged from what shipped; the one-time branches are the
  * new, true statements. A one-time purchase gets no "cancel" instruction —
- * there is nothing to cancel — but it DOES get the restore path, which is the
- * genuine equivalent affordance and is itself an App Review requirement for
- * non-consumable products.
+ * there is nothing to cancel. It gets the restore path only when the store can
+ * actually honour it (see `isRestorable`): that is the genuine equivalent
+ * affordance for a NON-CONSUMABLE, and an App Review requirement for one, but a
+ * consumable cannot be restored and must not be told otherwise.
  */
-export function purchaseDisclosure({ isRecurring, hasFreeTrial, price }: PurchaseTerms): string {
+export function purchaseDisclosure({
+  isRecurring,
+  isRestorable,
+  hasFreeTrial,
+  price,
+}: PurchaseTerms): string {
   const manage = isRecurring
     ? 'Manage or cancel anytime in your App Store or Google Play subscription settings. '
-    : 'This is a one-time purchase, not a subscription — there is nothing to cancel. ' +
-      'Use Restore Purchases to get it back on another device. ';
+    : isRestorable
+      ? 'This is a one-time purchase, not a subscription — there is nothing to cancel. ' +
+        'Use Restore Purchases to get it back on another device. '
+      // A consumable cannot be restored, so the sentence stops at the truth.
+      : 'This is a one-time purchase, not a subscription — there is nothing to cancel. ';
 
   if (!isRecurring) {
     // A trial is a subscription concept; if a non-subscription product somehow
