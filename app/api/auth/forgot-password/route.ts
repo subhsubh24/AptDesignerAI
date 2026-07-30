@@ -97,16 +97,30 @@ function isRateLimited(ip: string): boolean {
 // per-recipient cap at all, and a shared store (PENDING_OPS `rate-limit-redis`)
 // is what would close it outright.
 //
-// THE TRADE-OFF, chosen deliberately. A cap on mail per address is also a way
-// to deny the address's OWNER: an attacker who knows the victim's email can
-// burn the quota before the victim ever asks, and the victim's own request is
-// then silently suppressed. That is a real regression in availability against
-// the previous behaviour, where the victim's mail arrived buried in noise. It
-// is accepted because it is BOUNDED and self-healing — the window is 15 minutes
-// and the owner simply retries — whereas the flood it prevents is not bounded
-// at all, and an inbox with 300 identical reset mails is where reset-flood
-// phishing hides. `expires the lockout` in the tests pins the bound so nobody
-// can quietly turn this into a longer denial.
+// WHY THIS IS NOT A DENIAL OF SERVICE ON THE ACCOUNT OWNER — the objection two
+// reviewers raised, and the constraint that shapes the implementation.
+//
+// The fear is real in the obvious design: an attacker who knows a victim's
+// address burns the quota, and the victim's own reset is then silently
+// swallowed while the UI says "check your inbox" — breaking priority (1) at the
+// top of this file for the one user who actually needs the link.
+//
+// What makes it not a denial is that a claim is RELEASED whenever no mail
+// actually went out. So the quota only ever counts messages genuinely delivered
+// to that address, which means being over quota carries a guarantee: three
+// working recovery links were sent to this inbox in the last 15 minutes. The
+// owner is not locked out — they are holding a valid link already (Supabase
+// recovery links outlive this window several times over), and it reached THEIR
+// inbox regardless of who asked for it. "Check your email" stays TRUE, which is
+// the only reason the neutral body is not a fake success.
+//
+// Without the release this would be exactly the DoS described: three failed
+// `generateLink` calls would burn the quota having delivered nothing, and the
+// owner's fourth request would be suppressed with an empty inbox.
+//
+// The residual is small and bounded: an owner who deleted the earlier mails as
+// suspicious waits out the window. `EXPIRES the per-recipient lockout` pins that
+// bound so nobody can quietly widen it.
 const MAX_SENDS_PER_EMAIL = 3;
 const emailBucket = new Map<string, { count: number; resetAt: number }>();
 
@@ -131,6 +145,17 @@ function claimEmailSend(email: string): boolean {
   if (entry.count >= MAX_SENDS_PER_EMAIL) return false;
   entry.count++;
   return true;
+}
+
+/**
+ * Give a claim back. Called on every path where the claim did NOT result in a
+ * delivered message, so the quota counts real mail rather than attempts — see
+ * the note above for why that is what keeps this from denying the account
+ * owner their own recovery.
+ */
+function releaseEmailSend(email: string): void {
+  const entry = emailBucket.get(emailQuotaKey(email));
+  if (entry && entry.count > 0) entry.count--;
 }
 
 /**
@@ -279,6 +304,13 @@ export async function POST(req: NextRequest) {
     console.error("[auth/forgot-password] generateLink threw:", err);
   }
 
+  if (!resetUrl) {
+    // Nothing will be mailed — unknown address, provider declined, no token, or
+    // a throw. Give the claim back so a run of failures cannot burn the quota
+    // and leave the real owner suppressed with an empty inbox.
+    releaseEmailSend(email);
+  }
+
   if (resetUrl) {
     const { subject, html, text } = buildPasswordResetEmail(resetUrl);
     // The send must NOT be awaited before responding. Awaiting an outbound
@@ -292,6 +324,10 @@ export async function POST(req: NextRequest) {
     const send = sendEmail({ to: email, subject, html, text, stage: "password_reset" }).then(
       (result) => {
         if (!result.delivered) {
+          // The claim bought a message that never arrived — hand it back, or the
+          // owner's next attempt is suppressed against an inbox with nothing in
+          // it. This is the same claim-then-release shape the lifecycle crons use.
+          releaseEmailSend(email);
           console.error(
             "[auth/forgot-password] reset email not delivered:",
             result.error ?? (result.dryRun ? "dry-run" : "unknown"),
@@ -299,6 +335,7 @@ export async function POST(req: NextRequest) {
         }
       },
       (err) => {
+        releaseEmailSend(email);
         console.error("[auth/forgot-password] reset email threw:", err);
       },
     );

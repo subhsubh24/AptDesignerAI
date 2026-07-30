@@ -252,6 +252,51 @@ describe("POST /api/auth/forgot-password", () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(3);
   });
 
+  it("does NOT let failed attempts burn the quota — the owner is never suppressed against an empty inbox", async () => {
+    // THE property that keeps the per-recipient cap from being a denial of
+    // service on the account owner. Two reviewers raised it independently.
+    //
+    // If the quota counted ATTEMPTS, an attacker (or an unknown address, or a
+    // flaky provider) could burn it having delivered nothing, and the real
+    // owner's next request would return "check your email" over an empty inbox
+    // — breaking this route's priority (1), NO FAKE SUCCESS, for the one user
+    // who actually needs the link.
+    //
+    // It counts DELIVERED MAIL instead: every path that sends nothing releases
+    // its claim. So being over quota carries a guarantee — working links are
+    // already sitting in that inbox.
+    const victim = freshEmail();
+
+    // 3 attempts for an address with no account: nothing is mailed.
+    mockGenerateLink.mockResolvedValue({ data: null, error: { message: "User not found" } });
+    for (let i = 0; i < 3; i++) await POST(req({ email: victim }, freshIp()));
+    expect(mockSendEmail).not.toHaveBeenCalled();
+
+    // The owner now asks for their own reset. It must still send.
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "tok_owner" } },
+      error: null,
+    });
+    const owner = await POST(req({ email: victim }, freshIp()));
+    expect(owner.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: victim }));
+  });
+
+  it("releases the claim when the provider accepted nothing", async () => {
+    // Same property on the other failure path: sendEmail resolving undelivered.
+    const victim = freshEmail();
+    mockSendEmail.mockResolvedValue({ delivered: false, dryRun: false, error: "provider down" });
+    for (let i = 0; i < 3; i++) await POST(req({ email: victim }, freshIp()));
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+
+    mockSendEmail.mockResolvedValue({ delivered: true, dryRun: false, id: "msg_ok" });
+    await POST(req({ email: victim }, freshIp()));
+    // A 4th send was attempted rather than suppressed, because the first three
+    // delivered nothing.
+    expect(mockSendEmail).toHaveBeenCalledTimes(4);
+  });
+
   it("EXPIRES the per-recipient lockout, so a burned quota is not a permanent denial", async () => {
     // The trade-off this cap makes, pinned. An attacker who knows the victim's
     // address can burn the quota before the victim ever asks, silently
