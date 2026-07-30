@@ -8,6 +8,7 @@
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL, type MaterialProperties } from "./lookups";
 import { deltaE2000, hslToLab } from "./color-math";
 import { ROOM_FURNISHING_TIERS } from "../config/pipeline";
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 
 export interface BundleMathScores {
   palette_harmony: number;     // 0-1: cross-product color coherence
@@ -353,9 +354,23 @@ function computeBundleScaleBalance(products: BundleProduct[], _ctx: BundleMathCo
 
 // --- Spatial feasibility (room area coverage, clearance estimation) ---
 
-function parseRoomDimensions(floorPlan: Record<string, unknown>): { roomW: number; roomD: number } | null {
-  const rdStr = JSON.stringify(floorPlan.room_dimensions || "");
-  const match = rdStr.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
+/**
+ * This room's floor area, or null when the floor plan cannot say.
+ *
+ * Takes `roomType` because it must: stringifying the whole type-keyed
+ * `room_dimensions` map and regexing the first WxL out of it returned
+ * whichever room serialized first, so a bedroom bundle was scored for
+ * spatial feasibility against the living room's area. See
+ * lib/floor-plan/room-dimensions.
+ */
+function parseRoomDimensions(
+  floorPlan: Record<string, unknown>,
+  roomType: string,
+): { roomW: number; roomD: number } | null {
+  const raw = floorPlan.room_dimensions;
+  const rdStr =
+    typeof raw === "string" ? raw : lookupRoomDimension(raw as Record<string, unknown>, roomType);
+  const match = rdStr?.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
   if (!match) return null;
   return { roomW: parseFloat(match[1]) * 12, roomD: parseFloat(match[2]) * 12 };
 }
@@ -377,7 +392,7 @@ function computeSpatialFeasibility(products: BundleProduct[], ctx: BundleMathCon
     return { score: 0.6, issues: ["No floor plan data available for spatial feasibility check"] };
   }
 
-  const roomDims = parseRoomDimensions(ctx.floorPlan);
+  const roomDims = parseRoomDimensions(ctx.floorPlan, ctx.roomType);
   if (!roomDims) return { score: 0.7, issues: [] };
 
   const { roomW, roomD } = roomDims;

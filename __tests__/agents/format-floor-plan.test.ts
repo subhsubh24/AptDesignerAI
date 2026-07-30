@@ -191,4 +191,59 @@ describe("getRoomFromFloorPlan", () => {
     const plan = makePlan({ rooms: [makeRoom({ room_type: "kitchen" })] });
     expect(getRoomFromFloorPlan(plan, "bathroom")).toBeUndefined();
   });
+
+  // The two-bedroom apartment. A user's rooms are typed bedroom/bedroom_2/
+  // bedroom_3 (app/api/rooms/[roomId]/route.ts) while the extractor's schema
+  // has one generic "bedroom" bucket, so a real plan carries two rooms of the
+  // same type. `find()` answered every such lookup with the FIRST one, and the
+  // block it feeds is labelled AUTHORITATIVE to the model — so diagnosing,
+  // sourcing and rendering Bedroom 2 all received Bedroom 1's geometry.
+  describe("duplicate room types are ambiguous, not first-wins", () => {
+    const twoBedrooms = makePlan({
+      rooms: [
+        makeRoom({ room_type: "bedroom", label: "BR1", dimensions_text: "9x10 ft", natural_light: "low" }),
+        makeRoom({ room_type: "bedroom", label: "BR2", dimensions_text: "14x16 ft", natural_light: "high" }),
+        makeRoom({ room_type: "kitchen", label: "Kitchen", dimensions_text: "8x10 ft" }),
+      ],
+    });
+
+    it("refuses an exact-match lookup when two rooms share the type", () => {
+      expect(getRoomFromFloorPlan(twoBedrooms, "bedroom")).toBeUndefined();
+    });
+
+    it("refuses the prefix fallback when it would pick between two bedrooms", () => {
+      // "bedroom_2" has no exact match, so the prefix step runs — and matches
+      // both. Returning BR1 here is the original bug, in its literal form.
+      expect(getRoomFromFloorPlan(twoBedrooms, "bedroom_2")).toBeUndefined();
+      expect(getRoomFromFloorPlan(twoBedrooms, "bedroom_3")).toBeUndefined();
+    });
+
+    it("still resolves the types that are unambiguous in the same plan", () => {
+      expect(getRoomFromFloorPlan(twoBedrooms, "kitchen")?.label).toBe("Kitchen");
+    });
+
+    it("presents both bedrooms as labelled peers instead of asserting one is 'this room'", () => {
+      const text = formatExtractedFloorPlanForPrompt(twoBedrooms, "bedroom_2");
+      // No "This bedroom (BR1) — ~9x10 ft" header: the prompt no longer tells
+      // the model that one specific bedroom is the room being designed.
+      expect(text).not.toMatch(/^This bedroom/m);
+      // Both still appear under "Other rooms", each tagged with its own label,
+      // so the model keeps the apartment context and attributes nothing.
+      expect(text).toContain("Other rooms:");
+      expect(text).toContain("BR1 (bedroom) — ~9x10 ft");
+      expect(text).toContain("BR2 (bedroom) — ~14x16 ft");
+    });
+
+    it("DOES emit the 'This <room>' header when the type is unambiguous", () => {
+      // Guards the assertion above from passing for the wrong reason.
+      const text = formatExtractedFloorPlanForPrompt(twoBedrooms, "kitchen");
+      expect(text).toMatch(/^This kitchen \(Kitchen\)/m);
+    });
+
+    it("is order-independent — neither bedroom wins by position", () => {
+      const reversed = makePlan({ rooms: [...twoBedrooms.rooms].reverse() });
+      expect(getRoomFromFloorPlan(reversed, "bedroom")).toBeUndefined();
+      expect(getRoomFromFloorPlan(reversed, "bedroom_2")).toBeUndefined();
+    });
+  });
 });

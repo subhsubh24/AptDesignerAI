@@ -1,5 +1,7 @@
 // Spatial constraint scoring: room coverage, clearance checks, placement conflicts
 
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
+
 export interface SpatialConstraintResult {
   room_coverage_ratio: number; // 0-1
   clearance_score: number; // 0-1
@@ -169,11 +171,15 @@ function parseRoomDimensions(
   if (typeof raw === "string") {
     dimString = raw;
   } else if (raw && typeof raw === "object") {
-    // It's a map like { living_room: "12x15", bedroom: "10x12" }
-    const roomKey = (roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
+    // It's a map like { living_room: "12x15", bedroom: "10x12" }. Exact room
+    // only — see lib/floor-plan/room-dimensions. Defaulting an unknown or
+    // absent room type to `living_room` measured every other room against the
+    // living room, and the veto below acts on the result. Returning nothing
+    // here is not a loss: (d) below still estimates from total_sqft and marks
+    // the result `estimated: true`, which is honest where a neighbour's exact
+    // number is not.
     const obj = raw as Record<string, unknown>;
-    const val = obj[roomKey] || obj.living_room;
-    if (typeof val === "string") dimString = val;
+    dimString = lookupRoomDimension(obj, roomType) ?? null;
   }
 
   if (dimString) {

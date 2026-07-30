@@ -225,3 +225,58 @@ describe("formatSceneGraphForPrompt", () => {
     expect(block).toContain("seen in 2 photos");
   });
 });
+
+describe("groundCoverage picks the right room, or no room at all", () => {
+  // `expected` walls decide `gaps`, which becomes "Unseen areas (no photo): …"
+  // in downstream prompts and in the user-facing progress line — both stated as
+  // fact. The lookup used to fall back to `floorPlan.rooms[0]` whenever the
+  // room type did not match, and it never matches for the five DB room types
+  // the extractor has no bucket for (bedroom_2/3, bathroom_2/3, main_room). So
+  // Bedroom 2 was told to expect the LIVING ROOM's walls.
+  const wall = (direction: string) => ({ direction, features: [] });
+  const plan = {
+    image_url: "https://example.com/plan.png",
+    extracted_at: "2026-01-01T00:00:00.000Z",
+    confidence: "high" as const,
+    rooms: [
+      { room_type: "living_room", label: "Living", shape: "rectangular" as const,
+        natural_light: "high" as const, walls: [wall("north")] },
+      { room_type: "bedroom", label: "BR1", shape: "rectangular" as const,
+        natural_light: "low" as const, walls: [wall("south"), wall("east")] },
+      { room_type: "bedroom", label: "BR2", shape: "rectangular" as const,
+        natural_light: "high" as const, walls: [wall("north"), wall("west")] },
+    ],
+  };
+  const raw = {
+    walls_observed: ["north"],
+    gaps: [] as string[],
+    estimated_coverage: 0.5,
+    suggested_shots: [] as string[],
+  };
+
+  it("does NOT hand an unmatched room type the first room's walls", () => {
+    const report = groundCoverage(raw, "bedroom_2", plan as never);
+    // The living room's single north wall is observed, so falling back to
+    // rooms[0] would report full coverage and zero gaps for a room we know
+    // nothing about. The cardinal default is the honest answer.
+    expect(report.gaps).toContain("south");
+    expect(report.gaps).toContain("east");
+    expect(report.gaps).toContain("west");
+  });
+
+  it("does NOT pick between two rooms of the same type", () => {
+    const report = groundCoverage(raw, "bedroom", plan as never);
+    const reversed = { ...plan, rooms: [...plan.rooms].reverse() };
+    // Neither BR1's walls nor BR2's may be adopted, and the answer must not
+    // depend on which one the extractor listed first.
+    expect(report.gaps).toEqual(groundCoverage(raw, "bedroom", reversed as never).gaps);
+  });
+
+  it("still uses the floor plan when exactly one room matches", () => {
+    const single = { ...plan, rooms: [plan.rooms[0]] };
+    const report = groundCoverage(raw, "living_room", single as never);
+    // One north wall, observed → no gaps. Proves the negative tests above are
+    // not passing merely because the floor-plan path is dead.
+    expect(report.gaps).toEqual([]);
+  });
+});

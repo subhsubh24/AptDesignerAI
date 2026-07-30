@@ -1,4 +1,5 @@
 import { quoteForPrompt } from "@/lib/utils/sanitize-prompt";
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 
 // Generates the text-model prompt that produces a Nano Banana Pro image generation prompt.
 //
@@ -50,7 +51,9 @@ export function getMockupPrompt(
     const fp = buildingResearch.floor_plan as Record<string, unknown> | undefined;
     if (fp) {
       const dims = fp.room_dimensions as Record<string, string> | undefined;
-      const roomDim = dims?.[roomType] || dims?.living_room;
+      // Exact room only — see lib/floor-plan/room-dimensions. The render prompt
+      // treats this as the room's true size, so a neighbour's is not a fallback.
+      const roomDim = lookupRoomDimension(dims, roomType);
       if (roomDim) lines.push(`Room dimensions: ~${roomDim}`);
     }
 

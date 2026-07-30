@@ -59,10 +59,11 @@ export function formatExtractedFloorPlanForPrompt(
   if (plan.building_orientation) lines.push(`Orientation: ${plan.building_orientation}`);
   if (plan.total_sqft) lines.push(`Total apartment: ~${plan.total_sqft} sqft`);
 
-  // Find the primary room — prefer exact match, then fall back to partial
-  const primaryRoom = roomType
-    ? (plan.rooms.find(r => r.room_type === roomType) ?? plan.rooms.find(r => r.room_type.startsWith(roomType.split("_")[0])))
-    : undefined;
+  // Find the primary room — exact match, else a prefix match, and only when
+  // either picks out exactly ONE room. See matchSingleRoom: two bedrooms in
+  // the plan cannot answer "which bedroom is this?", and this block is
+  // labelled authoritative to the model.
+  const primaryRoom = roomType ? matchSingleRoom(plan.rooms, roomType) : undefined;
 
   if (primaryRoom) {
     lines.push("");
@@ -104,15 +105,40 @@ export function formatExtractedFloorPlanForPrompt(
 /**
  * Extract the matching room from an extracted floor plan, normalising
  * `room_type` so callers don't have to handle the lookup themselves.
- * Returns undefined when no floor plan exists or no room matches.
+ * Returns undefined when no floor plan exists or no room matches — and, just
+ * as importantly, when MORE THAN ONE room matches.
+ *
+ * The ambiguity is routine, not exotic. A user's rooms are typed
+ * `bedroom`/`bedroom_2`/`bedroom_3` (app/api/rooms/[roomId]/route.ts), while
+ * the extractor's schema has only a generic `bedroom` bucket
+ * (lib/prompts/floor-plan-extractor-prompt.ts), so a two-bedroom plan
+ * legitimately carries two rooms of type `bedroom`. `find()` answered every
+ * such lookup with the FIRST one, so diagnosing, sourcing, evaluating or
+ * rendering Bedroom 2 was handed Bedroom 1's shape, wall features, light and
+ * traffic notes — under a prompt header that calls the block AUTHORITATIVE.
+ *
+ * The prefix step is still a useful normalisation ("bedroom_2" → "bedroom")
+ * and is kept; it is only refused when it cannot pick out a single room. Same
+ * rule as lib/floor-plan/room-dimensions: an omitted floor-plan block makes
+ * the model reason from the photos, which is honest; a confidently wrong one
+ * it cannot detect.
  */
 export function getRoomFromFloorPlan(
   plan: ExtractedFloorPlan | null | undefined,
   roomType: string,
 ): FloorPlanRoom | undefined {
   if (!plan) return undefined;
-  return (
-    plan.rooms.find(r => r.room_type === roomType) ??
-    plan.rooms.find(r => r.room_type.startsWith(roomType.split("_")[0]))
-  );
+  return matchSingleRoom(plan.rooms, roomType);
+}
+
+/** The one room of this type, or undefined when there are none or several. */
+function matchSingleRoom(
+  rooms: readonly FloorPlanRoom[],
+  roomType: string,
+): FloorPlanRoom | undefined {
+  const exact = rooms.filter(r => r.room_type === roomType);
+  if (exact.length > 0) return exact.length === 1 ? exact[0] : undefined;
+  const prefix = roomType.split("_")[0];
+  const partial = rooms.filter(r => r.room_type.startsWith(prefix));
+  return partial.length === 1 ? partial[0] : undefined;
 }

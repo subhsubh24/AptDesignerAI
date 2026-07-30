@@ -11,6 +11,7 @@ import { generateWithVerification } from "@/lib/agents/mockup-verifier";
 import { analyzePhotoOrientations } from "@/lib/agents/photo-orientation-analyzer";
 import { extractRoomArchitecture, formatArchitectureForPrompt } from "@/lib/agents/room-architecture-extractor";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
 import { IMAGE_GENERATION_CONFIG } from "@/lib/config/pipeline";
 import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
@@ -329,7 +330,7 @@ REQUIREMENTS:
   // data (exact), fall back to legacy room_dimensions text string.
   const fp = buildingResearch?.floor_plan as Record<string, unknown> | undefined;
   const roomDims = fp?.room_dimensions as Record<string, string> | undefined;
-  const thisRoomDimensions = roomDims?.[room.room_type] ?? undefined;
+  const thisRoomDimensions = lookupRoomDimension(roomDims, room.room_type);
   const extractedRoom = getRoomFromFloorPlan(extractedFloorPlan, room.room_type);
 
   // Run photo orientation analysis and room architecture extraction in parallel.
@@ -870,8 +871,8 @@ function buildArchitecturalContext(
   const fp = br.floor_plan as Record<string, unknown> | undefined;
   if (fp) {
     const dims = fp.room_dimensions as Record<string, string> | undefined;
-    // Prefer the exact room's dimension; do NOT fall back to another room's dims
-    const roomDim = dims?.[roomType];
+    // Exact room only — never another room's. See lib/floor-plan/room-dimensions.
+    const roomDim = lookupRoomDimension(dims, roomType);
     if (roomDim) lines.push(`${roomType} dimensions: ~${roomDim}`);
   }
 

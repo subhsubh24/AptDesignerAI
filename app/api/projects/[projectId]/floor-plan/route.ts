@@ -7,6 +7,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import type { ExtractedFloorPlan } from "@/lib/types/database";
+import { buildRoomDimensionMap } from "@/lib/floor-plan/room-dimensions";
 
 const log = createLogger("floor-plan-route");
 
@@ -148,12 +149,11 @@ export async function POST(
 
   // Also backfill the legacy floor_plan.* keys so agents that read
   // building_research.floor_plan (apartment-research path) still work
-  const legacyRoomDimensions: Record<string, string> = {};
-  for (const room of extractedFloorPlan.rooms) {
-    if (room.dimensions_text) {
-      legacyRoomDimensions[room.room_type] = room.dimensions_text;
-    }
-  }
+  // Keyed by room_type, so a two-bedroom plan has two rooms competing for one
+  // slot. A plain assignment let the last one silently answer for both; the
+  // builder omits a type its rooms disagree on instead. See
+  // lib/floor-plan/room-dimensions.
+  const legacyRoomDimensions = buildRoomDimensionMap(extractedFloorPlan.rooms);
 
   const updatedBr = {
     ...existingBr,

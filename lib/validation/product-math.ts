@@ -8,6 +8,7 @@
 import { lookupColor, lookupMaterial, identifyWoodSpecies, identifyMetalFinish, type HSL } from "./lookups";
 import { deltaE2000, hslToLab } from "./color-math";
 import { parseDimensions } from "./spatial-math";
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 import { scoreLifestyleFit, type LifestyleFlags } from "./durability-map";
 
 export interface ProductMathScores {
@@ -168,10 +169,15 @@ function computeScaleFitFromDims(
   if (ctx.floorPlan) {
     const roomDims = ctx.floorPlan.room_dimensions;
     if (roomDims && typeof roomDims === "object") {
-      // Parse room dimensions (common formats: "12x15", { width: 12, length: 15 })
+      // Parse room dimensions (common formats: "12x15", { width: 12, length: 15 }).
+      // Stringifying the whole type-keyed map and taking the first WxL match
+      // read whichever room happened to serialize first — so a bedroom chair
+      // was sized against the living room, and the oversize veto below fired
+      // on the wrong area. Pick THIS room's entry, or none: see
+      // lib/floor-plan/room-dimensions.
       let roomW: number | undefined, roomD: number | undefined;
-      const rdStr = typeof roomDims === "string" ? roomDims : JSON.stringify(roomDims);
-      const match = rdStr.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
+      const rdStr = lookupRoomDimension(roomDims as Record<string, unknown>, ctx.roomType);
+      const match = rdStr?.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/);
       if (match) {
         roomW = parseFloat(match[1]) * 12; // feet to inches
         roomD = parseFloat(match[2]) * 12;
