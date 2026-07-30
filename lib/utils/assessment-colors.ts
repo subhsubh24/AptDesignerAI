@@ -4,8 +4,8 @@
  *
  * Deliberately a ONE-HUE EMPHASIS LADDER, not a traffic light. This is the same
  * decision already made for the price tiers (`lib/utils/tier-colors.ts`) and the
- * scoring surfaces (`lib/scoring/verdicts.ts`); this module finishes the job on
- * the assessment surfaces, which were the last ones still off-system.
+ * scoring surfaces (`lib/scoring/verdicts.ts`); this module carries it across the
+ * assessment surfaces.
  *
  * What it replaced, and why that mattered:
  *
@@ -23,6 +23,15 @@
  * and none of them from the warm-editorial token system. Worse, the same
  * `what_should_go` list was amber on /focus and rose on /saved, so a user who
  * saved a design watched its colour change for no reason.
+ *
+ * That list of three routes was INCOMPLETE, and this docstring used to claim the
+ * job was finished. It was not: /diagnosis — the step where the user FIRST meets
+ * this content — rendered the same two lists as a FOURTH palette (emerald cards
+ * for `what_is_working`, amber for `what_is_not_working`, with matching icon
+ * chips and bullet markers), so the very list a user saw in emerald on
+ * /diagnosis turned amber on /focus and rose on /saved. /diagnosis and the scene
+ * coverage card it renders are now consumers too, which is what closes the loop
+ * this module was opened for.
  *
  * Nothing is lost by dropping the hue. Every one of these surfaces renders the
  * meaning in words or in a lucide icon right beside the colour — the priority
@@ -96,6 +105,23 @@ export function priorityBadge(priority: string | null | undefined): string {
  * reassurance, and requires nothing) stays neutral ink on a muted surface.
  * Polarity itself is carried by the heading text and the CheckCircle2 / XCircle
  * icons, which is why neither side needs a hue of its own.
+ *
+ * `rail` exists for the /diagnosis presentation, which is the one consumer that
+ * renders the pair as two side-by-side Cards rather than as bare headed lists.
+ * It is part of the shared palette rather than local to that page for the same
+ * reason everything else here is: the pair is the thing being styled, and the
+ * next surface to render it as cards must not re-derive the mapping.
+ *
+ * There is deliberately NO tinted chip behind the heading icon. The /diagnosis
+ * cards had one (`bg-emerald-100` / `bg-amber-100`), and the obvious token
+ * translation — an `accent-warm/10` chip under an `accent-warm-strong` icon —
+ * measured 4.49:1 in dark mode, UNDER the AA floor, for exactly the reason
+ * PRIORITY_BADGE documents below: dark mode gives `--accent-warm-strong` and
+ * `--accent-warm` the same value, so tinting the fill with the icon's own hue
+ * eats the contrast. The guard caught it before it shipped. Rather than tune a
+ * third opacity, the icon now sits bare on the card — which is also how the
+ * other three consumers have always rendered this pair, so the presentations
+ * converged instead of diverging again.
  */
 export const ASSESSMENT_PANEL = {
   keep: {
@@ -105,11 +131,14 @@ export const ASSESSMENT_PANEL = {
     heading: "text-foreground",
     /** The leading marker on each list item. */
     marker: "text-muted-foreground",
+    /** 4px left rail on the card presentation (/diagnosis). */
+    rail: "border-l-border",
   },
   replace: {
     surface: "bg-accent-warm/5 border-accent-warm/25",
     heading: "text-accent-warm-strong",
     marker: "text-accent-warm-strong",
+    rail: "border-l-accent-warm",
   },
 } as const;
 
@@ -132,6 +161,43 @@ export const CONFIDENCE_THRESHOLD = 7;
 export function isHighConfidence(confidence: number): boolean {
   return confidence >= CONFIDENCE_THRESHOLD;
 }
+
+/**
+ * The room-workflow step marks in `components/layout/topbar.tsx` — done /
+ * current / not-yet-reached.
+ *
+ * This lives here, with one call site, for a reason the other ladders do not
+ * have: it is the only one where the marks carry their meaning with NO text and
+ * NO icon, so colour is the sole signal and it has to be MEASURED. It is pinned
+ * against the WCAG 1.4.11 non-text floor in
+ * `__tests__/design/assessment-colors.test.ts`, and an exported constant is what
+ * lets that maths reach it.
+ *
+ * The rule the ladder satisfies: every ADJACENT pair of states must be
+ * separated by contrast or by SIZE, never by hue alone.
+ *
+ *   done      neutral ink, standard width   4.34:1 (light) / 4.19:1 (dark) vs the
+ *                                           not-reached mark — same size, so
+ *                                           colour has to carry it, and it does
+ *   current   house accent, WIDER (w-6)     1.10:1 / 1.02:1 against `done` — all
+ *                                           but identical in luminance, which is
+ *                                           exactly why it is the wide one; the
+ *                                           size difference is the signal
+ *   upcoming  the border token              the faintest mark
+ *
+ * What this replaced was an `accent-warm/40` wash for `done`, and it was WRONG:
+ * against the not-reached mark it measured 1.44:1 in BOTH modes — under even the
+ * 3:1 non-text floor — so "done" and "not started" were near-indistinguishable.
+ * The raw `bg-emerald-500` before it had passed in dark mode (5.61:1) purely
+ * because an off-system hue happened to sit far from the border token. Removing
+ * the hue was right; replacing it with a wash of the accent was not, and nothing
+ * measured it because no guard covered this file. Now one does.
+ */
+export const STEP_MARK = {
+  done: "bg-muted-foreground",
+  current: "bg-accent-warm w-6",
+  upcoming: "bg-border",
+} as const;
 
 export const CONFIDENCE_BANNER = {
   high: {

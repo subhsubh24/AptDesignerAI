@@ -132,17 +132,26 @@ export function FloorPlanUploadZone({
   if (state === "done" && extracted) {
     const roomCount = extracted.rooms.length;
     const sqft = extracted.total_sqft;
+    // One-hue ladder, same direction as every other one in the product (see
+    // lib/utils/assessment-colors.ts): the expected case recedes, the case worth
+    // a second look takes the house accent. High confidence is the normal
+    // outcome and needs no decoration; low confidence is what the user should
+    // notice, and the word "Low" is printed right there carrying the meaning.
+    //
+    // Kept local rather than exported: this is the only surface that renders an
+    // extraction-confidence label, so there is nothing to de-duplicate — which
+    // is the sole reason the shared palette module exists.
     const confidenceColor = {
-      high: "text-green-600",
-      medium: "text-amber-600",
-      low: "text-red-500",
+      high: "text-muted-foreground",
+      medium: "text-foreground",
+      low: "text-accent-warm-strong",
     }[extracted.confidence];
 
     return (
       <div className={cn("rounded-lg border bg-muted/30 p-4 space-y-3", className)}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
+            <CheckCircle className="h-5 w-5 text-muted-foreground shrink-0" />
             <div>
               <p className="text-sm font-medium">Floor plan uploaded</p>
               <p className={cn("text-xs", confidenceColor)}>

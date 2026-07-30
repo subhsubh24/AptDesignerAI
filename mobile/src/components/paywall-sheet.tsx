@@ -10,6 +10,14 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
+import {
+  classifyPurchaseError,
+  hasActiveEntitlement,
+  performPurchaseAction,
+  purchaseErrorAction,
+  purchaseResultAction,
+  type PurchaseAction,
+} from '@/lib/purchase-outcome';
 import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
 
 const TERMS_URL = 'https://aptdesignerai.com/terms';
@@ -178,6 +186,26 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const selectedOption = options[selectedIndex] ?? null;
   const trialAvailable = selectedOption?.hasFreeTrial ?? false;
 
+  // The ONE place an unlock can happen. Every purchase outcome — resolved or
+  // thrown — is turned into a PurchaseAction by lib/purchase-outcome and then
+  // performed here, so there is no second path to onPurchaseSuccess to keep in
+  // sync and no branch for a new outcome to fall through.
+  const applyPurchaseAction = useCallback(
+    (action: PurchaseAction) => {
+      // Wiring only. WHICH handler fires for which action lives in
+      // lib/purchase-outcome's performPurchaseAction, where it is tested —
+      // including the negative, that an alert never reaches the unlock.
+      performPurchaseAction(action, {
+        unlock: () => {
+          onPurchaseSuccess?.();
+          onDismiss();
+        },
+        alert: (title, body) => Alert.alert(title, body),
+      });
+    },
+    [onDismiss, onPurchaseSuccess],
+  );
+
   const handlePurchase = useCallback(async () => {
     const pkg = selectedOption?.pkg;
     if (!RC_KEY) {
@@ -198,27 +226,29 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     }
     setPurchasing(true);
     try {
-      await Purchases.purchasePackage(pkg);
-      onPurchaseSuccess?.();
-      onDismiss();
+      // A resolved purchase is NOT an entitlement, and a thrown error is not
+      // necessarily a failure — lib/purchase-outcome decides which, and carries
+      // the copy, so the ONLY unlock path in this component runs through
+      // `action.kind === 'unlock'`, which that module can only return for a
+      // genuinely active entitlement.
+      const result = await Purchases.purchasePackage(pkg);
+      applyPurchaseAction(purchaseResultAction(result, ENTITLEMENT_ID));
     } catch (err: unknown) {
-      // RC throws { userCancelled: true } when the user taps Cancel in the OS dialog
-      const userCancelled =
-        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
-      if (!userCancelled) {
-        Alert.alert('Purchase failed', 'Please try again or restore your purchases below.');
-      }
+      applyPurchaseAction(purchaseErrorAction(err));
     } finally {
       setPurchasing(false);
     }
-  }, [onDismiss, onPurchaseSuccess, selectedOption]);
+  }, [applyPurchaseAction, onDismiss, selectedOption]);
 
   const handleRestore = useCallback(async () => {
     if (!RC_KEY) return;
     setPurchasing(true);
     try {
       const info = await Purchases.restorePurchases();
-      const restoredPro = info.entitlements.active[ENTITLEMENT_ID]?.isActive === true;
+      // Same guarded read as the purchase path, so the two cannot drift and
+      // neither throws on a payload missing `entitlements` (the RC types promise
+      // it; the network response is not runtime-checked).
+      const restoredPro = hasActiveEntitlement(info, ENTITLEMENT_ID);
       if (restoredPro) {
         onPurchaseSuccess?.();
         onDismiss();
@@ -229,10 +259,10 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         Alert.alert('Restore purchases', 'No active subscription was found for this account.');
       }
     } catch (err: unknown) {
-      // RC throws { userCancelled: true } when the user backs out of the OS dialog.
-      const userCancelled =
-        typeof err === 'object' && err !== null && (err as Record<string, unknown>).userCancelled === true;
-      if (!userCancelled) {
+      // Cancellation is read from the error CODE, not the deprecated (and
+      // nullable) `userCancelled` flag — a null there would surface a "Restore
+      // failed" alert over a dialog the user closed deliberately.
+      if (classifyPurchaseError(err) !== 'cancelled') {
         // A genuine failure (network / store error) — don't claim "no purchases
         // found", which would stop the user retrying a transient error.
         Alert.alert(

@@ -3,6 +3,7 @@ import Purchases from 'react-native-purchases';
 import type { CustomerInfo } from 'react-native-purchases';
 
 import { initRC, RC_KEY } from '@/lib/rc-init';
+import { hasActiveEntitlement } from '@/lib/purchase-outcome';
 
 export const ENTITLEMENT_ID = 'pro';
 
@@ -77,7 +78,13 @@ export function useEntitlements(userId: string | undefined): EntitlementsState {
         // (component unmounted, or the active user changed under it).
         if (!mountedRef.current || activeUserRef.current !== userId) return false;
         setCustomerInfo(info);
-        setIsPro(info.entitlements.active[ENTITLEMENT_ID]?.isActive === true);
+        // Via the shared guarded read rather than an inline
+        // `info.entitlements.active[…]`. The RC types promise `entitlements` is
+        // present, but nothing validates the native bridge payload at runtime —
+        // and this line sits INSIDE the `try`, so a missing `entitlements` would
+        // be swallowed as a "transient error", burn all three retry attempts, and
+        // strand a paying user at isPro=false with no error anyone could see.
+        setIsPro(hasActiveEntitlement(info, ENTITLEMENT_ID));
         return true;
       } catch {
         // Transient error — back off briefly and retry before giving up.

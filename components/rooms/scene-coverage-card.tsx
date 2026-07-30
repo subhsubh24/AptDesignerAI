@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Layers, CheckCircle2, ScanEye } from "lucide-react";
 import type { RoomSceneGraph } from "@/lib/types/database";
+import { cn } from "@/lib/utils/cn";
+import { ASSESSMENT_PANEL } from "@/lib/utils/assessment-colors";
 
 /**
  * Surfaces the multi-view scene graph to the user: how many photos were pieced
@@ -58,15 +60,28 @@ export function SceneCoverageCard({
         )}
 
         {/* Coverage gaps — the actionable part */}
+        {/* The same two-halves-of-one-verdict shape as the Keep / Replace pair
+            (lib/utils/assessment-colors.ts): "good coverage" is reassurance that
+            requires nothing, so it recedes onto the muted surface; "areas not
+            visible yet" is the half the user has to act on, so it takes the
+            house accent. Polarity is carried by the CheckCircle2 / Camera icons
+            and the wording, not by a hue — which is why this no longer needs an
+            emerald/amber pair of its own. */}
         {wellCovered ? (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+              ASSESSMENT_PANEL.keep.surface,
+              ASSESSMENT_PANEL.keep.heading,
+            )}
+          >
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             Good coverage — your photos show the whole room from enough angles.
           </div>
         ) : (
-          <div className="space-y-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className={cn("space-y-2.5 rounded-lg border p-3", ASSESSMENT_PANEL.replace.surface)}>
             <div className="flex flex-wrap items-center gap-1.5">
-              <Camera className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <Camera className={cn("h-4 w-4", ASSESSMENT_PANEL.replace.heading)} />
               <span className="text-sm font-medium">Some areas aren&apos;t visible yet</span>
               {gaps.map((g) => (
                 <Badge key={g} variant="outline" className="text-xs capitalize">
@@ -78,7 +93,7 @@ export function SceneCoverageCard({
               <ul className="space-y-1 text-sm text-muted-foreground">
                 {shots.slice(0, 4).map((s) => (
                   <li key={s} className="flex gap-2">
-                    <span className="text-amber-500">+</span>
+                    <span className={ASSESSMENT_PANEL.replace.marker}>+</span>
                     <span>{s}</span>
                   </li>
                 ))}

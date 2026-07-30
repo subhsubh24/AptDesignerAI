@@ -8,6 +8,7 @@ import {
   ASSESSMENT_PANEL,
   CONFIDENCE_BANNER,
   CONFIDENCE_THRESHOLD,
+  STEP_MARK,
   confidenceBanner,
   isHighConfidence,
   type AssessmentPriority,
@@ -21,15 +22,20 @@ import {
  * 2. CONTRAST, COMPUTED — ratios are calculated here from the token values
  *    parsed out of app/globals.css, so a token edit re-runs the maths instead
  *    of leaving a stale number in a comment.
- * 3. A CONSUMER RATCHET — the four routes this palette serves are asserted to
- *    contain no off-system Tailwind palette family at all.
+ * 3. A CONSUMER RATCHET — every surface this palette serves is asserted to
+ *    contain no off-system Tailwind palette family at all, and to actually
+ *    import the palette.
  *
- * SCOPE, stated plainly: guard 3 covers the FOUR consumer files listed in
- * CONSUMERS. It is NOT a repo-wide off-system-colour ratchet and does not claim
- * to be one — other surfaces still carry raw palette utilities. What it does
- * claim is that these four cannot silently regress, which is the failure mode
- * that produced this palette in the first place: the same `what_should_go` list
- * was amber on /focus and rose on /saved because nothing was watching.
+ * SCOPE, stated plainly: guard 3 covers exactly the files listed in CONSUMERS —
+ * a ZERO bar, on the surfaces that render this palette. It is deliberately
+ * stricter and narrower than the repo-wide ceiling in
+ * `__tests__/design/off-system-palette-ratchet.test.ts`, which caps total
+ * off-system usage everywhere but cannot demand zero (many surfaces still carry
+ * raw palette utilities). The two work together: the ceiling stops new drift
+ * anywhere, this one holds a hard zero where the doctrine has actually landed.
+ * That drift is the failure mode which produced this palette in the first place —
+ * the same `what_should_go` list was amber on /focus and rose on /saved because
+ * nothing was watching.
  */
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -45,11 +51,25 @@ const CONSUMERS = [
   "app/projects/[projectId]/rooms/[roomId]/bundles/page.tsx",
   "app/saved/[id]/page.tsx",
   "app/shared/[token]/SharedDesignView.tsx",
+  // /diagnosis is where the user FIRST meets the Keep / Replace pair, and it
+  // rendered a fourth palette for it (emerald cards + amber cards) until this
+  // ratchet was extended to cover it. The scene-coverage card renders inside
+  // that same card stack and carried the matching emerald/amber pair.
+  "app/projects/[projectId]/rooms/[roomId]/diagnosis/page.tsx",
+  "components/rooms/scene-coverage-card.tsx",
 ];
 
-/** Tailwind palette families that are NOT part of the warm-editorial system. */
+/**
+ * Tailwind palette families that are NOT part of the warm-editorial system.
+ *
+ * The utility prefix list includes the DIRECTIONAL border variants
+ * (`border-l-…`, `border-t-…`) deliberately: without them this regex did not
+ * match `border-l-amber-400`, which is exactly the class the /diagnosis issue
+ * rails and the identified-product pill used. A guard that cannot see the
+ * class the violation is written in reports clean while the violation ships.
+ */
 const OFF_SYSTEM_FAMILY =
-  /\b(?:bg|text|border|ring|from|to|via)-(purple|violet|indigo|fuchsia|emerald|blue|sky|cyan|teal|green|pink|rose|amber|yellow|lime|orange|slate|gray|zinc|neutral|stone)-\d{2,3}\b/;
+  /\b(?:bg|text|border|border-[lrtbxy]|ring|from|to|via|fill|stroke|divide|outline|decoration)-(purple|violet|indigo|fuchsia|emerald|blue|sky|cyan|teal|green|pink|rose|amber|yellow|lime|orange|slate|gray|zinc|neutral|stone)-\d{2,3}\b/;
 
 // ── token parsing ────────────────────────────────────────────────────────────
 // globals.css declares light tokens in `:root` and dark overrides under `.dark`.
@@ -373,6 +393,99 @@ describe("assessment palette — computed contrast", () => {
         }
       }
       expect(failures, failures.join("\n")).toEqual([]);
+    });
+  }
+
+  /**
+   * WCAG 2.1 1.4.11 (non-text contrast): a graphical object needed to understand
+   * the content must reach 3:1 against what is adjacent to it.
+   */
+  const AA_NON_TEXT = 3;
+
+  for (const mode of ["light", "dark"] as const) {
+    it(`the step marks stay distinguishable without text or icons (${mode})`, () => {
+      // These three marks are pure colour — no label, no icon, no tooltip — so
+      // unlike every other palette here, colour IS the signal and a pretty token
+      // is not enough. This guard exists because it was NOT here: the first
+      // version of the one-hue conversion gave `done` an `accent-warm/40` wash,
+      // which measures 1.44:1 against the not-reached mark in BOTH modes, and
+      // nothing in the suite looked at topbar.tsx to notice.
+      // COMPOSITING BASE, stated precisely because a reviewer checked it: the
+      // topbar paints `.glass` (globals.css:378 — rgba(255,255,255,0.75) light,
+      // rgba(20,18,17,0.75) dark over blurred content), NOT the flat
+      // `--background` token. In dark mode the two are numerically identical; in
+      // light mode measuring against `--background` differs from the real glass
+      // surface by <0.05 in the resulting ratio, which changes no pass/fail
+      // outcome here. It is moot for the values that actually ship, because all
+      // three STEP_MARK entries are OPAQUE — there is no alpha to composite, so
+      // whatever is underneath is painted over. The base only matters if someone
+      // reintroduces a translucent mark, and this assertion refuses that outright
+      // so the approximation can never become load-bearing.
+      for (const [name, classes] of Object.entries(STEP_MARK)) {
+        const spec = bgSpec(classes);
+        expect(spec, `STEP_MARK.${name} paints no background`).not.toBeNull();
+        expect(
+          spec!.alpha,
+          `STEP_MARK.${name} = "${classes}" is TRANSLUCENT. These marks composite over ` +
+            `the topbar's .glass surface, which this guard approximates with --background; ` +
+            `a translucent mark makes that approximation load-bearing, and an ` +
+            `accent-warm/40 wash is exactly how this ladder measured 1.44:1 before. ` +
+            `Use an opaque token.`,
+        ).toBe(1);
+      }
+
+      const bgOf = (classes: string): RGB => {
+        const spec = bgSpec(classes);
+        if (!spec) throw new Error(`no bg-* class in "${classes}"`);
+        return parseHex(token(spec.name, mode));
+      };
+
+      const done = bgOf(STEP_MARK.done);
+      const current = bgOf(STEP_MARK.current);
+      const upcoming = bgOf(STEP_MARK.upcoming);
+
+      // `done` vs `upcoming` are the SAME size, so nothing but colour separates
+      // them. This pair must clear the non-text floor.
+      const doneVsUpcoming = contrastRatio(done, upcoming);
+      expect(
+        doneVsUpcoming,
+        `done (${STEP_MARK.done}) vs upcoming (${STEP_MARK.upcoming}) is ` +
+          `${doneVsUpcoming.toFixed(2)}:1 — same size, so colour is the only ` +
+          `signal and it must clear ${AA_NON_TEXT}:1`,
+      ).toBeGreaterThanOrEqual(AA_NON_TEXT);
+
+      // `current` vs `upcoming` likewise: the wide accent mark against a mark
+      // the user has not reached.
+      expect(contrastRatio(current, upcoming)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+
+      // `current` vs `done` is the pair colour CANNOT carry — they sit within
+      // ~1.1:1 of each other by design. So the compensating signal is SIZE, and
+      // it is asserted numerically against the BASE width read out of the
+      // consumer, not merely as "some w-* class is present".
+      //
+      // That distinction is the whole point. A bare /\bw-\d/ check passes on
+      // `current: "bg-accent-warm w-4"` — the same width the other two marks
+      // inherit — which would collapse this pair to NO differentiator at all
+      // (~1.02:1 in colour AND identical width) while the guard stayed green.
+      const topbar = fs.readFileSync(path.join(ROOT, "components/layout/topbar.tsx"), "utf8");
+      const baseWidth = /"h-1\.5 (w-\d+) rounded-full/.exec(topbar)?.[1];
+      expect(baseWidth, "could not read the step mark's base width from topbar.tsx").toBeDefined();
+
+      const widthOf = (classes: string): string =>
+        classes.split(/\s+/).find((c) => /^w-\d+$/.test(c)) ?? baseWidth!;
+
+      expect(
+        widthOf(STEP_MARK.current),
+        `current (${STEP_MARK.current}) and done (${STEP_MARK.done}) are ` +
+          `near-identical in luminance, so the current mark must differ in WIDTH — ` +
+          `but it resolves to the same ${baseWidth} the other marks inherit, leaving ` +
+          `the pair with no differentiator at all`,
+      ).not.toBe(widthOf(STEP_MARK.done));
+
+      // And the override must be WIDER, not narrower: the active step is the one
+      // that should draw the eye.
+      const num = (w: string) => Number(w.slice("w-".length));
+      expect(num(widthOf(STEP_MARK.current))).toBeGreaterThan(num(widthOf(STEP_MARK.done)));
     });
   }
 
