@@ -40,6 +40,18 @@ function freshIp(): string {
   return `10.0.0.${ipSeq % 250}`;
 }
 
+let emailSeq = 0;
+/**
+ * A fresh recipient per call. The route now also caps sends PER ADDRESS, so a
+ * shared literal like "user@example.com" would silently start returning the
+ * suppressed (send-nothing) path once enough tests had used it — the same
+ * cross-test bleed freshIp() exists to prevent, on the other bucket.
+ */
+function freshEmail(): string {
+  emailSeq += 1;
+  return `t${emailSeq}@example.com`;
+}
+
 describe("POST /api/auth/forgot-password", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,7 +104,7 @@ describe("POST /api/auth/forgot-password", () => {
     try {
       // @ts-expect-error test override
       process.env.NODE_ENV = "production";
-      const res = await POST(req({ email: "user@example.com" }, freshIp()));
+      const res = await POST(req({ email: freshEmail() }, freshIp()));
       expect(res.status).toBe(503);
     } finally {
       // @ts-expect-error restore
@@ -107,7 +119,7 @@ describe("POST /api/auth/forgot-password", () => {
     // link, or claiming success while silently sending nothing, are both worse
     // than the neutral response plus a server-side error log.
     mockGenerateLink.mockResolvedValue({ data: { properties: {} }, error: null });
-    const res = await POST(req({ email: "user@example.com" }, freshIp()));
+    const res = await POST(req({ email: freshEmail() }, freshIp()));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(mockSendEmail).not.toHaveBeenCalled();
@@ -131,7 +143,7 @@ describe("POST /api/auth/forgot-password", () => {
 
   it("stays neutral when generateLink throws", async () => {
     mockGenerateLink.mockRejectedValue(new Error("boom"));
-    const res = await POST(req({ email: "user@example.com" }, freshIp()));
+    const res = await POST(req({ email: freshEmail() }, freshIp()));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(mockSendEmail).not.toHaveBeenCalled();
@@ -139,7 +151,7 @@ describe("POST /api/auth/forgot-password", () => {
 
   it("NEVER claims an email was sent while the provider is in dry-run", async () => {
     delete process.env.RESEND_API_KEY; // no provider => dry-run
-    const res = await POST(req({ email: "user@example.com" }, freshIp()));
+    const res = await POST(req({ email: freshEmail() }, freshIp()));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, emailUnavailable: true });
     // The whole point: no link minted, no send attempted, no "check your inbox".
@@ -149,7 +161,7 @@ describe("POST /api/auth/forgot-password", () => {
 
   it("fails visibly (503) when email is live but the admin client is missing", async () => {
     mockGetAdminClient.mockReturnValue(null);
-    const res = await POST(req({ email: "user@example.com" }, freshIp()));
+    const res = await POST(req({ email: freshEmail() }, freshIp()));
     expect(res.status).toBe(503);
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
@@ -164,9 +176,80 @@ describe("POST /api/auth/forgot-password", () => {
 
   it("rejects a failed captcha before minting a link", async () => {
     mockVerifyTurnstile.mockResolvedValue({ success: false, reason: "invalid" });
-    const res = await POST(req({ email: "user@example.com" }, freshIp()));
+    const res = await POST(req({ email: freshEmail() }, freshIp()));
     expect(res.status).toBe(400);
     expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
+  it("caps sends PER RECIPIENT even when every request comes from a DIFFERENT IP", async () => {
+    // The distributed case the per-IP limit cannot see: a botnet / proxy pool /
+    // rotating IPv6 gets a fresh per-IP budget for each host it comes from, all
+    // aimed at one victim's inbox. Without a per-recipient cap this is an
+    // unbounded mail flood at a single address.
+    const victim = freshEmail();
+    for (let i = 0; i < 3; i++) {
+      const res = await POST(req({ email: victim }, freshIp()));
+      expect(res.status).toBe(200);
+    }
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+
+    const overQuota = await POST(req({ email: victim }, freshIp()));
+    expect(overQuota.status).toBe(200);
+    // Nothing minted and nothing mailed on the 4th.
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+    expect(mockGenerateLink).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns a byte-identical response over quota — suppression must not be observable", async () => {
+    // A 429 here would be its own oracle: it would tell the caller that someone
+    // recently requested a reset for that address. The suppressed request has to
+    // look exactly like a delivered one.
+    const victim = freshEmail();
+    let firstStatus = 0;
+    let firstBody: unknown;
+    for (let i = 0; i < 3; i++) {
+      const res = await POST(req({ email: victim }, freshIp()));
+      if (i === 0) {
+        firstStatus = res.status;
+        firstBody = await res.json();
+      }
+    }
+    const suppressed = await POST(req({ email: victim }, freshIp()));
+    expect(suppressed.status).toBe(firstStatus);
+    expect(await suppressed.json()).toEqual(firstBody);
+  });
+
+  it("scopes the quota to ONE address — a flooded victim can't lock everyone else out", async () => {
+    const victim = freshEmail();
+    for (let i = 0; i < 4; i++) await POST(req({ email: victim }, freshIp()));
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+
+    const bystander = freshEmail();
+    const res = await POST(req({ email: bystander }, freshIp()));
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalledTimes(4);
+    expect(mockSendEmail).toHaveBeenLastCalledWith(
+      expect.objectContaining({ to: bystander }),
+    );
+  });
+
+  it("counts case and whitespace variants of an address against the SAME quota", async () => {
+    // The quota keys off the normalised address. If it did not, "Victim@x.com",
+    // "victim@x.com" and " VICTIM@X.com " would each get their own budget and
+    // the cap would be trivially bypassable.
+    const local = `case${Date.now() % 100000}`;
+    const variants = [
+      `${local}@example.com`,
+      `${local.toUpperCase()}@Example.com`,
+      ` ${local}@EXAMPLE.COM `,
+      `${local}@example.com`,
+    ];
+    for (const v of variants) {
+      const res = await POST(req({ email: v }, freshIp()));
+      expect(res.status).toBe(200);
+    }
+    // Four requests, one address: the 4th is suppressed.
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
   });
 
   it("rate-limits repeated requests from one IP (an email cannon is the abuse case)", async () => {

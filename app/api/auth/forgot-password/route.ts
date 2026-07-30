@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -57,6 +58,54 @@ function isRateLimited(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return true;
   entry.count++;
   return false;
+}
+
+// ─── Per-RECIPIENT quota ─────────────────────────────────────────────────────
+//
+// The per-IP limit above stops one host spamming; it does nothing about the
+// abuse case it is most often mistaken for. An attacker with a botnet, a proxy
+// pool, or plain IPv6 rotation gets a FRESH 3-request budget per address they
+// come from, all aimed at ONE victim's inbox. Nobody's account is compromised —
+// the harm is that the victim's mailbox is buried and, worse, that a real reset
+// link arrives amid dozens of identical ones, which is how reset-flood phishing
+// gets its cover.
+//
+// So the outbound side is capped too: at most MAX_SENDS_PER_EMAIL reset mails
+// per address per window, no matter how many hosts ask.
+//
+// ENUMERATION SAFETY — the property this must not break. Being over quota
+// returns the SAME `{ ok: true }` 200 as any other request; it never 429s. A
+// 429 here would be an oracle in itself (it would confirm someone else recently
+// requested a reset for that address, which is a signal about the address). The
+// suppressed request simply mints and sends nothing.
+//
+// The key is a SHA-256 of the normalised address, not the address: this Map
+// outlives the request, and a long-lived in-memory list of everyone who forgot
+// their password is not something to keep in plaintext for no benefit.
+const MAX_SENDS_PER_EMAIL = 3;
+const emailBucket = new Map<string, { count: number; resetAt: number }>();
+
+function emailQuotaKey(email: string): string {
+  return crypto.createHash("sha256").update(email).digest("hex");
+}
+
+/**
+ * Claim one send for this address. Returns false when the address is already at
+ * its quota for the current window — the caller must then do nothing and still
+ * return the neutral body.
+ */
+function claimEmailSend(email: string): boolean {
+  if (rateLimitBypassedForTest()) return true; // CI journey suite only
+  const now = Date.now();
+  const key = emailQuotaKey(email);
+  const entry = emailBucket.get(key);
+  if (!entry || now >= entry.resetAt) {
+    emailBucket.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= MAX_SENDS_PER_EMAIL) return false;
+  entry.count++;
+  return true;
 }
 
 /**
@@ -149,6 +198,18 @@ export async function POST(req: NextRequest) {
       { error: "Password reset is temporarily unavailable. Please try again later." },
       { status: 503 },
     );
+  }
+
+  // Per-recipient quota. Placed AFTER the neutral-body point and BEFORE any
+  // mint/send, so an over-quota request costs nothing upstream and is
+  // indistinguishable from a delivered one to the caller. Deliberately not a
+  // 429 — see the emailBucket note above.
+  if (!claimEmailSend(email)) {
+    console.warn(
+      "[auth/forgot-password] per-recipient reset quota reached; suppressing send " +
+        "(the caller still gets the neutral body)",
+    );
+    return NextResponse.json(NEUTRAL_OK, { status: 200 });
   }
 
   // (2) ENUMERATION-SAFE. generateLink errors for an address with no account.
