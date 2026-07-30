@@ -81,7 +81,32 @@ function isRateLimited(ip: string): boolean {
 //
 // The key is a SHA-256 of the normalised address, not the address: this Map
 // outlives the request, and a long-lived in-memory list of everyone who forgot
-// their password is not something to keep in plaintext for no benefit.
+// their password is not something to keep in plaintext for no benefit. It is
+// obfuscation, NOT secrecy — the input space is small enough that a known
+// address is trivially confirmed against a hash. The point is only that the
+// process does not sit on a plaintext list.
+//
+// SCOPE — the caveat that matters, stated because it undercuts the headline.
+// This is per-INSTANCE memory, exactly like the `ipBucket` above ("In-memory,
+// like the sibling public routes; swap for Upstash if scaled out"). A genuinely
+// distributed attacker is also the load pattern that makes Vercel spin up more
+// function instances, each with an empty Map — so the real ceiling is
+// MAX_SENDS_PER_EMAIL x (warm instances), not 3. That means this closes the
+// single/low-concurrency case fully and the fully-distributed case only
+// PARTIALLY. It still cuts the flood by orders of magnitude versus no
+// per-recipient cap at all, and a shared store (PENDING_OPS `rate-limit-redis`)
+// is what would close it outright.
+//
+// THE TRADE-OFF, chosen deliberately. A cap on mail per address is also a way
+// to deny the address's OWNER: an attacker who knows the victim's email can
+// burn the quota before the victim ever asks, and the victim's own request is
+// then silently suppressed. That is a real regression in availability against
+// the previous behaviour, where the victim's mail arrived buried in noise. It
+// is accepted because it is BOUNDED and self-healing — the window is 15 minutes
+// and the owner simply retries — whereas the flood it prevents is not bounded
+// at all, and an inbox with 300 identical reset mails is where reset-flood
+// phishing hides. `expires the lockout` in the tests pins the bound so nobody
+// can quietly turn this into a longer denial.
 const MAX_SENDS_PER_EMAIL = 3;
 const emailBucket = new Map<string, { count: number; resetAt: number }>();
 

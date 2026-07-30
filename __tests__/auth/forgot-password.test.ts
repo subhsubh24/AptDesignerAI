@@ -252,6 +252,28 @@ describe("POST /api/auth/forgot-password", () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(3);
   });
 
+  it("EXPIRES the per-recipient lockout, so a burned quota is not a permanent denial", async () => {
+    // The trade-off this cap makes, pinned. An attacker who knows the victim's
+    // address can burn the quota before the victim ever asks, silently
+    // suppressing the OWNER's own reset. That is accepted only because it is
+    // BOUNDED — 15 minutes, then it self-heals. This test is what stops anyone
+    // quietly widening the window into a real denial of service.
+    const victim = freshEmail();
+    for (let i = 0; i < 4; i++) await POST(req({ email: victim }, freshIp()));
+    expect(mockSendEmail).toHaveBeenCalledTimes(3); // 4th suppressed
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 15 * 60 * 1000 + 1);
+      const afterWindow = await POST(req({ email: victim }, freshIp()));
+      expect(afterWindow.status).toBe(200);
+      // The owner gets their link again once the window has passed.
+      expect(mockSendEmail).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rate-limits repeated requests from one IP (an email cannon is the abuse case)", async () => {
     const ip = freshIp();
     const statuses: number[] = [];
