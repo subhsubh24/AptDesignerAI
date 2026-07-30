@@ -172,7 +172,15 @@ function parseRoomDimensions(
     // It's a map like { living_room: "12x15", bedroom: "10x12" }
     const roomKey = (roomType || "living_room").toLowerCase().replace(/[\s-]+/g, "_");
     const obj = raw as Record<string, unknown>;
-    const val = obj[roomKey] || obj.living_room;
+    // This room's entry ONLY. There used to be a `|| obj.living_room` fallback
+    // here, which fed the living room's size into another room's coverage-ratio
+    // maths whenever that room had no entry of its own — including when
+    // lib/floor-plan/legacy-room-dimensions.ts omits a room type on purpose
+    // because two rooms of that type disagree. A wrong area silently skews the
+    // harmony score; no area just leaves the constraint unset, which the caller
+    // already handles. (`roomKey` still defaults to living_room when roomType is
+    // absent entirely — that is a missing QUESTION, not a wrong answer.)
+    const val = obj[roomKey];
     if (typeof val === "string") dimString = val;
   }
 

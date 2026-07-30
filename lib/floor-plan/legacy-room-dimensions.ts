@@ -19,12 +19,21 @@
  * the map to stay SILENT where it cannot attribute an answer. Omitting a type
  * costs a hint; keeping it costs a wrong answer presented as a fact.
  *
- * OMISSION IS ONLY SAFE IF ABSENCE MEANS SILENCE, and it did not. Three of the
- * readers above ran `dims?.[roomType] || dims?.living_room`, so removing the
- * `bedroom` entry sent BOTH bedrooms to the LIVING ROOM's size — trading a
- * same-room-type error for a cross-room-type one, and making the two-bedroom
- * case worse rather than better. A reviewer caught this. Those fallbacks are
- * gone in the same change; without that, this module is a regression.
+ * OMISSION IS ONLY SAFE IF ABSENCE MEANS SILENCE, and it did not. FOUR readers
+ * ran `[roomType] || living_room`, so removing the `bedroom` entry sent BOTH
+ * bedrooms to the LIVING ROOM's size — trading a same-room-type error for a
+ * cross-room-type one, and making the two-bedroom case worse rather than
+ * better. Reviewers caught this twice: three sites first (search, search/stream,
+ * the mockup prompt), then a fourth in `lib/validation/spatial-math.ts`, which
+ * fed the wrong area into the harmony score. All four are gone; without that,
+ * this module is a regression. `__tests__/floor-plan/no-cross-room-dimension-
+ * fallback.test.ts` guards the readers so the `||` cannot come back quietly.
+ *
+ * ALSO KNOWN AND OUT OF SCOPE: `lib/validation/bundle-math.ts`'s own
+ * `parseRoomDimensions` regexes the first `W x D` pair out of
+ * `JSON.stringify(room_dimensions)` — it takes no room type at all, so it reads
+ * whichever room serialises first. That is a different defect (no room identity
+ * to bind), not this fallback, and it needs its own change.
  *
  * KNOWN, DELIBERATELY OUT OF SCOPE: `getRoomFromFloorPlan`
  * (`lib/agents/format-floor-plan.ts`) resolves the "exact" per-room data with
