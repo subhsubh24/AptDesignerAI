@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { runFloorPlanExtraction } from "@/lib/agents/floor-plan-extractor";
-import { mergeLegacyRoomDimensions } from "@/lib/floor-plan/legacy-room-dimensions";
 import { createLogger } from "@/lib/logging/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
@@ -148,17 +147,13 @@ export async function POST(
   const existingBr = (project.building_research as Record<string, unknown>) || {};
 
   // Also backfill the legacy floor_plan.* keys so agents that read
-  // building_research.floor_plan (apartment-research path) still work.
-  // The legacy map is keyed by ROOM TYPE and every reader looks up by type, so
-  // a type appearing twice with different sizes cannot be represented — see
-  // lib/floor-plan/legacy-room-dimensions.ts. Those types are omitted rather
-  // than resolved to whichever room happened to come last.
-  const legacyRoomDimensions = mergeLegacyRoomDimensions(
-    (existingBr.floor_plan as Record<string, unknown> | undefined)?.room_dimensions as
-      | Record<string, unknown>
-      | undefined,
-    extractedFloorPlan.rooms,
-  );
+  // building_research.floor_plan (apartment-research path) still work
+  const legacyRoomDimensions: Record<string, string> = {};
+  for (const room of extractedFloorPlan.rooms) {
+    if (room.dimensions_text) {
+      legacyRoomDimensions[room.room_type] = room.dimensions_text;
+    }
+  }
 
   const updatedBr = {
     ...existingBr,
@@ -168,10 +163,10 @@ export async function POST(
     floor_plan: {
       ...(existingBr.floor_plan as Record<string, unknown> || {}),
       total_sqft: extractedFloorPlan.total_sqft ?? (existingBr.floor_plan as Record<string, unknown> | undefined)?.total_sqft,
-      // Already merged over the stored map by mergeLegacyRoomDimensions. Do NOT
-      // re-spread the stored map on top: that would resurrect a stale entry for
-      // a type this extraction just found to be ambiguous.
-      room_dimensions: legacyRoomDimensions,
+      room_dimensions: {
+        ...(((existingBr.floor_plan as Record<string, unknown> | undefined)?.room_dimensions) as Record<string, unknown> || {}),
+        ...legacyRoomDimensions,
+      },
     },
   };
 

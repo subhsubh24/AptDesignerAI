@@ -117,8 +117,8 @@ function isRateLimited(ip: string): boolean {
 // filter. (2) Whether an earlier link is still VALID when the owner asks depends
 // on the Supabase project's OTP expiry — an owner-controlled dashboard setting
 // this codebase never reads, so no claim is made about it here. If that expiry
-// is ever configured at or below 15 minutes, MAX_SENDS_PER_EMAIL should move
-// below it; PENDING_OPS carries that as an owner verification step.
+// is ever configured at or below 15 minutes, MAX_SENDS_PER_EMAIL must move below
+// it, or an owner who was flooded could find every delivered link already dead.
 //
 // Without the release this would be exactly the DoS described: three failed
 // `generateLink` calls would burn the quota having delivered nothing, and the
