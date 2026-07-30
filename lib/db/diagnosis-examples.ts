@@ -55,6 +55,11 @@ const DIRECTION_BUCKETS: Record<string, string[]> = {
   modern: ["Modern", "Contemporary", "Transitional", "Mid-Century Modern"],
   traditional: ["Traditional", "Classic", "Art Deco"],
   eclectic: ["Bohemian", "Eclectic", "Maximalist"],
+  // "Industrial" (STYLE_LABELS, lib/ai/semantic-extract.ts) is deliberately
+  // absent: relatedDirections already self-matches an unbucketed label, and
+  // that is the right behaviour here — it has no near neighbour in this set
+  // worth widening into. Giving it a single-member bucket would read as a fix
+  // while changing nothing.
 };
 
 function directionBucket(direction: string): string | null {

@@ -48,6 +48,7 @@ import type { Verdict } from "@/lib/types/scoring";
 import { cn } from "@/lib/utils/cn";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/toast";
+import { buildRoomDimensionMap, lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -163,6 +164,11 @@ export default function FocusPage() {
   } | null>(null);
   const [floorPlanFound, setFloorPlanFound] = useState<boolean | null>(null);
 
+  // THIS room's dimensions, or undefined when the plan cannot say which room a
+  // number belongs to — rendered below as "This room: ~12 x 15 ft", so a wrong
+  // one is a confidently wrong number on the core-journey screen.
+  const thisRoomDimensions = lookupRoomDimension(floorPlan?.room_dimensions, roomInfo?.room_type);
+
   // Refinement is now handled by the <RefineChat /> chat panel.
   // No local state needed — it owns its messages, input, and loading flags.
 
@@ -253,16 +259,12 @@ export default function FocusPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const efp = br.extracted_floor_plan as any;
             if (efp) {
-              // Build room_dimensions map from rooms array
-              const roomDimensions: Record<string, string> = {};
-              if (Array.isArray(efp.rooms)) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                for (const r of efp.rooms as any[]) {
-                  if (r.room_type && (r.dimensions_text || r.sqft)) {
-                    roomDimensions[r.room_type] = r.dimensions_text ?? `${r.sqft} sqft`;
-                  }
-                }
-              }
+              // Build room_dimensions map from rooms array. This map is keyed
+              // by room_type and is rendered as "This room: ~12 x 15 ft"
+              // below, so in a two-bedroom apartment the loop that used to
+              // build it here showed one bedroom's size on the other's page.
+              // Shared builder omits a type its rooms disagree on.
+              const roomDimensions = buildRoomDimensionMap(efp.rooms);
               // Build notable_spatial_features from overall_notes + per-room traffic_notes
               const spatialFeatures: string[] = [];
               if (efp.building_orientation) spatialFeatures.push(efp.building_orientation);
@@ -891,10 +893,10 @@ export default function FocusPage() {
                     {floorPlan.total_sqft && (
                       <span className="text-muted-foreground text-xs">{floorPlan.total_sqft} sqft</span>
                     )}
-                    {floorPlan.room_dimensions && roomInfo && floorPlan.room_dimensions[roomInfo.room_type] && (
+                    {thisRoomDimensions && (
                       <>
                         <span className="text-muted-foreground">·</span>
-                        <span className="text-muted-foreground text-xs">This room: ~{floorPlan.room_dimensions[roomInfo.room_type]}</span>
+                        <span className="text-muted-foreground text-xs">This room: ~{thisRoomDimensions}</span>
                       </>
                     )}
                     {floorPlan.living_dining_combined && (

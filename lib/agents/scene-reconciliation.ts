@@ -302,11 +302,22 @@ export function groundCoverage(
   const observed = normList(raw.walls_observed);
 
   // Expected walls: from the matching floor-plan room if available, else cardinal.
+  //
+  // The match must identify exactly ONE room. `?? floorPlan.rooms[0]` took the
+  // literal first room in the array whenever the type did not match — and it
+  // never matches for the five DB room types the extractor has no bucket for
+  // (bedroom_2/3, bathroom_2/3, main_room), so Bedroom 2's expected walls were
+  // whichever room the extractor happened to list first, often the living room.
+  // That propagates: `gaps` becomes "Unseen areas (no photo): …" in downstream
+  // prompts (formatSceneGraphForPrompt) and in the user-facing progress line,
+  // both stated as fact. DEFAULT_WALLS — the four cardinals — is the honest
+  // answer when we cannot say which room this is. See matchSingleRoom in
+  // lib/agents/format-floor-plan for the same rule.
   let expected = DEFAULT_WALLS;
   if (floorPlan?.rooms?.length) {
-    const match =
-      floorPlan.rooms.find((r) => norm(r.room_type) === norm(roomType)) ?? floorPlan.rooms[0];
-    const planWalls = (match.walls ?? []).map((w) => norm(w.direction)).filter(Boolean);
+    const matches = floorPlan.rooms.filter((r) => norm(r.room_type) === norm(roomType));
+    const match = matches.length === 1 ? matches[0] : undefined;
+    const planWalls = (match?.walls ?? []).map((w) => norm(w.direction)).filter(Boolean);
     if (planWalls.length) expected = Array.from(new Set(planWalls)).sort();
   }
 

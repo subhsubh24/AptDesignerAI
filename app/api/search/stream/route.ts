@@ -10,6 +10,7 @@ import { userOwnsRoom } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
+import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 
 /**
  * SSE streaming search endpoint.
@@ -304,7 +305,9 @@ export async function POST(request: Request) {
     const fp = br.floor_plan as Record<string, unknown> | undefined;
     if (fp) {
       const dims = fp.room_dimensions as Record<string, string> | undefined;
-      const roomDim = dims?.[room.room_type] || dims?.living_room;
+      // Exact room only — see lib/floor-plan/room-dimensions. Falling back to
+      // the living room here shipped its size as this room's sizing constraint.
+      const roomDim = lookupRoomDimension(dims, room.room_type);
       const spatialNotes = Array.isArray(fp.notable_spatial_features)
         ? fp.notable_spatial_features.join(", ")
         : "";

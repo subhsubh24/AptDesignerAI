@@ -56,6 +56,7 @@ function makeDiagnosis(overrides?: Partial<{
       { priority: 5, action: "Add 38-inch round walnut dining table", category: "dining_table", reasoning: "Hosting zone" },
       { priority: 6, action: "Add fiddle leaf fig plant in matte black planter", category: "plants", reasoning: "Living element" },
     ],
+    design_direction_label: "Modern",
   };
 }
 
@@ -346,6 +347,47 @@ describe("validateDiagnosis", () => {
 
       // Multiple issues should be recorded
       expect(result.issues.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("design_direction_label survives patching", () => {
+    // app/api/diagnosis/route.ts persists `validation.patched.design_direction_label`
+    // into room_diagnoses. That column is what fetchDiagnosisExamples' exact-direction
+    // query filters on with `.in(...)`, and SQL IN never matches NULL — so if the
+    // label is ever dropped on the way through the validator, the query silently
+    // returns zero rows for every label and few-shot retrieval goes direction-blind
+    // again, with nothing failing. Pin it here.
+    it("carries the label through an unpatched result", () => {
+      const result = validateDiagnosis(makeDiagnosis(), [], undefined);
+      expect(result.patched.design_direction_label).toBe("Modern");
+    });
+
+    it("carries the label through a result the validator actually rewrites", () => {
+      const result = validateDiagnosis(
+        makeDiagnosis(),
+        [],
+        "don't need curtains"
+      );
+      // Precondition: the validator really did patch something.
+      expect(result.patched.action_list.some((a) => a.category === "curtains")).toBe(false);
+      expect(result.patched.design_direction_label).toBe("Modern");
+    });
+
+    it("preserves an explicit null rather than inventing a label", () => {
+      const withoutLabel = { ...makeDiagnosis(), design_direction_label: null };
+      const result = validateDiagnosis(withoutLabel, [], undefined);
+      expect(result.patched.design_direction_label).toBeNull();
+    });
+
+    it("keeps null null through a result the validator rewrites", () => {
+      // The combination the other three miss: a future refactor that patched
+      // the label with `|| someDefault` would pass every test above and only
+      // fail here — and would write a fabricated style onto a diagnosis whose
+      // direction never matched one.
+      const withoutLabel = { ...makeDiagnosis(), design_direction_label: null };
+      const result = validateDiagnosis(withoutLabel, [], "don't need curtains");
+      expect(result.patched.action_list.some((a) => a.category === "curtains")).toBe(false);
+      expect(result.patched.design_direction_label).toBeNull();
     });
   });
 });
