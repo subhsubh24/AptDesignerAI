@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { getAdminClient } from "@/lib/supabase/admin";
@@ -57,6 +58,110 @@ function isRateLimited(ip: string): boolean {
   if (entry.count >= RATE_LIMIT) return true;
   entry.count++;
   return false;
+}
+
+// ─── Per-RECIPIENT quota ─────────────────────────────────────────────────────
+//
+// The per-IP limit above stops one host spamming; it does nothing about the
+// abuse case it is most often mistaken for. An attacker with a botnet, a proxy
+// pool, or plain IPv6 rotation gets a FRESH 3-request budget per address they
+// come from, all aimed at ONE victim's inbox. Nobody's account is compromised —
+// the harm is that the victim's mailbox is buried and, worse, that a real reset
+// link arrives amid dozens of identical ones, which is how reset-flood phishing
+// gets its cover.
+//
+// So the outbound side is capped too: at most MAX_SENDS_PER_EMAIL reset mails
+// per address per window, no matter how many hosts ask.
+//
+// ENUMERATION SAFETY — the property this must not break. Being over quota
+// returns the SAME `{ ok: true }` 200 as any other request; it never 429s. A
+// 429 here would be an oracle in itself (it would confirm someone else recently
+// requested a reset for that address, which is a signal about the address). The
+// suppressed request simply mints and sends nothing.
+//
+// The key is a SHA-256 of the normalised address, not the address: this Map
+// outlives the request, and a long-lived in-memory list of everyone who forgot
+// their password is not something to keep in plaintext for no benefit. It is
+// obfuscation, NOT secrecy — the input space is small enough that a known
+// address is trivially confirmed against a hash. The point is only that the
+// process does not sit on a plaintext list.
+//
+// SCOPE — the caveat that matters, stated because it undercuts the headline.
+// This is per-INSTANCE memory, exactly like the `ipBucket` above ("In-memory,
+// like the sibling public routes; swap for Upstash if scaled out"). A genuinely
+// distributed attacker is also the load pattern that makes Vercel spin up more
+// function instances, each with an empty Map — so the real ceiling is
+// MAX_SENDS_PER_EMAIL x (warm instances), not 3. That means this closes the
+// single/low-concurrency case fully and the fully-distributed case only
+// PARTIALLY. It still cuts the flood by orders of magnitude versus no
+// per-recipient cap at all, and a shared store (PENDING_OPS `rate-limit-redis`)
+// is what would close it outright.
+//
+// WHY THIS IS NOT A DENIAL OF SERVICE ON THE ACCOUNT OWNER — the objection two
+// reviewers raised, and the constraint that shapes the implementation.
+//
+// The fear is real in the obvious design: an attacker who knows a victim's
+// address burns the quota, and the victim's own reset is then silently
+// swallowed while the UI says "check your inbox" — breaking priority (1) at the
+// top of this file for the one user who actually needs the link.
+//
+// What makes it not a denial is that a claim is RELEASED whenever no mail
+// actually went out. So the quota only ever counts messages genuinely delivered
+// to that address, which means being over quota carries a real guarantee: three
+// recovery links for this address were ACCEPTED BY THE PROVIDER in the last 15
+// minutes, addressed to the owner's own inbox regardless of who asked for them.
+// So "check your email" is not a fake success.
+//
+// TWO LIMITS ON THAT GUARANTEE, stated rather than glossed. (1) `delivered`
+// means Resend returned 200, not that the message cleared the recipient's spam
+// filter. (2) Whether an earlier link is still VALID when the owner asks depends
+// on the Supabase project's OTP expiry — an owner-controlled dashboard setting
+// this codebase never reads, so no claim is made about it here. If that expiry
+// is ever configured at or below 15 minutes, MAX_SENDS_PER_EMAIL must move below
+// it, or an owner who was flooded could find every delivered link already dead.
+//
+// Without the release this would be exactly the DoS described: three failed
+// `generateLink` calls would burn the quota having delivered nothing, and the
+// owner's fourth request would be suppressed with an empty inbox.
+//
+// The residual is small and bounded: an owner who deleted the earlier mails as
+// suspicious waits out the window. `EXPIRES the per-recipient lockout` pins that
+// bound so nobody can quietly widen it.
+const MAX_SENDS_PER_EMAIL = 3;
+const emailBucket = new Map<string, { count: number; resetAt: number }>();
+
+function emailQuotaKey(email: string): string {
+  return crypto.createHash("sha256").update(email).digest("hex");
+}
+
+/**
+ * Claim one send for this address. Returns false when the address is already at
+ * its quota for the current window — the caller must then do nothing and still
+ * return the neutral body.
+ */
+function claimEmailSend(email: string): boolean {
+  if (rateLimitBypassedForTest()) return true; // CI journey suite only
+  const now = Date.now();
+  const key = emailQuotaKey(email);
+  const entry = emailBucket.get(key);
+  if (!entry || now >= entry.resetAt) {
+    emailBucket.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= MAX_SENDS_PER_EMAIL) return false;
+  entry.count++;
+  return true;
+}
+
+/**
+ * Give a claim back. Called on every path where the claim did NOT result in a
+ * delivered message, so the quota counts real mail rather than attempts — see
+ * the note above for why that is what keeps this from denying the account
+ * owner their own recovery.
+ */
+function releaseEmailSend(email: string): void {
+  const entry = emailBucket.get(emailQuotaKey(email));
+  if (entry && entry.count > 0) entry.count--;
 }
 
 /**
@@ -151,6 +256,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Per-recipient quota. Placed AFTER the neutral-body point and BEFORE any
+  // mint/send, so an over-quota request costs nothing upstream and is
+  // indistinguishable from a delivered one to the caller. Deliberately not a
+  // 429 — see the emailBucket note above.
+  if (!claimEmailSend(email)) {
+    console.warn(
+      "[auth/forgot-password] per-recipient reset quota reached; suppressing send " +
+        "(the caller still gets the neutral body)",
+    );
+    return NextResponse.json(NEUTRAL_OK, { status: 200 });
+  }
+
   // (2) ENUMERATION-SAFE. generateLink errors for an address with no account.
   // That error is logged and swallowed — the caller gets the same body either
   // way. Everything below this point returns NEUTRAL_OK.
@@ -193,6 +310,13 @@ export async function POST(req: NextRequest) {
     console.error("[auth/forgot-password] generateLink threw:", err);
   }
 
+  if (!resetUrl) {
+    // Nothing will be mailed — unknown address, provider declined, no token, or
+    // a throw. Give the claim back so a run of failures cannot burn the quota
+    // and leave the real owner suppressed with an empty inbox.
+    releaseEmailSend(email);
+  }
+
   if (resetUrl) {
     const { subject, html, text } = buildPasswordResetEmail(resetUrl);
     // The send must NOT be awaited before responding. Awaiting an outbound
@@ -206,6 +330,10 @@ export async function POST(req: NextRequest) {
     const send = sendEmail({ to: email, subject, html, text, stage: "password_reset" }).then(
       (result) => {
         if (!result.delivered) {
+          // The claim bought a message that never arrived — hand it back, or the
+          // owner's next attempt is suppressed against an inbox with nothing in
+          // it. This is the same claim-then-release shape the lifecycle crons use.
+          releaseEmailSend(email);
           console.error(
             "[auth/forgot-password] reset email not delivered:",
             result.error ?? (result.dryRun ? "dry-run" : "unknown"),
@@ -213,6 +341,7 @@ export async function POST(req: NextRequest) {
         }
       },
       (err) => {
+        releaseEmailSend(email);
         console.error("[auth/forgot-password] reset email threw:", err);
       },
     );

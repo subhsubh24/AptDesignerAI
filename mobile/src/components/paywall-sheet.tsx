@@ -11,11 +11,20 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
 import {
+  classifyProductShape,
+  planLabel,
+  purchaseAgreementLead,
+  purchaseCtaLabel,
+  purchaseDisclosure,
+} from '@/lib/paywall-disclosure';
+import {
+  alertHandler,
   classifyPurchaseError,
   hasActiveEntitlement,
   performPurchaseAction,
   purchaseErrorAction,
   purchaseResultAction,
+  unlockHandler,
   type PurchaseAction,
 } from '@/lib/purchase-outcome';
 import { ENTITLEMENT_ID } from '@/hooks/use-entitlements';
@@ -44,6 +53,18 @@ type DisplayOption = {
    * what the store will actually do (Apple 3.1.2).
    */
   hasFreeTrial: boolean;
+  /**
+   * True for a subscription, false for a one-time purchase. Drives every piece
+   * of recurrence copy on the sheet (CTA, legal sentence, agreement lead) via
+   * lib/paywall-disclosure — the sheet used to assume `true` for everything,
+   * which told a one-time buyer their purchase renews automatically.
+   */
+  isRecurring: boolean;
+  /**
+   * Whether the store can hand this purchase back on another device. A
+   * CONSUMABLE cannot be restored, so it must not be offered the restore path.
+   */
+  isRestorable: boolean;
 };
 
 // Shown when RC offerings haven't loaded yet or RC is not configured. These
@@ -57,6 +78,8 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
     subline: '$33.25 per month · billed yearly',
     badge: 'Best value',
     hasFreeTrial: false,
+    isRecurring: true,
+    isRestorable: true,
   },
   {
     pkg: null,
@@ -65,6 +88,8 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
     subline: 'Billed monthly · cancel anytime',
     badge: null,
     hasFreeTrial: false,
+    isRecurring: true,
+    isRestorable: true,
   },
 ];
 
@@ -94,18 +119,32 @@ function packagesToOptions(
         isIOS,
         eligibility?.[pkg.product.identifier],
       );
-      const trialNote = hasFreeTrial ? 'Free trial included' : 'Cancel anytime';
+      // Read the PRODUCT, not the offering slot it happens to sit in — see
+      // classifyProductShape. `packageType` would misread a CUSTOM-slot
+      // subscription as a one-time purchase and drop its renewal disclosure.
+      const { isRecurring, isRestorable } = classifyProductShape(pkg.product);
+      const trialNote = hasFreeTrial
+        ? 'Free trial included'
+        : isRecurring
+          ? 'Cancel anytime'
+          : 'One-time purchase';
       return {
         pkg,
-        label: isAnnual ? 'Annual' : isMonthly ? 'Monthly' : pkg.identifier,
+        label: isAnnual
+          ? 'Annual'
+          : isMonthly
+            ? 'Monthly'
+            : planLabel(pkg.product.title, pkg.identifier),
         price: isAnnual ? `${priceStr} / year` : isMonthly ? `${priceStr} / month` : priceStr,
         subline: isAnnual
           ? `${trialNote} · best value`
           : isMonthly
             ? trialNote
-            : pkg.product.description,
+            : pkg.product.description || trialNote,
         badge: isAnnual ? 'Best value' : null,
         hasFreeTrial,
+        isRecurring,
+        isRestorable,
       };
     });
 }
@@ -185,6 +224,11 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
 
   const selectedOption = options[selectedIndex] ?? null;
   const trialAvailable = selectedOption?.hasFreeTrial ?? false;
+  // Default TRUE when no option is selected: the fallback display is the two
+  // subscription plans, so "subscription" is the honest assumption there. Once a
+  // real package is selected this reflects that package.
+  const recurring = selectedOption?.isRecurring ?? true;
+  const ctaLabel = purchaseCtaLabel({ isRecurring: recurring, hasFreeTrial: trialAvailable });
 
   // The ONE place an unlock can happen. Every purchase outcome — resolved or
   // thrown — is turned into a PurchaseAction by lib/purchase-outcome and then
@@ -196,11 +240,15 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
       // lib/purchase-outcome's performPurchaseAction, where it is tested —
       // including the negative, that an alert never reaches the unlock.
       performPurchaseAction(action, {
-        unlock: () => {
+        // The two roles are NOMINAL (see purchase-outcome's UnlockHandler /
+        // AlertHandler). A bare closure is not assignable to either slot, so
+        // swapping which one grants access is a compile error rather than a
+        // silent inversion that unlocks Pro on a declined card.
+        unlock: unlockHandler(() => {
           onPurchaseSuccess?.();
           onDismiss();
-        },
-        alert: (title, body) => Alert.alert(title, body),
+        }),
+        alert: alertHandler((title, body) => Alert.alert(title, body)),
       });
     },
     [onDismiss, onPurchaseSuccess],
@@ -362,11 +410,11 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             onPress={handlePurchase}
             disabled={purchasing}
             accessibilityRole="button"
-            accessibilityLabel={trialAvailable ? 'Start free trial' : 'Subscribe'}
+            accessibilityLabel={ctaLabel}
             accessibilityState={{ disabled: purchasing, busy: purchasing }}
           >
             <ThemedText style={[styles.ctaText, { color: colors.accentForeground }]}>
-              {purchasing ? 'Processing…' : trialAvailable ? 'Start Free Trial' : 'Subscribe'}
+              {purchasing ? 'Processing…' : ctaLabel}
             </ThemedText>
           </Pressable>
 
@@ -387,24 +435,19 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
             type="small"
             style={[styles.legal, { color: colors.mutedForeground }]}
           >
-            {/* Disclose the recurring price + period AND the cancellation
-                method at the point of purchase (Apple App Store 3.1.2(v) /
-                Google Play subscription policy — both require telling the user
-                HOW to cancel, not just that they can). selectedOption.price
-                already reads e.g. "$49 / month"; the store-native path mirrors
-                the guidance shown in Settings (settings.tsx). The trial half of
-                the sentence appears ONLY when the selected product really has a
-                free phase — otherwise it would promise the buyer a grace period
-                the store is not going to give them. */}
-            {trialAvailable
-              ? selectedOption?.price
-                ? `Your free trial then renews at ${selectedOption.price} unless you cancel before it ends. `
-                : 'Payment is charged when your free trial ends. '
-              : selectedOption?.price
-                ? `You'll be charged ${selectedOption.price}, renewing automatically until you cancel. `
-                : 'Your subscription renews automatically until you cancel. '}
-            {'Manage or cancel anytime in your App Store or Google Play subscription settings. '}
-            By subscribing you agree to our{' '}
+            {/* The terms shown before consent (Apple App Store 3.1.2(v) /
+                Google Play subscription policy). Which sentence is true depends
+                on the SELECTED plan — a subscription renews and can be
+                cancelled, a one-time purchase does neither — so the copy lives
+                in lib/paywall-disclosure where it is asserted, rather than as a
+                nested ternary here that assumed every package renews. */}
+            {purchaseDisclosure({
+              isRecurring: recurring,
+              isRestorable: selectedOption?.isRestorable ?? true,
+              hasFreeTrial: trialAvailable,
+              price: selectedOption?.price ?? null,
+            })}
+            {purchaseAgreementLead(recurring)}{' '}
             <ThemedText
               type="small"
               style={[styles.legalLink, { color: colors.textSecondary }]}

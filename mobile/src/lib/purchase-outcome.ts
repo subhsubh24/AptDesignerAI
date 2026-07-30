@@ -239,6 +239,56 @@ export function purchaseErrorAction(err: unknown): PurchaseAction {
 }
 
 /**
+ * The two effects `performPurchaseAction` can produce, as NOMINAL types.
+ *
+ * The gap this closes was found by a reviewer and is the last one left on this
+ * path. Routing the decision through a tested dispatcher stopped the switch
+ * being wrong; it did not stop the WIRING being wrong. With plain structural
+ * types, this call site
+ *
+ *     performPurchaseAction(action, {
+ *       unlock: () => Alert.alert('Purchase failed', 'Please try again.'),
+ *       alert:  () => { onPurchaseSuccess?.(); onDismiss(); },
+ *     })
+ *
+ * inverts the entire property — a DECLINED card unlocks Pro — while routing
+ * correctly through the tested dispatcher and passing `npm test`, both `tsc`
+ * runs and lint. Structural typing cannot see it: `() => void` is assignable to
+ * a two-parameter handler, so at least one direction of the swap always
+ * type-checks.
+ *
+ * Four source-text guards were defeated on this same property before this, so
+ * this deliberately is NOT a fifth. A brand makes the crossing a COMPILE error:
+ * a bare closure is no longer assignable to either slot, and the only way to
+ * produce one is `unlockHandler(...)` / `alertHandler(...)`. Writing
+ * `unlock: unlockHandler(() => Alert.alert(...))` is still possible — no type
+ * can read intent — but it is now a sentence that states what it does, rather
+ * than an invisible swap of two adjacent object keys.
+ */
+declare const HANDLER_ROLE: unique symbol;
+
+/** A closure that GRANTS entitlement-gated access. Built by `unlockHandler`. */
+export type UnlockHandler = (() => void) & { readonly [HANDLER_ROLE]: "unlock" };
+
+/** A closure that only TELLS the user something. Built by `alertHandler`. */
+export type AlertHandler = ((title: string, body: string) => void) & {
+  readonly [HANDLER_ROLE]: "alert";
+};
+
+/**
+ * Tag a closure as the one that unlocks. The cast is confined to this line;
+ * everywhere else the two roles are incompatible.
+ */
+export function unlockHandler(fn: () => void): UnlockHandler {
+  return fn as UnlockHandler;
+}
+
+/** Tag a closure as the one that only shows a message. */
+export function alertHandler(fn: (title: string, body: string) => void): AlertHandler {
+  return fn as AlertHandler;
+}
+
+/**
  * PERFORM an action — the dispatch half, extracted so it can be tested.
  *
  * Keeping the switch inside the React component left one real hole, which a
@@ -268,8 +318,8 @@ export function purchaseErrorAction(err: unknown): PurchaseAction {
 export function performPurchaseAction(
   action: PurchaseAction,
   handlers: {
-    readonly unlock: () => void;
-    readonly alert: (title: string, body: string) => void;
+    readonly unlock: UnlockHandler;
+    readonly alert: AlertHandler;
   },
 ): void {
   switch (action.kind) {
