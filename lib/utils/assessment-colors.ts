@@ -162,6 +162,43 @@ export function isHighConfidence(confidence: number): boolean {
   return confidence >= CONFIDENCE_THRESHOLD;
 }
 
+/**
+ * The room-workflow step marks in `components/layout/topbar.tsx` — done /
+ * current / not-yet-reached.
+ *
+ * This lives here, with one call site, for a reason the other ladders do not
+ * have: it is the only one where the marks carry their meaning with NO text and
+ * NO icon, so colour is the sole signal and it has to be MEASURED. It is pinned
+ * against the WCAG 1.4.11 non-text floor in
+ * `__tests__/design/assessment-colors.test.ts`, and an exported constant is what
+ * lets that maths reach it.
+ *
+ * The rule the ladder satisfies: every ADJACENT pair of states must be
+ * separated by contrast or by SIZE, never by hue alone.
+ *
+ *   done      neutral ink, standard width   4.34:1 (light) / 4.19:1 (dark) vs the
+ *                                           not-reached mark — same size, so
+ *                                           colour has to carry it, and it does
+ *   current   house accent, WIDER (w-6)     1.10:1 / 1.02:1 against `done` — all
+ *                                           but identical in luminance, which is
+ *                                           exactly why it is the wide one; the
+ *                                           size difference is the signal
+ *   upcoming  the border token              the faintest mark
+ *
+ * What this replaced was an `accent-warm/40` wash for `done`, and it was WRONG:
+ * against the not-reached mark it measured 1.44:1 in BOTH modes — under even the
+ * 3:1 non-text floor — so "done" and "not started" were near-indistinguishable.
+ * The raw `bg-emerald-500` before it had passed in dark mode (5.61:1) purely
+ * because an off-system hue happened to sit far from the border token. Removing
+ * the hue was right; replacing it with a wash of the accent was not, and nothing
+ * measured it because no guard covered this file. Now one does.
+ */
+export const STEP_MARK = {
+  done: "bg-muted-foreground",
+  current: "bg-accent-warm w-6",
+  upcoming: "bg-border",
+} as const;
+
 export const CONFIDENCE_BANNER = {
   high: {
     surface: "bg-muted/40 border-border text-foreground",

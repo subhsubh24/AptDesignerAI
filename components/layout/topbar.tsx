@@ -18,6 +18,7 @@ import { LogOut, ChevronRight, Menu, X, LayoutDashboard, HelpCircle, FileText, B
 import { LogoMark } from "@/components/ui/logo-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils/cn";
+import { STEP_MARK } from "@/lib/utils/assessment-colors";
 
 interface TopbarProps {
   user?: {
@@ -151,17 +152,19 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
                   key={i}
                   className={cn(
                     "h-1.5 w-4 rounded-full transition-all duration-300",
-                    // One-hue progress ladder: completed steps carry a lighter
-                    // wash of the SAME accent the current (wider) step paints
-                    // solid, and steps not yet reached stay on the border token.
-                    // Emerald for "done" made this row read as two unrelated
-                    // colour systems — the only three-mark ladder in the product
-                    // that was not already a single hue.
+                    // Read out of the shared palette, and MEASURED there: these
+                    // marks carry their meaning with no text and no icon, so
+                    // colour is the only signal and the ladder has to clear the
+                    // WCAG 1.4.11 non-text floor. See STEP_MARK for the numbers
+                    // and for why `done` is neutral ink rather than a wash of
+                    // the accent (a wash measured 1.44:1 against the
+                    // not-yet-reached mark — worse than the off-system emerald
+                    // it replaced).
                     i < activeStepIndex
-                      ? "bg-accent-warm/40"
+                      ? STEP_MARK.done
                       : i === activeStepIndex
-                      ? "bg-accent-warm w-6"
-                      : "bg-border"
+                      ? STEP_MARK.current
+                      : STEP_MARK.upcoming
                   )}
                 />
               ))}

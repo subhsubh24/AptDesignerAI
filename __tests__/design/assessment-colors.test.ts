@@ -8,6 +8,7 @@ import {
   ASSESSMENT_PANEL,
   CONFIDENCE_BANNER,
   CONFIDENCE_THRESHOLD,
+  STEP_MARK,
   confidenceBanner,
   isHighConfidence,
   type AssessmentPriority,
@@ -392,6 +393,61 @@ describe("assessment palette — computed contrast", () => {
         }
       }
       expect(failures, failures.join("\n")).toEqual([]);
+    });
+  }
+
+  /**
+   * WCAG 2.1 1.4.11 (non-text contrast): a graphical object needed to understand
+   * the content must reach 3:1 against what is adjacent to it.
+   */
+  const AA_NON_TEXT = 3;
+
+  for (const mode of ["light", "dark"] as const) {
+    it(`the step marks stay distinguishable without text or icons (${mode})`, () => {
+      // These three marks are pure colour — no label, no icon, no tooltip — so
+      // unlike every other palette here, colour IS the signal and a pretty token
+      // is not enough. This guard exists because it was NOT here: the first
+      // version of the one-hue conversion gave `done` an `accent-warm/40` wash,
+      // which measures 1.44:1 against the not-reached mark in BOTH modes, and
+      // nothing in the suite looked at topbar.tsx to notice.
+      const bgOf = (classes: string): RGB => {
+        const spec = bgSpec(classes);
+        if (!spec) throw new Error(`no bg-* class in "${classes}"`);
+        const rgb = parseHex(token(spec.name, mode));
+        // The marks sit on the page background, not a card.
+        return spec.alpha === 1
+          ? rgb
+          : composite(rgb, spec.alpha, parseHex(token("background", mode)));
+      };
+
+      const done = bgOf(STEP_MARK.done);
+      const current = bgOf(STEP_MARK.current);
+      const upcoming = bgOf(STEP_MARK.upcoming);
+
+      // `done` vs `upcoming` are the SAME size, so nothing but colour separates
+      // them. This pair must clear the non-text floor.
+      const doneVsUpcoming = contrastRatio(done, upcoming);
+      expect(
+        doneVsUpcoming,
+        `done (${STEP_MARK.done}) vs upcoming (${STEP_MARK.upcoming}) is ` +
+          `${doneVsUpcoming.toFixed(2)}:1 — same size, so colour is the only ` +
+          `signal and it must clear ${AA_NON_TEXT}:1`,
+      ).toBeGreaterThanOrEqual(AA_NON_TEXT);
+
+      // `current` vs `upcoming` likewise: the wide accent mark against a mark
+      // the user has not reached.
+      expect(contrastRatio(current, upcoming)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+
+      // `current` vs `done` is the pair colour CANNOT carry — they sit within
+      // ~1.1:1 of each other by design. State the compensating signal as a hard
+      // requirement rather than a comment: the current mark must differ in SIZE.
+      // If someone later equalises the widths, this fails and points at why.
+      expect(
+        STEP_MARK.current,
+        "current and done are near-identical in luminance, so the current mark " +
+          "must be distinguished by width (w-6) — colour cannot do it",
+      ).toMatch(/\bw-\d/);
+      expect(STEP_MARK.done).not.toMatch(/\bw-\d/);
     });
   }
 
