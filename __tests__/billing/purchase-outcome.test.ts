@@ -15,6 +15,8 @@
  * The tests are written around those two, not around the happy path.
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 
 import {
@@ -23,6 +25,7 @@ import {
   classifyPurchaseError,
   ERROR_CODE_PURCHASE_CANCELLED,
   ERROR_CODE_PAYMENT_PENDING,
+  ERROR_CODE_PRODUCT_ALREADY_PURCHASED,
 } from "@/mobile/src/lib/purchase-outcome";
 
 const PRO = "pro";
@@ -91,16 +94,6 @@ describe("classifyPurchaseResult — resolved is not entitled", () => {
     expect(classifyPurchaseResult({}, PRO)).toBe("pending");
     expect(classifyPurchaseResult({ customerInfo: null }, PRO)).toBe("pending");
   });
-
-  it("never returns a third value the caller does not handle", () => {
-    // The paywall branches on exactly two outcomes; a new one would silently
-    // fall into the pending copy.
-    const outcomes = new Set([
-      classifyPurchaseResult({ customerInfo: { entitlements: { active: { pro: { isActive: true } } } } }, PRO),
-      classifyPurchaseResult({}, PRO),
-    ]);
-    expect([...outcomes].sort()).toEqual(["pending", "unlocked"]);
-  });
 });
 
 describe("classifyPurchaseError — a pending charge is not a failure", () => {
@@ -135,9 +128,22 @@ describe("classifyPurchaseError — a pending charge is not a failure", () => {
     expect(classifyPurchaseError({ code: 1 })).toBe("cancelled");
   });
 
+  it("reads PRODUCT_ALREADY_PURCHASED_ERROR as already-owned, not failed", () => {
+    // The SECOND-TAP case. After a pending purchase the CTA re-enables, so a user
+    // can tap Subscribe again; the store answers "you already own this". Without
+    // its own branch that falls into "failed", whose copy says "please try again"
+    // — the exact advice the pending branch exists to stop giving, one tap later.
+    // The right answer is Restore.
+    expect(classifyPurchaseError({ code: ERROR_CODE_PRODUCT_ALREADY_PURCHASED })).toBe(
+      "already-owned",
+    );
+    expect(ERROR_CODE_PRODUCT_ALREADY_PURCHASED).toBe("6");
+    expect(classifyPurchaseError({ code: 6 })).toBe("already-owned");
+  });
+
   it("classifies genuine store/network errors as failed", () => {
     // STORE_PROBLEM_ERROR, NETWORK_ERROR, PRODUCT_NOT_AVAILABLE — these SHOULD
-    // reach the retryable alert.
+    // reach the retryable alert. Deliberately excludes "6", which is retry-proof.
     for (const code of ["2", "10", "5", "16"]) {
       expect(classifyPurchaseError({ code }), `code ${code}`).toBe("failed");
     }
@@ -157,5 +163,37 @@ describe("classifyPurchaseError — a pending charge is not a failure", () => {
     expect(classifyPurchaseError({ code: ERROR_CODE_PAYMENT_PENDING, userCancelled: false })).toBe(
       "pending",
     );
+  });
+});
+
+describe("the paywall handles every outcome the classifier can return", () => {
+  // The component's `switch` carries a `default` that shows the retryable
+  // "Purchase failed" alert. That default is correct for genuine errors, but it
+  // also means a NEW classifier outcome silently inherits the one piece of copy
+  // this module exists to stop showing on a non-failure. So pin the mapping
+  // structurally: every non-default outcome must have its own `case`.
+  //
+  // Read from source rather than rendered, because the Expo component cannot be
+  // imported into the web test runner (native modules) — the same constraint that
+  // shapes __tests__/billing/purchase-disclosure.test.ts.
+  const source = readFileSync(
+    path.join(path.resolve(__dirname, "../.."), "mobile/src/components/paywall-sheet.tsx"),
+    "utf8",
+  );
+
+  it.each(["cancelled", "pending", "already-owned"])(
+    "branches explicitly on %s",
+    (outcome) => {
+      expect(source, `no 'case ${outcome}' in the paywall's error switch`).toContain(
+        `case '${outcome}':`,
+      );
+    },
+  );
+
+  it("gates the unlock on the entitlement, not on the promise resolving", () => {
+    // The defect this module was written for: `onPurchaseSuccess` must sit behind
+    // classifyPurchaseResult, never directly after the await.
+    expect(source).toContain("classifyPurchaseResult(result, ENTITLEMENT_ID) === 'unlocked'");
+    expect(source).not.toMatch(/await Purchases\.purchasePackage\(pkg\);\s*\n\s*onPurchaseSuccess/);
   });
 });

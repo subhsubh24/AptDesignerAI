@@ -224,7 +224,17 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
           // here invites a SECOND purchase for the same subscription.
           Alert.alert(
             'Payment pending',
-            "Your payment is still being processed by the store. Pro unlocks as soon as it clears — please don't purchase again.",
+            'Your payment is still being processed by the store. Pro unlocks as soon as it clears — there is no need to buy again.',
+          );
+          break;
+        case 'already-owned':
+          // Reached by tapping Subscribe again after a pending purchase — the CTA
+          // re-enables, so this is the second tap. Point at Restore; retrying
+          // cannot help, and the generic "please try again" copy would be exactly
+          // the advice the pending branch above exists to avoid.
+          Alert.alert(
+            'Already subscribed',
+            'The store says this subscription is already active on your account. Tap Restore Purchases below to unlock Pro.',
           );
           break;
         default:
