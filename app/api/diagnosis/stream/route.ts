@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { userOwnsRoom } from "@/lib/auth/ownership";
-import { runRoomDiagnosis } from "@/lib/agents/room-diagnostician";
+import { runRoomDiagnosis, reconcileStyleLabel } from "@/lib/agents/room-diagnostician";
 import { assembleRoomSceneGraph } from "@/lib/agents/scene-assembler";
 import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
 import { selfReviewDiagnosis } from "@/lib/agents/self-correction";
@@ -245,8 +245,19 @@ export async function POST(request: Request) {
             ctx.roomType,
           );
           if (selfReview.wasCorrepted) {
+            // Self-review can replace the design direction wholesale, and the
+            // style label inferred during the run describes the PRE-correction
+            // one. reconcileStyleLabel re-infers only when the fields the label
+            // derives from actually changed — shared with /api/diagnosis so the
+            // two routes cannot drift.
+            const directionBefore = result.data.design_direction;
             result.data.diagnosis = selfReview.output.diagnosis as unknown as typeof result.data.diagnosis;
             result.data.design_direction = selfReview.output.designDirection as unknown as typeof result.data.design_direction;
+            result.data.design_direction_label = await reconcileStyleLabel(
+              result.data.design_direction_label,
+              directionBefore,
+              result.data.design_direction,
+            );
             sendEvent("step", { step: "Self-reviewing diagnosis", status: "done", detail: `Self-corrected ${selfReview.correctionRounds} issue(s)` });
           } else {
             sendEvent("step", { step: "Self-reviewing diagnosis", status: "done" });
@@ -352,6 +363,12 @@ export async function POST(request: Request) {
             model_used: result.model,
             expansion_log: expansion.expansionLog,
             scene_graph_json: sceneGraph,
+            // Required, not optional: fetchDiagnosisExamples' exact-direction
+            // query filters on this column with `.in(...)`, and SQL IN never
+            // matches NULL — omitting it here (as this route did) silently
+            // disables direction-matched few-shot retrieval for every diagnosis
+            // the UI creates, which is all of them.
+            design_direction_label: diagnosisData.design_direction_label ?? null,
             room_type: room.room_type ?? null,
             action_list_count: expansion.expandedActionList.length,
           })

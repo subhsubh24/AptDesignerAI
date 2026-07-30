@@ -16,6 +16,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { pickLatestDiagnosis } from "@/lib/diagnosis/latest-diagnosis";
 import { getRoomFromFloorPlan } from "@/lib/agents/format-floor-plan";
+import { reconcileStyleLabel } from "@/lib/agents/room-diagnostician";
 import { inferUserPreferences, type PreferenceSignals } from "@/lib/design-context/infer-preferences";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
@@ -244,8 +245,24 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
       ctx.roomType,
     );
     if (selfReview.wasCorrepted) {
+      // Self-review can replace the design direction wholesale (a palette or
+      // material clash rewrites style_notes), and the style label the
+      // diagnostician inferred describes the PRE-correction direction. Persist
+      // them out of sync and the row lies to every future retrieval: the stored
+      // action_list was generated under a direction the stored label no longer
+      // names.
+      //
+      // reconcileStyleLabel re-infers only when the fields the label derives
+      // from actually changed — shared with /api/diagnosis/stream so the two
+      // routes cannot drift.
+      const directionBefore = result.data.design_direction;
       result.data.diagnosis = selfReview.output.diagnosis as unknown as typeof result.data.diagnosis;
       result.data.design_direction = selfReview.output.designDirection as unknown as typeof result.data.design_direction;
+      result.data.design_direction_label = await reconcileStyleLabel(
+        result.data.design_direction_label,
+        directionBefore,
+        result.data.design_direction,
+      );
       console.log(`[diagnosis] Self-correction applied (${selfReview.correctionRounds} round(s)):`,
         selfReview.issues.join("; "));
     }
@@ -405,7 +422,15 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
       expansion_log: expansionLog,
       scene_graph_json: sceneGraph,
       // Quality tracking columns (migration 010) — enable DB few-shot retrieval.
-      // design_direction_label left null for now (schema lacks a label field).
+      // The label MUST be written: fetchDiagnosisExamples' exact-direction query
+      // filters on `.in("design_direction_label", ...)`, and SQL IN never matches
+      // NULL. Leaving it null meant that query returned zero rows for every
+      // label ever, so every diagnosis silently fell through to the
+      // direction-blind fallback and the retrieval loop could never learn.
+      // Value comes from the diagnostician, which already inferred it to run
+      // its own retrieval — recomputing here would cost a second LLM call and
+      // could disagree with the label this run actually retrieved against.
+      design_direction_label: diagnosisData.design_direction_label ?? null,
       room_type: room.room_type ?? null,
       action_list_count: expandedActionList.length,
     })

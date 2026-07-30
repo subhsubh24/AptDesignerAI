@@ -34,7 +34,7 @@ const log = createLogger("room-diagnostician");
  * Returns null when no confident label matches — the fetcher will fall back
  * to same-room_type-any-direction examples.
  */
-async function inferStyleLabel(direction: DesignDirection): Promise<string | null> {
+export async function inferStyleLabel(direction: DesignDirection): Promise<string | null> {
   const notes = direction.style_notes ?? "";
   const materials = direction.recommended_materials ?? [];
 
@@ -62,6 +62,10 @@ async function inferStyleLabel(direction: DesignDirection): Promise<string | nul
     ["Traditional", /\btraditional\b/],
     ["Classic", /\bclassic\b/],
     ["Art Deco", /\bart[-\s]?deco\b/],
+    // Present in STYLE_LABELS, so the LLM tier could return it while the
+    // deterministic tier never could — the regex fallback silently lost this
+    // one style whenever the classifier was unavailable.
+    ["Industrial", /\bindustrial\b/],
   ];
   for (const [label, rx] of namedStyles) {
     if (rx.test(haystack)) return label;
@@ -73,11 +77,55 @@ async function inferStyleLabel(direction: DesignDirection): Promise<string | nul
   return null;
 }
 
+/**
+ * The two fields `inferStyleLabel` actually reads. Comparing them decides
+ * whether a rewritten design direction can possibly have moved the label —
+ * everything else self-review may change (palette hexes, furniture types) is
+ * invisible to the classifier.
+ */
+function styleLabelInputs(direction: DesignDirection): string {
+  return JSON.stringify([direction?.style_notes ?? "", direction?.recommended_materials ?? []]);
+}
+
+/**
+ * The style label to persist after a self-review round rewrote the design
+ * direction.
+ *
+ * Both diagnosis routes (`/api/diagnosis` and `/api/diagnosis/stream`) run the
+ * same self-review and the same insert, so this lives here rather than in
+ * either of them — the duplication between those two routes is exactly how the
+ * first version of this fix ended up landing only on the one the UI does not
+ * call.
+ *
+ * Re-inference is gated on a deterministic, free-to-evaluate trigger: a
+ * correction round that left style_notes and recommended_materials alone
+ * cannot have moved the label, so it must not cost a classification.
+ */
+export async function reconcileStyleLabel(
+  currentLabel: string | null,
+  before: DesignDirection,
+  after: DesignDirection,
+): Promise<string | null> {
+  if (styleLabelInputs(before) === styleLabelInputs(after)) return currentLabel;
+  return inferStyleLabel(after);
+}
+
 export interface DiagnosisResult {
   diagnosis: DiagnosisData;
   design_direction: DesignDirection;
   missing_categories: string[];
   action_list: ActionItem[];
+  /**
+   * The closed-vocabulary style label inferred from this run's design
+   * direction (see inferStyleLabel), or null when nothing matched.
+   *
+   * Carried out so the caller can PERSIST it to
+   * `room_diagnoses.design_direction_label`. It is surfaced rather than
+   * recomputed because inferring it costs an LLM call — and because the
+   * column feeding the few-shot retrieval must hold the same label this run
+   * retrieved against, not a second independent guess.
+   */
+  design_direction_label: string | null;
 }
 
 /**
@@ -433,6 +481,7 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
       design_direction: analysis.design_direction,
       missing_categories: plan.missing_categories,
       action_list: plan.action_list,
+      design_direction_label: inferredStyleLabel,
     },
     tokensUsed: analysisTokens + planTokens,
     model: analysisModel,
