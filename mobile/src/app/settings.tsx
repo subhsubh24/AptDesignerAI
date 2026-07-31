@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
 import { signOutWithTimeout } from '@/lib/auth/sign-out';
@@ -227,7 +227,7 @@ export default function SettingsScreen() {
         <ThemedView style={styles.header}>
           <Pressable
             onPress={() => router.back()}
-            hitSlop={8}
+            hitSlop={TapSlop.smallLabel}
             accessibilityRole="button"
             accessibilityLabel="Back"
           >

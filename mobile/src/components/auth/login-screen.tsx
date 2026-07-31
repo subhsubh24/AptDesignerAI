@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { signInErrorMessage } from '@/lib/auth/auth-errors';
 import { supabase } from '@/lib/supabase';
@@ -189,7 +189,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
                 accessibilityRole="button"
                 accessibilityLabel="Create an account"
                 onPress={onSignup}
-                hitSlop={8}
+                hitSlop={TapSlop.smallLabel}
               >
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>
                   Create one

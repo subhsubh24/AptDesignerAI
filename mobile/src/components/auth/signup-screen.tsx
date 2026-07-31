@@ -13,7 +13,7 @@ import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser'
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isAlreadyRegisteredError, signUpErrorMessage } from '@/lib/auth/auth-errors';
 import { supabase } from '@/lib/supabase';
@@ -289,7 +289,7 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
                 accessibilityRole="button"
                 accessibilityLabel="Sign in to your account"
                 onPress={onLogin}
-                hitSlop={8}
+                hitSlop={TapSlop.smallLabel}
               >
                 <ThemedText type="small" style={{ color: colors.accent, fontWeight: '600' }}>
                   Sign in

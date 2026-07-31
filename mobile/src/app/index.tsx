@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function DashboardScreen() {
@@ -22,7 +22,7 @@ export default function DashboardScreen() {
             </ThemedText>
             <Pressable
               onPress={() => router.push('/settings')}
-              hitSlop={8}
+              hitSlop={TapSlop.smallLabel}
               accessibilityRole="button"
               accessibilityLabel="Account settings"
             >
