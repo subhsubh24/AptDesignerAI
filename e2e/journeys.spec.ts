@@ -135,6 +135,109 @@ test.describe("public + structural journeys", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
     await captureJourneyStep(page, "public-pricing");
   });
+
+  // The public CONTENT pages — the marketing and compliance surface a visitor
+  // and an app-store reviewer land on before any account exists.
+  //
+  // e2e/public-pages.spec.ts already smoke-tests that these return <400 with a
+  // visible heading. That is not enough for either half of what this suite is
+  // for: a page stripped of its substance still has a heading and still returns
+  // 200, so the smoke test passes over a gutted /faq or a /privacy that lost the
+  // disclosures Apple requires. Each test below asserts the SUBSTANCE the page
+  // exists to deliver, and captures the screen so the F7 vision lenses have an
+  // artifact to judge rather than a green tick to trust.
+
+  test("waitlist page shows the real signup form, the conversion surface", async ({ page }) => {
+    const res = await page.goto("/waitlist");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // The form IS the page's purpose — a waitlist that renders copy but no way
+    // to join is the exact "builds but does not work" failure, and it would
+    // sail through a heading-only assertion.
+    await expect(page.getByLabel(/email address/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /join|waitlist|notify/i })).toBeVisible();
+    await captureJourneyStep(page, "public-waitlist");
+  });
+
+  test("FAQ page answers real questions, not an empty shell", async ({ page }) => {
+    const res = await page.goto("/faq");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // A specific question, so the assertion fails if the content collection
+    // empties out — a count alone would pass on placeholder entries.
+    const firstQuestion = page.getByText(/what does aptdesigner actually do\?/i);
+    await expect(firstQuestion).toBeVisible();
+    // The questions are <details> disclosures, so "visible" proves only that a
+    // summary rendered. Open one and assert its ANSWER appears — a disclosure
+    // that never expands is a page that looks complete and answers nothing.
+    const answer = page.getByText(/you take a few photos of your rooms/i).first();
+    await expect(answer).toBeHidden();
+    await firstQuestion.click();
+    await expect(answer).toBeVisible();
+    // A multi-topic reference, not a single answer.
+    expect(await page.locator("details").count()).toBeGreaterThanOrEqual(10);
+    await captureJourneyStep(page, "public-faq");
+  });
+
+  test("privacy policy still carries the disclosures the stores require", async ({ page }) => {
+    const res = await page.goto("/privacy");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1, name: /privacy policy/i })).toBeVisible();
+    // Both of these are store-acceptance load-bearing, not decoration: the
+    // camera/photos/notifications disclosure, and the deletion promise Apple
+    // 5.1.1(v) is checked against. Losing either silently is a rejection.
+    await expect(page.getByRole("heading", { name: /device permissions/i })).toBeVisible();
+    await expect(page.getByText(/permanently removes all your content/i)).toBeVisible();
+    await captureJourneyStep(page, "public-privacy");
+  });
+
+  test("terms page renders the real agreement", async ({ page }) => {
+    const res = await page.goto("/terms");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1, name: /terms of service/i })).toBeVisible();
+    expect(await page.getByRole("heading", { level: 2 }).count()).toBeGreaterThanOrEqual(5);
+    await captureJourneyStep(page, "public-terms");
+  });
+
+  test("guides index lists guides that actually link somewhere", async ({ page }) => {
+    const res = await page.goto("/guides");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // An SEO index whose entries lead nowhere is worse than no index. Assert
+    // the links exist AND that following one reaches a real article.
+    const guideLinks = page.locator('a[href^="/guides/"]');
+    expect(await guideLinks.count()).toBeGreaterThanOrEqual(3);
+    await captureJourneyStep(page, "public-guides");
+
+    await guideLinks.first().click();
+    await expect(page).toHaveURL(/\/guides\/.+/);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await captureJourneyStep(page, "public-guide-article");
+  });
+
+  test("support page offers a real way to get help", async ({ page }) => {
+    const res = await page.goto("/support");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // A support page with no contact route is a dead end — and a dead end here
+    // is what an app-store reviewer sees when they look for support contact.
+    //
+    // Scoped to <main>, and that scoping is the whole assertion. MarketingFooter
+    // renders an unconditional "Contact us" mailto on EVERY marketing page, so a
+    // page-wide `a[href^="mailto:"]` would stay green with the support page's own
+    // body deleted — the chrome-satisfies-the-assertion failure these tests exist
+    // to end.
+    await expect(page.getByRole("heading", { name: /email support/i })).toBeVisible();
+    await expect(page.locator('main a[href^="mailto:"]').first()).toBeVisible();
+    await captureJourneyStep(page, "public-support");
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

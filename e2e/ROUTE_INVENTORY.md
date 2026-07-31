@@ -2,8 +2,8 @@
 
 Records runtime functional coverage: which routes/flows have a spec, the **intended
 outcome** it asserts (not `status < 400`), and what is still uncovered. It does NOT
-claim every route is covered — **10 of the 35 `app/**/page.tsx` routes appear in the
-table below**, and all 25 that do not are listed under "Tracked gaps" so the
+claim every route is covered — **17 of the 35 `app/**/page.tsx` routes appear in the
+table below**, and all 18 that do not are listed under "Tracked gaps" so the
 shortfall is counted rather than implied away. (Counts derived from
 `find app -name page.tsx` against the backticked paths in the table; if you edit
 either, re-derive rather than adjusting by hand — a hand-count is how the previous
@@ -33,6 +33,13 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | `/saved` (logged out) | structural | redirects to `/login` | ✅ |
 | `/` | structural | resolves to `/login` (logged out) / `/dashboard`; no boundary | ✅ |
 | `/pricing` | public | real heading; status < 400; no boundary | ✅ |
+| `/waitlist` | public | the signup form itself — labelled email input + submit button; copy without a way to join is the BUILDS ≠ WORKS case | ✅ |
+| `/faq` | public | a named question is present AND its `<details>` EXPANDS to reveal the real answer (a disclosure that never opens answers nothing); ≥10 entries | ✅ |
+| `/privacy` | public | the Apple 5.1.1(v) load-bearing content: the "Device permissions" section and the "permanently removes all your content" deletion promise | ✅ |
+| `/terms` | public | the real agreement — ≥5 `h2` sections, not a stub | ✅ |
+| `/guides` | public | ≥3 guide links that are FOLLOWED, not just counted — an index whose entries lead nowhere is worse than none | ✅ |
+| `/guides/color-palette-guide` | public | reached by clicking through from the index; renders its own `h1`, no boundary | ✅ |
+| `/support` | public | a real contact route scoped to `<main>` ("Email support" + a mailto) — the page-wide locator was satisfied by the footer's "Contact us" on every page | ✅ |
 | sign-in → `/dashboard` | authed | **"Welcome to AptDesigner" + "Start designing" render; NO "Something went wrong"** (canonical guard) | ✅ |
 | core flow entry (onboarding) | authed | "Start designing" advances without error | ✅ |
 | `/login` (logged in) | authed | redirects to `/dashboard` | ✅ |
@@ -55,10 +62,10 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   smoke check. `focus` is **not** in that scan and has no coverage of any kind: opening it
   starts the room-analysis pipeline, so scanning it would be slow and dependent on live LLM
   behaviour (`journeys.spec.ts:271-273`).
-- **The 25 routes absent from the table**, in full, so the number above is checkable:
-  - marketing / content (11): `/faq`, `/gallery`, `/picks`, `/support`, `/privacy`, `/terms`,
-    `/waitlist`, `/guides`, `/guides/ai-vs-professional-design`, `/guides/color-palette-guide`,
-    `/guides/material-coherence`
+- **The 18 routes absent from the table**, in full, so the number above is checkable:
+  - marketing / content (4): `/gallery`, `/picks`, `/guides/ai-vs-professional-design`,
+    `/guides/material-coherence` — the two guide articles the index test does not click
+    through to (it follows the first link only)
   - product (9): `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`, and the seven
     per-room routes above (`setup`, `focus`, `diagnosis`, `products`, `bundles`, `mockups`,
     `compare`) — six a11y-scanned, none functionally asserted
