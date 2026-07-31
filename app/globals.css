@@ -17,6 +17,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-warm: var(--accent-warm);
   --color-accent-warm-strong: var(--accent-warm-strong);
+  --color-accent-warm-on-solid: var(--accent-warm-on-solid);
+  --color-accent-warm-solid-hover: var(--accent-warm-solid-hover);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -58,6 +60,18 @@
      tint is only 4.25:1; this clears AA (5.1:1) without darkening the brand
      accent used for fills/borders/focus rings. */
   --accent-warm-strong: #a3441a;
+  /* Label colour for text sitting ON a SOLID warm fill (bg-accent-warm) or on
+     the warm CTA gradient. It is NOT --accent-foreground: near-black on the
+     light accent is only 3.51:1. White clears AA here at 5.11:1 on #b4501e and
+     6.18:1 on #a3441a. The dark theme deliberately inverts this — see below. */
+  --accent-warm-on-solid: #ffffff;
+  /* Hover fill for a solid warm CTA. Exists because the obvious hover on a
+     hand-rolled fill — `hover:opacity-90` — is an AA regression: opacity
+     composites the fill AND its label toward the surface behind, so white on
+     #b4501e falls from 5.11:1 to 4.26:1 over a white panel. Changing the FILL
+     instead leaves the label opaque; darkening it in light raises the ratio to
+     6.18:1 while still reading as a hover. */
+  --accent-warm-solid-hover: #a3441a;
   --destructive: #dc2626;
   --destructive-foreground: #faf9f7;
   --border: #e8e1d9;
@@ -72,6 +86,32 @@
   /* Extended design tokens */
   --gradient-warm-start: #b4501e;
   --gradient-warm-end: #d4733e;
+  /* The CTA-fill gradient is a SEPARATE pair from the decorative one above,
+     because it has to carry a label. The decorative gradient's light end
+     (#d4733e) is only 3.32:1 against white, so a label on it fails AA over most
+     of the button. This pair stays dark enough that --accent-warm-on-solid
+     clears AA at BOTH ends, at rest (6.18:1 → 5.60:1) AND under the variant's
+     `hover:brightness-110` (5.33:1 → 4.82:1), which is what forces the end this
+     deep: the filter lightens the fill while white text stays white, so a
+     rest-state pass is not enough.
+
+     The HOVER state is a second fixed pair rather than a brightness filter, for
+     the same reason `--accent-warm-solid-hover` exists: a filter lightens the
+     fill uncontrollably, so the REST stops have to be deep enough to survive
+     it, and the button ends up over-corrected. Pinning hover explicitly buys
+     the rest state its vibrancy back — the rest pair only has to clear AA on
+     its own (5.11:1 → 4.69:1), so it can start at the brand accent itself and
+     end LIGHTER than that, where a filter-driven version had to end darker
+     than the accent's darkest point. Hover then deepens, matching the
+     direction `--accent-warm-solid-hover` takes on the flat CTAs instead of
+     brightening while they darken.
+
+     Decorative uses — the hero `.text-gradient-warm` heading, the gradient
+     border — keep the original, brighter pair and are unaffected. */
+  --gradient-warm-button-start: #b4501e;
+  --gradient-warm-button-end: #ba5724;
+  --gradient-warm-button-hover-start: #a3441a;
+  --gradient-warm-button-hover-end: #ac4a1c;
   --glow-warm: rgba(180, 80, 30, 0.15);
   --surface-elevated: #ffffff;
   --shadow-warm-color: rgba(180, 80, 30, 0.08);
@@ -99,6 +139,16 @@
   /* Dark accent-warm already clears AA as text on the tinted pill (5.0:1); keep
      the strong token equal so the shared utility renders identically in dark. */
   --accent-warm-strong: #d4733e;
+  /* Inverted relative to light, and deliberately so: the dark theme lightens the
+     warm accent to #d4733e so it reads against a dark surface, which drops white
+     to 3.32:1 — a FAIL. Near-black on that same fill is 5.41:1, and 7.50:1 on the
+     gradient's light end. Each theme wants the other theme's label colour. */
+  --accent-warm-on-solid: #1a1614;
+  /* Dark lifts rather than deepens — #a3441a would be near-invisible against a
+     dark surface. Against the near-black label this is 7.50:1, up from the
+     5.41:1 at rest, so the hover state is the higher-contrast one in both
+     themes. */
+  --accent-warm-solid-hover: #e8935e;
   --destructive: #ef4444;
   --destructive-foreground: #ede9e3;
   --border: #2e2a26;
@@ -112,6 +162,15 @@
   /* Extended design tokens */
   --gradient-warm-start: #d4733e;
   --gradient-warm-end: #e8935e;
+  /* Dark keeps the bright pair for the CTA fill — with the near-black label above
+     it clears AA at both ends (5.41:1 → 7.50:1), so there is nothing to darken.
+     Hover LIFTS here rather than deepening, because on a dark surface a deeper
+     fill reads as receding; that is the same direction --accent-warm-solid-hover
+     takes in this theme, and it raises the label to 7.50:1 → 9.07:1. */
+  --gradient-warm-button-start: #d4733e;
+  --gradient-warm-button-end: #e8935e;
+  --gradient-warm-button-hover-start: #e8935e;
+  --gradient-warm-button-hover-end: #f2a86e;
   --glow-warm: rgba(212, 115, 62, 0.2);
   --surface-elevated: #222019;
   --shadow-warm-color: rgba(212, 115, 62, 0.12);
@@ -396,7 +455,23 @@ body {
 
 /* ─── Warm gradient CTAs & shadows ─── */
 .bg-gradient-warm-button {
-  background: linear-gradient(135deg, var(--gradient-warm-start) 0%, var(--gradient-warm-end) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--gradient-warm-button-start) 0%,
+    var(--gradient-warm-button-end) 100%
+  );
+}
+
+/* Scoped to the INTERACTIVE elements only. The same class paints decorative
+   step-number circles (app/page.tsx, the diagnosis lists) which are not
+   controls and should not react to the pointer. */
+button.bg-gradient-warm-button:hover,
+a.bg-gradient-warm-button:hover {
+  background: linear-gradient(
+    135deg,
+    var(--gradient-warm-button-hover-start) 0%,
+    var(--gradient-warm-button-hover-end) 100%
+  );
 }
 
 .bg-gradient-card-hero {

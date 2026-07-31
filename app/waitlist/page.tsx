@@ -120,7 +120,7 @@ export default function WaitlistPage() {
               </p>
               <a
                 href="/signup"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-warm text-white font-semibold px-7 py-3 text-sm hover:opacity-90 transition-opacity"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-warm text-accent-warm-on-solid font-semibold px-7 py-3 text-sm hover:bg-accent-warm-solid-hover transition-colors"
               >
                 Try it free — no credit card
               </a>

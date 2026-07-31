@@ -123,7 +123,7 @@ export default function PicksPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                   roomFilter === "all"
-                    ? "border-accent-warm bg-accent-warm text-white shadow-sm"
+                    ? "border-accent-warm bg-accent-warm text-accent-warm-on-solid shadow-sm"
                     : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                 )}
               >
@@ -137,7 +137,7 @@ export default function PicksPage() {
                   className={cn(
                     "px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all duration-200 active:scale-95",
                     roomFilter === r.id
-                      ? "border-accent-warm bg-accent-warm text-white shadow-sm"
+                      ? "border-accent-warm bg-accent-warm text-accent-warm-on-solid shadow-sm"
                       : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >

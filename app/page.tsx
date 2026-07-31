@@ -243,7 +243,7 @@ export default function LandingPage() {
 
                   {/* Step number */}
                   <div className="relative z-10 shrink-0">
-                    <div className="h-11 w-11 rounded-full bg-gradient-warm-button text-white flex items-center justify-center text-sm font-bold shadow-warm-sm group-hover:shadow-warm-md transition-shadow">
+                    <div className="h-11 w-11 rounded-full bg-gradient-warm-button text-accent-warm-on-solid flex items-center justify-center text-sm font-bold shadow-warm-sm group-hover:shadow-warm-md transition-shadow">
                       {item.step}
                     </div>
                   </div>

@@ -433,7 +433,7 @@ export default function ProductsPage() {
                     {isShortlisted && (
                       <div className="absolute top-3 right-3">
                         <div className="h-7 w-7 rounded-full bg-accent-warm flex items-center justify-center shadow-warm-sm">
-                          <CheckCircle2 className="h-4 w-4 text-white" />
+                          <CheckCircle2 className="h-4 w-4 text-accent-warm-on-solid" />
                         </div>
                       </div>
                     )}
