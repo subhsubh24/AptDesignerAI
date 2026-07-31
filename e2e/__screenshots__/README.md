@@ -23,7 +23,8 @@ readiness-issue evidence for the gate.
 
 | Tier | Captured | Committed here |
 |---|---|---|
-| Public + structural | yes | yes — 5 distinct states × 2 widths |
+| Public + structural (signup, login, forgot-password, reset-password, pricing) | yes | yes — 5 distinct states × 2 widths |
+| Public content (waitlist, FAQ, privacy, terms, guides index, guide article, support) | yes | yes — 7 distinct states × 2 widths |
 | Authenticated (dashboard, onboarding, account, paywall, free-tier gate) | yes, when the suite runs with the auth stack | **no** |
 | Design-dense room surfaces (setup, diagnosis, products, bundles, mockups, compare) | yes, when the suite runs with the auth stack | **no** |
 
@@ -52,10 +53,17 @@ npx next start -p 3100          # with the app's required env set
 CI=1 PLAYWRIGHT_BASE_URL=http://localhost:3100 bash scripts/run-journeys.sh --public-only
 ```
 
+**Run it serially.** `--workers=1` is not a preference. A run at two workers
+produced a BLANK 4.7KB `/login` desktop capture — the page shot mid-paint —
+while every DOM assertion in that test passed. Three serial re-runs reproduced
+the real 471KB screen byte-for-byte. `__tests__/design/screenshot-manifest.test.ts`
+now decodes pixels and fails a blank artifact, so this cannot be committed
+silently, but the remedy is still to re-capture serially.
+
 Captures are near-deterministic — animations disabled, caret hidden, fonts
 awaited (all bounded; see `e2e/helpers/screenshot.ts`). "Near", not "perfectly":
-re-running against an unchanged app reproduced 9 of these 10 files byte-for-byte,
-while `public-pricing-mobile.png` moved by 7 bytes on a sub-pixel antialiasing
+re-running against an unchanged app reproduces the great majority of these files
+byte-for-byte, while a few move by single-digit bytes on a sub-pixel antialiasing
 difference at one rounded corner. Expect the occasional few-byte churn; treat a
 LARGE diff, or a diff on many files at once, as a real visual change worth
 looking at.
