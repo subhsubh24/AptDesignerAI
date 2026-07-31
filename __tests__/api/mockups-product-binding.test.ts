@@ -127,8 +127,17 @@ function makeClient(opts: {
     }
     if (table === "mockup_jobs") {
       const chain: Record<string, unknown> = {};
+      // The free-tier cap counts this table with `{ count: "exact" }` before any
+      // render work; the write path uses the same table without it. These tests
+      // are about the product<->room bind, so the count always reports 0 (under
+      // the allowance) and the request proceeds to the bind as before.
+      const countChain: Record<string, unknown> = {};
+      countChain.eq = vi.fn().mockReturnValue(countChain);
+      countChain.neq = vi.fn().mockResolvedValue({ count: 0, error: null });
       chain.insert = jobInsertSpy;
-      chain.select = vi.fn().mockReturnValue(chain);
+      chain.select = vi.fn((_cols?: string, options?: { count?: string }) =>
+        options?.count ? countChain : chain,
+      );
       chain.single = vi.fn().mockResolvedValue({ data: { id: "job-1" }, error: null });
       chain.update = vi.fn().mockReturnValue(chain);
       chain.eq = vi.fn().mockResolvedValue({ error: null });

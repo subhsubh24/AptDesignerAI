@@ -17,6 +17,7 @@ type FunnelEvent =
   | 'analysis_complete'
   | 'design_saved'
   | 'save_limit_paywall_shown'
+  | 'mockup_limit_paywall_shown'
   | 'share_nudge_shown'
   | 'share_nudge_clicked'
   | 'upgrade_page_view'
