@@ -124,11 +124,23 @@ export function WaitlistForm() {
         className="flex-1 h-11 rounded-xl border bg-background px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-warm/50 disabled:opacity-60 transition"
         aria-label="Email address"
       />
+      {/* ONLY the in-flight request disables this. Every other reason a submit
+          could fail is better said than shown, and both already are: the input
+          is `type="email" required`, so an empty or malformed address gets the
+          browser's own validation bubble focused on the field, and an unsolved
+          challenge gets "Please complete the verification below." from
+          handleSubmit. Gating the BUTTON on those instead left the primary call
+          to action rendering at disabled:opacity-50 on first paint — on the
+          pre-launch conversion surface, on a page that already says "Coming
+          soon" — with no text explaining what would enable it, and out of the
+          tab order, so a keyboard user reached the field and then nothing.
+          Caught by LOOKING at the committed F7 capture; the journey assertion
+          passed, because it only checks the button is visible. */}
       <Button
         type="submit"
         variant="warm"
         size="lg"
-        disabled={state === "loading" || !email.trim() || (CAPTCHA_ENABLED && !captchaToken)}
+        disabled={state === "loading"}
         className="shrink-0"
       >
         {state === "loading" ? (
