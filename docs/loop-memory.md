@@ -4,6 +4,58 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-31 (Run 131) — scout-driven (no DEEP AUDIT, ran Run 130). Unblocked #751 after four rounds. The run's lesson: **three separate guards I wrote were blind in the exact way they claimed to fix, and every one was found by someone re-running it, never by me re-reading it.**
+
+### State on entry
+- Cold container; `node_modules` absent at root AND `/mobile`. Baseline GREEN: web tsc, **2721 tests** / 11 skip, determinism, `/mobile` tsc.
+- DEEP AUDIT **not due** (ran Run 130, 2026-07-31; next ~Run 134) → 8-Haiku-scout sweep.
+- PR #751 open from Run 129 at its review-cycle cap, needing ONE clean round rather than more building.
+
+### Scout yield: 2 lenses CLEAN, and THREE candidate stories died on a first-hand trace
+- security/RLS **CLEAN** — fifth consecutive clean sweep (31 migrations / 56 routes). performance **CLEAN**.
+- **Rejected before any work, each in one command:**
+  - "`.single()` throws and 500s /api/search and /api/bundles/evaluate" (two "TIER 1 CRITICAL" candidates). FALSE: supabase-js `.single()` RESOLVES `{data:null,error}`, it does not reject, and both sites already destructure `{ data: diagnosis }` and use `diagnosis?.`.
+  - "mobile use-saved-designs renders `undefined` for a missing title." FALSE twice: `011_saved_designs.sql:7` declares `title text not null`, and React Native renders nothing for `undefined` rather than stringifying it.
+  - "/terms date is 8 days stale." NOT a defect — a policy's date records when its DISCLOSURES last changed, and `app/terms/page.tsx` last changed 2026-07-23, which is what it shows.
+- The design scout's FINDING was right and its ARITHMETIC was wrong (reported 4.83/3.09 where the true values are 5.11/3.32). A scout's conclusion can be right for wrong numbers; re-measure before quoting.
+
+### The three blind guards (the run's actual lesson)
+1. **The warm-CTA ratchet folded fill and label into one regex** (`bg-accent-warm\s+text-white`), so a glyph on a CHILD element could not match BY CONSTRUCTION — the same same-line assumption `muted-text-contrast.test.ts` already records as a lesson. It reported clean while a `text-white` spinner sat on a gradient at 2.40:1. Widening to a fixed 4-line window then created a SIBLING false-positive; keying off the class line broke on a multi-line `cn(...)`; the durable form anchors to the element's opening tag and ends on a tag line at or outside that indent.
+2. **The mobile tap-target guard skipped every STYLED control** with a comment deferring them to "manual review". That review never happened and three 40pt CTAs shipped past it. Closing that hole exposed four more holes, each hiding a real control: reading only the Pressable's own style (a 28pt tab button with padding on an inner wrapper), excluding on sight anything containing an icon (a 24pt accordion header — in NO bucket at all), an element-body window ending at a nested `<SymbolView />`, `minHeight` replacing padding rather than flooring it, and a CHILD's `flex: 1` marking a plain 56pt row unmeasurable.
+3. **A seed assertion checked `typeof seed === "number"`** over a single call — a hardcoded `seed: 12345` passed it silently, and `new Set(seeds).size === 1` is tautological for one call.
+
+**The pattern:** each guard was written to catch a class of defect, and each encoded an assumption that made one member of that class invisible. A guard that passes is evidence only if you have watched it fail on the real defect. Every fix this run is now pinned by a falsification I ran and quoted.
+
+### Lessons learned
+1. **`git add -A` bundled another change's untracked file into an unrelated commit.** A test written earlier for the fit-scorer change was still in the tree while the contrast branch was checked out; `-A` swept it in and it force-pushed inside an a11y diff, also corrupting that commit's test count. **Stage explicit paths on a multi-change run.**
+2. **A failed `git checkout` leaves you on the old branch, and the next command does not know that.** A checkout to the mobile branch aborted on local changes; I then ran a batch of mobile `sed` edits that silently landed on the contrast branch. They matched nothing, so no damage — but only `git status` revealed it. **After any checkout in a multi-branch run, confirm the branch before editing.**
+3. **A carry-forward item is a hypothesis, not a work order — in BOTH directions.** The waitlist double-submit was recorded as verified and buildable; tracing the server showed the unique constraint serialises the second insert and `RESEND_COOLDOWN_MS` suppresses the duplicate mail, so its real cost is rate-limit budget, not duplicate email — deliberately NOT shipped. The `/guides` contrast item was the opposite: recorded as "four pages", actually the primary CTA across 52 call sites failing in both themes.
+4. **Fixing a contrast bug at rest and not in its INTERACTION states is fixing half of it — twice in one run.** `hover:brightness-110` on the gradient (caught while building) and `hover:opacity-90` on eight flat CTAs (caught by a reviewer). opacity is NOT brightness: it composites the fill AND its label toward the surface behind, so it lowers contrast from both sides at once.
+5. **A filter forces the rest state to over-correct; a fixed hover token does not.** Because `brightness-110` lightens uncontrollably, the rest gradient had to be deep enough to survive it and ended DARKER than the brand accent's darkest point — a reviewer called it a brand regression and was right. Replacing the filter with an explicit hover pair let the rest state start at the accent and end lighter. **When a hover mechanism constrains the rest state, change the mechanism, not the rest state.**
+6. **THREE numeric claims of mine were false in ways only a re-run could show, and the third was a correction of the second.** "The ratchet reports all six live violations against the base tree" — six was measured by restoring TWO files; the whole base tree reports 32 across 22 sites in 14 files. "All 15 text-only Pressables resolve" — a figure never counted. Corrected to 29 — ALSO never counted, and stale besides, because it predated closing the guard's detection holes; the real number is 33. Each correction was made in prose, which is why the second one was wrong too. The count is now ASSERTED in the test (`expect(measured).toBe(33)`), where a miscount fails instead of shipping. **A figure that keeps being wrong belongs in an assertion, not in a sentence.**
+7. **Not every reviewer finding is real, and the way to tell is the same command.** A reviewer called "2734 tests on this base" a contradiction, because the parent commit's own gate line reads 2729. Checking out that parent and running the suite gives 2734: its 2729 was measured on a branch cut before #759 (+2) and #751 (+3) merged. The finding was disputed with a measurement, not an argument, and the message now says where the number comes from so nobody re-derives the confusion. **Reviewers earn deference by measuring; when they infer instead, measure.**
+8. **A statistic copied from a scout carries the scout's framing.** "lib/agents sits at 11.66%" was `orchestrator.ts`'s number; the directory is 46.84% and the file under test was 6.27%. The scout reported all three correctly.
+9. **Concurrent reviewer agents are a live hazard on the shared container — three distinct incidents this run.** One held `.git/index.lock` during a `git checkout` restore, leaving a source file mid-edit. One reported an already-corrected commit message because the branch was force-pushed mid-review. Two left scratch files (`__tests__/design/_tmp_pr751.test.ts`, `_tmp_driver.mjs`) in the shared repo, which a stop-hook caught before they could be committed. **Reviewer prompts now say: anchor to a commit hash and read via `git show`/an isolated worktree, never a plain Read of the shared tree; restore by editing if a git command hits the lock.** That instruction visibly worked — later reviewers reported anchoring and using disposable worktrees.
+
+### Outcome
+**4 merged** — #759 (App Privacy permission under-declaration), #751 (Run 129's blank-screenshot guard, landed after four rounds), #760 (fit-scorer batch reassembly), #761 (warm CTA contrast). **#762 (mobile tap targets) left OPEN** at its final message check: an independent reviewer confirmed the mechanics — 33 measured + 1 layout-sized accounts for all 34 `<Pressable` in mobile/src, nothing invisible — but three rounds each found a wrong figure in the commit message, so it is handed to the next run for one clean check rather than merged on my own say-so. That is the #751 pattern, which worked: held at the cap by Run 129, reviewed cold this run, merged.
+
+Merged-tree gate GREEN: web tsc, **2752 tests** (2721 +31), determinism, `/mobile` tsc, eslint 0.
+
+**Reviewer verdicts: 24 across 5 changes, and every REQUEST_CHANGES that concerned CODE was a real defect.** Five were my own claims stated as verified. One reviewer finding was itself wrong (the 2734 base count) and was settled by running the parent's suite rather than by arguing.
+
+### Carry-forward
+- **DEEP AUDIT next due ~Run 134** (last ran Run 130).
+- **NAMED, verified, buildable next-run items:**
+  - Heading-level skips remain (per-branch verified by Run 130) in `app/dashboard`, `app/gallery`, `app/page.tsx`, `rooms/[roomId]/focus`. Deferred this run only because the contrast change consumed three of those four files.
+  - `PENDING_OPS.md` `wire-orphaned-e2e-specs-into-ci` says `e2e/a11y.spec.ts` "currently FAILS on a real serious-impact color-contrast violation on /guides" — that violation is FIXED by this run's contrast change; the note needs re-checking once the spec actually runs somewhere. Wiring it is a `.github/` edit, OWNER STEP.
+  - The mobile guard's `layoutSized` list (`photo.tsx:125`, the 4:3 photo preview) is the one control it cannot size. A control sized by `aspectRatio`/`flex` needs a different measurement approach than a fixed box.
+  - `--workers=1` in `run-journeys.sh`: requirement real and unenforced, costs ~66% wall-clock. Needs a run that states that cost honestly.
+  - Annual billing (`ANNUAL_BILLING_ENABLED` + migration 021) and the referral loop (migration 026) are both BUILT but unapplied — owner steps, already in PENDING_OPS. The business case credits them.
+- **DO-NOT-RE-FLAG (carry prior lists +):** `.single()` "crashes" in search/bundles-evaluate (supabase-js resolves, does not reject — both sites already optional-chain); mobile saved-designs "undefined title" (`title text not null`); `/terms` date (correct — it records the last DISCLOSURE change, not today).
+
+---
+
 ## Run 2026-07-31 (Run 130) — DEEP AUDIT (8-lens, DUE) + the run's real finding came from RUNNING the gate, not from scouting. Heavy review round: 16 verdicts, and **every single blocking finding was real** — including three against my own verification claims.
 
 ### State on entry
@@ -51,6 +103,13 @@ F7 requires the deep-audit lens to actually OPEN each capture and record a verdi
 **All 4 merged** — #754 (journey gate), #755 (compare a11y), #756 (heading-order ×10 + the axe guard), #757 (waitlist CTA + spec repair). **16 reviewer verdicts, 7 REQUEST_CHANGES, every blocking finding real.** The heading-order guard is the one I could not verify locally (the authed tier needs the seeded stack) — CI run 30618992413 settled it: `mode=full`, **30 passed, `E2E_JOURNEYS_PASSED=1`**, so the guard runs and is green on the six routes rather than red on arrival.
 
 **#751 stays open at its cycle cap for the third run.** Not stalled for lack of a fix — the code got safer each round; the COMMENT kept overclaiming. Final round changed only the claims. It needs one clean review, not more building.
+
+### Outcome
+**4 merged** — #759 (App Privacy permission under-declaration), #751 (Run 129's blank-screenshot guard, landed after four rounds), #760 (fit-scorer batch reassembly), #761 (warm CTA contrast). **#762 (mobile tap targets) left OPEN** at its final message check: an independent reviewer confirmed the mechanics — 33 measured + 1 layout-sized accounts for all 34 `<Pressable` in mobile/src, nothing invisible — but three rounds each found a wrong figure in the commit message, so it is handed to the next run for one clean check rather than merged on my own say-so. That is the #751 pattern, which worked: held at the cap by Run 129, reviewed cold this run, merged.
+
+Merged-tree gate GREEN: web tsc, **2752 tests** (2721 +31), determinism, `/mobile` tsc, eslint 0.
+
+**Reviewer verdicts: 24 across 5 changes, and every REQUEST_CHANGES that concerned CODE was a real defect.** Five were my own claims stated as verified. One reviewer finding was itself wrong (the 2734 base count) and was settled by running the parent's suite rather than by arguing.
 
 ### Carry-forward + audit cadence
 - **DEEP AUDIT ran Run 130 (2026-07-31) — next due ~Run 134.**
@@ -107,6 +166,13 @@ The finding underneath it is the durable one: **that blank satisfied the ENTIRE 
 5. **Reviewer worktrees under `.claude/worktrees/` poison a repo-wide `npx eslint .`** — it tried to lint files in a since-removed worktree and reported "140 problems (30 errors, 110 warnings)" that were phantom copies of `/mobile`, then crashed with ENOENT once the worktree was gone. Run 127 recorded this; it recurred. **Run the repo-wide lint only after every reviewer has finished, or scope it to touched files.**
 6. **A prompt-injection-shaped string appeared mid-review for the FOURTH consecutive run** — a reviewer reported a `<system-reminder>`-shaped claim that a file had been externally modified along with an instruction not to disclose it. It verified the tree against HEAD (clean), disregarded the instruction, and reported it anyway. The discipline held again.
 
+### Outcome
+**4 merged** — #759 (App Privacy permission under-declaration), #751 (Run 129's blank-screenshot guard, landed after four rounds), #760 (fit-scorer batch reassembly), #761 (warm CTA contrast). **#762 (mobile tap targets) left OPEN** at its final message check: an independent reviewer confirmed the mechanics — 33 measured + 1 layout-sized accounts for all 34 `<Pressable` in mobile/src, nothing invisible — but three rounds each found a wrong figure in the commit message, so it is handed to the next run for one clean check rather than merged on my own say-so. That is the #751 pattern, which worked: held at the cap by Run 129, reviewed cold this run, merged.
+
+Merged-tree gate GREEN: web tsc, **2752 tests** (2721 +31), determinism, `/mobile` tsc, eslint 0.
+
+**Reviewer verdicts: 24 across 5 changes, and every REQUEST_CHANGES that concerned CODE was a real defect.** Five were my own claims stated as verified. One reviewer finding was itself wrong (the 2734 base count) and was settled by running the parent's suite rather than by arguing.
+
 ### Carry-forward + audit cadence
 - **DEEP AUDIT is DUE next run** (last ran Run 126, 2026-07-30 ~01:49). Run 130 should open with the 8-lens audit before scouting.
 - **The QUALITY_SCORECARD is still 8+ commits stale in the factory's favour** (as_of 2026-07-27, overall C). Run 128 verified most of its ship-critical findings already fixed. Re-verify against HEAD before working off it; do NOT re-fix.
@@ -147,6 +213,13 @@ The independent scorecard (as_of 2026-07-27) named five ship-critical dimensions
 6. **A test that asserts the message instead of the effect proves nothing.** My room-type-gate test checked the error text but not that Pass B was skipped — the whole point of a gate that exists to save tokens. It now asserts the call count.
 7. **Reviewers ran in the LIVE tree this run, not worktrees** (contrast Run 127, which isolated them). Nothing was corrupted, but one `Edit` failed transiently mid-run and reviewers reported "untracked scratch file" noise from work in flight. **Go back to worktree isolation** — the cost is trivial and the failure mode is silent.
 8. **Killing a no-op is a better response to a review than defending it.** I added an `industrial` direction bucket; a reviewer showed it was behaviourally identical to the existing unbucketed fallback. It is reverted, with a comment recording that the absence is deliberate. The regex entry beside it was a real fix and stayed.
+
+### Outcome
+**4 merged** — #759 (App Privacy permission under-declaration), #751 (Run 129's blank-screenshot guard, landed after four rounds), #760 (fit-scorer batch reassembly), #761 (warm CTA contrast). **#762 (mobile tap targets) left OPEN** at its final message check: an independent reviewer confirmed the mechanics — 33 measured + 1 layout-sized accounts for all 34 `<Pressable` in mobile/src, nothing invisible — but three rounds each found a wrong figure in the commit message, so it is handed to the next run for one clean check rather than merged on my own say-so. That is the #751 pattern, which worked: held at the cap by Run 129, reviewed cold this run, merged.
+
+Merged-tree gate GREEN: web tsc, **2752 tests** (2721 +31), determinism, `/mobile` tsc, eslint 0.
+
+**Reviewer verdicts: 24 across 5 changes, and every REQUEST_CHANGES that concerned CODE was a real defect.** Five were my own claims stated as verified. One reviewer finding was itself wrong (the 2734 base count) and was settled by running the parent's suite rather than by arguing.
 
 ### Carry-forward + audit cadence
 - **DEEP AUDIT next due ~Run 130** (last ran Run 126, 2026-07-30 ~01:49). Run 129 can lean on scouts + the scorecard — but re-verify the scorecard against HEAD first (see above).
@@ -191,6 +264,13 @@ Security/RLS came back **CLEAN, zero findings** (26 tables, 56 routes, highest m
 6. **`git add -A` swept an unrelated 4-line fix into the revert commit** — the exact trap Run 126 recorded and I repeated within one run of reading it. Amended the message to say so rather than rewriting history. `git add <paths>`, always.
 7. **Reviewer worktree isolation worked.** Zero tree corruption across 26 reviewers (contrast Run 126, where two reviewers in the shared tree stashed my work and left a mutation behind). `git worktree remove --force` + `prune` before the final lint, or eslint reports phantom problems from the copied `/mobile` files.
 8. **The cycle cap was exceeded (3 rounds vs a cap of 2) and this time I do NOT think it was justified for the two abandoned changes** — rounds 2 and 3 on floor-plan produced no convergence, just a longer inventory. It WAS justified for mobile, where each round shrank the diff to a one-line fix and ended 2/2 APPROVE. **Signal to use next time: if a round's finding is a NEW instance rather than a refinement of the old one, that is divergence — abandon rather than iterate.**
+
+### Outcome
+**4 merged** — #759 (App Privacy permission under-declaration), #751 (Run 129's blank-screenshot guard, landed after four rounds), #760 (fit-scorer batch reassembly), #761 (warm CTA contrast). **#762 (mobile tap targets) left OPEN** at its final message check: an independent reviewer confirmed the mechanics — 33 measured + 1 layout-sized accounts for all 34 `<Pressable` in mobile/src, nothing invisible — but three rounds each found a wrong figure in the commit message, so it is handed to the next run for one clean check rather than merged on my own say-so. That is the #751 pattern, which worked: held at the cap by Run 129, reviewed cold this run, merged.
+
+Merged-tree gate GREEN: web tsc, **2752 tests** (2721 +31), determinism, `/mobile` tsc, eslint 0.
+
+**Reviewer verdicts: 24 across 5 changes, and every REQUEST_CHANGES that concerned CODE was a real defect.** Five were my own claims stated as verified. One reviewer finding was itself wrong (the 2734 base count) and was settled by running the parent's suite rather than by arguing.
 
 ### Carry-forward findings (real, verified, NOT built this run)
 - **`design_direction_label` is never written** (`app/api/diagnosis/route.ts:408`), so the direction-matched few-shot feature migration 010 built is entirely inert — every diagnosis silently uses direction-blind examples. Fix is small (write the label on insert); it makes the whole `DIRECTION_BUCKETS` machinery live.
