@@ -215,7 +215,23 @@ test.describe("public + structural journeys", () => {
     await captureJourneyStep(page, "public-guides");
 
     await guideLinks.first().click();
-    await expect(page).toHaveURL(/\/guides\/.+/);
+    // waitForURL, not `expect(page).toHaveURL(...)`. `expect` polls on the 5s
+    // EXPECT budget; a navigation started by page.goto() gets the 30s NAVIGATION
+    // budget. The two other click-driven assertions in this file already work
+    // around that with hand-picked `{ timeout: 8000 }` / `{ timeout: 15_000 }`
+    // values; this uses the navigation API instead, so there is no number to
+    // pick or to outgrow. A dev server compiles the destination
+    // route on demand at first visit, so a cold `.next` blew the 5s and reported
+    // this working link as a dead one — observed RED on the first run of a fresh
+    // container and GREEN on an immediate re-run with the route already
+    // compiled. A false RED here is worse than no gate: `scripts/run-journeys.sh`
+    // is what preflight GATE 1b reads, so it made "a flow builds but does not
+    // work" the reported cause of a cold cache.
+    //
+    // This does NOT weaken the assertion. A genuinely broken link still fails —
+    // the URL never matches, at 5s or at 30s. All that changes is that a slow
+    // navigation is given the same budget as every other navigation in the file.
+    await page.waitForURL(/\/guides\/.+/);
     await expectNoErrorBoundary(page);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await captureJourneyStep(page, "public-guide-article");
