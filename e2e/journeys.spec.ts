@@ -477,6 +477,33 @@ test.describe("authenticated journeys", () => {
             v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
         );
       }
+
+      // heading-order needs its own pass, and the reason is the hole it left.
+      // The sweep above filters to critical||serious; axe rates heading-order
+      // "moderate", so it was dropped even when it fired. It is also tagged
+      // `best-practice` rather than wcag2a, so `withTags` above never even
+      // requests it. Two independent reasons the gate could not see a skip —
+      // which is how every one of these six surfaces came to render <h1> and
+      // then jump to <h3> with no <h2>, unnoticed.
+      //
+      // So: ask for the rule BY ID, and fail on any violation regardless of
+      // impact. Scoped to these six because these are the routes whose skips
+      // are actually fixed; app/dashboard, app/gallery, app/page.tsx and
+      // rooms/[roomId]/focus still skip and are disclosed as open, so a
+      // repo-wide version of this would be red on arrival.
+      //
+      // WHAT IT DOES NOT COVER, said plainly: the seed above creates an EMPTY
+      // project and room, so these pages render their empty states. The
+      // populated branches — including the bundles card grid this change had to
+      // fix separately — are not exercised here. It is a regression guard on
+      // the branch the suite reaches, not proof of the whole class.
+      const headingOrder = await new AxeBuilder({ page }).withRules(["heading-order"]).analyze();
+      for (const v of headingOrder.violations) {
+        failures.push(
+          `${route}\n  [heading-order] ${v.description}\n  ` +
+            v.nodes.slice(0, 3).map((n) => n.html).join("\n  "),
+        );
+      }
     }
     expect(failures, `design-dense axe violations:\n\n${failures.join("\n\n")}`).toEqual([]);
   });
