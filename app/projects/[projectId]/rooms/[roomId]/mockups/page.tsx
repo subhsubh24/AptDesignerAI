@@ -11,6 +11,7 @@ import { ArrowLeft, Loader2, Image as ImageIcon, Sparkles, X, Maximize2, Downloa
 import { ShareButton } from "@/components/ui/share-button";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { cn } from "@/lib/utils/cn";
 
 interface Mockup {
@@ -44,6 +45,11 @@ export default function MockupsPage() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // Set when the server refuses a render because the free-tier mockup cap is
+  // spent (403 + subscription_required). Distinct from generateError so the
+  // paywall renders as an upgrade path, not as a failure.
+  const [atMockupLimit, setAtMockupLimit] = useState(false);
+  const [mockupLimit, setMockupLimit] = useState<number | null>(null);
 
   // Cycle the rotating generation status label while generating.
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function MockupsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     setGenerateError(null);
+    setAtMockupLimit(false);
     setRotationIndex(0);
 
     try {
@@ -107,7 +114,21 @@ export default function MockupsPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("Mockup generation failed. Please try again in a moment.");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          subscription_required?: boolean;
+          limit?: number;
+        };
+        // The free-mockup cap is a paywall, not a transient failure. Routing it
+        // through the error banner would tell the user to "try again in a
+        // moment" for something that can only ever succeed after an upgrade.
+        if (res.status === 403 && body.subscription_required) {
+          setMockupLimit(typeof body.limit === "number" ? body.limit : null);
+          setAtMockupLimit(true);
+          return;
+        }
+        throw new Error("Mockup generation failed. Please try again in a moment.");
+      }
       const data = await res.json().catch(() => null);
       if (!data) throw new Error("Mockup generation failed. Please try again in a moment.");
       setMockups((prev) => [data, ...prev]);
@@ -168,6 +189,16 @@ export default function MockupsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Free-tier mockup cap. Server-enforced — this only renders after the
+          server's 403, and routes to the real Stripe checkout. */}
+      {atMockupLimit && !generating && (
+        <UpgradeCtaCard
+          reason="mockup"
+          usedSaves={mockupLimit ?? undefined}
+          limit={mockupLimit ?? undefined}
+        />
+      )}
 
       {/* Generation error banner */}
       {generateError && !generating && (

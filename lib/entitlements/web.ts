@@ -19,6 +19,32 @@ import { getAdminClient } from "@/lib/supabase/admin";
 export const FREE_SAVE_LIMIT_WEB = 3;
 
 /**
+ * Maximum number of standard full-room mockup renders for free-tier web users.
+ *
+ * "AI mockups of finished rooms" is listed on /pricing as an Apartment-tier
+ * feature and is absent from the Explore (free) feature list, so a free user is
+ * entitled to zero by the published plan — one is deliberately MORE generous
+ * than advertised, never less. It exists so the free tier can see the finished
+ * result once before the upgrade ask lands.
+ *
+ * SCOPE — read this before relying on it as a cost ceiling. It caps exactly one
+ * of the three render modes in app/api/mockups: the standard full-room render,
+ * the branch that writes a `mockup_jobs` row. It does NOT cap:
+ *   - `vision_mode`, the design preview. The focus page auto-generates it when
+ *     an analysis lands (the first-run "aha", which is why it is not gated),
+ *     but it is ALSO reachable from a "Regenerate" control the user can click
+ *     repeatedly, and it reaches the same image model at the same cost.
+ *   - `recommendation_mockup`, the per-item product shots, which the results
+ *     page fires in a loop.
+ * Both remain bounded only by the per-user rate limit and the daily spend
+ * ceiling — the same two limits that were the ONLY bound on standard renders
+ * before this constant existed. Bounding them properly means choosing a free
+ * render budget across all three paths without spending the activation moment,
+ * which is a product decision rather than a mechanical fix; tracked separately.
+ */
+export const FREE_MOCKUP_LIMIT_WEB = 1;
+
+/**
  * Days a Pro subscription retains access after entering `past_due`.
  *
  * When a renewal charge fails, Stripe moves the subscription to `past_due` and

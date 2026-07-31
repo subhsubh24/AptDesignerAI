@@ -10,11 +10,36 @@ const PRO_BENEFITS = [
   "AI mockups + client-ready share links",
 ];
 
+/**
+ * Which free-tier allowance ran out. Drives the at-limit heading, body and
+ * usage-line label so the card never tells a user they hit their "save limit"
+ * when what they actually hit was the mockup cap.
+ */
+export type UpgradeReason = "save" | "mockup";
+
+const REASON_COPY: Record<UpgradeReason, { heading: string; body: string; usageLabel: string }> = {
+  save: {
+    heading: "You've reached your free save limit",
+    body: "Upgrade to keep saving every room you design — your existing designs stay right here.",
+    usageLabel: "Free saves used",
+  },
+  mockup: {
+    heading: "You've used your free room mockup",
+    body: "Upgrade to render every room you design — the mockups you've already made stay right here.",
+    usageLabel: "Free mockups used",
+  },
+};
+
 export interface UpgradeCtaCardProps {
-  /** Saved designs used so far (for the usage line). */
+  /**
+   * Units of the allowance consumed so far (for the usage line). Named for its
+   * original save-limit caller; `reason` decides how it is labelled.
+   */
   usedSaves?: number;
-  /** Free-tier save limit (for the usage line). */
+  /** The free-tier limit that `usedSaves` is measured against. */
   limit?: number;
+  /** Which allowance ran out. Defaults to the save limit. */
+  reason?: UpgradeReason;
   /** Entry tier the CTA routes to. */
   tier?: "apartment" | "pro" | "pro_annual";
   /** Compact variant drops the benefit list (e.g. inline in a dense surface). */
@@ -31,12 +56,14 @@ export interface UpgradeCtaCardProps {
 export function UpgradeCtaCard({
   usedSaves,
   limit,
+  reason = "save",
   tier = "apartment",
   compact = false,
   className,
 }: UpgradeCtaCardProps) {
   const showUsage = typeof usedSaves === "number" && typeof limit === "number";
   const atLimit = showUsage && usedSaves! >= limit!;
+  const copy = REASON_COPY[reason];
 
   return (
     <Card
@@ -52,18 +79,16 @@ export function UpgradeCtaCard({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold tracking-tight">
-              {atLimit ? "You've reached your free save limit" : "Unlock unlimited designs"}
+              {atLimit ? copy.heading : "Unlock unlimited designs"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {atLimit
-                ? "Upgrade to keep saving every room you design — your existing designs stay right here."
-                : "Go further with the full apartment design experience."}
+              {atLimit ? copy.body : "Go further with the full apartment design experience."}
             </p>
 
             {showUsage && (
               <div className="mt-4 max-w-xs">
                 <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Free saves used</span>
+                  <span>{copy.usageLabel}</span>
                   <span className="tabular-nums font-medium text-foreground">
                     {Math.min(usedSaves!, limit!)} of {limit}
                   </span>
@@ -74,7 +99,7 @@ export function UpgradeCtaCard({
                   aria-valuenow={Math.min(usedSaves!, limit!)}
                   aria-valuemin={0}
                   aria-valuemax={limit}
-                  aria-label="Free saves used"
+                  aria-label={copy.usageLabel}
                 >
                   <div
                     className="h-full rounded-full bg-accent-warm transition-all"
