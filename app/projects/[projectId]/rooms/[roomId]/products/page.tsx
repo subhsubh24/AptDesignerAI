@@ -362,7 +362,7 @@ export default function ProductsPage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
               <AlertTriangle className="h-8 w-8 text-destructive/70" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h2>
             <p className="text-sm text-muted-foreground text-center max-w-sm mb-5">
               Something went wrong loading this room&apos;s products. Check your connection and try again.
             </p>
@@ -380,9 +380,9 @@ export default function ProductsPage() {
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 animate-float">
               <ShoppingBag className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">
+            <h2 className="text-lg font-semibold mb-2">
               {products.length === 0 ? "Let's find your pieces" : "No matching products"}
-            </h3>
+            </h2>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
               {products.length === 0
                 ? "Run AI search to see handpicked furniture and decor that fit your space — or paste a URL to score a specific piece."
@@ -441,9 +441,9 @@ export default function ProductsPage() {
                 )}
                 <CardContent className="p-3 sm:p-4 space-y-3">
                   <div>
-                    <h3 className="font-semibold text-sm line-clamp-2">
+                    <h2 className="font-semibold text-sm line-clamp-2">
                       {product.title || "Untitled Product"}
-                    </h3>
+                    </h2>
                     <div className="flex items-center gap-2 mt-1.5">
                       {product.retailer && (
                         <span className="text-xs text-muted-foreground">{product.retailer}</span>

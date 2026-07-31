@@ -164,7 +164,7 @@ export default function PicksPage() {
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <Star className="h-10 w-10 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-1">Couldn&apos;t load your picks</h3>
+            <h2 className="text-lg font-semibold mb-1">Couldn&apos;t load your picks</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Something went wrong fetching your shortlisted products. Please try again.
             </p>
@@ -177,7 +177,7 @@ export default function PicksPage() {
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <Star className="h-10 w-10 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-1">No picks yet</h3>
+            <h2 className="text-lg font-semibold mb-1">No picks yet</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Shortlist products from your room searches — they&apos;ll all appear here.
             </p>

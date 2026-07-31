@@ -238,7 +238,7 @@ export default function MockupsPage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
               <AlertTriangle className="h-8 w-8 text-destructive/70" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load mockups</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load mockups</h2>
             <p className="text-sm text-muted-foreground text-center max-w-sm mb-5">
               Something went wrong loading this room&apos;s mockups. Check your connection and try again.
             </p>
@@ -256,7 +256,7 @@ export default function MockupsPage() {
             <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-6 animate-float">
               <ImageIcon className="h-10 w-10 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">See it before you buy it</h3>
+            <h2 className="text-lg font-semibold mb-2">See it before you buy it</h2>
             <p className="text-sm text-muted-foreground text-center max-w-sm mb-6">
               We&apos;ll render your shortlisted pieces right into your actual room — so you know it&apos;s right before spending a dollar.
             </p>

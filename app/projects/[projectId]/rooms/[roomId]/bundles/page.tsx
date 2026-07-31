@@ -273,7 +273,7 @@ export default function BundlesPage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 mx-auto">
               <AlertTriangle className="h-8 w-8 text-destructive/70" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load bundles</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load bundles</h2>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-5">
               Something went wrong loading this room&apos;s bundles. Check your connection and try again.
             </p>
@@ -291,7 +291,7 @@ export default function BundlesPage() {
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
               <LayoutGrid className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">See the room come together</h3>
+            <h2 className="text-lg font-semibold mb-2">See the room come together</h2>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               Shortlist a few products, then create a bundle to see how they harmonize — palette, proportion, style cohesion, all scored.
             </p>
@@ -425,7 +425,7 @@ export default function BundlesPage() {
                         <div className="space-y-3 border-t pt-5">
                           <div className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4 text-accent-warm" />
-                            <h4 className="text-sm font-semibold">Room Vibe</h4>
+                            <h3 className="text-sm font-semibold">Room Vibe</h3>
                             {evaluation.room_vibe.mood && (
                               <Badge variant="warm" className="text-xs">
                                 {evaluation.room_vibe.mood}

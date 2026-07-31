@@ -260,12 +260,12 @@ export default async function RoomPage({
                       <div className="flex items-center gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <h3 className={cn(
+                            <h2 className={cn(
                               "font-semibold text-base",
                               isNext && "text-accent-warm"
                             )}>
                               {step.title}
-                            </h3>
+                            </h2>
                             {isNext && (
                               <Badge variant="warm" className="text-[10px]">Next</Badge>
                             )}

@@ -148,7 +148,7 @@ export default function SavedDesignsPage() {
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <AlertCircle className="h-10 w-10 text-destructive/40 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-1">Couldn&apos;t load your designs</h3>
+            <h2 className="text-lg font-semibold mb-1">Couldn&apos;t load your designs</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Something went wrong reaching your saved designs. This is usually temporary.
             </p>
@@ -161,7 +161,7 @@ export default function SavedDesignsPage() {
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <Bookmark className="h-10 w-10 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-1">No saved designs yet</h3>
+            <h2 className="text-lg font-semibold mb-1">No saved designs yet</h2>
             <p className="text-sm text-muted-foreground mb-4">
               When you complete a room assessment or product search, save it here for later.
             </p>
@@ -188,7 +188,7 @@ export default function SavedDesignsPage() {
               <CardContent className={design.thumbnail_url ? "pt-3" : "pt-5"}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold truncate">{design.title}</h3>
+                    <h2 className="font-semibold truncate">{design.title}</h2>
                     <div className="flex items-center gap-2 mt-1">
                       {design.room_type && (
                         <span className="text-xs text-muted-foreground capitalize">{design.room_type.replace(/_/g, " ")}</span>
