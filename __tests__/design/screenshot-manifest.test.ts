@@ -73,6 +73,19 @@ const BLANK_PROBE_ROWS = 400;
 const MIN_DISTINCT_COLORS = 64;
 
 /**
+ * Refuse to read an artifact larger than this instead of loading it to inspect
+ * it. The decoder below bounds what IT allocates, but a caller that has already
+ * done `readFileSync` on a 200 MiB file has spent the memory before the decoder
+ * sees a byte — so the outermost bound belongs here, at the read.
+ *
+ * Measured, like the two above: the largest committed capture is 845,564 bytes
+ * (a full-page /faq at desktop width). 8 MiB is ~10x that, so it cannot reject
+ * a real screenshot, and a "screenshot" past it is a bad artifact on its own
+ * terms — which is what this file is for.
+ */
+const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
+
+/**
  * `captureJourneyStep(page, …)`, in both forms the spec uses: a quoted literal
  * (`"public-pricing"`) and a template literal (`` `authed-room-${segment}` ``,
  * whose slug is built from a loop variable and so is not statically knowable).
@@ -159,9 +172,20 @@ function paeth(a: number, b: number, c: number): number {
  * row cap bounds the LOOP, never the decompression.
  *
  * Streaming makes the bound structural instead of declared: this reads until it
- * has the bytes the probe will actually consume and destroys the stream, so
- * peak memory is `maxBytes` plus one zlib chunk NO MATTER what the header
- * claims. Nothing here has to trust a number in the file.
+ * has the bytes the probe will actually consume and destroys the stream, so the
+ * memory THIS function adds is `maxBytes` plus one zlib chunk (16 KiB, zlib's
+ * default) no matter what the header claims.
+ *
+ * The chunks are written one at a time and are subarray VIEWS into the caller's
+ * buffer, never copies. An earlier version concatenated them first, which
+ * reopened the same bug class one axis over — a shape-valid PNG carrying a
+ * 200 MiB IDAT cost a 200 MiB copy before any of the streaming below ran, for a
+ * call that wanted ~1.3 MiB of output. Feeding the views costs nothing.
+ *
+ * WHAT THIS DOES NOT BOUND, stated because the previous version of this comment
+ * claimed more than it delivered: the caller has already read the whole file
+ * into memory, so process memory is still file size + this budget. Bounding
+ * that belongs at the read, and the caller does it — see MAX_ARTIFACT_BYTES.
  *
  * Resolves null on a corrupt/truncated stream — the same undecodable-artifact
  * outcome the caller already reports.
@@ -190,7 +214,17 @@ async function inflateAtMost(idat: Buffer[], maxBytes: number): Promise<Buffer |
     // buffer runs out.
     inflate.on("end", () => settle(Buffer.concat(chunks, total)));
     inflate.on("error", () => settle(null));
-    inflate.end(Buffer.concat(idat));
+
+    // One chunk at a time, and stop the moment the probe is satisfied — a file
+    // with thousands of IDAT chunks must not be copied into one buffer just to
+    // read its first 400 rows. Writes after destroy() are a no-op, and `settled`
+    // is set synchronously by the 'data' handler, so this loop exits as soon as
+    // the budget is met.
+    for (const chunk of idat) {
+      if (settled) break;
+      inflate.write(chunk);
+    }
+    if (!settled) inflate.end();
   });
 }
 
@@ -518,7 +552,16 @@ describe("F7 journey screenshot artifacts", () => {
     const bad: string[] = [];
 
     for (const file of files) {
-      const buf = fs.readFileSync(path.join(SHOTS_DIR, file));
+      const full = path.join(SHOTS_DIR, file);
+      const bytes = fs.statSync(full).size;
+      if (bytes > MAX_ARTIFACT_BYTES) {
+        bad.push(
+          `${file}: ${bytes} bytes, past the ${MAX_ARTIFACT_BYTES}-byte ceiling — not read. ` +
+            `The largest real capture is under 1MB; something this size is not a screenshot.`,
+        );
+        continue;
+      }
+      const buf = fs.readFileSync(full);
       const colors = await distinctColorsInTopRows(buf, BLANK_PROBE_ROWS);
 
       if (colors === null) {
