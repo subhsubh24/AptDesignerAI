@@ -181,7 +181,7 @@ export default function ComparePage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 mx-auto">
               <AlertTriangle className="h-8 w-8 text-destructive" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load products</h2>
             <p className="text-sm text-muted-foreground mb-5">
               Something went wrong fetching the scored products. Please try again.
             </p>
@@ -197,7 +197,7 @@ export default function ComparePage() {
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
               <GitCompare className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No products to compare</h3>
+            <h2 className="text-lg font-semibold mb-2">No products to compare</h2>
             <p className="text-sm text-muted-foreground">
               Score some products first, then come back to compare.
             </p>
@@ -292,8 +292,16 @@ export default function ComparePage() {
                             key={product.id}
                             className={cn(
                               "p-4 border-b text-center",
-                              isBest && "bg-emerald-50/50 dark:bg-emerald-950/20",
-                              isWorst && "bg-amber-50/50 dark:bg-amber-950/20"
+                              // Emphasis, not hue-coding. Best gets the single
+                              // warm accent the rest of the system uses for
+                              // "look here"; lowest gets no surface at all,
+                              // because de-emphasis IS the other end of that
+                              // ladder. The pair this replaces (emerald for
+                              // best, amber for lowest) was two competing
+                              // accents encoding ordinal data — the same
+                              // anti-pattern already converted out of
+                              // tier-colors.ts and ManualScorecardView.
+                              isBest && "bg-accent-warm/10"
                             )}
                           >
                             <div className="space-y-1">
@@ -309,6 +317,22 @@ export default function ComparePage() {
                                   style={{ width: `${score * 10}%` }}
                                 />
                               </div>
+                              {/* A tinted cell was the ONLY thing marking best
+                                  and lowest, so the ranking simply did not
+                                  exist for anyone who cannot separate the two
+                                  tints — WCAG 1.4.1. A visible word carries it
+                                  for everyone, and reaches assistive tech
+                                  without a parallel sr-only copy to drift. */}
+                              {isBest && (
+                                <span className="block text-[10px] font-medium uppercase tracking-wide text-accent-warm-strong">
+                                  Best
+                                </span>
+                              )}
+                              {isWorst && (
+                                <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Lowest
+                                </span>
+                              )}
                             </div>
                           </td>
                         );

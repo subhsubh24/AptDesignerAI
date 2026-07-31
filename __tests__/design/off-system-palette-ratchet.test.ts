@@ -67,12 +67,18 @@ const OFF_SYSTEM = new RegExp(
 /**
  * Current committed count OUTSIDE the categorical exemptions. Only ratchet DOWN.
  *
- * Established at 82 after this run converted the /diagnosis assessment pair and
+ * Established at 82 after a run converted the /diagnosis assessment pair and
  * issue rails, the scene-coverage verdict, the floor-plan confidence ladder, the
  * refine warning rungs, the identified-product pill and the topbar step ladder —
  * 25 usages across those six files, all of them ordinal or action ladders.
+ *
+ * 82 -> 78: the /compare table marked the best and lowest score in each row with
+ * emerald and amber cell tints — two competing accents encoding ordinal data,
+ * the same shape as the conversions above. Best now takes the single warm accent
+ * and lowest takes no surface, which is the emphasis ladder rather than a hue
+ * per rung, and both carry a visible word so the ranking is not colour-only.
  */
-const MAX_OFF_SYSTEM = 82;
+const MAX_OFF_SYSTEM = 78;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's
