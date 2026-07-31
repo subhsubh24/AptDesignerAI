@@ -303,7 +303,7 @@ export default function DiagnosisPage() {
             <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-6 animate-float">
               <Sparkles className="h-10 w-10 text-accent-warm/60" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Let&apos;s understand your room</h3>
+            <h2 className="text-lg font-semibold mb-2">Let&apos;s understand your room</h2>
             <p className="text-sm text-muted-foreground text-center max-w-sm mb-6">
               Our AI will analyze your photos and provide a detailed design assessment
               with actionable recommendations.

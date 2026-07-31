@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils/cn";
 
@@ -46,11 +47,26 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardHeader.displayName = "CardHeader";
 
-const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("text-xl font-semibold leading-none tracking-tight", className)} {...props} />
-  )
-);
+/**
+ * Renders a <div> by default — a card title is usually decorative, and making
+ * every one a heading would flood heading navigation with noise.
+ *
+ * `asChild` exists for the cards where it is NOT decorative: when the card is a
+ * top-level content section, its title is the section's real heading, and
+ * leaving it a <div> means the section has no heading at all. That is how the
+ * bundles grid ended up rendering the page <h1> followed by an <h3> with
+ * nothing in between. Same Slot mechanism as Button's `asChild`, so the styling
+ * is identical and only the element changes.
+ */
+const CardTitle = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & { asChild?: boolean }
+>(({ className, asChild = false, ...props }, ref) => {
+  const Comp = asChild ? Slot : "div";
+  return (
+    <Comp ref={ref} className={cn("text-xl font-semibold leading-none tracking-tight", className)} {...props} />
+  );
+});
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(

@@ -273,7 +273,7 @@ export default function BundlesPage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 mx-auto">
               <AlertTriangle className="h-8 w-8 text-destructive/70" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load bundles</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load bundles</h2>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-5">
               Something went wrong loading this room&apos;s bundles. Check your connection and try again.
             </p>
@@ -291,7 +291,7 @@ export default function BundlesPage() {
             <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-accent-warm/10 to-accent-warm/5 flex items-center justify-center mb-5 mx-auto animate-float">
               <LayoutGrid className="h-8 w-8 text-accent-warm/50" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">See the room come together</h3>
+            <h2 className="text-lg font-semibold mb-2">See the room come together</h2>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               Shortlist a few products, then create a bundle to see how they harmonize — palette, proportion, style cohesion, all scored.
             </p>
@@ -310,7 +310,20 @@ export default function BundlesPage() {
               <Card variant="elevated" className="overflow-hidden">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{bundle.name || "Untitled Bundle"}</CardTitle>
+                    {/* `asChild`-less by design: CardTitle renders a <div>, so
+                        in the branch where bundles EXIST this card had no
+                        heading at all, and the only heading below it ("Room
+                        Vibe") sat under the page h1 with nothing between them.
+                        The two h2s above are on the error and empty branches,
+                        which never render at the same time as this one — so
+                        fixing those did not fix this path, which is the state
+                        every user with a scored bundle actually sees. The
+                        bundle name is the right h2: it is what the section is
+                        ABOUT, and it makes each bundle a heading-navigation
+                        landmark. Visual weight is unchanged. */}
+                    <CardTitle asChild className="text-lg">
+                      <h2>{bundle.name || "Untitled Bundle"}</h2>
+                    </CardTitle>
                     {evaluation ? (
                       <div className="flex items-center gap-2">
                         <span className={cn("text-3xl font-bold animate-score-pop", getScoreColor(evaluation.final_bundle_score))}>
@@ -425,7 +438,7 @@ export default function BundlesPage() {
                         <div className="space-y-3 border-t pt-5">
                           <div className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4 text-accent-warm" />
-                            <h4 className="text-sm font-semibold">Room Vibe</h4>
+                            <h3 className="text-sm font-semibold">Room Vibe</h3>
                             {evaluation.room_vibe.mood && (
                               <Badge variant="warm" className="text-xs">
                                 {evaluation.room_vibe.mood}

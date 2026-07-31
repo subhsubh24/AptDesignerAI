@@ -122,7 +122,7 @@ export default function RoomSetupPage() {
             <div className="h-16 w-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5">
               <AlertTriangle className="h-8 w-8 text-destructive/70" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Couldn&apos;t load this room</h3>
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load this room</h2>
             <p className="text-sm text-muted-foreground max-w-sm mb-5">
               Something went wrong loading this room&apos;s setup. Check your connection and try again.
             </p>

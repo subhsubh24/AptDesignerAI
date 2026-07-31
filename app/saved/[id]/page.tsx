@@ -279,7 +279,7 @@ export default function SavedDesignDetailPage() {
 
           {/* What to get */}
           <div>
-            <h3 className="text-sm font-semibold mb-2">What to get</h3>
+            <h2 className="text-sm font-semibold mb-2">What to get</h2>
             <div className="space-y-2">
               {sortedItems.map((item, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
@@ -299,9 +299,9 @@ export default function SavedDesignDetailPage() {
           {/* Keep / Remove */}
           {assessment.what_works.length > 0 && (
             <div>
-              <h3 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.keep.heading)}>
+              <h2 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.keep.heading)}>
                 <CheckCircle2 className="h-3.5 w-3.5" /> Keep
-              </h3>
+              </h2>
               <ul className="space-y-1">
                 {assessment.what_works.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
@@ -314,9 +314,9 @@ export default function SavedDesignDetailPage() {
 
           {assessment.what_should_go.length > 0 && (
             <div>
-              <h3 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.replace.heading)}>
+              <h2 className={cn("text-sm font-semibold mb-2 flex items-center gap-1.5", ASSESSMENT_PANEL.replace.heading)}>
                 <XCircle className="h-3.5 w-3.5" /> Replace or remove
-              </h3>
+              </h2>
               <ul className="space-y-1">
                 {assessment.what_should_go.map((item, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
@@ -330,9 +330,9 @@ export default function SavedDesignDetailPage() {
           {/* Design direction */}
           {assessment.design_direction && (
             <div>
-              <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+              <h2 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 text-accent-warm" /> Design Direction
-              </h3>
+              </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">{assessment.design_direction}</p>
             </div>
           )}
@@ -361,7 +361,7 @@ export default function SavedDesignDetailPage() {
 
               return (
                 <div key={tier} className="mb-6 last:mb-0">
-                  <h4 className="text-sm font-semibold mb-2">{tierLabel}</h4>
+                  <h3 className="text-sm font-semibold mb-2">{tierLabel}</h3>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {tierProducts.map((p, i) => (
                       <div key={i} className="flex gap-3 p-2 rounded-lg border bg-background">
