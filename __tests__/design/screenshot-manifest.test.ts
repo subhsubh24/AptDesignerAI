@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 
 import { SCREENSHOT_DIR, WIDTHS } from "@/e2e/helpers/screenshot";
 
@@ -58,6 +59,20 @@ const SPEC = path.join(ROOT, "e2e", "journeys.spec.ts");
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /**
+ * How far down a capture we look for evidence that something was drawn, and how
+ * many distinct colours must appear there.
+ *
+ * Both numbers are measured, not guessed. Across the committed set the sparsest
+ * real screen (a reset-password form at 390px) shows 539 distinct colours in its
+ * top 400 rows and the densest shows 4,332; a uniform image shows 1. Every page
+ * this app serves puts a header, a logo and antialiased text in its first rows,
+ * so 64 sits ~8x below the sparsest real capture and ~64x above a blank —
+ * comfortably clear of both a false alarm and a miss.
+ */
+const BLANK_PROBE_ROWS = 400;
+const MIN_DISTINCT_COLORS = 64;
+
+/**
  * `captureJourneyStep(page, …)`, in both forms the spec uses: a quoted literal
  * (`"public-pricing"`) and a template literal (`` `authed-room-${segment}` ``,
  * whose slug is built from a loop variable and so is not statically knowable).
@@ -78,6 +93,184 @@ function readPngSize(buf: Buffer): { width: number; height: number } | null {
   if (!buf.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
   if (buf.subarray(12, 16).toString("ascii") !== "IHDR") return null;
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+type PngHeader = {
+  width: number;
+  height: number;
+  bitDepth: number;
+  colorType: number;
+  interlace: number;
+};
+
+/** Walk the chunk stream, collecting the header and the compressed image data. */
+function readPngChunks(buf: Buffer): { header: PngHeader | null; idat: Buffer[] } {
+  const idat: Buffer[] = [];
+  let header: PngHeader | null = null;
+  if (buf.length < 8 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) return { header, idat };
+
+  let offset = 8;
+  while (offset + 8 <= buf.length) {
+    const length = buf.readUInt32BE(offset);
+    const type = buf.subarray(offset + 4, offset + 8).toString("ascii");
+    const data = buf.subarray(offset + 8, offset + 8 + length);
+    if (type === "IHDR") {
+      // A write truncated mid-IHDR leaves a chunk that CLAIMS 13 bytes and
+      // carries fewer, and readUInt32BE throws a RangeError past the end. Stop
+      // instead: a header we cannot read means no header, which the caller
+      // already reports as an undecodable artifact — the same path a truncated
+      // IDAT takes. Both failures should read the same to whoever hits them.
+      if (data.length < 13) return { header: null, idat };
+      header = {
+        width: data.readUInt32BE(0),
+        height: data.readUInt32BE(4),
+        bitDepth: data[8],
+        colorType: data[9],
+        interlace: data[12],
+      };
+    } else if (type === "IDAT") {
+      idat.push(data);
+    } else if (type === "IEND") {
+      break;
+    }
+    offset += 12 + length; // length + type + data + crc
+  }
+  return { header, idat };
+}
+
+/** PNG Paeth predictor (filter type 4), per the spec's reference implementation. */
+function paeth(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  return pb <= pc ? b : c;
+}
+
+/**
+ * Count distinct RGB values in the top `maxRows` scanlines of a PNG.
+ *
+ * This decodes real pixels rather than inferring "blank" from file size. Size
+ * is only a compression proxy, and a proxy is exactly the kind of guard that
+ * looks like it works until the one time it matters. Scanline filters are
+ * cumulative, so rows are un-filtered in order from the top — which is also
+ * where every page in this app draws its header, logo and text.
+ *
+ * Returns null for a format this decoder cannot vouch for (interlaced, or a bit
+ * depth / colour type Playwright does not emit). Callers treat null as a FAILURE
+ * rather than a pass: an artifact we cannot inspect is not an artifact we can
+ * trust, and silently skipping it is how a guard goes hollow.
+ */
+function distinctColorsInTopRows(buf: Buffer, maxRows: number): number | null {
+  const { header, idat } = readPngChunks(buf);
+  if (!header || idat.length === 0) return null;
+
+  const { width, height, bitDepth, colorType, interlace } = header;
+  if (bitDepth !== 8 || interlace !== 0) return null;
+  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : 0;
+  if (channels === 0) return null;
+
+  // ACCEPT ONLY WHAT THE SUITE ACTUALLY SHOOTS, and reject everything else here
+  // rather than one malformed field at a time.
+  //
+  // Three separate crash paths were found in this function by review — a
+  // truncated IDAT, an IHDR shorter than 13 bytes, and a 13-byte IHDR carrying
+  // an absurd `width`, where `Buffer.alloc(width * channels)` either throws or
+  // tries to reserve gigabytes (worse than throwing: on a small CI runner it
+  // OOM-kills the process, which reads as infrastructure flake rather than a
+  // bad artifact). They are one bug: the decoder trusted a header it had not
+  // checked. Patching each input as it was found would have left the next one
+  // waiting, so the header is validated against a known-good shape ONCE, before
+  // any allocation, and every rejection lands on the same documented null.
+  //
+  // The bound is the capture widths themselves, doubled for headroom — a real
+  // artifact is shot at one of WIDTHS, and a full-page height is bounded by the
+  // longest page the suite visits, not by anything a file gets to claim.
+  const MAX_WIDTH = Math.max(...WIDTHS.map((w) => w.width)) * 2;
+  const MAX_HEIGHT = 100_000;
+  if (width < 1 || width > MAX_WIDTH) return null;
+  if (height < 1 || height > MAX_HEIGHT) return null;
+
+  // Even with a sane header, IDAT can stop mid-stream (the truncated-write case
+  // this file's header calls out) and inflateSync THROWS on that. Letting it
+  // propagate would crash the caller with a generic zlib message naming no
+  // file, when the contract above promises a null the caller reports as an
+  // undecodable artifact. Same outcome (the build fails), but only one of them
+  // tells you which file to look at.
+  let raw: Buffer;
+  try {
+    raw = zlib.inflateSync(Buffer.concat(idat));
+  } catch {
+    return null;
+  }
+  const stride = width * channels;
+  const rows = Math.min(height, maxRows);
+  const colors = new Set<number>();
+
+  let prev = Buffer.alloc(stride);
+  let cur = Buffer.alloc(stride);
+
+  for (let y = 0; y < rows; y++) {
+    const start = y * (stride + 1);
+    if (start + stride + 1 > raw.length) break;
+    const filter = raw[start];
+    raw.copy(cur, 0, start + 1, start + 1 + stride);
+
+    for (let i = 0; i < stride; i++) {
+      const a = i >= channels ? cur[i - channels] : 0;
+      const b = prev[i];
+      const c = i >= channels ? prev[i - channels] : 0;
+      if (filter === 1) cur[i] = (cur[i] + a) & 0xff;
+      else if (filter === 2) cur[i] = (cur[i] + b) & 0xff;
+      else if (filter === 3) cur[i] = (cur[i] + ((a + b) >> 1)) & 0xff;
+      else if (filter === 4) cur[i] = (cur[i] + paeth(a, b, c)) & 0xff;
+    }
+
+    for (let x = 0; x + channels <= stride; x += channels) {
+      colors.add((cur[x] << 16) | (cur[x + 1] << 8) | cur[x + 2]);
+    }
+
+    const swap = prev;
+    prev = cur;
+    cur = swap;
+  }
+
+  return colors.size;
+}
+
+/** A single-colour PNG — the shape a blank capture actually takes on disk. */
+function uniformPng(width: number, height: number, rgb: [number, number, number]): Buffer {
+  const channels = 3;
+  const stride = width * channels;
+  const raw = Buffer.alloc(height * (stride + 1));
+  for (let y = 0; y < height; y++) {
+    const start = y * (stride + 1);
+    raw[start] = 0; // filter: none
+    for (let x = 0; x < stride; x += channels) {
+      raw[start + 1 + x] = rgb[0];
+      raw[start + 2 + x] = rgb[1];
+      raw[start + 3 + x] = rgb[2];
+    }
+  }
+  // CRCs are left zero — this decoder does not verify them, and the fixture
+  // exists only to be read back by the function under test.
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    return Buffer.concat([length, Buffer.from(type, "ascii"), data, Buffer.alloc(4)]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // colour type: truecolour
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 type CaptureSites = {
@@ -210,6 +403,50 @@ describe("F7 journey screenshot artifacts", () => {
     }
 
     expect(bad, `Placeholder or malformed screenshot artifacts:\n${bad.join("\n")}`).toEqual([]);
+  });
+
+  it("detects a blank image — the guard's own guard", () => {
+    // Without this, a decoder that silently started returning null (a format
+    // change, a refactor) would make the blankness test below pass over every
+    // artifact, and nothing would say so. Prove the detector still separates a
+    // drawn screen from an undrawn one before trusting its verdicts.
+    const blank = uniformPng(1280, 800, [250, 249, 247]);
+    expect(distinctColorsInTopRows(blank, BLANK_PROBE_ROWS)).toBeLessThan(MIN_DISTINCT_COLORS);
+
+    const drawn = files.find((f) => f.startsWith("public-"));
+    expect(drawn, "no public capture to compare against").toBeDefined();
+    expect(
+      distinctColorsInTopRows(fs.readFileSync(path.join(SHOTS_DIR, drawn!)), BLANK_PROBE_ROWS),
+    ).toBeGreaterThanOrEqual(MIN_DISTINCT_COLORS);
+  });
+
+  it("commits no visually BLANK artifact", () => {
+    // The hole this closes is not theoretical. A journey run at two workers
+    // produced a 4.7KB all-background /login capture while every DOM assertion
+    // in that test passed — a screen that rendered nothing, shot mid-paint. It
+    // satisfied the PNG-header check above (correct signature, correct 1280x800
+    // IHDR), so nothing stopped it being committed as evidence. Dimensions
+    // prove a file is an image; only pixels prove it is a picture of something.
+    const bad: string[] = [];
+
+    for (const file of files) {
+      const buf = fs.readFileSync(path.join(SHOTS_DIR, file));
+      const colors = distinctColorsInTopRows(buf, BLANK_PROBE_ROWS);
+
+      if (colors === null) {
+        bad.push(`${file}: could not be decoded — an artifact we cannot inspect is not evidence`);
+        continue;
+      }
+      if (colors < MIN_DISTINCT_COLORS) {
+        bad.push(
+          `${file}: only ${colors} distinct colour(s) in its top ${BLANK_PROBE_ROWS} rows — ` +
+            `the page rendered nothing. Re-capture serially (--workers=1); a parallel run can ` +
+            `shoot before the paint lands.`,
+        );
+      }
+    }
+
+    expect(bad, `Blank or undecodable screenshot artifacts:\n${bad.join("\n")}`).toEqual([]);
   });
 
   it("has no orphaned screenshots left behind by a removed journey", () => {
