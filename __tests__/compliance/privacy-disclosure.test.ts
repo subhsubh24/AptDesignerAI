@@ -175,4 +175,77 @@ describe("privacy artifacts match what the code actually collects", () => {
       );
     }
   });
+
+  /**
+   * Both store forms ask about device permissions SEPARATELY from data
+   * collection, so a permission the app requests but the artifacts omit is an
+   * incomplete attestation even when no new data category is involved. That is
+   * exactly how `expo-notifications` went undeclared: it was added to
+   * `mobile/app.json` as a plugin, produced no new stored column for the
+   * collection-derived assertions above to catch, and `docs/app-privacy.md`
+   * went on asserting "the only permission strings are camera and photo
+   * library" — a sentence that was true when written.
+   *
+   * Derived from the plugin list, in the same spirit as the rest of this file:
+   * adding a permission-requesting plugin fails this until both artifacts name
+   * it, and removing one relaxes the requirement on its own.
+   */
+  it("declares every device permission the Expo plugin list actually requests", () => {
+    const appJson = JSON.parse(read("mobile/app.json")) as {
+      expo: { plugins?: (string | [string, unknown])[] };
+    };
+    const plugins = (appJson.expo.plugins ?? []).map((p) => (Array.isArray(p) ? p[0] : p));
+
+    // Plugin → the word both artifacts must use for the permission it prompts
+    // for. Only plugins that trigger a RUNTIME permission dialog belong here;
+    // expo-router/expo-splash-screen prompt for nothing.
+    const PERMISSION_PLUGINS: Record<string, RegExp> = {
+      "expo-image-picker": /photo library/i,
+      "expo-notifications": /notification/i,
+      "expo-location": /location permission/i,
+      "expo-contacts": /contacts/i,
+    };
+
+    const requested = plugins.filter((p) => p in PERMISSION_PLUGINS);
+    // The premise: if this ever finds nothing, the plugin list moved or the
+    // parse broke, and every assertion below would pass vacuously.
+    expect(requested.length, "no permission-requesting Expo plugin found — parse likely broke")
+      .toBeGreaterThan(0);
+
+    for (const plugin of requested) {
+      for (const rel of [APP_PRIVACY, PRIVACY_PAGE]) {
+        expect(
+          PERMISSION_PLUGINS[plugin].test(read(rel)),
+          `${rel} must declare the permission that ${plugin} requests`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * The push token is the one piece of notification data that could become a
+   * declarable identifier. It is not declared today because it never leaves the
+   * device — so this pins that PREMISE rather than the conclusion: the day a
+   * caller sends the token to a server, this fails and the forms get revisited.
+   */
+  it("keeps the push token on-device, which is why no Device ID is declared", () => {
+    const hook = read("mobile/src/hooks/use-push-notifications.ts");
+    expect(hook, "the token must still be persisted locally").toContain("AsyncStorage.setItem");
+    // No network call in the module that obtains the token.
+    expect(hook).not.toMatch(/\bfetch\s*\(|apiFetch|axios/);
+
+    // Anchor on the push-token passage itself and read only that window. A
+    // document-wide search for a phrase like "not collected" passes on the
+    // unrelated "**Not collected:**" paragraph this file already parses
+    // elsewhere — which it did, on the exact revision that had no push-token
+    // disclosure at all.
+    const doc = read(APP_PRIVACY);
+    const at = doc.search(/push token/i);
+    expect(at, `${APP_PRIVACY} must have a push-token passage`).toBeGreaterThan(-1);
+    const passage = doc.slice(at, at + 900).replace(/\s+/g, " ");
+    expect(
+      /not\b[^.]{0,60}declared|never leaves the device|nothing sends it/i.test(passage),
+      `${APP_PRIVACY} must explain why the push token is not declared as an identifier`,
+    ).toBe(true);
+  });
 });
