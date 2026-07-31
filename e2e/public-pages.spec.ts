@@ -2,12 +2,20 @@ import { test, expect } from "@playwright/test";
 
 // These pages must load for unauthenticated visitors.
 // They render entirely from static/server markup — no Supabase or AI calls.
-// Each `heading` is the page's OWN h1 text. /faq and /guides used to expect
-// /faq|frequently/ and /guide/, which their h1s ("Questions, answered" and
-// "Design, explained") do not contain — those two tests were passing on a
-// footer or nav heading elsewhere on the page, so they would have gone on
-// passing with the entire article content deleted. Matching the real h1 is what
-// makes the assertion capable of failing.
+// Each `heading` is the page's OWN h1 text.
+//
+// Three of these were RED, in two different ways, and it is worth being exact
+// about which because they argue for different things:
+//   - /support matched THREE headings at once (h1 "How can we help?", an h2
+//     "Email support", a footer h3 "Support") — a strict-mode violation. The
+//     `level: 1` scoping below fixes that, and is the stronger assertion anyway:
+//     the page's own title rather than any matching text anywhere on it.
+//   - /faq and /guides matched NOTHING. They expected /faq|frequently/ and
+//     /guide/, but those h1s read "Questions, answered" and "Design, explained"
+//     and always have — the regexes were wrong in the spec's first commit, so
+//     neither test has ever passed. Not a page that rotted away from its test;
+//     a test that was never right.
+// Both failure modes survived because nothing runs this file (see below).
 const PUBLIC_PAGES = [
   { path: "/waitlist", heading: /coming to your phone/i },
   { path: "/pricing", heading: /honest pricing/i },
@@ -22,14 +30,15 @@ for (const { path, heading } of PUBLIC_PAGES) {
   test(`${path} loads and has a visible heading`, async ({ page }) => {
     const response = await page.goto(path);
     expect(response?.status()).toBeLessThan(400);
-    // `level: 1` is load-bearing, not tidiness. Unscoped, this matched every
-    // heading on the page, and /faq, /guides and /support each grew a section
-    // heading or a footer column that also matches — three strict-mode
-    // violations ("resolved to 3 elements"), i.e. three tests RED. They stayed
-    // red unnoticed because nothing runs this file: the CI `journeys` job
-    // (.github/workflows/ci.yml) invokes `scripts/run-journeys.sh`, which runs
-    // e2e/journeys.spec.ts and nothing else, so this spec and e2e/a11y.spec.ts
-    // are never executed there.
+    // `level: 1` is load-bearing, not tidiness: unscoped, this matches every
+    // heading on the page, which is how /support resolved to three elements at
+    // once. Scoping to the h1 asserts the page's OWN title — the same reason
+    // journeys.spec.ts pins each route to its h1.
+    //
+    // Nothing runs this file, which is why the breakage above went unnoticed:
+    // the CI `journeys` job (.github/workflows/ci.yml) invokes
+    // `scripts/run-journeys.sh`, which runs e2e/journeys.spec.ts and nothing
+    // else, so this spec and e2e/a11y.spec.ts never execute there.
     //
     // Pinning to the h1 is also the stronger assertion: it checks the page's
     // OWN title rather than accepting any matching text anywhere on it — the
