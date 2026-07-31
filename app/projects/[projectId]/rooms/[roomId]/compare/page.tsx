@@ -324,7 +324,7 @@ export default function ComparePage() {
                                   for everyone, and reaches assistive tech
                                   without a parallel sr-only copy to drift. */}
                               {isBest && (
-                                <span className="block text-[10px] font-medium uppercase tracking-wide text-accent-warm">
+                                <span className="block text-[10px] font-medium uppercase tracking-wide text-accent-warm-strong">
                                   Best
                                 </span>
                               )}
