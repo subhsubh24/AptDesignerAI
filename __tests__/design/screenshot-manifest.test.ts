@@ -78,10 +78,14 @@ const MIN_DISTINCT_COLORS = 64;
  * done `readFileSync` on a 200 MiB file has spent the memory before the decoder
  * sees a byte — so the outermost bound belongs here, at the read.
  *
- * Measured, like the two above: the largest committed capture is 845,564 bytes
- * (a full-page /faq at desktop width). 8 MiB is ~10x that, so it cannot reject
- * a real screenshot, and a "screenshot" past it is a bad artifact on its own
- * terms — which is what this file is for.
+ * Measured, like the two above: the largest capture committed on this branch is
+ * 680,988 bytes (public-pricing-desktop.png), and the largest across every
+ * branch is 845,564. 8 MiB is ~10x the latter, so it cannot reject a real
+ * screenshot, and a "screenshot" past it is a bad artifact on its own terms —
+ * which is what this file is for.
+ *
+ * It is also the only thing bounding the per-chunk cost noted in
+ * inflateAtMost's third caveat, so it is load-bearing beyond the read itself.
  */
 const MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
 
@@ -171,21 +175,32 @@ function paeth(a: number, b: number, c: number): number {
  * had established, before the `rows` cap downstream could limit any work. The
  * row cap bounds the LOOP, never the decompression.
  *
- * Streaming makes the bound structural instead of declared: this reads until it
- * has the bytes the probe will actually consume and destroys the stream, so the
- * memory THIS function adds is `maxBytes` plus one zlib chunk (16 KiB, zlib's
- * default) no matter what the header claims.
+ * Streaming caps the DECOMPRESSED side: this collects until it has the bytes the
+ * probe will consume, then destroys the stream, so the inflated data held here
+ * is `maxBytes` plus one zlib chunk (16 KiB) however large the stream is. That
+ * is the bound that matters, because decompression is where a small file turns
+ * into a huge buffer.
  *
  * The chunks are written one at a time and are subarray VIEWS into the caller's
  * buffer, never copies. An earlier version concatenated them first, which
  * reopened the same bug class one axis over — a shape-valid PNG carrying a
- * 200 MiB IDAT cost a 200 MiB copy before any of the streaming below ran, for a
- * call that wanted ~1.3 MiB of output. Feeding the views costs nothing.
+ * 200 MiB IDAT cost a 200 MiB copy before any streaming ran, for a call that
+ * wanted ~1.3 MiB of output.
  *
- * WHAT THIS DOES NOT BOUND, stated because the previous version of this comment
- * claimed more than it delivered: the caller has already read the whole file
- * into memory, so process memory is still file size + this budget. Bounding
- * that belongs at the read, and the caller does it — see MAX_ARTIFACT_BYTES.
+ * THREE THINGS THIS DOES NOT BOUND. Listed because every previous round of this
+ * function was undone by a comment claiming a cleaner guarantee than the code
+ * gives:
+ *   1. The file is already in memory when we are called, so process memory is
+ *      file size + the above. That bound lives at the read — MAX_ARTIFACT_BYTES.
+ *   2. Cost scales with the NUMBER of IDAT chunks, which the file dictates
+ *      independently of its size. Node's per-write bookkeeping is small but not
+ *      free: at the ~699k minimum-size chunks an 8 MiB file can hold, the
+ *      measured cost is ~85 MiB, not 16 KiB. Bounded by MAX_ARTIFACT_BYTES, not
+ *      by anything here.
+ *   3. The `if (settled) break` below does NOT stop the writes early in
+ *      practice. zlib emits 'data' asynchronously, so a synchronous for-loop
+ *      always finishes first; measured across 10 to 699,050 chunks it never
+ *      broke once. It is kept as a cheap guard, not relied on.
  *
  * Resolves null on a corrupt/truncated stream — the same undecodable-artifact
  * outcome the caller already reports.
