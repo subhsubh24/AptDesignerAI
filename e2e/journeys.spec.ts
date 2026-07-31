@@ -215,10 +215,12 @@ test.describe("public + structural journeys", () => {
     await captureJourneyStep(page, "public-guides");
 
     await guideLinks.first().click();
-    // waitForURL, not `expect(page).toHaveURL(...)`. This is the suite's only
-    // assertion on a CLICK-driven navigation, and `expect` polls on the 5s
-    // EXPECT budget while every other navigation here goes through page.goto()
-    // and gets the 30s NAVIGATION budget. A dev server compiles the destination
+    // waitForURL, not `expect(page).toHaveURL(...)`. `expect` polls on the 5s
+    // EXPECT budget; a navigation started by page.goto() gets the 30s NAVIGATION
+    // budget. The two other click-driven assertions in this file already work
+    // around that with hand-picked `{ timeout: 8000 }` / `{ timeout: 15_000 }`
+    // values; this uses the navigation API instead, so there is no number to
+    // pick or to outgrow. A dev server compiles the destination
     // route on demand at first visit, so a cold `.next` blew the 5s and reported
     // this working link as a dead one — observed RED on the first run of a fresh
     // container and GREEN on an immediate re-run with the route already

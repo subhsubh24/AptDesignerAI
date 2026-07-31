@@ -65,29 +65,7 @@ if [ "$MODE" != "--public-only" ] && [ -z "${E2E_AUTH_STACK:-}" ]; then
 fi
 
 echo "run-journeys: running $SPEC (mode=$MODE)..."
-# --workers=1 is a REQUIREMENT, not a tuning choice, and this is the only place
-# it can be enforced: both CI and the documented local regeneration command go
-# through this script, while playwright.config.ts sets `workers: CI ? 2 :
-# undefined` (i.e. parallel in both).
-#
-# e2e/__screenshots__/README.md already states it ("`--workers=1` is not a
-# preference"), because a run at two workers produced a BLANK 4.7KB /login
-# capture — the page shot mid-paint — while every DOM assertion in that test
-# passed. Three serial re-runs reproduced the real 471KB screen byte-for-byte.
-# Until now that requirement lived only in prose, so the runner the README tells
-# you to invoke did the exact thing the README forbids.
-#
-# The pixel guard in __tests__/design/screenshot-manifest.test.ts is the
-# backstop, not the remedy: it can only reject a blank artifact after one is
-# produced, and it only ever sees COMMITTED files.
-#
-# COST, measured rather than assumed: the public tier ran 1.4m at the default
-# worker count and 1.1m at --workers=1 on a cold cache (same container, same
-# 16 tests). Serial is not the slower option here — parallel workers contend for
-# the same dev server and the same CPU. Expect that margin to narrow, not invert,
-# as the authed tier grows; the requirement stands either way, because a capture
-# of a half-painted page is worth less than the minute it saves.
-if npx playwright test "$SPEC" --workers=1; then
+if npx playwright test "$SPEC"; then
   echo "E2E_JOURNEYS_PASSED=1"
   exit 0
 fi
