@@ -1715,3 +1715,134 @@ entries in the very commit, 38a79b5, this run cites as its source) — fixed bot
   Program (the business case's floor-clearing figure now depends on the 15% rate this grants).
   Highest-leverage pair unchanged: SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL
   (15 min) — neither requires code, both are pure Vercel environment variable sets.
+
+---
+
+## Run 17 — 2026-07-31
+
+### Branch/PR housekeeping (before any GTM work)
+This run's designated branch (`claude/beautiful-cori-zfz8b0`) had a clean working tree with no
+unmerged commits ahead of the default branch, and Run 16's PR had already merged. No reset was
+needed beyond confirming the branch already tracked current default-branch history.
+
+### What we found
+- **Both independent scorecards are unchanged since Run 16.** `git log --oneline -- docs/growth/GTM_SCORECARD.md`
+  shows the last touch is still `fb45671` (GTM Auditor Run 4, `as_of: 2026-07-27`, overall C,
+  `ship_gate_met: false`) — no new GTM Auditor pass since Run 15's 8 fixes landed. `git log --oneline
+  -- docs/quality/QUALITY_SCORECARD.md` shows the last touch is still `0e0f901` (ninth grade,
+  `as_of: 2026-07-27`, overall C, `ship_gate_met: false`, five ship-critical dims below A). Neither
+  auditor has re-graded in the ~4 days since Run 16 — expected under maker≠checker, not a Factory
+  regression; there is simply nothing new to react to from either routine, for the second
+  consecutive run.
+- **`docs/BUSINESS_CASE.md` moved once since Run 16** (Run 123, commit `bd795f9`, 2026-07-28) but
+  only to credit three already-shipped revenue levers (a free-tier save-limit paywall, a
+  save→share viral nudge, and a third) that had been missing from the "built revenue levers"
+  section — verified via `git show bd795f9 -- docs/BUSINESS_CASE.md` that NO figure moved
+  (`arr_year1.base` still $149,300; the commit message states explicitly "no uplift is claimed").
+  Read as DATA, not actioned — a documentation-completeness fix, not a business-case number change.
+- Re-verified `PENDING_OPS.md` directly rather than assuming: `as_of` is still `2026-07-28`,
+  unchanged since Run 16, and every growth-relevant item (`set-site-gate-password`,
+  `connect-email-resend`, `apply-migration-031`, `set-metrics-token`, `set-cron-secret`,
+  `enroll-apple-small-business-program`, `apply-migration-021`, `set-email-physical-address`,
+  `waitlist-early-discount-coupon`) is still `status: open`.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a THIRTEENTH time: still
+  `connect_rejected`/gateway 502 to CONNECT, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (two entries, 2026-07-31T05:07:09Z) — identical
+  signature to every prior probe. `trustpilot.com/review/havenly.com` still returns HTTP 403,
+  re-confirmed directly.
+- Spot-checked that the GTM Auditor Run 4 EARLY30 finding (a live unbacked "30% off" promise on
+  `app/waitlist/page.tsx`) is still fixed: `grep -rn "EARLY30\|30% off" docs/*.md app/waitlist/page.tsx`
+  finds no live promise — only PENDING_OPS.md's own tracked-item text and a historical
+  loop-memory.md record. Consistent with Run 15's fix still holding.
+
+### Demand-signal research this run (implementing Run 16's deferred next_action)
+Run 16 flagged themes 1, 3, and 4 as the thinnest relative to theme 2 (2-4 sources each vs theme
+2's 6) and recommended targeting one with the confirmation+disconfirming pairing that worked for
+theme 2. This run targeted themes 1 and 4 and got an HONEST NEGATIVE for the first time using this
+exact method — two genuine attempts, zero new verbatim citations added:
+- **Theme 1 (confirmation-seeking)**: searched "furniture shopping decision fatigue survey 2026
+  statistics." WebSearch synthesized plausible-sounding aggregate figures (73% of consumers
+  overwhelmed by choice, 78.65% furniture cart-abandonment, 18-25% return rates) with no single
+  attributable source. Attempted to verbatim-verify the strongest candidate,
+  `consumeraffairs.com/homeowners/the-state-of-furniture-buying.html`, via direct WebFetch — it
+  returned HTTP 403 (site-side block, joining Trustpilot in that category). A second candidate,
+  `speakwiseapp.com/blog/decision-fatigue-statistics`, fetched cleanly but on direct read contained
+  **zero furniture-specific statistics** — its actual cited figures are general e-commerce cart
+  abandonment (Baymard, 70.22%), luxury/jewelry abandonment (81.68%), the classic jam-choice study
+  (Iyengar & Lepper 2000), and Netflix browsing behavior — none about furniture, despite surfacing
+  in a furniture-targeted search.
+- **Theme 4 (disconfirming-seeking)**: searched "AR view in room furniture app actually helped
+  customers decide satisfied." Surfaced a competing claim (71%/61% positive AR-adoption
+  statistics) traced to a single source: `glamar.io`, itself a commercial AR-furniture-app
+  vendor — the same undisclosed-competitor-promotion problem already flagged for First Chair in
+  this doc's own `disconfirming` block, so correctly NOT cited as neutral evidence. Re-fetched the
+  existing Baymard citation directly to check for any internal positive counter-finding: confirmed
+  there is none — the article is uniformly negative; the closest passage ("for the small
+  percentage of users who try the feature (only 13% in testing), 'View in Room' does not replace
+  the work of measuring their space") still describes a limitation, not a success.
+- Held `confidence` at "emerging" (unchanged) — zero themes gained a source this run.
+- This is the second time this research method has hit genuine diminishing returns on a targeted
+  theme pair (the first was Runs 8-10 on the original Reddit/Trustpilot structural gap). Recorded
+  honestly per this doc's standing norm rather than forcing a weak or unverifiable citation to
+  manufacture the appearance of progress.
+- Both structural web-research gaps re-probed and unchanged: Reddit stays excluded on
+  GTM_STANDARD S10 Responsible Builder Policy grounds (an owner decision, not a tooling gap, per
+  Run 16's finding); Trustpilot still 403s; `consumeraffairs.com` joins Trustpilot as a second
+  site-blocked-by-the-site-itself source this run.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (13th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND the independent QUALITY_SCORECARD still
+  reports `ship_gate_met: false` (unchanged ninth grade, five ship-critical dimensions below A) —
+  HARD BLOCK per GTM_STANDARD S6/S13 Gate 1. Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md, VISION.md, or BUSINESS_CASE.md: nothing this run clears the S3 bar for
+  a steer (funnel still 0/null; demand-signal research this run was a negative result, not new
+  evidence); the one BUSINESS_CASE.md change since Run 16 was already made by the Product Factory
+  and credits levers without moving any figure, so nothing needed re-deriving.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads competition data; no new information since Run 3.
+- Did not enqueue social drafts or touch the email lifecycle: `awaiting_connect: true`, no channel
+  connected; unchanged since Run 1.
+- Did not spawn an independent maker≠checker reviewer this run: every claim added is either a
+  negative/unchanged finding (both scorecards unchanged, PENDING_OPS unchanged, no new
+  demand-signal citation found) or independently re-derivable via `git log`/`git show`/direct curl
+  re-probes performed by this run itself rather than trusted from prior prose — no new marketing
+  copy, campaign, pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer
+  shipped. Matches the precedent set by Runs 4, 5, 8, and 9 for when a reviewer is/isn't warranted
+  on a routine S4/S5 dashboard-and-verification update.
+
+### Verification (before committing)
+`npm install` (materializes `js-yaml` into a fresh `node_modules`, no `package.json` change) then
+`node scripts/validate-gtm.mjs` — OK. Independently re-parsed the GROWTH_STATUS YAML block with
+`js-yaml` and spot-checked `as_of`, `demand_signal.as_of`, and `confidence` — all correct. Re-ran
+`git log --oneline` against `docs/growth/GTM_SCORECARD.md`, `docs/quality/QUALITY_SCORECARD.md`,
+and `docs/BUSINESS_CASE.md` to confirm the "unchanged since Run 16" / "one lever-credit commit,
+no figure moved" claims directly rather than trusting recollection. Re-probed
+`aptdesignerai.com` and `trustpilot.com/review/havenly.com` directly via curl through the
+agent-proxy, cross-checked against `/__agentproxy/status`.
+
+### Lessons learned
+- **A WebSearch-synthesized aggregate can name a plausible statistic that does not actually exist
+  in the source it implies.** The 73%/78.65% furniture-specific figures this run's search
+  produced looked immediately usable, but the one source cleanly fetchable
+  (`speakwiseapp.com`) turned out, on direct read, to contain zero furniture-specific data — only
+  general e-commerce/jewelry/jam-study/streaming research. This is exactly the class of error
+  `verbatim_count` vs `cited_count` exists to prevent, and it is worth explicitly re-verifying
+  even when a search result "sounds right" and matches the theme being researched.
+- **Diminishing returns is itself a real, reportable finding on its second occurrence, not just
+  its first.** Runs 8-10 already established the pattern of stating "no new citation, re-probed,
+  unchanged" honestly rather than padding; this run shows the same discipline generalizes to a
+  *different* theme pair (1 and 4) under a *newer* method (confirmation+disconfirming pairing),
+  confirming the norm is durable, not a one-off.
+- **Checking whether a "fixed" finding is STILL fixed costs almost nothing and catches drift
+  early.** The EARLY30 re-check (a 30-second grep) confirmed Run 15's fix holds; worth doing for
+  any auditor-named compliance fix on every subsequent run until the underlying feature (the
+  Stripe coupon) actually ships, since a regression here would be a live CAN-SPAM/consumer-promise
+  defect the moment RESEND_API_KEY lands.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-16? YES — circuit breaker remains FIRED (Run 17, 17th consecutive
+  run, ~34 days elapsed since Run 1). No new blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
