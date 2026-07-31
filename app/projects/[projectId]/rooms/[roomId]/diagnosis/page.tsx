@@ -413,7 +413,7 @@ export default function DiagnosisPage() {
                 <ul className="space-y-3">
                   {d.biggest_improvement_opportunities.map((item, i) => (
                     <li key={i} className="flex items-start gap-3 text-sm">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-warm-button text-white text-xs font-bold shadow-warm-sm">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-warm-button text-accent-warm-on-solid text-xs font-bold shadow-warm-sm">
                         {i + 1}
                       </span>
                       <span className="text-muted-foreground pt-1 leading-relaxed">{item}</span>
@@ -594,7 +594,7 @@ export default function DiagnosisPage() {
                   <div className="space-y-4">
                     {actions.map((action, i) => (
                       <div key={i} className="flex items-start gap-4 pb-4 border-b last:border-0 last:pb-0">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-warm-button text-white text-sm font-semibold shadow-warm-sm">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-warm-button text-accent-warm-on-solid text-sm font-semibold shadow-warm-sm">
                           {action.priority}
                         </span>
                         <div className="flex-1">

@@ -154,7 +154,7 @@ export default function GalleryPage() {
                 className={cn(
                   "px-4 py-1.5 rounded-full text-sm font-medium",
                   i === 0
-                    ? "bg-accent-warm text-white"
+                    ? "bg-accent-warm text-accent-warm-on-solid"
                     : "bg-card border text-muted-foreground",
                 )}
               >

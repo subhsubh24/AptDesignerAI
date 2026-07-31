@@ -216,9 +216,9 @@ export default async function RoomPage({
                   className={cn(
                     "relative z-10 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 shrink-0",
                     step.completed
-                      ? "bg-accent-warm text-white shadow-sm"
+                      ? "bg-accent-warm text-accent-warm-on-solid shadow-sm"
                       : isNext
-                      ? "bg-accent-warm text-white shadow-warm-md animate-gentle-glow"
+                      ? "bg-accent-warm text-accent-warm-on-solid shadow-warm-md animate-gentle-glow"
                       : step.available
                       ? "border-2 border-border bg-card"
                       : "border-2 border-border/50 bg-muted"

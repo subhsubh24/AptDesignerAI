@@ -106,7 +106,7 @@ export default function GuidesPage() {
               </p>
               <Link
                 href="/signup"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent-warm text-accent-foreground font-semibold text-sm hover:opacity-90 transition-opacity"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent-warm text-accent-warm-on-solid font-semibold text-sm hover:bg-accent-warm-solid-hover transition-colors"
               >
                 Try it free
                 <ArrowRight className="h-4 w-4" />

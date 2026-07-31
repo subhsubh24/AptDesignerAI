@@ -480,7 +480,7 @@ export default function DashboardPage() {
                   className={cn(
                     "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bedrooms === opt.value
-                      ? "border-accent-warm bg-accent-warm text-white shadow-md"
+                      ? "border-accent-warm bg-accent-warm text-accent-warm-on-solid shadow-md"
                       : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >
@@ -501,7 +501,7 @@ export default function DashboardPage() {
                   className={cn(
                     "h-12 px-6 rounded-full border-2 text-sm font-medium transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     bathrooms === n
-                      ? "border-accent-warm bg-accent-warm text-white shadow-md"
+                      ? "border-accent-warm bg-accent-warm text-accent-warm-on-solid shadow-md"
                       : "border-border hover:border-accent-warm/50 hover:bg-secondary"
                   )}
                 >
@@ -906,7 +906,7 @@ export default function DashboardPage() {
         <div className="relative inline-flex h-20 w-20 items-center justify-center mx-auto">
           <div className="absolute inset-0 rounded-full bg-accent-warm/15 animate-ping" />
           <div className="relative h-20 w-20 rounded-full bg-gradient-warm-button flex items-center justify-center shadow-warm-md">
-            <Loader2 className="h-9 w-9 text-white animate-spin" />
+            <Loader2 className="h-9 w-9 text-accent-warm-on-solid animate-spin" />
           </div>
         </div>
 
@@ -1043,7 +1043,7 @@ export default function DashboardPage() {
                 {/* Selected indicator */}
                 {isSelected && (
                   <div className="absolute top-3 right-3 h-7 w-7 rounded-full bg-accent-warm flex items-center justify-center shadow-lg animate-fade-in-up">
-                    <CheckCircle2 className="h-4 w-4 text-white" />
+                    <CheckCircle2 className="h-4 w-4 text-accent-warm-on-solid" />
                   </div>
                 )}
 
