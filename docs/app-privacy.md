@@ -24,8 +24,8 @@ stay consistent.
 
 **About the location entry — read before filling either form.** This is *not*
 device location. The app never requests a location permission on any platform
-(see `mobile/app.json` — the only permission strings are camera and photo
-library), never reads GPS, and never tracks the user's movement. What is
+(see the device-permission list below — location is not among them), never
+reads GPS, and never tracks the user's movement. What is
 collected is a single address the user deliberately types and picks from an
 autocomplete, plus the coordinates Google Places returns for that address.
 Because the stored value is a latitude/longitude at full precision, Apple's
@@ -37,6 +37,35 @@ straight to Stripe and never reaches our servers), browsing history, search
 history, sensitive info, contacts, third-party social IDs, device/GPS location,
 background location, and any content the user did not deliberately submit to the
 design pipeline.
+
+## Device permissions the app requests
+
+Derived from the Expo plugin list in `mobile/app.json`. Both store forms ask
+about permissions separately from data collection, and a permission the app
+requests but the form omits is an incomplete attestation — so this list is the
+one to check against `mobile/app.json` before filling either form, and
+`__tests__/compliance/privacy-disclosure.test.ts` fails if a permission-
+requesting plugin is added without being declared here and on `/privacy`.
+
+| Permission | Plugin | Why | Data it produces |
+|---|---|---|---|
+| Camera | `expo-image-picker` (`cameraPermission`) | Photograph the room for design analysis | The photo — already declared above under Photos or Videos |
+| Photo library | `expo-image-picker` (`photosPermission`) | Pick an existing room photo. Only the selected image is read | The photo — as above |
+| Notifications | `expo-notifications` | Tell the user when a design they asked for is ready, plus occasional product updates. Declining leaves the app fully functional | An Expo push token (see below) |
+
+**The push token, stated precisely.** `mobile/src/hooks/use-push-notifications.ts`
+requests the notification permission and, if granted, obtains an Expo push token
+and writes it to on-device `AsyncStorage`. As of today nothing sends it
+anywhere: there is no server endpoint that receives it (the server-side sender
+is still an open item in `PENDING_OPS.md`). Under Apple's definition, data is
+"collected" when it is transmitted off the device, so the token is **not**
+declared as Device ID on either form today, and that is why no identifier row
+appears in the tables below.
+
+**This is the one entry most likely to go stale.** The moment the server-side
+sender lands, the token starts leaving the device and both forms must gain an
+identifier declaration (Apple: Identifiers → Device ID, linked to the user;
+Play: Device or other IDs) before the next submission.
 
 ---
 

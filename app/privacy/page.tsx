@@ -8,7 +8,11 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  const updatedDate = "July 12, 2026";
+  // The date this policy's DISCLOSURES last changed, not today's date. Last
+  // moved by the location-collection declaration (#728, 2026-07-27); it had sat
+  // at July 12 through that change and the storage-purge change before it,
+  // showing users a date older than the disclosures on the page.
+  const updatedDate = "July 27, 2026";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

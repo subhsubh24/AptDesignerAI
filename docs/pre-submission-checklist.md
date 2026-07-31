@@ -43,6 +43,12 @@ Open `mobile/app.json` and verify:
 
 - [ ] `photosPermission` accurately describes why photos are accessed
 - [ ] `cameraPermission` accurately describes why the camera is used
+- [ ] The `expo-notifications` plugin is still declared in the device-permission
+      table in `docs/app-privacy.md` and in the permissions list on `/privacy`
+      (this one has no usage string of its own, so it is the easy one to miss —
+      it went undeclared in the App Privacy doc until Run 131)
+- [ ] Every OTHER plugin in the `plugins` array that prompts for a runtime
+      permission appears in both of those places
 - [ ] No placeholder text (`"TODO"`, `"Your app"`, `"Uses the camera"`)
 
 Run `grep -r "TODO\|placeholder\|lorem ipsum" mobile/app.json` — should return nothing.
