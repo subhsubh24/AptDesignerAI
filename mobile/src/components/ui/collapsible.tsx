@@ -5,7 +5,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Spacing, TapSlop } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
@@ -19,6 +19,7 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
         accessibilityLabel={title}
         accessibilityState={{ expanded: isOpen }}
         style={({ pressed }) => [styles.heading, pressed && styles.pressedHeading]}
+        hitSlop={TapSlop.iconRow}
         onPress={() => setIsOpen((value) => !value)}>
         <ThemedView type="backgroundElement" style={styles.button}>
           <SymbolView

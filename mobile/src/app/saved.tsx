@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSession } from '@/hooks/use-session';
 import { useSavedDesigns, type SavedDesign } from '@/hooks/use-saved-designs';
@@ -91,6 +91,11 @@ function DesignCard({
         <Pressable
           style={({ pressed }) => [styles.shareButton, { opacity: pressed ? 0.6 : 1 }]}
           onPress={() => onShare(design.id, design.title)}
+          // 4pt padding around a 20pt line box is a 28pt target — under both
+          // Apple's 44pt and Android's 48dp minimum. The label is deliberately
+          // a quiet inline link rather than a button, so the fix is to grow the
+          // TOUCH target without growing the visual one.
+          hitSlop={TapSlop.smallLabelPadded}
           accessibilityRole="button"
           accessibilityLabel={`Share ${design.title}`}
         >

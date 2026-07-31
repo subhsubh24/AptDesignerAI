@@ -79,3 +79,8 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+// Touch-target sizing lives in its own module so the Node test runner can load
+// it without this file's `global.css` import; re-exported here so call sites
+// keep a single theme import.
+export { TapSlop } from './tap-targets';

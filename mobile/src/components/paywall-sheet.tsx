@@ -6,7 +6,7 @@ import type { PurchasesOffering, PurchasesPackage } from 'react-native-purchases
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
@@ -421,7 +421,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
           <Pressable
             style={styles.restoreButton}
             onPress={handleRestore}
-            hitSlop={8}
+            hitSlop={TapSlop.smallLabelPadded}
             disabled={purchasing}
             accessibilityRole="button"
             accessibilityLabel="Restore purchases"

@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { setPendingImageUri } from '@/state/photo-session';
 
@@ -232,6 +232,7 @@ export default function PhotoCaptureScreen() {
 
                 <Pressable
                   style={({ pressed }) => [styles.skipButton, { opacity: pressed ? 0.6 : 1 }]}
+                  hitSlop={TapSlop.defaultLabelPadded}
                   accessibilityRole="button"
                   onPress={() => router.push('/')}
                 >

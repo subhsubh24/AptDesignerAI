@@ -7,7 +7,7 @@ import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PaywallSheet } from '@/components/paywall-sheet';
-import { BottomTabInset, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEntitlements } from '@/hooks/use-entitlements';
 import { useFreeSaveQuota } from '@/hooks/use-free-quota';
@@ -410,6 +410,7 @@ export default function ResultsScreen() {
                     styles.retryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  hitSlop={TapSlop.defaultLabelPadded}
                   accessibilityRole="button"
                   accessibilityLabel="Try again"
                   onPress={() => run(imageUri, roomType)}
@@ -424,6 +425,7 @@ export default function ResultsScreen() {
                     styles.retryButton,
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
+                  hitSlop={TapSlop.defaultLabelPadded}
                   accessibilityRole="button"
                   accessibilityLabel="Pick a photo"
                   onPress={() => router.push('/photo')}
