@@ -149,6 +149,52 @@ function paeth(a: number, b: number, c: number): number {
 }
 
 /**
+ * Inflate at most `maxBytes` of the image data, then stop.
+ *
+ * `inflateSync` cannot stop early — it returns the WHOLE stream or nothing —
+ * and that is what let a header-valid file still exhaust memory: at 2560x100000
+ * RGBA an all-zero raw stream compresses to under a megabyte and expands to
+ * ~977 MiB, so the decompression itself blew past any bound the header check
+ * had established, before the `rows` cap downstream could limit any work. The
+ * row cap bounds the LOOP, never the decompression.
+ *
+ * Streaming makes the bound structural instead of declared: this reads until it
+ * has the bytes the probe will actually consume and destroys the stream, so
+ * peak memory is `maxBytes` plus one zlib chunk NO MATTER what the header
+ * claims. Nothing here has to trust a number in the file.
+ *
+ * Resolves null on a corrupt/truncated stream — the same undecodable-artifact
+ * outcome the caller already reports.
+ */
+async function inflateAtMost(idat: Buffer[], maxBytes: number): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const inflate = zlib.createInflate();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    // destroy() makes the stream emit a premature-close error after we have
+    // already resolved, so every path funnels through one guarded settle.
+    const settle = (value: Buffer | null) => {
+      if (settled) return;
+      settled = true;
+      inflate.destroy();
+      resolve(value);
+    };
+    inflate.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+      total += chunk.length;
+      if (total >= maxBytes) settle(Buffer.concat(chunks, total));
+    });
+    // A stream shorter than the probe wants is not an error — a short image has
+    // fewer rows than `maxRows`, and the un-filter loop already stops when the
+    // buffer runs out.
+    inflate.on("end", () => settle(Buffer.concat(chunks, total)));
+    inflate.on("error", () => settle(null));
+    inflate.end(Buffer.concat(idat));
+  });
+}
+
+/**
  * Count distinct RGB values in the top `maxRows` scanlines of a PNG.
  *
  * This decodes real pixels rather than inferring "blank" from file size. Size
@@ -162,7 +208,7 @@ function paeth(a: number, b: number, c: number): number {
  * rather than a pass: an artifact we cannot inspect is not an artifact we can
  * trust, and silently skipping it is how a guard goes hollow.
  */
-function distinctColorsInTopRows(buf: Buffer, maxRows: number): number | null {
+async function distinctColorsInTopRows(buf: Buffer, maxRows: number): Promise<number | null> {
   const { header, idat } = readPngChunks(buf);
   if (!header || idat.length === 0) return null;
 
@@ -184,28 +230,31 @@ function distinctColorsInTopRows(buf: Buffer, maxRows: number): number | null {
   // waiting, so the header is validated against a known-good shape ONCE, before
   // any allocation, and every rejection lands on the same documented null.
   //
-  // The bound is the capture widths themselves, doubled for headroom — a real
-  // artifact is shot at one of WIDTHS, and a full-page height is bounded by the
-  // longest page the suite visits, not by anything a file gets to claim.
+  // Both bounds are MEASURED against what the suite actually shoots, not picked
+  // as round numbers. Width: a capture is taken at one of WIDTHS, doubled for
+  // headroom. Height: the tallest committed full-page capture is ~4,126px, so
+  // 20,000 leaves nearly 5x and still rejects a header inventing a size.
+  //
+  // These are SHAPE checks only. They are deliberately NOT what keeps memory
+  // bounded — a previous version leaned on the height bound for that and a
+  // header-valid 2560x100000 RGBA file still forced a ~977 MiB inflate, because
+  // a declared size can be enormous while staying under any constant you pick.
+  // inflateAtMost() is what makes the ceiling structural; see its note.
   const MAX_WIDTH = Math.max(...WIDTHS.map((w) => w.width)) * 2;
-  const MAX_HEIGHT = 100_000;
+  const MAX_HEIGHT = 20_000;
   if (width < 1 || width > MAX_WIDTH) return null;
   if (height < 1 || height > MAX_HEIGHT) return null;
 
-  // Even with a sane header, IDAT can stop mid-stream (the truncated-write case
-  // this file's header calls out) and inflateSync THROWS on that. Letting it
-  // propagate would crash the caller with a generic zlib message naming no
-  // file, when the contract above promises a null the caller reports as an
-  // undecodable artifact. Same outcome (the build fails), but only one of them
-  // tells you which file to look at.
-  let raw: Buffer;
-  try {
-    raw = zlib.inflateSync(Buffer.concat(idat));
-  } catch {
-    return null;
-  }
   const stride = width * channels;
   const rows = Math.min(height, maxRows);
+
+  // Read only what the probe consumes: `rows` scanlines, each a filter byte plus
+  // one stride. A truncated or corrupt stream resolves null — the same
+  // undecodable-artifact outcome as an unreadable header, so both failures read
+  // identically to whoever hits them.
+  const raw = await inflateAtMost(idat, (stride + 1) * rows);
+  if (raw === null) return null;
+
   const colors = new Set<number>();
 
   let prev = Buffer.alloc(stride);
@@ -405,22 +454,61 @@ describe("F7 journey screenshot artifacts", () => {
     expect(bad, `Placeholder or malformed screenshot artifacts:\n${bad.join("\n")}`).toEqual([]);
   });
 
-  it("detects a blank image — the guard's own guard", () => {
+  it("detects a blank image — the guard's own guard", async () => {
     // Without this, a decoder that silently started returning null (a format
     // change, a refactor) would make the blankness test below pass over every
     // artifact, and nothing would say so. Prove the detector still separates a
     // drawn screen from an undrawn one before trusting its verdicts.
     const blank = uniformPng(1280, 800, [250, 249, 247]);
-    expect(distinctColorsInTopRows(blank, BLANK_PROBE_ROWS)).toBeLessThan(MIN_DISTINCT_COLORS);
+    expect(await distinctColorsInTopRows(blank, BLANK_PROBE_ROWS)).toBeLessThan(
+      MIN_DISTINCT_COLORS,
+    );
 
     const drawn = files.find((f) => f.startsWith("public-"));
     expect(drawn, "no public capture to compare against").toBeDefined();
     expect(
-      distinctColorsInTopRows(fs.readFileSync(path.join(SHOTS_DIR, drawn!)), BLANK_PROBE_ROWS),
+      await distinctColorsInTopRows(fs.readFileSync(path.join(SHOTS_DIR, drawn!)), BLANK_PROBE_ROWS),
     ).toBeGreaterThanOrEqual(MIN_DISTINCT_COLORS);
+
+    // A header can claim any size, and the guard must not believe it. Rewrite a
+    // real 1x1 capture's IHDR to claim 2560x100000 — the shape a review found
+    // could defeat the previous version, where an all-zero RGBA stream at those
+    // dimensions weighs under a megabyte on disk and ~977 MiB once inflated.
+    // Rejected on shape, before a byte is decompressed.
+    const liar = uniformPng(1, 1, [255, 255, 255]);
+    liar.writeUInt32BE(2560, 16); // IHDR width
+    liar.writeUInt32BE(100_000, 20); // IHDR height
+    expect(await distinctColorsInTopRows(liar, BLANK_PROBE_ROWS)).toBeNull();
   });
 
-  it("commits no visually BLANK artifact", () => {
+  it("stops inflating at the byte budget, whatever the stream holds", async () => {
+    // The shape check above rejects an absurd HEADER. This covers the case it
+    // cannot: dimensions that pass every bound and still carry far more data
+    // than the probe reads. The old code called inflateSync, which returns the
+    // whole stream or nothing, so peak memory tracked the FILE rather than the
+    // 400 rows actually inspected — the bound was declared, not enforced.
+    //
+    // Four megabytes of zeros compress to a few kilobytes. Asking for 1 KiB
+    // must yield about 1 KiB, not four megabytes.
+    const budget = 1024;
+    const compressed = zlib.deflateSync(Buffer.alloc(4 * 1024 * 1024));
+    const out = await inflateAtMost([compressed], budget);
+
+    expect(out).not.toBeNull();
+    expect(out!.length).toBeGreaterThanOrEqual(budget);
+    // One zlib chunk of slack above the budget; nowhere near the whole stream.
+    expect(out!.length).toBeLessThan(1024 * 1024);
+
+    // And a stream SHORTER than the budget still comes back whole, so a small
+    // image is not mistaken for a corrupt one.
+    const short = zlib.deflateSync(Buffer.alloc(16));
+    expect((await inflateAtMost([short], budget))!.length).toBe(16);
+
+    // A corrupt stream is an undecodable artifact, not a crash.
+    expect(await inflateAtMost([Buffer.from("not a zlib stream")], budget)).toBeNull();
+  });
+
+  it("commits no visually BLANK artifact", async () => {
     // The hole this closes is not theoretical. A journey run at two workers
     // produced a 4.7KB all-background /login capture while every DOM assertion
     // in that test passed — a screen that rendered nothing, shot mid-paint. It
@@ -431,7 +519,7 @@ describe("F7 journey screenshot artifacts", () => {
 
     for (const file of files) {
       const buf = fs.readFileSync(path.join(SHOTS_DIR, file));
-      const colors = distinctColorsInTopRows(buf, BLANK_PROBE_ROWS);
+      const colors = await distinctColorsInTopRows(buf, BLANK_PROBE_ROWS);
 
       if (colors === null) {
         bad.push(`${file}: could not be decoded — an artifact we cannot inspect is not evidence`);
