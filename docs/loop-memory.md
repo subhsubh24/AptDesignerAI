@@ -4,6 +4,69 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-07-31 (Run 130) — DEEP AUDIT (8-lens, DUE) + the run's real finding came from RUNNING the gate, not from scouting. Heavy review round: 16 verdicts, and **every single blocking finding was real** — including three against my own verification claims.
+
+### State on entry
+- Cold container; `node_modules` absent at root AND `/mobile`. Branch cut with `git checkout -B <name> origin/<default>` per Run 129's rule — no stale-ref repeat.
+- Baseline GREEN: web tsc, **2721 tests** / 11 skip, determinism, `/mobile` tsc.
+- DEEP AUDIT **DUE** (last ran Run 126, 2026-07-30). Ran the 8-lens sweep before scouting.
+- PR #751 open from Run 129, awaiting a fresh reviewer.
+
+### THE RUN'S FINDING: the functional-reality gate was RED, and only running it showed that
+Before touching anything I ran `scripts/run-journeys.sh --public-only` — the mechanical BUILDS≠WORKS gate preflight GATE 1b reads. It came back **`E2E_JOURNEYS_PASSED=0`**, naming a guides link that "builds but does not work". It was not a product defect: `expect(page).toHaveURL()` polls on the 5s EXPECT budget while `page.goto()` navigations get 30s, and a dev server compiles the destination route on first visit (measured: 5.54s cold, ~0.08s warm). **The gate the readiness audit depends on goes red on a cold container.** No scout lens would have found this; only running it did.
+
+### The 8-lens DEEP AUDIT
+- **correctness/dead code: CLEAN.** **security/RLS: CLEAN** — fourth consecutive clean sweep (31 migrations / 56 routes).
+- **QUALITY_SCORECARD reconcile (the highest-signal lens):** the scorecard (`as_of: 2026-07-27`) is stale in the factory's favour again. store_readiness (storage purge + privacy labels) FIXED; business_case FIXED and now clears the floor ($121,339 store / $136,762 web).
+- **A reconcile scout reported the `performance` gaps as STILL BROKEN. I checked myself and it was wrong on all three** — `gemini.ts:314` wraps the fetch in `imageFetchLimit`, `resolveImageBlocks` has 5+ real call sites, `evaluate-set` is capped at `EXTRACT_CONCURRENCY=5`. It had read the scorecard's stale line numbers and reported them as current. **A scout that cites the artifact you gave it is not evidence; only a first-hand read is.**
+- **a11y/design lens produced the run's two shippable finds** (compare-table colour-only ranking; the heading-order class).
+- **deps:** the transitive postcss/sharp advisories inside Next's own tree remain; `npm audit fix` proposes next@9.3.3, a nonsense downgrade. Not actionable without a Next bump. Timeouts + fail-loud env checks re-verified PASS.
+- **tests/evals:** `lib/agents` still the weak spot — orchestrator 11.66%, fit-scorer 6.27%, scene-assembler 1.53%.
+
+### F7 dual-axis visual verdict — DoD(2), done for the first time
+F7 requires the deep-audit lens to actually OPEN each capture and record a verdict on BOTH axes. Sampled across the committed set, at both widths:
+
+| capture | FUNCTIONAL | DESIGN |
+|---|---|---|
+| public-login-form-desktop | PASS — real form, both fields, working recovery link | PASS — asymmetric 2-col, single warm accent, honest trust strip |
+| public-pricing-desktop | PASS — three real tiers, $29/$49 consistent, annual correctly absent | PASS |
+| public-signup-form-mobile | PASS — full form + legal links, mobile value-prop present | PASS |
+| public-reset-password-resolved-desktop | PASS — expired-link state resolves to a real recovery path, not a spinner | PASS |
+| public-privacy-mobile | PASS — location collection declared, all 11 processors, device permissions, retention | PASS |
+| **public-waitlist-desktop** | **FAIL** — primary CTA rendered DISABLED on first paint | PASS otherwise |
+
+**The waitlist FAIL is exactly what F7 exists for.** Every DOM assertion passed: the journey suite checks the button is *visible*, and a visible disabled button satisfies that. Only looking at the picture caught it. Shipped as a fix + an ENABLED assertion.
+
+### Lessons learned
+1. **THE RUN'S LESSON: FOUR separate times I stated something as measured fact and a reviewer falsified it.** (a) I claimed serial journeys were *faster* (1.1m vs 1.4m) — I had compared a FAILING parallel run, which pays for retries and trace capture, against a passing serial one; controlled, serial is 66–85% *slower*. (b) I claimed a colour pairing cleared AA; recomputed it was 4.25:1, and the repo already had `--accent-warm-strong` for exactly that case, documented in `globals.css` with the same number. (c) I claimed a heading re-scan found "exactly one page still skipping"; my scan collected levels PRESENT in a file, which says nothing about what renders TOGETHER. (d) I claimed two dead tests had been "passing on a footer heading" and would have survived the page being gutted; `git log -p` shows both matched ZERO elements and had never passed since the spec's first commit — a test that was never right, not a page that drifted.
+   Every one was caught by a reviewer RECOMPUTING rather than reading, and none by me re-reading my own work. **The failure is not carelessness with numbers, it is that a plausible mechanism feels like evidence.** (a) had a real mechanism (cold compiles are slow) and a real observation, and was still wrong because the comparison was uncontrolled; (d) had a real symptom (three red tests) and I invented the cause. The habit to build: when a claim is falsifiable in one command, run the command before writing the sentence.
+2. **The per-branch trap, twice in one run, and I described it before I fell into it.** I fixed the bundles error/empty states to h2, turning `h1→h3→h4` into `h1→h2→h4`, wrote in the commit message that moving-the-gap was the mistake to avoid — and then shipped exactly that, because the two h2s are on branches that never render alongside the h3. **For conditional UI, enumerate the mutually exclusive RENDER PATHS; a file-wide scan is not a document outline.**
+3. **A CONCURRENT-AGENT hazard worth its own line: reviewer subagents share this container's filesystem AND its ports.** Two distinct incidents. One reviewer ran `npm ci` inside their own worktree and it wiped the SHARED repo's `node_modules` through a bind mount (they caught it and reinstalled). Another had a worktree removed underneath them mid-review by a different agent. **Reviewer prompts must say: work in a uniquely-named worktree, symlink `node_modules` rather than installing, and never assume a shared scratch path survives.** And see the next lesson for the port half of the same problem.
+4. **A shared container makes `reuseExistingServer: true` a correctness hazard.** A reviewer subagent's dev server held port 3100, and Playwright silently ran MY test against THEIR tree — I spent three cycles debugging a "still disabled" button that was correct in my working copy. `playwright.config.ts` even warns about this for :3000. **Reviewer prompts now say: verify the port is free, never 3100.**
+5. **Test-env config can fake a product failure.** `e2e/public-pages.spec.ts` run without a Supabase identity takes the middleware's "no Supabase configured — bypass auth" branch and serves the DASHBOARD for every path, so `/waitlist` assertions fail against a page that is not `/waitlist`. `run-journeys.sh` supplies a placeholder identity for exactly this; running playwright directly does not.
+6. **Two whole e2e spec files never run in CI.** `.github/workflows/ci.yml`'s `journeys` job runs `scripts/run-journeys.sh`, which runs `journeys.spec.ts` and nothing else — so `public-pages.spec.ts` and `a11y.spec.ts` are dead there. Predictably rotted — three tests RED, in **two different ways**: `/support` matched three headings at once (a strict-mode violation), while `/faq` and `/guides` matched NOTHING, because their regexes (`/faq|frequently/`, `/guide/`) never matched h1s reading "Questions, answered" and "Design, explained" and have been wrong since the spec's first commit. **Neither of those two has ever passed.** Fixed the file; wiring it into the gate needs a `.github/` edit.
+7. **PR #751 hit its cap again, on the same class a fourth time.** Each round the code got safer and the COMMENT kept overclaiming: "bounded no matter what the header claims" was false first for the compressed side (`Buffer.concat(idat)` copying 200 MiB), then for per-chunk write cost (~85 MiB at the chunk count an 8 MiB file allows), then for an early-exit `break` that a reviewer proved never fires because zlib's 'data' is async. Final round changed only the claims. **When the code is right and the comment keeps being wrong, the defect is the habit of claiming a clean guarantee — so state the caveats instead of narrowing the code again.**
+
+### Outcome
+**All 4 merged** — #754 (journey gate), #755 (compare a11y), #756 (heading-order ×10 + the axe guard), #757 (waitlist CTA + spec repair). **16 reviewer verdicts, 7 REQUEST_CHANGES, every blocking finding real.** The heading-order guard is the one I could not verify locally (the authed tier needs the seeded stack) — CI run 30618992413 settled it: `mode=full`, **30 passed, `E2E_JOURNEYS_PASSED=1`**, so the guard runs and is green on the six routes rather than red on arrival.
+
+**#751 stays open at its cycle cap for the third run.** Not stalled for lack of a fix — the code got safer each round; the COMMENT kept overclaiming. Final round changed only the claims. It needs one clean review, not more building.
+
+### Carry-forward + audit cadence
+- **DEEP AUDIT ran Run 130 (2026-07-31) — next due ~Run 134.**
+- **NAMED, verified, buildable next-run items:**
+  - **A SERIOUS WCAG AA violation on four public pages, precisely characterised and deliberately NOT half-fixed this run.** The four `/guides` pages hand-roll their signup CTA as `bg-accent-warm text-accent-foreground` instead of using the Button component: axe reports `color-contrast`, impact **serious**, **3.51:1** (`#1a1614` on `#b4501e`, 14px, needs 4.5:1). Dark mode is worse — `#ede9e3` on `#d4733e` = 2.75:1. The token pair is simply inverted in both themes: computed, **white on the light accent is 5.11:1 and near-black on the dark accent is 5.41:1**, i.e. each theme wants the OTHER theme's foreground. NOTE THE TRAP: swapping these to `<Button variant="warm">` would make axe go quiet WITHOUT fixing the ratio, because that variant paints a *gradient* and axe reports gradients as "incomplete" rather than a violation — and white on the dark gradient's `#e8935e` end is only 2.40:1. That is silencing the gate, not fixing the defect, so it was left for a run that can do the token work properly.
+  - `app/privacy/page.tsx:11` says "Last updated: July 12, 2026" while its disclosures materially changed on 2026-07-22 (#680) and 2026-07-27 (#728) — the location-collection declaration among them. `/terms` is correctly dated. A policy showing a date older than its own disclosure changes is a real notice defect.
+  - **Double-submit on the public waitlist endpoint** (found by a reviewer, reproduced on the BASE commit, so pre-existing): two synchronous clicks both see `disabled === false` and fire two POSTs, because `setState("loading")` does not take effect until the next render. It sends mail and is unauthenticated.
+  - `PENDING_OPS.md:26` still says the authed journey tier is "not yet green under `next start` in CI". Stale — CI run 30618992413 shows it green at 30/30 this run.
+  - Heading-level skips remain (per-branch verified) in `app/dashboard`, `app/gallery`, `app/page.tsx`, `rooms/[roomId]/focus`. Ten instances fixed this run; these four are NOT and are not claimed to be.
+  - `--workers=1` in `run-journeys.sh`: the requirement is real and unenforced, but it costs ~66% wall-clock on the CI journeys job. Needs a run that states that cost honestly and argues the correctness win.
+  - Wire `e2e/public-pages.spec.ts` + `e2e/a11y.spec.ts` into CI — `.github/` edit, OWNER STEP.
+  - `e2e/a11y.spec.ts` `/guides` has a live critical/serious axe violation (pre-existing, unrelated to this run's diffs).
+- **DO-NOT-RE-FLAG (carry prior lists +):** the three `performance` scorecard gaps (gemini serial fetch, unused `resolveImageBlocks`, uncapped evaluate-set) — ALL verified FIXED at HEAD, do not re-fix; mobile `/api/mobile/analyze` "missing entitlement gate" (FALSE POSITIVE — web `/api/diagnosis` has none either; analysis is free-tier on both, so this is parity, not a leak); the $29 tier "absent from the mobile paywall" (it is absent only from `FALLBACK_OPTIONS`, the non-purchasable placeholder shown before RevenueCat offerings load — `packagesToOptions` already classifies one-time products via `isRecurring`/`isRestorable`).
+
+---
+
 ## Run 2026-07-31 (Run 129) — scout-driven (no DEEP AUDIT, not due). 3 changes built, **2 merged and 1 HELD OPEN at the review-cycle cap**. 12 reviewer verdicts: 5 APPROVE, 7 REQUEST_CHANGES; all three changes were rejected on the first pass and every rejection was real. The run's lesson is a new one: **I verified my mechanism against the world and still not against the world's other doors.**
 
 ### State on entry
