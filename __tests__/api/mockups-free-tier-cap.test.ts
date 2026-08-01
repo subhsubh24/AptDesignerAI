@@ -1,21 +1,23 @@
 import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vitest";
 
-// Guards the free-tier cap on full room-scene mockup renders.
+// Guards the free-tier caps on mockup renders: the standard full room-scene
+// render, and the per-item recommendation-mockup shot.
 //
 // "AI mockups of finished rooms" is an Apartment-tier feature on /pricing and is
-// absent from the free tier's list, but app/api/mockups enforced only a rate
-// limit — so the most expensive call in the product was unlimited for free
-// users, and docs/BUSINESS_CASE.md's claim that "the free tier caps renders per
-// user" was not true of the code.
+// absent from the free tier's list, but app/api/mockups originally enforced only
+// a rate limit on two of its three render modes — so the most expensive calls in
+// the product were unlimited for free users, and docs/BUSINESS_CASE.md's claim
+// that "the free tier caps renders per user" was not true of the code (#748).
 //
-// The two properties that matter, and that these tests pin:
-//   1. A blocked request costs NOTHING — the gate runs before the render, so no
-//      mockup_jobs row is created and no image model is reached.
-//   2. The cap is scoped to the STANDARD render only. `vision_mode` (the preview
-//      the focus page auto-generates the moment an analysis lands — the free
-//      tier's "aha") and `recommendation_mockup` (per-item product shots) are
-//      never counted and never gated; a regression there would trade activation
-//      for revenue.
+// The properties that matter, and that these tests pin:
+//   1. A blocked request costs NOTHING — each gate runs before its render, so no
+//      job/run row is created and no image model is reached.
+//   2. `recommendation_mockup` is capped per-user across ALL their rooms,
+//      excluding failed/incomplete runs from the count (an outage must not
+//      consume the allowance).
+//   3. `vision_mode` (the preview the focus page auto-generates the moment an
+//      analysis lands — the free tier's "aha") stays deliberately UNGATED; a
+//      regression there would trade activation for revenue.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
@@ -70,12 +72,14 @@ vi.mock("@/lib/agents/format-floor-plan", () => ({ getRoomFromFloorPlan: vi.fn((
 
 import { createClient } from "@/lib/supabase/server";
 import { userOwnsRoom } from "@/lib/auth/ownership";
-import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
+import { createAgentRun } from "@/lib/db/agent-runs";
+import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB, FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
 import { POST as mockupsPost } from "@/app/api/mockups/route";
 
 const mockCreateClient = createClient as unknown as Mock;
 const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
 const mockHasPro = hasProEntitlementWeb as unknown as Mock;
+const mockCreateAgentRun = createAgentRun as unknown as Mock;
 
 type Harness = {
   /** Spy on the mockup_jobs INSERT — the first billable step of a render. */
@@ -84,22 +88,36 @@ type Harness = {
   countSelect: Mock;
   /** Spy on the `.neq(...)` applied to the count query. */
   countNeq: Mock;
-  /** Spy on the ownership `.eq(...)` applied to the count query. */
+  /** Spy on the ownership `.eq(...)` applied to the standard-mode count query. */
   countEq: Mock;
+  /** Spy on the ownership `.eq(...)` applied to the recommendation count query. */
+  recCountOwnerEq: Mock;
+  /** Spy on the `.eq("agent_type", ...)` applied to the recommendation count query. */
+  recCountTypeEq: Mock;
+  /** Spy on the `.eq("status", ...)` applied to the recommendation count query (the resolving call). */
+  recCountStatusEq: Mock;
+  /** Spy on the recommendation count SELECT (the one passed `{ count: "exact" }`). */
+  recCountSelect: Mock;
 };
 
 /**
- * Supabase stub for the mockup POST. `existingMockups` is what the free-tier
- * count query returns for this user.
+ * Supabase stub for the mockup POST. `existingMockups` is what the standard-mode
+ * free-tier count query returns; `existingRecommendations` is what the
+ * recommendation-mode free-tier count query returns.
  */
-function makeClient(opts: { user: { id: string }; existingMockups: number }): Harness {
-  const { user, existingMockups } = opts;
+function makeClient(opts: { user: { id: string }; existingMockups: number; existingRecommendations?: number }): Harness {
+  const { user, existingMockups, existingRecommendations = 0 } = opts;
   const jobInsert = vi.fn().mockReturnValue({
     select: () => ({ single: async () => ({ data: { id: "job-1" }, error: null }) }),
   });
   const countNeq = vi.fn().mockResolvedValue({ count: existingMockups, error: null });
   const countEq = vi.fn();
   const countSelect = vi.fn();
+
+  const recCountStatusEq = vi.fn().mockResolvedValue({ count: existingRecommendations, error: null });
+  const recCountTypeEq = vi.fn().mockReturnValue({ eq: recCountStatusEq });
+  const recCountOwnerEq = vi.fn().mockReturnValue({ eq: recCountTypeEq });
+  const recCountSelect = vi.fn().mockReturnValue({ eq: recCountOwnerEq });
 
   const from = vi.fn((table: string) => {
     if (table === "rooms") {
@@ -142,6 +160,12 @@ function makeClient(opts: { user: { id: string }; existingMockups: number }): Ha
       chain.then = (res: (v: unknown) => unknown) => res({ data: [{ id: "prod-A" }], error: null });
       return chain;
     }
+    if (table === "agent_runs") {
+      // The only real (unmocked) read against this table is the
+      // recommendation-mockup free-tier count — createAgentRun/completeAgentRun
+      // are mocked at the module level and never touch the client.
+      return { select: recCountSelect };
+    }
     if (table === "mockup_jobs") {
       const chain: Record<string, unknown> = {};
       // The counting read and the write path share this table, so they are told
@@ -174,7 +198,7 @@ function makeClient(opts: { user: { id: string }; existingMockups: number }): Ha
     },
   });
 
-  return { jobInsert, countSelect, countNeq, countEq };
+  return { jobInsert, countSelect, countNeq, countEq, recCountOwnerEq, recCountTypeEq, recCountStatusEq, recCountSelect };
 }
 
 function req(body: unknown) {
@@ -187,6 +211,7 @@ beforeEach(() => {
   mockUserOwnsRoom.mockResolvedValue(true);
   mockHasPro.mockReset();
   mockHasPro.mockResolvedValue(false);
+  mockCreateAgentRun.mockClear();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -261,14 +286,97 @@ describe("free-tier full-room mockup cap", () => {
     expect(mockHasPro).not.toHaveBeenCalled();
   });
 
-  it("never gates per-item recommendation shots", async () => {
+});
+
+describe("free-tier recommendation-mockup cap", () => {
+  function recReq(recommendation_mockup: Record<string, unknown> = { category: "sofa", search_title: "linen sofa" }) {
+    return req({ room_id: "room-1", recommendation_mockup });
+  }
+
+  it("403s a free user who has spent the recommendation allowance, and starts no agent run", async () => {
+    const h = makeClient({
+      user: { id: "free-1" },
+      existingMockups: 0,
+      existingRecommendations: FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB,
+    });
+    const res = await mockupsPost(recReq());
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.subscription_required).toBe(true);
+    expect(body.limit).toBe(FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB);
+    // A refused request must not have paid for anything — no agent run, no
+    // image model call.
+    expect(mockCreateAgentRun).not.toHaveBeenCalled();
+    void h;
+  });
+
+  it("lets a free user under the recommendation allowance through", async () => {
+    const h = makeClient({
+      user: { id: "free-1" },
+      existingMockups: 0,
+      existingRecommendations: FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB - 1,
+    });
+    const res = await mockupsPost(recReq());
+
+    expect(res.status).not.toBe(403);
+    expect(mockCreateAgentRun).toHaveBeenCalledTimes(1);
+    void h;
+  });
+
+  it("lets a PAID user render past the recommendation allowance", async () => {
+    mockHasPro.mockResolvedValue(true);
+    const h = makeClient({
+      user: { id: "pro-1" },
+      existingMockups: 0,
+      existingRecommendations: FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB + 5,
+    });
+    const res = await mockupsPost(recReq());
+
+    expect(res.status).not.toBe(403);
+    expect(mockCreateAgentRun).toHaveBeenCalledTimes(1);
+    expect(mockHasPro).toHaveBeenCalledWith("pro-1");
+    void h;
+  });
+
+  it("does not pay for an entitlement lookup while under the recommendation allowance", async () => {
+    makeClient({ user: { id: "free-1" }, existingMockups: 0, existingRecommendations: 0 });
+    await mockupsPost(recReq());
+
+    expect(mockHasPro).not.toHaveBeenCalled();
+  });
+
+  it("excludes non-completed (failed/running) renders from the recommendation count", async () => {
+    const h = makeClient({ user: { id: "free-1" }, existingMockups: 0, existingRecommendations: 0 });
+    await mockupsPost(recReq());
+
+    expect(h.recCountStatusEq).toHaveBeenCalledWith("status", "completed");
+    expect(h.recCountTypeEq).toHaveBeenCalledWith("agent_type", "mockup_recommendation");
+  });
+
+  it("counts recommendation renders across ALL of the user's rooms, not just this one", async () => {
+    const h = makeClient({ user: { id: "free-1" }, existingMockups: 0, existingRecommendations: 0 });
+    await mockupsPost(recReq());
+
+    expect(h.recCountOwnerEq).toHaveBeenCalledWith("rooms.projects.user_id", "free-1");
+    expect(h.recCountSelect).toHaveBeenCalledWith(
+      expect.stringContaining("rooms!inner(projects!inner(user_id))"),
+      expect.objectContaining({ count: "exact" }),
+    );
+  });
+});
+
+describe("vision-mode stays ungated", () => {
+  it("never gates the vision preview — it is the free tier's first look at a finished room", async () => {
     const h = makeClient({ user: { id: "free-1" }, existingMockups: FREE_MOCKUP_LIMIT_WEB + 10 });
     const res = await mockupsPost(
-      req({ room_id: "room-1", recommendation_mockup: { category: "sofa", search_title: "linen sofa" } }),
+      req({ room_id: "room-1", vision_mode: true, design_direction: "warm minimal", items_description: "sofa" }),
     );
 
     expect(res.status).not.toBe(403);
+    // Proves the scoping, not just the outcome: neither cap query is issued.
     expect(h.countNeq).not.toHaveBeenCalled();
+    expect(h.recCountStatusEq).not.toHaveBeenCalled();
     expect(mockHasPro).not.toHaveBeenCalled();
   });
 });
