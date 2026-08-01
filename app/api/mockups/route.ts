@@ -19,7 +19,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { userOwnsRoom } from "@/lib/auth/ownership";
-import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
+import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB, FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
 import { parsePagination } from "@/lib/utils/pagination";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
 import { uploadMockupImage } from "@/lib/storage/mockup-upload";
@@ -184,18 +184,18 @@ export async function POST(request: Request) {
   // below it (photo orientation analysis, room architecture extraction, the
   // image model) is billable work.
   //
-  // This gates ONE of the three modes, and the other two are NOT cheap. Both
-  // `vision_mode` and `recommendation_mockup` reach the same image model; they
-  // are excluded because the vision preview auto-fires on analysis completion
-  // and is the free tier's activation moment, and the recommendation shots fire
-  // per item on the results page. Capping those without spending the "aha"
-  // needs a free render budget chosen across all three paths — a product call,
-  // tracked separately. Until then they stay bounded only by the rate limit and
-  // the daily spend ceiling, and this constant is NOT a total cost ceiling.
+  // `vision_mode` and `recommendation_mockup` reach the same image model but
+  // are counted separately, not against this constant. `recommendation_mockup`
+  // has its own gate in its branch below, against
+  // FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB. `vision_mode` stays deliberately
+  // UNGATED — it auto-fires on analysis completion and is the free tier's
+  // activation moment ("aha"); capping it trades activation for revenue
+  // (tracked separately, #748). It remains bounded only by the rate limit and
+  // the daily spend ceiling.
   //
-  // The mode split is also why `mockup_jobs` is the right thing to count: it is
-  // written by the standard branch alone, so its rows are exactly the renders
-  // this gate governs.
+  // `mockup_jobs` is the right thing to count here: it is written by the
+  // standard branch alone, so its rows are exactly the renders this gate
+  // governs.
   if (!recommendation_mockup && !vision_mode) {
     const { count: mockupCount } = await supabase
       .from("mockup_jobs")
@@ -267,6 +267,35 @@ export async function POST(request: Request) {
   // product shots don't need room photos at all, so skip the expensive
   // LLM calls that vision_mode and standard mode require.
   if (recommendation_mockup) {
+    // Free-tier gate on per-item recommendation shots — unlike the standard
+    // render there's no natural per-request bound (a room's recommendation
+    // list can hold a dozen items, each a full image-model call), so count
+    // completed recommendation renders across ALL of the user's rooms via the
+    // same ownership join as the standard-mode gate above. Placed before
+    // `createAgentRun` so a blocked request costs nothing — no run row, no
+    // image model call.
+    const { count: recCount } = await supabase
+      .from("agent_runs")
+      .select("id, rooms!inner(projects!inner(user_id))", { count: "exact", head: true })
+      .eq("rooms.projects.user_id", user.id)
+      .eq("agent_type", "mockup_recommendation")
+      // A failed render produced nothing, so it must not consume the
+      // allowance — same rule as the standard-mode gate.
+      .eq("status", "completed");
+
+    if ((recCount ?? 0) >= FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB) {
+      if (!(await hasProEntitlementWeb(user.id))) {
+        return NextResponse.json(
+          {
+            error: "Free recommendation limit reached. Upgrade to generate more product shots.",
+            subscription_required: true,
+            limit: FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB,
+          },
+          { status: 403 },
+        );
+      }
+    }
+
     const djsonEarly = diagnosis?.diagnosis_json as Record<string, unknown> | undefined;
     const ddJsonEarly = diagnosis?.design_direction_json as Record<string, unknown> | undefined;
 

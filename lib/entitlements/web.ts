@@ -29,20 +29,36 @@ export const FREE_SAVE_LIMIT_WEB = 3;
  *
  * SCOPE — read this before relying on it as a cost ceiling. It caps exactly one
  * of the three render modes in app/api/mockups: the standard full-room render,
- * the branch that writes a `mockup_jobs` row. It does NOT cap:
- *   - `vision_mode`, the design preview. The focus page auto-generates it when
- *     an analysis lands (the first-run "aha", which is why it is not gated),
- *     but it is ALSO reachable from a "Regenerate" control the user can click
- *     repeatedly, and it reaches the same image model at the same cost.
- *   - `recommendation_mockup`, the per-item product shots, which the results
- *     page fires in a loop.
- * Both remain bounded only by the per-user rate limit and the daily spend
- * ceiling — the same two limits that were the ONLY bound on standard renders
- * before this constant existed. Bounding them properly means choosing a free
- * render budget across all three paths without spending the activation moment,
- * which is a product decision rather than a mechanical fix; tracked separately.
+ * the branch that writes a `mockup_jobs` row. `recommendation_mockup` has its
+ * own cap, `FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB` below. It does NOT cap
+ * `vision_mode`, the design preview: the focus page auto-generates it when an
+ * analysis lands (the first-run "aha", which is why it is deliberately left
+ * ungated), but it is ALSO reachable from a "Regenerate" control the user can
+ * click repeatedly, and it reaches the same image model at the same cost.
+ * `vision_mode` remains bounded only by the per-user rate limit and the daily
+ * spend ceiling. Bounding it properly means choosing a free budget for it
+ * without spending the activation moment, which is a product decision rather
+ * than a mechanical fix; tracked separately (#748).
  */
 export const FREE_MOCKUP_LIMIT_WEB = 1;
+
+/**
+ * Maximum number of per-item recommendation-mockup renders (catalog-style
+ * product shots, fired once per recommended item from the results page) for
+ * free-tier web users, summed across all of a user's rooms.
+ *
+ * Unlike the standard render, there's no natural per-request bound — a single
+ * room's recommendation list can hold a dozen items, each one a full
+ * image-model call, previously reachable at zero cost to the caller. Set
+ * higher than FREE_MOCKUP_LIMIT_WEB because these are cheaper single-product
+ * shots (no room photos, no photo-orientation/room-architecture extraction —
+ * see the early-return in app/api/mockups/route.ts) rather than full-scene
+ * renders, and because a free user needs to see more than one recommended
+ * product before the upgrade ask is meaningful. Failed renders are excluded
+ * from the count (an outage must not consume the allowance), matching
+ * FREE_MOCKUP_LIMIT_WEB's rule.
+ */
+export const FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB = 5;
 
 /**
  * Days a Pro subscription retains access after entering `past_due`.
