@@ -1846,3 +1846,133 @@ agent-proxy, cross-checked against `/__agentproxy/status`.
   run, ~34 days elapsed since Run 1). No new blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 18 — 2026-08-01
+
+### Branch/PR housekeeping (before any GTM work)
+This run's designated branch (`claude/beautiful-cori-xb5zq0`) had a clean working tree, zero
+commits ahead/behind the current default branch (`git rev-list --left-right --count` returned
+`0 0`), and no open PR against it (`search_pull_requests head:claude/beautiful-cori-xb5zq0`
+returned zero results). No reset was needed — the branch already tracked current default-branch
+history.
+
+### What we found
+- **Both independent scorecards are unchanged since Run 16/17.** `git log --oneline --
+  docs/growth/GTM_SCORECARD.md` shows the last touch is still `fb45671` (GTM Auditor Run 4,
+  `as_of: 2026-07-27`, overall C, `ship_gate_met: false`). `git log --oneline --
+  docs/quality/QUALITY_SCORECARD.md` shows the last touch is still `0e0f901` (ninth grade,
+  `as_of: 2026-07-27`, overall C, `ship_gate_met: false`, five ship-critical dims below A).
+  Neither auditor has re-graded in the ~5 days since Run 16 — expected under maker≠checker, not a
+  Factory regression; nothing new to react to from either routine, for the third consecutive run.
+- **`docs/BUSINESS_CASE.md` is unchanged since Run 17** — `git log --oneline --
+  docs/BUSINESS_CASE.md` confirms the last touch is still `bd795f9` (Run 123, 2026-07-28, the
+  lever-inventory documentation fix credited by Run 17, no figure moved).
+- Re-verified `PENDING_OPS.md` directly: `as_of` is still `2026-07-28`, unchanged since Run 17,
+  and every growth-relevant item (`set-site-gate-password`, `connect-email-resend`,
+  `apply-migration-031`, `set-metrics-token`, `set-cron-secret`,
+  `enroll-apple-small-business-program`, `apply-migration-021`, `set-email-physical-address`,
+  `waitlist-early-discount-coupon`) is still `status: open`.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a FOURTEENTH time: still
+  `connect_rejected`/gateway 502 to CONNECT, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (two entries, 2026-08-01T05:07:17Z) — identical
+  signature to every prior probe. `trustpilot.com/review/havenly.com` still returns HTTP 403,
+  re-confirmed directly.
+- Spot-checked that the EARLY30 unbacked-promise fix (GTM Auditor Run 4) is still holding:
+  `grep -rn 'EARLY30\|30% off' docs/*.md app/waitlist/page.tsx app/waitlist/confirmed/page.tsx`
+  finds no live promise — only PENDING_OPS.md's own tracked-item text and a historical
+  loop-memory.md record.
+
+### Demand-signal research this run (implementing Run 17's deferred next_action)
+Run 17 flagged theme 3 (Havenly/Modsy pricing-and-delivery failures) as the next target after
+themes 1 and 4 hit two honest negatives. This run got a genuine positive:
+- **Theme 3**: searched for whether Modsy — already cited via TechCrunch's 2022 shutdown
+  coverage — has its own BBB complaints page distinct from the already-cited Havenly BBB page.
+  It does: `bbb.org/us/ca/san-francisco/profile/online-shopping/modsy-1116-880030/complaints`,
+  fetched cleanly via direct WebFetch. VERBATIM-VERIFIED: a $434.25 design-package complaint
+  (ordered 2022-04-29) states "Since the company went under Pencil, LLC I did fill out the
+  refund form. The refund form is difficult to fill our for a refund... I cannot get any reply
+  nor a refund." The customer's own resolution note describes finding a Modsy co-founder on
+  LinkedIn and messaging them personally — the official post-shutdown refund channel (Pencil
+  LLC, the assignment-for-benefit-of-creditors administrator) did not work at all. This is a
+  genuinely new source for theme 3: a different company (Modsy, previously TechCrunch/press-only)
+  documented via a source TYPE already used for Havenly (BBB) — strengthens per-source-type
+  diversity within the theme, not just raw count. Theme 3 moves from cited_count 4/verbatim_count
+  3 to cited_count 5/verbatim_count 4.
+- **A second attempt** (following the theme-2 precedent of using an incumbent's own App Store
+  review page as a source) tried Havenly's App Store listing
+  (`apps.apple.com/us/app/havenly-interior-design/id1149153371`) — returned HTTP 503 on two
+  separate WebFetch attempts (with and without query params). A preliminary WebSearch surfaced a
+  synthesized summary of mixed reviews, but per this doc's verbatim_count/cited_count discipline
+  a WebSearch synthesis that cannot be independently re-fetched is not citable — recorded as an
+  honest new structural gap (joining Trustpilot's 403 and consumeraffairs.com's 403 from Run 17)
+  rather than papered over.
+- **Deliberately excluded off-theme evidence**: a furniture-RETAILER complaint search (Interior
+  Icons, Castlery, Design Within Reach, AptDeco, Manhattan Home Design — all delivery-delay
+  complaints from BBB) surfaced during this run's research. These are furniture retailers, not
+  full-service e-design CONSULTING services (Havenly/Modsy/Decorist's markup + concierge model,
+  the actual theme-3 value proposition) — citing them would pad the count with a different
+  underlying problem. Recorded here so a future run does not repeat the search and mistake
+  topical (furniture) overlap for theme (e-design-service) relevance.
+- Held `confidence` at "emerging" (unchanged) — only theme 3 gained a source this run; themes 1,
+  2, and 4 are unchanged since Run 16/17. Both structural gaps (Reddit policy-exclusion,
+  Trustpilot 403) re-probed and unchanged.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (14th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND the independent QUALITY_SCORECARD still
+  reports `ship_gate_met: false` (unchanged ninth grade, five ship-critical dimensions below A) —
+  HARD BLOCK per GTM_STANDARD S6/S13 Gate 1. Zero outreach drafts this run, correct.
+- Did not touch ROADMAP.md, VISION.md, or BUSINESS_CASE.md: nothing this run clears the S3 bar
+  for a steer (funnel still 0/null; the one new demand-signal citation strengthens existing,
+  already-live positioning rather than opening a new direction, and is qualitative source-count
+  evidence, not statistically significant quantified data).
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect
+  Search Ads competition data; no new information since Run 3.
+- Did not enqueue social drafts or touch the email lifecycle: `awaiting_connect: true`, no channel
+  connected; unchanged since Run 1.
+- Did not spawn an independent maker≠checker reviewer this run: the one substantive addition (the
+  Modsy BBB citation) is a directly-fetched, independently re-checkable verbatim quote from a
+  primary public complaint record — the same evidentiary class as prior single-citation
+  demand-signal additions (e.g. Run 16) that also did not spawn a reviewer. Everything else is a
+  negative/unchanged finding or independently re-derivable via `git log`/direct curl re-probes
+  performed by this run itself — no new marketing copy, campaign, pricing/positioning claim,
+  outreach draft, or roadmap/vision/business-case steer shipped.
+
+### Verification (before committing)
+`npm install` (materializes `js-yaml` into a fresh `node_modules`, no `package.json` change) then
+`node scripts/validate-gtm.mjs` — OK. Independently re-parsed the GROWTH_STATUS YAML block with
+`js-yaml` and spot-checked `as_of`, `demand_signal.as_of`, `confidence`, theme 3's
+cited_count/verbatim_count, and the learnings/next_actions/owner_blockers array lengths — all
+correct. Re-ran `git log --oneline` against `docs/growth/GTM_SCORECARD.md`,
+`docs/quality/QUALITY_SCORECARD.md`, and `docs/BUSINESS_CASE.md` to confirm the
+"unchanged since Run 17" claims directly. Re-probed `aptdesignerai.com` and
+`trustpilot.com/review/havenly.com` directly via curl through the agent-proxy, cross-checked
+against `/__agentproxy/status`.
+
+### Lessons learned
+- **A source type that worked for one company in a theme is worth trying on another company in
+  the same theme.** Theme 2's App Store review breakthrough (Interium, then RoomGPT) was
+  company-specific; this run generalized the PATTERN (try the same source type — BBB — on the
+  theme's other named company) rather than the specific source, and it worked: Modsy had its own
+  BBB page nobody had checked in 17 prior runs of citing it only via TechCrunch.
+- **Off-theme evidence that surfaces during a search is a trap worth naming, not just silently
+  discarding.** The furniture-retailer BBB complaints looked superficially on-topic (interior
+  design + delivery problems) but describe a different failure mode (retail shipping delay) than
+  theme 3's actual claim (concierge-service markup + fulfillment/refund breakdown). Recording the
+  near-miss explicitly, not just omitting it, prevents a future run from re-discovering and
+  mis-citing the same tempting-but-wrong evidence.
+- **A refund process that fails even during an orderly, disclosed wind-down is stronger evidence
+  than a refund that fails during normal operations.** The Modsy citation isn't just "a company
+  had complaints" — it shows that even the FORMAL, publicly-announced refund mechanism (Pencil
+  LLC) set up specifically to handle the shutdown didn't work for this customer, which speaks
+  directly to the operational fragility of the concierge/human-designer business model theme 3
+  is about, not merely to Modsy's insolvency.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-17? YES — circuit breaker remains FIRED (Run 18, 18th consecutive
+  run, ~35 days elapsed since Run 1). No new blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
