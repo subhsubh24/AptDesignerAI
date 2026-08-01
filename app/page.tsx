@@ -112,11 +112,17 @@ export default function LandingPage() {
                       <div className="absolute top-1/2 left-6 -translate-y-1/2 animate-fade-in-up" style={{ animationDelay: "800ms" }}>
                         <div className="glass rounded-xl px-4 py-3 shadow-warm-md border border-border/40 space-y-2">
                           <div className="text-caption">Palette Match</div>
+                          {/* Illustrative — represents colors SAMPLED FROM the
+                              user's own room photo, not app chrome. Forcing
+                              this into the one-hue token ladder would make a
+                              "we detected your palette" demo look like it
+                              detected the site's own accent color instead;
+                              see the off-system-palette-ratchet exemption. */}
                           <div className="flex gap-1.5">
-                            <div className="h-5 w-5 rounded-full bg-foreground" />
-                            <div className="h-5 w-5 rounded-full bg-muted-foreground/40" />
-                            <div className="h-5 w-5 rounded-full bg-accent-warm" />
-                            <div className="h-5 w-5 rounded-full bg-secondary border border-border" />
+                            <div className="h-5 w-5 rounded-full bg-amber-700" />
+                            <div className="h-5 w-5 rounded-full bg-stone-300" />
+                            <div className="h-5 w-5 rounded-full bg-emerald-800" />
+                            <div className="h-5 w-5 rounded-full bg-slate-600" />
                           </div>
                         </div>
                       </div>
@@ -214,8 +220,11 @@ export default function LandingPage() {
                         <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/50" />
                         <div className="h-2 rounded-full bg-muted w-32" />
                       </div>
+                      {/* Illustrative palette swatches sampled from the room
+                          photo — see the note on the hero mockup's identical
+                          "Palette Match" row above. */}
                       <div className="flex gap-1.5 mt-3">
-                        {["bg-foreground", "bg-muted-foreground/40", "bg-accent-warm", "bg-secondary"].map((bg, i) => (
+                        {["bg-amber-700", "bg-stone-400", "bg-slate-600", "bg-emerald-800"].map((bg, i) => (
                           <div key={i} className={`h-6 w-6 rounded-full ${bg}`} />
                         ))}
                       </div>
