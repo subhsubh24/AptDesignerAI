@@ -2,8 +2,8 @@
 
 Records runtime functional coverage: which routes/flows have a spec, the **intended
 outcome** it asserts (not `status < 400`), and what is still uncovered. It does NOT
-claim every route is covered — **17 of the 35 `app/**/page.tsx` routes appear in the
-table below**, and all 18 that do not are listed under "Tracked gaps" so the
+claim every route is covered — **20 of the 35 `app/**/page.tsx` routes appear in the
+table below**, and all 15 that do not are listed under "Tracked gaps" so the
 shortfall is counted rather than implied away. (Counts derived from
 `find app -name page.tsx` against the backticked paths in the table; if you edit
 either, re-derive rather than adjusting by hand — a hand-count is how the previous
@@ -39,6 +39,9 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | `/terms` | public | the real agreement — ≥5 `h2` sections, not a stub | ✅ |
 | `/guides` | public | ≥3 guide links that are FOLLOWED, not just counted — an index whose entries lead nowhere is worse than none | ✅ |
 | `/guides/color-palette-guide` | public | reached by clicking through from the index; renders its own `h1`, no boundary | ✅ |
+| `/guides/ai-vs-professional-design` | public | navigated to directly (not via index click-through); renders its own `h1`, no boundary | ✅ |
+| `/guides/material-coherence` | public | navigated to directly (not via index click-through); renders its own `h1`, no boundary | ✅ |
+| `/gallery` | public | real heading + ≥2 curated example cards (`h3`) render, not an empty shell | ✅ |
 | `/support` | public | a real contact route scoped to `<main>` ("Email support" + a mailto) — the page-wide locator was satisfied by the footer's "Contact us" on every page | ✅ |
 | sign-in → `/dashboard` | authed | **"Welcome to AptDesigner" + "Start designing" render; NO "Something went wrong"** (canonical guard) | ✅ |
 | core flow entry (onboarding) | authed | "Start designing" advances without error | ✅ |
@@ -62,10 +65,8 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   smoke check. `focus` is **not** in that scan and has no coverage of any kind: opening it
   starts the room-analysis pipeline, so scanning it would be slow and dependent on live LLM
   behaviour (`journeys.spec.ts:271-273`).
-- **The 18 routes absent from the table**, in full, so the number above is checkable:
-  - marketing / content (4): `/gallery`, `/picks`, `/guides/ai-vs-professional-design`,
-    `/guides/material-coherence` — the two guide articles the index test does not click
-    through to (it follows the first link only)
+- **The 15 routes absent from the table**, in full, so the number above is checkable:
+  - marketing / content (1): `/picks`
   - product (9): `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`, and the seven
     per-room routes above (`setup`, `focus`, `diagnosis`, `products`, `bundles`, `mockups`,
     `compare`) — six a11y-scanned, none functionally asserted

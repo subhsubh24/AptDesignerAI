@@ -237,6 +237,35 @@ test.describe("public + structural journeys", () => {
     await captureJourneyStep(page, "public-guide-article");
   });
 
+  // The index test above only follows the FIRST guide link. Direct navigation
+  // is used here rather than clicking through, because the point is proving
+  // these two specific articles (previously listed as gaps in
+  // e2e/ROUTE_INVENTORY.md — the index test does not click through to them)
+  // each render their own real content, not re-testing the index's own links.
+  for (const slug of ["ai-vs-professional-design", "material-coherence"]) {
+    test(`guide article /guides/${slug} renders its own content`, async ({ page }) => {
+      const res = await page.goto(`/guides/${slug}`);
+      expect(res?.status() ?? 0).toBeLessThan(400);
+      await expectNoErrorBoundary(page);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await captureJourneyStep(page, `public-guide-${slug}`);
+    });
+  }
+
+  test("gallery page renders real curated examples", async ({ page }) => {
+    const res = await page.goto("/gallery");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    // An empty gallery is a worse first impression than no gallery — assert
+    // real example cards render, not just the page chrome. Scoped to <main>:
+    // MarketingFooter renders its own "Product"/"Support"/"Legal" h3s on every
+    // page (the exact page-wide-locator trap ROUTE_INVENTORY.md's /support row
+    // already documents), so an unscoped count would pass even with zero cards.
+    expect(await page.locator("main").getByRole("heading", { level: 3 }).count()).toBeGreaterThanOrEqual(2);
+    await captureJourneyStep(page, "public-gallery");
+  });
+
   test("support page offers a real way to get help", async ({ page }) => {
     const res = await page.goto("/support");
     expect(res?.status() ?? 0).toBeLessThan(400);
