@@ -308,11 +308,16 @@ export function alertHandler(fn: (title: string, body: string) => void): AlertHa
  * a new `PurchaseAction` member stops the build here rather than silently doing
  * nothing.
  *
- * RESIDUAL GAP, stated rather than papered over: nothing prevents a future edit
- * from calling `onPurchaseSuccess` directly in the component instead of routing
- * through here. That surface is now four lines of wiring rather than a switch,
- * and closing it properly needs a React Native test runner (jest-expo) that this
- * repo does not have — a real, separate piece of work, not something a fourth
+ * RESIDUAL GAP, narrowed but not closed: paywall-sheet.tsx now routes its two
+ * legitimate `onPurchaseSuccess` call sites (the unlock handler here, and the
+ * restore-purchases success branch, which reaches Pro without ever producing a
+ * `PurchaseAction`) through one shared `grantProAndClose` function, so the
+ * component has exactly one place that touches the prop instead of two that
+ * could independently drift. That is a structural reduction of the surface,
+ * not a type-level guarantee — nothing at the type level stops a FUTURE edit
+ * from calling `onPurchaseSuccess` a third time outside `grantProAndClose`.
+ * Closing that properly needs a React Native test runner (jest-expo) that this
+ * repo does not have — a real, separate piece of work, not something a
  * source-text assertion should pretend to cover.
  */
 export function performPurchaseAction(

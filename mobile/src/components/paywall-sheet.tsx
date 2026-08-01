@@ -230,6 +230,20 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
   const recurring = selectedOption?.isRecurring ?? true;
   const ctaLabel = purchaseCtaLabel({ isRecurring: recurring, hasFreeTrial: trialAvailable });
 
+  // The ONLY function that may call onPurchaseSuccess. purchase-outcome.ts's own
+  // docstring names the residual gap this closes: nothing at the type level
+  // stops a future edit from calling onPurchaseSuccess directly instead of
+  // routing through performPurchaseAction. Giving both legitimate grant sites —
+  // the unlock handler below AND the restore-success branch further down — a
+  // single named function to call means `grep onPurchaseSuccess` finds exactly
+  // one call site, not two independently-correct-today ones a future edit could
+  // triplicate. Doesn't require a React Native test runner to hold: it's a
+  // structural reduction of the surface, not a new assertion.
+  const grantProAndClose = useCallback(() => {
+    onPurchaseSuccess?.();
+    onDismiss();
+  }, [onDismiss, onPurchaseSuccess]);
+
   // The ONE place an unlock can happen. Every purchase outcome — resolved or
   // thrown — is turned into a PurchaseAction by lib/purchase-outcome and then
   // performed here, so there is no second path to onPurchaseSuccess to keep in
@@ -244,14 +258,11 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
         // AlertHandler). A bare closure is not assignable to either slot, so
         // swapping which one grants access is a compile error rather than a
         // silent inversion that unlocks Pro on a declined card.
-        unlock: unlockHandler(() => {
-          onPurchaseSuccess?.();
-          onDismiss();
-        }),
+        unlock: unlockHandler(grantProAndClose),
         alert: alertHandler((title, body) => Alert.alert(title, body)),
       });
     },
-    [onDismiss, onPurchaseSuccess],
+    [grantProAndClose],
   );
 
   const handlePurchase = useCallback(async () => {
@@ -298,8 +309,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
       // it; the network response is not runtime-checked).
       const restoredPro = hasActiveEntitlement(info, ENTITLEMENT_ID);
       if (restoredPro) {
-        onPurchaseSuccess?.();
-        onDismiss();
+        grantProAndClose();
       } else {
         // Restore succeeded but this account holds no active subscription. Tell
         // the truth and keep the sheet open — dismissing + firing onPurchaseSuccess
@@ -321,7 +331,7 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     } finally {
       setPurchasing(false);
     }
-  }, [onDismiss, onPurchaseSuccess]);
+  }, [grantProAndClose]);
 
   return (
     <Modal
