@@ -40,10 +40,22 @@ const SCAN_DIRS = ["app", "components"];
  * The exempt files, and their pinned counts. Listed as exact paths so a NEW file
  * cannot inherit the exemption, and counted so the two that ARE exempt cannot
  * grow either.
+ *
+ * `app/page.tsx`'s 8 are a THIRD, distinct exemption class: the landing page's
+ * two "Palette Match" mockups illustrate colors SAMPLED FROM the user's own
+ * room photo, not app chrome. That is neither categorical status (toast/badge)
+ * nor an ordinal ladder (what this ratchet exists to convert) — it's
+ * illustrative content, and forcing it onto the one-hue token ladder would
+ * make a "we detected your palette" demo look like it detected the site's own
+ * accent color instead. A reviewer caught an earlier version of this change
+ * doing exactly that. The rest of app/page.tsx (headings, checkmarks,
+ * progress bars) IS converted and carries zero off-system palette outside
+ * these two swatch rows.
  */
 const CATEGORICAL_EXEMPT: Record<string, number> = {
   "components/ui/toast.tsx": 32,
   "components/ui/badge.tsx": 12,
+  "app/page.tsx": 8,
 };
 
 /**
@@ -77,8 +89,18 @@ const OFF_SYSTEM = new RegExp(
  * the same shape as the conversions above. Best now takes the single warm accent
  * and lowest takes no surface, which is the emphasis ladder rather than a hue
  * per rung, and both carry a visible word so the ranking is not colour-only.
+ *
+ * 78 -> 60: the landing/pricing pages carried the same traffic-light pattern —
+ * three checkmarks and a progress-bar pair standing in for a Keep/Replace-style
+ * verdict, plus a stray emerald check icon on /pricing competing with the
+ * highlighted tier's warm accent. All ordinal/state usages, converted to the
+ * one-hue ladder (10 usages). The landing page's two illustrative "Palette
+ * Match" swatch rows (8 usages, sampled-from-photo content rather than an
+ * ordinal ladder) moved to CATEGORICAL_EXEMPT instead of converting — same net
+ * effect on `total` (excluded either way), but honest about WHY: see the
+ * app/page.tsx entry above.
  */
-const MAX_OFF_SYSTEM = 78;
+const MAX_OFF_SYSTEM = 60;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's

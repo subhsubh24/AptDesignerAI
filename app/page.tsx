@@ -112,6 +112,12 @@ export default function LandingPage() {
                       <div className="absolute top-1/2 left-6 -translate-y-1/2 animate-fade-in-up" style={{ animationDelay: "800ms" }}>
                         <div className="glass rounded-xl px-4 py-3 shadow-warm-md border border-border/40 space-y-2">
                           <div className="text-caption">Palette Match</div>
+                          {/* Illustrative — represents colors SAMPLED FROM the
+                              user's own room photo, not app chrome. Forcing
+                              this into the one-hue token ladder would make a
+                              "we detected your palette" demo look like it
+                              detected the site's own accent color instead;
+                              see the off-system-palette-ratchet exemption. */}
                           <div className="flex gap-1.5">
                             <div className="h-5 w-5 rounded-full bg-amber-700" />
                             <div className="h-5 w-5 rounded-full bg-stone-300" />
@@ -123,7 +129,7 @@ export default function LandingPage() {
 
                       <div className="absolute bottom-6 left-6 right-6 animate-fade-in-up" style={{ animationDelay: "1000ms" }}>
                         <div className="glass rounded-xl px-4 py-3 shadow-warm-md border border-border/40 flex items-center gap-3">
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                          <CheckCircle2 className="h-5 w-5 text-accent-warm-strong shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium truncate">West Elm Harmony Sofa</div>
                             <div className="text-xs text-muted-foreground">Perfect scale fit for your space</div>
@@ -160,7 +166,11 @@ export default function LandingPage() {
                     <span className="text-xs font-bold text-muted-foreground tabular-nums">{feature.num}</span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm mb-1.5">{feature.title}</h3>
+                    {/* h2, not h3: this grid is the first content section after
+                        the h1 hero, with no h2 section title of its own — each
+                        card stands as its own top-level heading, same level as
+                        "How it works" / "The result" below it. */}
+                    <h2 className="font-semibold text-sm mb-1.5">{feature.title}</h2>
                     <p className="text-xs text-muted-foreground leading-relaxed">{feature.desc}</p>
                   </div>
                 </div>
@@ -203,13 +213,16 @@ export default function LandingPage() {
                   mockup: (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        <div className="h-2 rounded-full bg-emerald-200 dark:bg-emerald-800 w-24" />
+                        <CheckCircle2 className="h-4 w-4 text-accent-warm-strong" />
+                        <div className="h-2 rounded-full bg-accent-warm/30 w-24" />
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 rounded-full border-2 border-amber-400" />
-                        <div className="h-2 rounded-full bg-amber-200 dark:bg-amber-800 w-32" />
+                        <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/50" />
+                        <div className="h-2 rounded-full bg-muted w-32" />
                       </div>
+                      {/* Illustrative palette swatches sampled from the room
+                          photo — see the note on the hero mockup's identical
+                          "Palette Match" row above. */}
                       <div className="flex gap-1.5 mt-3">
                         {["bg-amber-700", "bg-stone-400", "bg-slate-600", "bg-emerald-800"].map((bg, i) => (
                           <div key={i} className={`h-6 w-6 rounded-full ${bg}`} />
@@ -300,7 +313,7 @@ export default function LandingPage() {
                   {/* Floating score */}
                   <div className="absolute bottom-4 right-4 glass rounded-xl px-3 py-2 shadow-warm-sm border border-accent-warm/20">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <CheckCircle2 className="h-4 w-4 text-accent-warm-strong" />
                       <span className="text-sm font-semibold">Score: 8.7</span>
                     </div>
                   </div>

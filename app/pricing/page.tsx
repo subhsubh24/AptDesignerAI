@@ -155,7 +155,7 @@ export default function PricingPage() {
                       <Check
                         className={cn(
                           "h-4 w-4 mt-0.5 shrink-0",
-                          tier.highlight ? "text-accent-warm" : "text-emerald-600 dark:text-emerald-400",
+                          tier.highlight ? "text-accent-warm" : "text-muted-foreground",
                         )}
                       />
                       <span>{f}</span>
