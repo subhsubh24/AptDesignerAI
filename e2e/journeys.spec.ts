@@ -258,8 +258,11 @@ test.describe("public + structural journeys", () => {
     await expectNoErrorBoundary(page);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     // An empty gallery is a worse first impression than no gallery — assert
-    // real example cards render, not just the page chrome.
-    expect(await page.getByRole("heading", { level: 3 }).count()).toBeGreaterThanOrEqual(2);
+    // real example cards render, not just the page chrome. Scoped to <main>:
+    // MarketingFooter renders its own "Product"/"Support"/"Legal" h3s on every
+    // page (the exact page-wide-locator trap ROUTE_INVENTORY.md's /support row
+    // already documents), so an unscoped count would pass even with zero cards.
+    expect(await page.locator("main").getByRole("heading", { level: 3 }).count()).toBeGreaterThanOrEqual(2);
     await captureJourneyStep(page, "public-gallery");
   });
 
