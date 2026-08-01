@@ -6160,3 +6160,127 @@ noise, not a regression to chase.
   stale); mobile `_layout.tsx` RC `logIn().catch(()=>{})` (deferred since Run 103,
   unchanged); `use-free-quota.ts`'s AsyncStorage `.catch(()=>{})` (documented client-UX-hint
   only, server enforces the real limit — not a security bug).
+
+## Run 2026-08-01 (Run 134) — DEEP AUDIT (3-lens, due) + scout-driven. 1 file-disjoint value-bar change; audit came back clean.
+
+### State on entry
+Cold container. Assigned branch `claude/sleepy-goldberg-krq1kg`, reset to default tip
+`9172d77` (#773, Run 133 ledger). Baseline gate GREEN after `npm install`: web tsc clean,
+2774 tests/11 skip, determinism clean, eslint 0/0. No open PRs on entry. DEEP AUDIT was
+due (last ran Run 130, 2026-07-31, ~4 runs prior) → ran a 3-Haiku-scout sweep (security/RLS,
+correctness/dead-code, artifact freshness) before/alongside normal scouting.
+
+### Deep-audit findings
+- **security/RLS: CLEAN.** All 25+ tables across migrations 001-031 have RLS enabled with
+  correct ownership policies (or intentionally no policy on admin-only tables); all 13
+  `getAdminClient()` call sites are legitimately scoped (webhook/cron/internal/pre-confirmed
+  signup); no hardcoded secrets (env-only throughout); `handle_new_user()` pins
+  `search_path = ''` (migrations 024, 028).
+- **artifact freshness: CLEAN.** README, `docs/app-privacy.md` (all 12 disclosed
+  processors/SDKs verified actually integrated), `docs/BUSINESS_CASE.md` (pricing figures
+  match `lib/billing/stripe.ts`; annual tier correctly documented as gated off via
+  `isAnnualBillingEnabled()`), and the guides/pricing pages all consistent with current code.
+- **correctness/dead-code: one candidate, verified FALSE POSITIVE.** Scout flagged
+  `lib/agents/orchestrator.ts:2848-2849` — `scoreMin: scores[0]` / `scoreMax:
+  scores[scores.length - 1]` read via raw bracket indexing on a possibly-empty `scores`
+  array, inconsistent with the guarded ternary just above it for `scoreMedian`. Checked
+  against `lib/agents/post-search-coordinator.ts:187-189` (the `CoordinatorState` category
+  type): `scoreMedian`, `scoreMin`, `scoreMax` are ALL typed optional (`?: number`), and
+  every consumer (`post-search-coordinator.ts:327,334`) already reads them via `?.toFixed()`
+  / `?? 0`. An empty array produces `undefined` from bracket indexing exactly the same as
+  the ternary would — the "inconsistency" is cosmetic, not a behavioral bug. Correctly
+  dropped rather than shipped as a fix (this repo's own recurring lesson: verify a scout/
+  scorecard claim against the current tree before building off it).
+
+### Issue #711 evaluated and deliberately deferred (not a shortfall)
+Considered `a11y: the warm-accent pills fail WCAG AA on 10 of 36 real surface pairings`
+(warm badge/pill text-on-tint contrast) as a second candidate. Read the full issue: it
+documents TWO real WCAG failures still open (tint-on-tint stacking in
+`focus/page.tsx:1043-1047`, and a `Badge variant="warm"` rendered over an arbitrary room
+photo under a scrim in `rooms/[roomId]/page.tsx:170-172` that no static token check can
+verify) AND a prior attempt that was built, reviewed, and DELIBERATELY ABANDONED because a
+token-only bump left 4 dark + 1 light pairing still failing while its own test claimed full
+coverage — "a partial fix carrying a false completeness claim is worse than an open issue."
+A correct fix needs: removing the tint-stacking (solid background on the nested pill),
+giving the photo-scrim badge a solid background, re-measuring the WCAG-formula contrast
+table across every real surface × tint pairing in both themes, and a regex-ratchet test
+correctly anchored to `:root {}` / `.dark {}` (the abandoned one wasn't). That is real,
+multi-file, careful-math work — attempting a rushed version of it within this run's ≤2
+review-cycle cap risked repeating the exact mistake that got it abandoned twice already.
+Left open, scoped exactly as the issue already describes it, for a run with the budget to
+do it properly end-to-end.
+
+### Shipped — 1 change (2/2-reviewer-APPROVED, no revision cycle needed)
+- **a11y (issue #723): `SelectTrigger`'s accessible name, structurally enforced.** Radix's
+  `SelectTrigger` renders `role="combobox"`, which takes its name from neither rendered
+  children nor a sibling `<Label>` — an unnamed trigger is WCAG 4.1.2 CRITICAL. A regex-based
+  source-text ratchet guarding this had been built and defeated three separate times by
+  independent reviewers (bare substring match, trailing `=` smuggling, quoted-value
+  stripping) and dropped as unfixable by construction — the issue explicitly asked for a
+  structural fix or nothing. Changed `SelectTrigger`'s prop type to
+  `React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & ({ "aria-label": string;
+  "aria-labelledby"?: undefined } | { "aria-labelledby": string; "aria-label"?: undefined
+  })`, making the omission of both a `tsc` COMPILE ERROR — `npx tsc --noEmit` is already part
+  of the gate on every change, so this needed no new tooling. All 6 real call sites
+  (`create-room-dialog.tsx` ×3, `products/page.tsx` ×3 render sites, `setup/page.tsx` ×1)
+  already supply `aria-label`, so it shipped with zero regressions. PR #774, squash-merged to
+  default at `c44e290`.
+  - Review note: Reviewer A's first pass returned REQUEST_CHANGES, but on a process ground,
+    not a code defect — it ran `git diff HEAD~1 HEAD` before the change was committed (review
+    was requested pre-commit) and found no diff to inspect. It independently verified the
+    actual type mechanics anyway (wrote a scratch file proving omitting both props is
+    rejected by `tsc`, supplying either compiles, supplying both is also rejected as a minor,
+    non-blocking stricter-than-necessary nitpick) and confirmed zero regressions across all
+    6 call sites. Reviewer B approved cleanly on value/scope/design/spend grounds. Lesson for
+    future runs: commit the change BEFORE requesting review, not after — reviewing a staged-
+    but-uncommitted diff breaks any reviewer instruction that repro's via `git diff`/`git show`.
+
+### Merge outcome + gate
+PR #774 merged squash to default (`c44e290`). Merged-tree gate re-verified GREEN post-merge:
+`npx tsc --noEmit` clean, 2774 tests (unchanged — type-only change, no new runtime paths),
+`npm run check:determinism` clean, `npx eslint .` 0 errors/0 warnings. No migrations, no
+secrets, no new PENDING_OPS entries, no ROADMAP checkbox ticked (issue #723 wasn't itself a
+ROADMAP line item). CI's `journeys` job failed on its first attempt with the pre-existing,
+already-tracked flake (issue #654 — "Failed to resolve latest Supabase CLI release: rate
+limit exceeded" in `supabase/setup-cli@v1`), unrelated to this diff; `verify`/`build`/
+`mobile` (this repo's three required checks) all passed on the first attempt. Reran the
+failed job via `rerun_failed_jobs`; the retry passed and auto-merge completed normally —
+consistent with #654's own description of this as a recurring, transient GitHub-API rate
+limit rather than a real CI regression.
+
+### Lessons learned
+1. **Request review AFTER committing, not on a staged-only diff.** A reviewer prompt that
+   says "run `git diff HEAD~1 HEAD`" is a real instruction the reviewer will actually execute
+   — if the change is only `git add`-staged, that command finds nothing, and the reviewer
+   correctly (if confusingly) reports a process failure instead of a code verdict. The fix
+   substance was still validated (the reviewer worked around it by testing the mechanism
+   directly), but the clean path is: implement → verify → commit → THEN spawn reviewers.
+2. **A scout finding that "looks like an inconsistency" (guarded ternary next to raw bracket
+   indexing) can still be behaviorally identical once you check the actual type and its
+   consumers.** `scores[0]` on an empty array is `undefined` in JS, same as the ternary's
+   explicit `undefined` branch — and since the consuming type already marks the field
+   optional and every consumer already null-guards it, there is no real bug, just a
+   stylistic asymmetry. Checking the TYPE DEFINITION and CONSUMERS, not just the write site,
+   is what turns a plausible-looking scout flag into a correctly-dropped non-issue.
+3. **"Two prior abandonments" is a strong signal to defer, not attempt a lighter version.**
+   Issue #711's own text names the exact trap (a token-only partial fix that still leaves
+   real pairings failing while claiming full coverage) that a time-pressured third attempt
+   would very plausibly re-fall into. Recognizing "this needs the full treatment or nothing"
+   and deferring cleanly is the correct call under this run's cycle caps — matching the
+   issue's own explicit reasoning for why the second attempt was abandoned rather than
+   shipped partial.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 138** (this run, Run 134, is the reset point; cadence has held at
+  ~1 per 3-4 runs).
+- **Issue #711 (a11y warm-accent contrast) is READY FOR A FOCUSED RUN, not a batched slot.**
+  The issue itself has the full contrast-math table, the exact 3 fix components (de-stack
+  the `focus/page.tsx` tint, solid-background the photo-scrim badge, re-pick token values
+  from the worst real composite), and the two ways the abandoned regex guard broke
+  (unanchored `:root`/`.dark` matching, an exponent-invariant sanity check) — a future run
+  with budget to do all of it in one pass (not a partial token bump) should pick it up
+  directly from the issue text rather than re-deriving the analysis.
+- **DO-NOT-RE-FLAG (this run's additions):** `lib/agents/orchestrator.ts:2848-2849`
+  `scoreMin`/`scoreMax` bracket-indexing "inconsistency" (FALSE POSITIVE — both fields are
+  optional and already null-guarded downstream, verified this run); all Run 133
+  DO-NOT-RE-FLAG entries carried forward unchanged.
