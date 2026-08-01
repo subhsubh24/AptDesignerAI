@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseUserContext, formatParsedContextForPrompt } from "@/lib/utils/parse-user-context";
+
+vi.mock("@/lib/ai/semantic-extract", () => ({ parseUserContextLLM: vi.fn() }));
 
 describe("parseUserContext", () => {
   describe("exclusion detection", () => {
@@ -160,5 +162,85 @@ describe("formatParsedContextForPrompt", () => {
     // May or may not have lifestyle notes, but shouldn't have exclusions/requests
     // If it's empty, should be empty string or just lifestyle
     expect(parsed.exclusions).toHaveLength(0);
+  });
+
+  it("should format lifestyle notes with an identity-context callout", () => {
+    const parsed = parseUserContext("I am a 30 year old bachelor working in tech");
+    expect(parsed.lifestyleNotes.length).toBeGreaterThan(0);
+    const prompt = formatParsedContextForPrompt(parsed);
+    expect(prompt).toContain("CLIENT LIFESTYLE CONTEXT");
+    expect(prompt).toContain(parsed.lifestyleNotes[0]);
+  });
+});
+
+// parseUserContextAsync unions the LLM extraction with the pure regex parse
+// (never loses what the regex caught), falls back to regex-only on LLM
+// failure, and dedupes case-insensitively across the two sources — none of
+// which the sync-only tests above exercise.
+describe("parseUserContextAsync", () => {
+  beforeEach(async () => {
+    const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+    vi.mocked(parseUserContextLLM).mockReset();
+  });
+
+  it("returns the empty shape for blank input without calling the LLM", async () => {
+    const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+    const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+    const result = await parseUserContextAsync("   ");
+    expect(result).toEqual({
+      exclusions: [],
+      explicitRequests: [],
+      additionalKeepItems: [],
+      lifestyleNotes: [],
+      rawContext: "",
+    });
+    expect(parseUserContextLLM).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the regex-only parse when the LLM call fails", async () => {
+    const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+    const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+    vi.mocked(parseUserContextLLM).mockRejectedValue(new Error("provider down"));
+
+    const raw = "don't need curtains, I want a dining table";
+    const result = await parseUserContextAsync(raw);
+    const regexOnly = parseUserContext(raw);
+    expect(result).toEqual(regexOnly);
+  });
+
+  it("falls back to the regex-only parse when the LLM resolves null", async () => {
+    const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+    const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+    vi.mocked(parseUserContextLLM).mockResolvedValue(null);
+
+    const raw = "keep the black arc floor lamp";
+    const result = await parseUserContextAsync(raw);
+    expect(result).toEqual(parseUserContext(raw));
+  });
+
+  it("unions LLM and regex findings, deduping case-insensitively", async () => {
+    const { parseUserContextAsync } = await import("@/lib/utils/parse-user-context");
+    const { parseUserContextLLM } = await import("@/lib/ai/semantic-extract");
+    // "curtains" is found by BOTH sources under different casing (the regex's
+    // lowercase "curtains" vs the LLM's "Curtains") — must collapse to one.
+    // "beige" is an LLM-only negation the regex has no pattern for — must
+    // survive the union, proving nothing the LLM caught is lost either.
+    vi.mocked(parseUserContextLLM).mockResolvedValue({
+      exclusions: ["beige", "Curtains"],
+      explicit_requests: [{ item: "dining table", wants_multiple: false }],
+      additional_keep_items: [],
+      lifestyle_notes: [],
+    });
+
+    const raw = "don't need curtains";
+    const result = await parseUserContextAsync(raw);
+
+    expect(result.exclusions).toContain("beige");
+    // Case-insensitive dedup: only one of "Curtains" (LLM) / "curtains" (regex) survives.
+    expect(result.exclusions.filter((e) => e.toLowerCase() === "curtains")).toHaveLength(1);
+    expect(result.explicitRequests).toEqual(
+      expect.arrayContaining([{ item: "dining table", wantsMultiple: false }]),
+    );
+    expect(result.rawContext).toBe(raw);
   });
 });

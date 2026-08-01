@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { computeFinalBundleScore } from "@/lib/scoring/bundle-scorer";
+import { recordBundleScores, resetScoreBuffer } from "@/lib/scoring/drift-monitor";
 import type { BundleScores } from "@/lib/types/scoring";
 
 function makeBundleScores(override: Partial<BundleScores> = {}): BundleScores {
@@ -98,5 +99,39 @@ describe("computeFinalBundleScore", () => {
     const result = computeFinalBundleScore(scores);
     expect(result).toBeGreaterThanOrEqual(0);
     expect(result).toBeLessThanOrEqual(10);
+  });
+});
+
+// Every test above runs with an EMPTY drift-monitor buffer (no test in this file
+// records a score before this point), so getScoreDistributionSummary()["final_
+// bundle_score"] is always undefined and observedMedian/observedMean are always
+// undefined — the count>=5 branch in computeFinalBundleScore has never run.
+describe("computeFinalBundleScore — drift-monitor calibration branch", () => {
+  afterEach(() => {
+    resetScoreBuffer();
+  });
+
+  it("does not touch expansion/inflation below the 5-sample threshold (4 samples == no samples)", () => {
+    const scores = makeBundleScores({ spatial_arrangement_score: 7 });
+    const withoutAnySamples = computeFinalBundleScore(scores);
+
+    // One short of the >= 5 gate on bundleDist.count.
+    for (let i = 0; i < 4; i++) recordBundleScores({ final_bundle_score: 9.5 });
+    const withFourSamples = computeFinalBundleScore(scores);
+
+    expect(withFourSamples).toBe(withoutAnySamples);
+  });
+
+  it("applies expansion + inflation correction once the 5th final_bundle_score sample lands", () => {
+    const scores = makeBundleScores({ spatial_arrangement_score: 7 });
+    const withoutAnySamples = computeFinalBundleScore(scores);
+
+    // 5 samples at 9.5: median (9.5) exceeds the default 7.5 inflation
+    // threshold, and a defined observedMean always engages expandScore — so
+    // this must diverge from the no-signal case above for the SAME raw scores.
+    for (let i = 0; i < 5; i++) recordBundleScores({ final_bundle_score: 9.5 });
+    const withFiveSamples = computeFinalBundleScore(scores);
+
+    expect(withFiveSamples).not.toBe(withoutAnySamples);
   });
 });
