@@ -35,6 +35,9 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
   return (
     <Pressable
       {...props}
+      accessibilityRole="tab"
+      accessibilityLabel={typeof children === 'string' ? children : undefined}
+      accessibilityState={{ selected: !!isFocused }}
       hitSlop={TapSlop.smallLabelPadded}
       style={({ pressed }) => pressed && styles.pressed}
     >
