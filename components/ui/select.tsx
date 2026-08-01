@@ -9,9 +9,24 @@ const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
+// Radix renders SelectPrimitive.Trigger as role="combobox", which does not
+// take its accessible name from content — so the trigger's own children and
+// any sibling <Label> are both invisible to assistive tech. A regex-based
+// ratchet over this requirement was defeated three separate times (issue
+// #723: substring match, trailing-`=` smuggling, quoted-value stripping) and
+// dropped because a text scan can never be exhaustive. This union type makes
+// the omission a COMPILE ERROR instead: every caller must supply one of the
+// two ways to name a combobox, checked by `tsc`, which is already part of the
+// gate on every change — not a heuristic that can be strung around.
+type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> &
+  (
+    | { "aria-label": string; "aria-labelledby"?: undefined }
+    | { "aria-labelledby": string; "aria-label"?: undefined }
+  );
+
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+  SelectTriggerProps
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
