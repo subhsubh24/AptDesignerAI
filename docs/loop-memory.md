@@ -6005,3 +6005,158 @@ Lenses: honesty/marketing-claims, web-reliability/correctness, tests/coverage, m
 - **NAMED buildable F2 backlog REMAINING:** formatLifestyleFitForPrompt (WEAK — single issues loop; only if a run is light), plus any remaining format*ForPrompt a scout confirms untested+load-bearing. (SHIPPED this run: spatial-graph, outlet-reach, direction-distance.)
 - **NAMED conversion levers on focus/page.tsx now BOTH shipped** (save-limit paywall Run 105 + save→share nudge Run 106). Next business_case_strength lever must come from elsewhere (onboarding time-to-wow, a Pro/Studio tier, add-ons/credits) OR the annual-billing flip (human-gated).
 - **DO-NOT-RE-FLAG (carry prior lists +):** mobile buttons "missing accessibilityLabel" that HAVE a `<ThemedText>` child + `accessibilityState` (FALSE POSITIVE — text is the name; a static label regresses dynamic state); the 5 correctness "silent-degradation" enrichment-read findings (DROPPED — graceful null is correct, 500 would regress); perf #385 pgvector RPC (migration-gated — memory-store `.rpc()` is a no-op); next/image on external product CDNs (needs remotePatterns); saved/picks `<Link><Button>` nested-interactive (SHIPPED); spatial-graph/outlet-reach/direction-distance formatter coverage (SHIPPED); privacy device-permissions section (SHIPPED — complete enumeration); save→share nudge (SHIPPED). + ALL prior carried non-issues.
+
+## NOTE (Run 133): this file went stale between Run 106 and Run 133
+`docs/loop-memory.md` was last appended to at Run 106 (2026-07-22). `IMPROVEMENT_LOG.md`
+has a row for every run since (through Run 132, 2026-08-01) — that is the reliable
+per-run history for anything in that window; this file's "Rotation guide"/DO-NOT-RE-FLAG
+notes below predate it by ~27 runs and should NOT be trusted for current state (e.g. the
+ship-blocker scorecard summary two entries up is dated 2026-07-20 and is stale — read
+`docs/quality/QUALITY_SCORECARD.md` directly, and verify even THAT against the current
+tree, since Run 133 found most of its named 2026-07-27 gaps already fixed). Not backfilled
+here — 27 runs of retroactive detail is out of scope for one run and would be unverifiable.
+Resuming normal append-per-run practice from here.
+
+## Run 2026-08-01 (Run 133) — scout-driven (no DEEP AUDIT, not due). 1 file-disjoint value-bar change; a genuinely quiet, clean-codebase run.
+
+### State on entry
+- Cold container. Assigned branch `claude/sleepy-goldberg-c581ag`, reset to default tip
+  `fd56361` (#771, Growth Agent Run 18). Baseline gate GREEN after `npm install`: web tsc
+  clean, **2774 tests**/11 skip, determinism green, `eslint .` 0 errors/0 warnings (full
+  clean — no vendored-tooling warnings observed this run). DEEP AUDIT NOT due (last ran
+  Run 130, 2026-07-31, well under the ~24h/~4-run cadence) → 5-Haiku-scout sweep.
+
+### 5-scout sweep — findings
+- **performance:** re-verified 3 of 4 items the stale (2026-07-27) `QUALITY_SCORECARD.md`
+  named as open perf gaps are ALREADY FIXED (`fetchImageAsBase64` now batched inside its
+  own `imageFetchLimit()` gate; `resolveImageBlocks`/`resolveImageBlocksSettled` have 6
+  real call sites, not dead code; `evaluate-set`'s extraction fan-out is `pLimit`-capped).
+  The 4th, `app/api/mockups/route.ts`'s `findCachedMockup` `fs.readdirSync` on the request
+  path, IS still present but is dead-in-production code (Vercel's `public/` is read-only
+  at runtime; every request falls through to the Supabase-storage upload path regardless)
+  — below the value bar, DROPPED as marginal/no-op.
+- **security/RLS:** CLEAN. Fresh sweep of the 5 newest migrations (027-031, all RLS+policy
+  correct), 8 spot-checked API routes (mockups, waitlist/unsubscribe, user/delete,
+  shared/[token], billing/checkout+status+webhook, projects/rooms/saved-designs — all
+  ownership-bound), 4 admin-client usages (all scoped), and a hardcoded-secret grep — no
+  findings.
+- **F2 coverage:** CLEAN. Every `format*ForPrompt` in `lib/validation/` has a dedicated
+  test file, including `formatLifestyleFitForPrompt` (the prior rotation guide's last
+  NAMED remaining item — it now has mutation-proven coverage; that note was stale).
+- **artifact freshness:** CLEAN. `e2e/ROUTE_INVENTORY.md`'s CI-journeys-job note, header
+  claims, `docs/BUSINESS_CASE.md`'s `as_of` date (2026-07-29, 3 days old), and 4 spot-checked
+  ROADMAP ticks all matched current reality.
+- **auth/mobile:** the G4 rotation-guide item "email-verification link idempotency —
+  REMAINING/untouched" is STALE — `app/api/waitlist/confirm/route.ts` already handles a
+  double-click safely (second call: no row matches the now-null token, redirects to
+  "invalid", no duplicate email; pinned by `__tests__/api/waitlist-double-opt-in.test.ts`).
+  Mobile sweep found only already-deferred/non-issues: `mobile/src/app/_layout.tsx`'s RC
+  `logIn().catch(()=>{})` (deferred since Run 103 as marginal, unchanged); a `.catch(()=>{})`
+  on `use-free-quota.ts`'s AsyncStorage read (explicitly documented in the file itself as
+  "client-side UX hint only — the server enforces the real limit," so a failed local read
+  is not a security boundary); no icon-only unlabeled mobile buttons.
+
+### Shipped — 1 change (2/2-reviewer-APPROVED after 1 fix cycle)
+- **F7/ROUTE_INVENTORY coverage** (`e2e/journeys.spec.ts`, `e2e/ROUTE_INVENTORY.md`, 6 new
+  PNGs): `/gallery`, `/guides/ai-vs-professional-design`, `/guides/material-coherence` were
+  NAMED tracked gaps (zero runtime test). Added 3 outcome-asserting tests matching the
+  file's existing pattern; captured F7 screenshots; re-derived route-coverage counts
+  (17→20/35 covered, 18→15 gaps) programmatically rather than by hand (the doc's own
+  standing warning: a hand-count is how the count went wrong before). Reviewer A caught a
+  REAL bug: the gallery test's `h3` card-count assertion was unscoped, so it passed on
+  `MarketingFooter`'s site-wide "Product"/"Support"/"Legal" h3s alone regardless of whether
+  the actual example grid rendered — the exact page-wide-locator trap
+  `ROUTE_INVENTORY.md`'s own `/support` row already documents (and which this run's author
+  should have caught the first time, having just read that exact row). Fixed by scoping to
+  `<main>`; mutation-verified by temporarily emptying the gallery's example array and
+  confirming the assertion then fails (0 < 2) before restoring the source. PR #772,
+  squash-merged to default at `242112a`.
+
+### Screenshot capture note (environment-specific, not a product defect)
+Local capture (`npm run dev`, no live provider secrets in this sandbox) shows a small
+red "N / 1 Issue" Next.js DEV-MODE-ONLY overlay in the corner of all 6 new PNGs — traced
+to `console.error: eval() is not supported in this environment ... React will never use
+eval() in production mode` (React's dev-mode eval-based debugging blocked by this
+sandbox's CSP). Confirmed via a clean `npm run build` that production mode (`next start`)
+has NO such overlay — but production mode also hard-fails without real
+`NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DEEPSEEK_API_KEY`/`TAVILY_API_KEY`
+(fail-loud `MissingEnvError`), which this sandbox does not have (matches CI's documented
+"spend-capped keys" pattern — this container never has them). Both reviewers judged the
+badge as unrelated dev-tooling chrome, not a product design defect, and approved on that
+basis. **Takeaway for a future run:** if this sandbox ever gets real provider secrets, a
+`npm run build && npm run start -- -p 3100` capture (matching exactly what CI's `journeys`
+job does) would produce clean production-parity screenshots with no overlay; until then,
+a corner "1 Issue" badge on freshly-captured (not pre-existing) F7 PNGs is expected sandbox
+noise, not a regression to chase.
+
+### Merge outcome + gate
+- PR #772 merged squash to default (`242112a`). Merged-tree gate GREEN: tsc clean, 2774
+  tests (unchanged — spec-file-only change, no vitest unit tests added), determinism clean,
+  eslint 0/0, `bash scripts/run-journeys.sh --public-only` 19/19 (including the 3 new
+  tests), `screenshot-manifest.test.ts` 10/10. No migrations, no secrets, no new
+  PENDING_OPS entries, no ROADMAP box ticked (F7 stays `[ ]` — still far from complete:
+  full core pipeline E2E, checkout completion, save/share, per-room functional passes, and
+  `/picks` remain open, named gaps).
+
+### Lessons learned
+1. **A stale independent-auditor doc (`QUALITY_SCORECARD.md`, `as_of: 2026-07-27`) can be
+   MOSTLY fixed by the time you read it, five days and ~13 runs later, in a fast-moving
+   loop.** Nearly every named top_gap this run investigated (storage purge, privacy
+   location disclosure, the `ManualScorecardView` accent violation, `evaluate-set`'s
+   fan-out cap) was already shipped. Verifying each against the actual current tree (not
+   trusting the doc's prose) avoided re-doing ~4 already-closed items and correctly
+   redirected effort to the one genuine gap a scout found instead. Same discipline applies
+   to THIS file's own now-stale rotation-guide entries — see the staleness note above.
+2. **A "quiet run" (1 shipped change) is the correct outcome when a thorough scout sweep
+   genuinely finds little, not a shortfall to pad.** 132 prior runs left very little
+   low-hanging fruit; the alternative to shipping a small real fix would have been either
+   inventing marginal work (forbidden — value bar) or reaching for a large multi-hour
+   undertaking (full pipeline E2E, checkout completion) that could not responsibly clear
+   the ≤2-review-cycle cap in one run. Restraint here matches this repo's own stated
+   anti-padding rule.
+3. **A locator that reads as "scoped to real content" can still be a page-wide trap if you
+   don't check what ELSE renders an element of that same role/level.** The gallery test's
+   own inline comment claimed intent ("assert real example cards render, not just the page
+   chrome") that the code didn't deliver — an unscoped `getByRole("heading", {level:3})`
+   matched `MarketingFooter`'s 3 nav-column headings before a single example card rendered,
+   on the SAME page whose `/support` row in `ROUTE_INVENTORY.md` documents this exact
+   footer-chrome-satisfies-the-locator failure mode. Reviewer A caught it; a maker
+   self-check would have been to grep for other `h3`/`h1`/etc. usages on the same
+   layout chrome (header/footer) before trusting a page-wide count. Mutation-testing the
+   fix (empty the real data, confirm the assertion now fails) is the reliable way to prove
+   a "real content" assertion actually is one — not just a claim in a comment.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 134** (last ran Run 130, 2026-07-31; Runs 131-133 leaned on scouts
+  + the scorecard). Cadence has been holding at 1 deep audit per ~3-4 runs.
+- **Re-verify `QUALITY_SCORECARD.md` and `GTM_SCORECARD.md` freshness before trusting
+  their named gaps** — as of this run neither had been re-graded since ~Run 16/2026-07-27
+  (per `docs/growth/GROWTH_STATUS.md`'s own validation note); if a future run finds a fresh
+  grade, prioritize its NEW findings, but if it's still the same stale block, verify each
+  named top_gap against the current tree before building anything off it (Run 133's
+  experience: most were already fixed).
+- **NAMED buildable F7/ROUTE_INVENTORY gaps REMAINING (standalone, do NOT batch-pad):**
+  `/picks` (1 route, needs an auth-tier classification decision — it fetches `/api/picks`
+  client-side rather than redirecting when logged out, unlike the other authed pages, so
+  check whether it's meant to be public-with-empty-state or authed before writing its
+  test); the 9 product per-room routes (6 already a11y-scanned via
+  `DESIGN_DENSE_A11Y_ROUTES` but lack a functional outcome pass — a FOCUSED run, not a
+  batched slot); billing outcomes (`/billing/checkout-success`, `/billing/checkout-cancel`
+  — needs Stripe test-mode wiring); sharing (`/saved/[id]`, `/shared/[token]`,
+  `/waitlist/confirmed` — needs a seeded design fixture). The full core pipeline E2E
+  (photo→understand→diagnose→source→mockup) and checkout completion remain the two
+  largest F7/F4 gaps, both correctly scoped by `ROUTE_INVENTORY.md` as needing dedicated
+  infra (image fixtures / deterministic provider behavior; Stripe test keys + webhook
+  stub) — not something to start speculatively inside a normal scout-driven run.
+- **Screenshot capture environment note carried forward:** see this run's note above — a
+  corner Next.js dev-mode "1 Issue" badge on freshly-captured (not pre-existing) F7 PNGs
+  in THIS sandbox is expected (CSP blocks React's dev-mode `eval()`), not a regression;
+  a production-mode capture would need real provider secrets this container doesn't have.
+- **DO-NOT-RE-FLAG (this run's additions):** `fetchImageAsBase64` batching, `resolveImageBlocks`
+  dead-code claim, `evaluate-set` fan-out cap (ALL ALREADY FIXED, pre-Run-133 — do not
+  re-propose from the stale scorecard); `findCachedMockup`'s `fs.readdirSync` (real but
+  dead-in-production, below the value bar as a standalone change); waitlist confirm-link
+  idempotency (ALREADY correct — the G4 rotation-guide note calling it "remaining" is
+  stale); mobile `_layout.tsx` RC `logIn().catch(()=>{})` (deferred since Run 103,
+  unchanged); `use-free-quota.ts`'s AsyncStorage `.catch(()=>{})` (documented client-UX-hint
+  only, server enforces the real limit — not a security bug).
