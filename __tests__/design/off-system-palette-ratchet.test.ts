@@ -78,7 +78,7 @@ const OFF_SYSTEM = new RegExp(
  * and lowest takes no surface, which is the emphasis ladder rather than a hue
  * per rung, and both carry a visible word so the ranking is not colour-only.
  */
-const MAX_OFF_SYSTEM = 78;
+const MAX_OFF_SYSTEM = 60;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's
