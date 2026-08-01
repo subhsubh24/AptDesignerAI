@@ -238,6 +238,58 @@ describe("enqueuePost length validation", () => {
   });
 });
 
+// Fake admin for the 23505 (dedupe_key collision) path: the FIRST call chain is
+// the insert (which errors), the SECOND is the fallback lookup by dedupe_key —
+// distinguished by whether `.insert()` was invoked on that particular
+// `from()`-returned builder, matching the two separate `admin.from(TABLE)`
+// calls the real code makes.
+function dedupeFakeAdmin(lookup: { id?: string } | null) {
+  return {
+    from() {
+      const builder: Record<string, unknown> = {};
+      let isInsertChain = false;
+      Object.assign(builder, {
+        insert: () => {
+          isInsertChain = true;
+          return builder;
+        },
+        select: () => builder,
+        eq: () => builder,
+        maybeSingle: () =>
+          isInsertChain
+            ? Promise.resolve({ data: null, error: { code: "23505" } })
+            : Promise.resolve({ data: lookup, error: null }),
+      });
+      return builder;
+    },
+  };
+}
+
+describe("enqueuePost dedupe_key collision (23505)", () => {
+  it("treats a re-enqueue of the same dedupeKey as a successful no-op, returning the EXISTING row's id", async () => {
+    const res = await enqueuePost(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      dedupeFakeAdmin({ id: "existing-post-7" }) as any,
+      { platform: "x", body: "Launch soon!", dedupeKey: "launch-2026-08" },
+    );
+    // The agent gets back the row that already exists, not a fresh insert —
+    // safe to call twice without creating a duplicate post.
+    expect(res).toEqual({ ok: true, id: "existing-post-7", duplicate: true });
+  });
+
+  it("falls back to a generic failure if the 23505 lookup itself finds no row", async () => {
+    // A genuine race/inconsistency: the insert collided on dedupe_key, but the
+    // follow-up lookup for that same key comes back empty. Must not throw or
+    // fabricate an id — report the same failure as any other insert error.
+    const res = await enqueuePost(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      dedupeFakeAdmin(null) as any,
+      { platform: "x", body: "Launch soon!", dedupeKey: "launch-2026-08" },
+    );
+    expect(res).toEqual({ ok: false, error: "Could not enqueue post" });
+  });
+});
+
 describe("flushDueQueue", () => {
   const orig = { ...process.env };
   afterEach(() => {
