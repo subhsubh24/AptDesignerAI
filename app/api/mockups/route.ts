@@ -101,15 +101,14 @@ function resolveImageOptions(body: Record<string, unknown>): MockupImageOptions 
  * Check the local filesystem mockups dir for an already-rendered image at
  * the given cache key. Returns the public URL if present, null otherwise.
  */
-function findCachedMockup(cacheKey: string): { url: string } | null {
+async function findCachedMockup(cacheKey: string): Promise<{ url: string } | null> {
   const mockupsDir = path.join(process.cwd(), "public", "uploads", "room-images", "mockups");
   try {
-    if (!fs.existsSync(mockupsDir)) return null;
-    const files = fs.readdirSync(mockupsDir);
+    const files = await fs.promises.readdir(mockupsDir);
     const hit = files.find((f) => f.startsWith(cacheKey + "."));
     if (hit) return { url: `/uploads/room-images/mockups/${hit}` };
   } catch {
-    // Ignore — fall through to regenerate
+    // Missing dir or read error — fall through to regenerate
   }
   return null;
 }
@@ -348,7 +347,7 @@ REQUIREMENTS:
       aspectRatio: imageOptions.aspectRatio,
       grounded: imageOptions.imageSearchGrounding,
     });
-    const cachedRec = findCachedMockup(recCacheKey);
+    const cachedRec = await findCachedMockup(recCacheKey);
     if (cachedRec) {
       console.log(`[mockup] recommendation cache hit key=${recCacheKey}`);
       await completeAgentRun(supabase, agentRun.id, {
@@ -560,7 +559,7 @@ RULES:
       aspectRatio: imageOptions.aspectRatio,
       grounded: imageOptions.imageSearchGrounding,
     });
-    const cachedVision = findCachedMockup(visionCacheKey);
+    const cachedVision = await findCachedMockup(visionCacheKey);
     if (cachedVision) {
       console.log(`[mockup] vision cache hit key=${visionCacheKey}`);
       await completeAgentRun(supabase, agentRun.id, {
@@ -690,7 +689,7 @@ RULES:
     aspectRatio: imageOptions.aspectRatio,
     grounded: imageOptions.imageSearchGrounding,
   });
-  const cached = findCachedMockup(cacheKey);
+  const cached = await findCachedMockup(cacheKey);
   if (cached) {
     console.log(`[mockup] cache hit key=${cacheKey}`);
     // Still record this as a mockup job so the UI can reference it. The image

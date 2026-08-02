@@ -846,7 +846,7 @@ export default function FocusPage() {
           <CardContent className="py-12">
             <div className="flex flex-col items-center mb-6">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
-              <h3 className="text-lg font-semibold">Studying this room</h3>
+              <h2 className="text-lg font-semibold">Studying this room</h2>
               <p className="text-sm text-muted-foreground mt-1">Usually 2–3 minutes</p>
             </div>
             <div className="max-w-md mx-auto">
@@ -953,7 +953,7 @@ export default function FocusPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Design Assessment</CardTitle>
+              <CardTitle asChild><h2>Design Assessment</h2></CardTitle>
               <CardDescription>{areaAnalysis.summary}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1206,7 +1206,7 @@ export default function FocusPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <h3 className="text-lg font-semibold">Imagining your room redesigned...</h3>
+            <h2 className="text-lg font-semibold">Imagining your room redesigned...</h2>
             <p className="text-sm text-muted-foreground mt-1">Creating a vision based on the design direction</p>
           </CardContent>
         </Card>
@@ -1219,7 +1219,7 @@ export default function FocusPage() {
             {/* Header with elapsed time */}
             <div className="flex flex-col items-center mb-6">
               <Loader2 className="h-8 w-8 animate-spin text-accent-warm mb-4" />
-              <h3 className="text-lg font-semibold">Sourcing pieces for your room</h3>
+              <h2 className="text-lg font-semibold">Sourcing pieces for your room</h2>
               <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
                 Searching across retailers at every price point
               </p>
