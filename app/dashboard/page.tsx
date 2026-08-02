@@ -1023,18 +1023,20 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Status badge — top-left */}
+                {/* Status badge — top-left. A one-hue emphasis ladder (quiet →
+                    house accent → solid ink), not three unrelated colours —
+                    see lib/scoring/verdicts.ts for the same pattern. */}
                 <div className="absolute top-3 left-3">
                   {isDone ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700 text-white text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-foreground text-background text-[10px] font-semibold shadow">
                       <CheckCircle2 className="h-3 w-3" /> Done
                     </span>
                   ) : isInProgress ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-warm text-accent-warm-on-solid text-[10px] font-semibold shadow">
                       In Progress
                     </span>
                   ) : isOutstanding ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-700 text-white text-[10px] font-semibold shadow">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/90 text-foreground text-[10px] font-semibold shadow">
                       Outstanding
                     </span>
                   ) : null}
