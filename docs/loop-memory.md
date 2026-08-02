@@ -6397,3 +6397,105 @@ critical path.
 - **DO-NOT-RE-FLAG (this run's additions):** none new — all 3 mobile items the scout
   re-surfaced this run were already on the list; carrying the full existing
   DO-NOT-RE-FLAG history forward unchanged.
+
+## Run 2026-08-02 (Run 136) — 2 file-disjoint changes; test-coverage scout was 3/4 false positives, caught before implementation.
+
+### State on entry
+Cold container. Assigned branch `claude/sleepy-goldberg-8o24tp`, reset to default tip
+`282aa5c` (#777, Run 135 ledger). Baseline gate GREEN: tsc clean, 2781 tests, determinism
+clean, eslint 0/0. No open PRs on entry. DEEP AUDIT not due (last ran Run 134,
+2026-08-01; next due ~Run 138).
+
+### Scout sweep (4 Haiku scouts)
+- **Security/RLS: CLEAN.** All tables RLS-correct, `SECURITY DEFINER` functions pin
+  `search_path`, admin-client usage properly scoped, no hardcoded secrets, public write
+  routes rate-limited + validated.
+- **Correctness/reliability: CLEAN.** No new reachable bugs on critical paths; sibling
+  route pairs (plain + `/stream`) consistent with each other.
+- **Test coverage: 3 of 4 candidates were FALSE POSITIVES.** The scout flagged
+  `lib/auth/login-errors.ts`, `lib/floor-plan/room-dimensions.ts`, and
+  `lib/auth/signup-errors.ts` as zero-coverage — all three already have dedicated,
+  substantial test files (`__tests__/auth/login-errors.test.ts` — 8 tests,
+  `__tests__/floor-plan/room-dimensions.test.ts` — 13 tests,
+  `__tests__/auth/signup-errors.test.ts`). The scout evidently didn't check the matching
+  `__tests__/auth/` and `__tests__/floor-plan/` subdirectories. Caught by a direct
+  file-existence check before writing any test code — **worth doing by default before
+  implementing any "zero coverage" test-gap finding:** grep `__tests__/` for the module's
+  basename first, don't trust the scout's coverage claim at face value. The 4th candidate
+  held up on inspection: `lib/utils/sanitize-prompt.ts`'s markdown-heading-strip branch
+  (`text.replace(/^#{1,6}\s/gm, "")`, a prompt-injection defense per its own docstring)
+  had genuinely zero coverage in both sibling test files
+  (`sanitize-prompt-pii.test.ts`, `sanitize-prompt-injection.test.ts`).
+- **Accessibility: 1 real finding, 1 dropped as not a real violation.** Real: the
+  onboarding "setup" step (step 3 of 3, mainline path, always reached) renders its
+  `StepHeader` title as `<h1>`, but three sibling subsections ("Building", "Do you have a
+  floor plan?", "Room Photos") were `<h3>` with no `<h2>` in between — a genuine WCAG
+  1.3.1 heading-hierarchy skip. Dropped: a "room-card link labeling" finding on
+  `app/projects/[projectId]/page.tsx` — the scout described screen readers announcing
+  the room name, badges, and mode tags as "separate pieces," but all of that text lives
+  inside a single `<Link>`, so its accessible name is the full concatenation; not a real
+  WCAG 2.4.4 violation, just verbose. Correctly judged borderline/not-bar-clearing and
+  left alone rather than shipped as busywork.
+
+### Shipped — 2 changes (both 2/2-reviewer-APPROVED)
+- **fix(a11y): dashboard setup step skips heading level 2.** Promoted the three `<h3>`
+  subsections above to `<h2>` in `app/dashboard/page.tsx` — pure tag-name change, no
+  styling/text/attribute changes.
+- **test(F2): cover sanitize-prompt's untested heading-strip branch.** 5 new cases in
+  `__tests__/utils/sanitize-prompt-pii.test.ts`: the positive strip (single-level +
+  multi-level/multiline), two negative cases that isolate the regex's actual boundaries
+  (no-space-after-hash; mid-line hash under the `^` multiline anchor — not a "no space"
+  duplicate of the first negative case), and a compound case verifying correct
+  interaction with PII redaction + injection detection in one call. No source change.
+
+### Process note: single-branch review hygiene
+This session operates on one designated branch (harness constraint — no per-change
+branches this run, unlike the ROADMAP's described multi-branch choreography). Both
+changes were implemented as uncommitted working-tree edits before review, which meant a
+reviewer's own `git diff` saw BOTH files at once and one reviewer (a11y Reviewer B)
+REQUEST_CHANGES'd purely on apparent scope-bundling — a process artifact, not a real
+defect in either change (the other 3 of 4 reviews approved outright on identical
+substance). Fixed by committing each disjoint change atomically (separate `git commit`
+per change) BEFORE spawning reviewers, then re-reviewing just the isolated a11y commit,
+which approved cleanly on the second pass. **Lesson for future single-branch runs:**
+commit each file-disjoint change as its own commit as soon as it's verified, before
+handing anything to a reviewer — don't let multiple pending changes coexist as
+uncommitted working-tree edits during the review step.
+
+### Merge outcome + gate
+Both changes committed atomically, pushed, opened as one PR (#778) off the session's
+single branch, auto-merge enabled, subscribed to PR activity, unsubscribed automatically
+on merge. Squash-merged to default at `b74a8d7`. CI's required checks (`verify`,
+`build`, `mobile`) plus `journeys`, `lint`, `validate-gtm`, `validate-capabilities` all
+passed on the first attempt (run 30739753624). Local re-verification pre-merge: tsc
+clean, **2786 tests** (2781 baseline + 5 new, 0 regressions), determinism clean, eslint
+0/0. No migrations, no secrets, no new PENDING_OPS entries, no ROADMAP box ticked
+(neither fix is a named Track/DoD line item).
+
+### Lessons learned
+1. **A scout's "zero coverage" claim needs a file-existence check before any test code
+   gets written** — 3 of 4 candidates this run already had substantial dedicated test
+   files the scout missed, likely from not checking module-name-matching subdirectories
+   under `__tests__/`. Cheap to verify, expensive to skip (would have shipped duplicate
+   test files or wasted a full implement+verify+review cycle on already-solved coverage).
+2. **On a single-branch run, commit disjoint changes atomically before review, not
+   after.** Leaving multiple verified-but-uncommitted changes in one working tree makes
+   any reviewer that runs its own `git diff` (rather than trusting a pasted diff) see
+   them as one bundled unit, producing a false scope-creep rejection. This cost one
+   revision cycle (still within the 2-cycle cap) that a `git commit` per change up front
+   would have avoided entirely.
+3. **A described-as-real a11y finding is worth a second look at its actual mechanism**
+   before implementing — the room-card-link finding sounded plausible in the scout's
+   prose ("announces as separate pieces") but didn't survive checking how link accessible
+   names actually compose; not every a11y-shaped scout finding is a real WCAG violation.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 138** (last ran Run 134, 2026-08-01; unchanged from Run 135's
+  note — this run didn't run one, consistent with the ~1-per-3-4-runs cadence).
+- **QUALITY_SCORECARD.md's DATA_BACKEND persistence gap** and its CI-workflow blocker
+  remain exactly as documented in Run 135's rotation note and `PENDING_OPS.md id:
+  ci-journeys-data-backend` / `id: cutover-to-persistent-data` — both HUMAN-GATED,
+  nothing new to add.
+- **DO-NOT-RE-FLAG (this run's additions):** the room-card-link labeling finding on
+  `app/projects/[projectId]/page.tsx` (all context is already in the link's accessible
+  name — not a real violation, don't re-flag without new evidence).
