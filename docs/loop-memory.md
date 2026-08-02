@@ -6284,3 +6284,116 @@ limit rather than a real CI regression.
   `scoreMin`/`scoreMax` bracket-indexing "inconsistency" (FALSE POSITIVE — both fields are
   optional and already null-guarded downstream, verified this run); all Run 133
   DO-NOT-RE-FLAG entries carried forward unchanged.
+
+## Run 2026-08-02 (Run 135) — scout-driven, 1 file-disjoint value-bar change; 3/4 scouts came back clean.
+
+### State on entry
+Cold container. Assigned branch `claude/sleepy-goldberg-dxmjhx`, reset to default tip
+`1ccae4b` (#775, Run 134 ledger). Baseline gate GREEN after `npm install`: tsc clean,
+2774 tests/11 skip, determinism clean, eslint 0/0. No open PRs on entry. DEEP AUDIT not
+due (last ran Run 134, 2026-08-01; cadence holds at ~1 per 3-4 runs, next due ~Run 138).
+
+### Scout sweep (4 Haiku scouts)
+- **Security/RLS: CLEAN.** No new migration RLS gaps, no admin-client misuse, no
+  hardcoded secrets. Re-verified the two open G4 items (login lockout/backoff,
+  email-verification link idempotency) are genuinely deferred — lockout has no server
+  route to instrument (client-side sign-in), and idempotency refers to a signup-confirm
+  flow that doesn't exist yet pending a real email pipeline — not overlooked gaps.
+  Waitlist confirm/unsubscribe routes independently re-confirmed idempotent.
+- **Quality/validation gaps: nothing new above the bar.** F2's formatter/pure-helper
+  coverage burndown (ran ~10 prior runs) is done; remaining low-coverage modules
+  (orchestrator, product-extractor, validation-agent) all need heavy-mock/fixture infra,
+  explicitly flagged in loop-memory as "a focused run for ONE done properly, don't
+  attempt cold" — correctly left alone rather than attempted piecemeal.
+- **Mobile: only long-deferred, already-known items.** Re-surfaced RC `logIn().catch(()=>{})`
+  in `mobile/src/app/_layout.tsx` (deferred since Run 103, re-confirmed marginal across
+  many subsequent runs), `use-push-notifications.ts`'s token-registration catch (deferred,
+  logging-only value), and `use-free-quota.ts`'s AsyncStorage catch (documented
+  client-UX-hint only, server enforces the real limit). All three are on this file's own
+  DO-NOT-RE-FLAG history (lines ~1788, 3737, 6053-6057) — declined to re-litigate.
+- **Web correctness: 1 real, verified bug.** `app/api/search/route.ts` accepts an
+  unvalidated `categories` array (string or `{category, search_title, specs}` object) with
+  no Zod schema. A rich object missing `category` mapped to `undefined` via
+  `typeof c === "string" ? c : c.category`, and the very next `.filter()` called
+  `undefined.toLowerCase()` — an unhandled `TypeError`, i.e. a raw 500 on an authenticated,
+  rate-limited, paid-API-calling route, trivially reachable with a malformed but
+  well-intentioned client request (no auth/RLS bypass, just a crash). The sibling
+  `app/api/search/stream/route.ts` had the identical `.map()` with no filter at all,
+  silently forwarding `undefined` downstream into the orchestrator instead of crashing —
+  same root cause, different failure mode.
+
+### Shipped — 1 change (2/2-reviewer-APPROVED, no revision cycle needed)
+- **fix(search): malformed category objects crashed the search route.** Extracted the
+  duplicated map-and-filter logic from both routes into a single pure, unit-tested helper
+  (`lib/utils/category-normalization.ts`, `normalizeMissingCategories`) that drops
+  non-string/empty entries (and, for the main route, still filters against
+  `identifiedCategories` case-insensitively — the stream route passes an empty `Set` to
+  preserve its original no-dedup behavior). 7 new unit tests cover real branches: string
+  passthrough, rich-object extraction, missing field, non-string field, empty string,
+  case-insensitive dedup, empty input. PR #776, squash-merged to default at `3d2471e`.
+  - Review note: Reviewer A ran `tsc`/the new test file/`eslint` itself rather than
+    trusting the diff description, confirmed the crash was real (no enclosing try/catch)
+    and the fix behavior-equivalent for well-formed input, but caught a real inaccuracy in
+    the draft commit message — it claimed malformed input now gets "a 400" when the actual
+    behavior is drop-and-continue with 200 (fewer categories searched, not an error
+    response). Amended the commit message before merge rather than shipping an overstated
+    claim — consistent with this repo's anti-reward-hacking discipline applying to commit
+    messages, not just code/tests. Reviewer B independently confirmed a client-triggerable
+    unhandled 500 on an authenticated route is a genuine, trivially-reachable bug (not a
+    speculative edge case) and that extracting a shared helper is proportionate — not
+    over-engineered — since both call sites need the same normalization with a different
+    second argument, and a 2-line inline guard would have had to be duplicated anyway.
+
+### Merge outcome + gate
+PR #776 merged squash to default (`3d2471e`). Merged-tree state: `tsc --noEmit` clean,
+**2781 tests** (2774 baseline + 7 new, 0 regressions), `npm run check:determinism` clean,
+`npx eslint .` 0/0. CI's required checks (`verify`, `build`, `mobile`) plus `journeys`,
+`lint`, `validate-gtm`, `validate-capabilities` all passed on the first attempt (run
+30725118384). No migrations, no secrets, no new PENDING_OPS entries. No ROADMAP checkbox
+ticked — this fix isn't a named Track/DoD line item, just a real correctness fix on a
+critical path.
+
+### Lessons learned
+1. **A duplicated bug across two near-identical routes can manifest as two different
+   failure modes** — the main `/search` route crashed outright (an unguarded `.toLowerCase()`
+   right after the map), while the `/stream` sibling had no such downstream call and so
+   silently propagated `undefined` into the orchestrator instead. Grepping for the shared
+   `c.category`/mapping pattern across `app/` (not just the one route the scout named) is
+   what caught the second, quieter instance — worth doing by default whenever a scout
+   flags a bug in one of a pair of near-duplicate routes (a common pattern in this repo:
+   a plain route + its `/stream` SSE sibling).
+2. **A reviewer that independently re-runs the verification commands (not just reads the
+   diff) catches things a description-trusting review would miss** — Reviewer A's own
+   `tsc`/test/lint runs confirmed the fix, but its close read of the actual before/after
+   behavior (not just "does it compile and pass") is what caught the commit message
+   overstating the fix as returning "a 400" when it actually silently drops the bad entry
+   and returns 200. Worth instructing reviewers to verify the WORDING of a fix's claimed
+   behavior against the actual diff, not just its test/build status.
+3. **A 3-of-4-scouts-clean run, with the 4th finding one real bug, is this repo's new
+   normal at 135 runs deep** — consistent with Runs 130-134's pattern (1-5 merged per run,
+   several fully clean sweeps). Restraint (shipping exactly what clears the bar, not
+   padding with the mobile scout's stale re-finds) is the correct behavior per this
+   repo's own explicit anti-padding rule, not a shortfall.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 138** (last ran Run 134, 2026-08-01; cadence holding at ~1 per
+  3-4 runs).
+- **QUALITY_SCORECARD.md's #1 named gap remains the DATA_BACKEND persistence cutover**
+  (`functional_reality` held at C for six consecutive grading cycles as of `as_of:
+  2026-07-27`, itself now ~5-6 days / many runs stale — re-verify freshness before
+  trusting it verbatim). The scorecard's own suggested first step — setting
+  `DATA_BACKEND: "supabase"` in the CI `journeys` job's `env:` block — is tracked as
+  `PENDING_OPS.md id: ci-journeys-data-backend`, which already records (Run 122) that the
+  loop CANNOT do this itself: editing `.github/workflows/ci.yml` is forbidden
+  (sensitive-file permission prompt hangs a headless run), and the obvious workaround
+  (exporting the var from the loop-editable `scripts/run-journeys.sh`) doesn't work either,
+  because CI starts the app with `npm run start &` before that script runs, so the env
+  never reaches the already-running server process. The PRODUCTION cutover itself
+  (`PENDING_OPS.md id: cutover-to-persistent-data`) is separately HUMAN-GATED (apply
+  migrations, set env vars, flip `DATA_BACKEND=supabase` on the deployment, verify a cold
+  start survives). Both blockers are already correctly documented in PENDING_OPS — a
+  future run should read those entries rather than re-deriving this reasoning from
+  scratch.
+- **DO-NOT-RE-FLAG (this run's additions):** none new — all 3 mobile items the scout
+  re-surfaced this run were already on the list; carrying the full existing
+  DO-NOT-RE-FLAG history forward unchanged.
