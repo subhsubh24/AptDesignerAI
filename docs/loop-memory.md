@@ -6499,3 +6499,154 @@ clean, **2786 tests** (2781 baseline + 5 new, 0 regressions), determinism clean,
 - **DO-NOT-RE-FLAG (this run's additions):** the room-card-link labeling finding on
   `app/projects/[projectId]/page.tsx` (all context is already in the link's accessible
   name — not a real violation, don't re-flag without new evidence).
+
+## Run 2026-08-02 (Run 137) — 3 file-disjoint changes; QUALITY_SCORECARD's named gaps were all already fixed by prior runs, so a fresh 6-scout sweep found the real remaining work instead.
+
+### State on entry
+Cold container. Assigned branch `claude/sleepy-goldberg-5sx23i`, at default tip `9cf0a1e`
+(#779, Run 136 ledger). No open PRs on entry. DEEP AUDIT not due (last ran Run 134,
+2026-08-01; next due ~Run 138). Ran `npm install` (fresh container, no node_modules) before
+any gate command.
+
+### QUALITY_SCORECARD consumed as DATA, not blindly re-implemented
+Started from `docs/quality/QUALITY_SCORECARD.md` (as_of 2026-07-27) since it names
+specific, in-loop-control gaps with file:line citations. Before implementing anything,
+verified each against current code — and found **every named in-control gap already
+fixed**: account-deletion storage purge (`lib/storage/user-storage.ts`, Run 120),
+privacy label accuracy (`docs/app-privacy.md`, `app/privacy/page.tsx`, Run 120),
+`lib/ai/gemini.ts` image-fetch batching (Run 120), the `ManualScorecardView` colour
+ladder (now consuming `lib/scoring/verdicts.ts`'s shared ladder), the saved-designs/
+products IDOR nits (both already bound correctly), and the evaluate-set concurrency cap
+(already `pLimit`-guarded). The scorecard document itself is simply stale — it hasn't
+been re-graded since 07-27, and Run 120 (the same day) evidently built its fixes off
+this exact scorecard version. **Lesson: always verify a scorecard/scout finding against
+current code before implementing — a "gap" from an unrefreshed independent audit may
+already be closed by an intervening run.** No time was wasted re-implementing any of
+these; each was confirmed fixed via direct grep/read before moving on.
+
+### Fresh 6-scout sweep (since the scorecard had nothing left to give)
+- **Security/RLS: CLEAN.** Fresh sweep of migrations 028-031 and all API routes touched
+  since 07-27 found zero new IDOR/RLS gaps.
+- **Test coverage: CLEAN.** Checked 50+ candidate modules; the codebase's pure-function
+  coverage is now comprehensive after 136+ runs. No genuine gaps clearing the bar.
+- **Artifact freshness: CLEAN.** The scorecard's own named stale-doc claims (about
+  `e2e/ROUTE_INVENTORY.md` and `ci.yml`) turned out to be themselves stale/inaccurate on
+  re-check — the docs are current.
+- **Performance:** found `lib/store/embedding-index.ts`'s full-table-scan (real, but the
+  auditor's own prior notes explicitly say defer it until the DATA_BACKEND cutover since
+  it would be dead code under the memory backend today — correctly skipped, not
+  re-litigated) and `app/api/mockups/route.ts`'s synchronous `fs.readdirSync` on the
+  request path (real, shipped).
+- **Design-bar/a11y:** found a real 3rd instance of the emerald/blue/amber
+  three-competing-accent anti-pattern on the dashboard's room-status badge (the same
+  pattern already fixed twice before, in `lib/scoring/verdicts.ts` and
+  `lib/utils/tier-colors.ts`), and a severe WCAG 1.3.1 heading-hierarchy skip across the
+  ENTIRE focus page (the core-journey flagship) — h1 straight to eight orphaned h3s, no
+  h2 until deep in the page at "Our picks".
+- **Mobile/monetization:** found 4 buttons (`paywall-sheet.tsx`, `room-type.tsx`,
+  `results.tsx`, `photo.tsx`) with hardcoded `hitSlop={12}`, which the scout matched to
+  the shape of a previously-fixed tap-target bug (`hitSlop={8}` on bare 20pt-line-height
+  text, fixed via `TapSlop.smallLabel` on `settings.tsx`/`index.tsx`/auth screens).
+
+### Shipped — 3 changes (all 2/2-reviewer-APPROVED); 1 candidate correctly abandoned
+- **fix(design-bar): dashboard room-status badge used three off-system hues.** Converted
+  `isDone`/`isInProgress`/`isOutstanding` from `bg-emerald-700`/`bg-primary`/
+  `bg-amber-700` to the single-hue emphasis ladder (quiet → house accent → full ink),
+  using `--accent-warm-on-solid` (not `text-white`) for AA contrast. Lowered
+  `off-system-palette-ratchet.test.ts`'s `MAX_OFF_SYSTEM` 60→58 to lock in the
+  improvement (a bidirectional ratchet — a drop in the count REQUIRES tightening the
+  ceiling, not just permits it). First implementation attempt used `text-white` on the
+  warm fill and FAILED `warm-cta-contrast.test.ts` (3.32:1 in dark, below AA) — caught by
+  the local gate before review even started, fixed by using the existing
+  `--accent-warm-on-solid` token instead.
+- **fix(a11y): the focus page's flagship step content skipped from h1 to h3.** Promoted
+  3 standalone step-header h3s (each the sole heading for its own mutually-exclusive
+  `step` state) directly to h2. The other 5 orphaned h3s are subsections of a "Design
+  Assessment" card whose `CardTitle` renders a plain `div` (confirmed in
+  `components/ui/card.tsx`) — my first draft promoted all 8 to h2 uniformly, which
+  Reviewer A caught as WRONG: it would have flattened a real h2→h3 relationship into 5
+  parentless h2 siblings. Fixed by giving `CardTitle`'s "Design Assessment" title an
+  `asChild` h2 (the exact pattern already used on the bundles page for the identical
+  CardTitle-as-div gap) and keeping the 5 subsections correctly nested as h3. Both
+  reviewers approved the corrected version; the commit message was rewritten to describe
+  the accurate final structure rather than the oversimplified first draft.
+- **perf(mockups): swap the cache-lookup readdirSync for an async readdir.**
+  `findCachedMockup()`'s synchronous `fs.existsSync`+`fs.readdirSync` on every
+  `/api/mockups` POST → `fs.promises.readdir` at all 3 call sites (all already inside
+  async handlers). Reviewer B specifically credited this as event-loop-blocking (affects
+  ALL concurrent requests), not a single-request micro-opt, which is the stronger
+  justification the repo's own calibration bar asks for.
+- **ABANDONED: mobile tap-target `hitSlop` fix.** Implemented `hitSlop={12}` →
+  `TapSlop.smallLabel` on 4 buttons, but BOTH independent reviewers (working
+  independently, from a diff alone) proved the premise false: all 4 buttons render
+  `ThemedText` with no `type` prop (`type="default"`, 24pt line-height), not the `type=
+  "small"` (20pt) shape the actual precedent bug had — so `tapSlopFor(24) = 12`, meaning
+  the ORIGINAL hardcoded `hitSlop={12}` already yielded exactly the 48pt minimum. Reviewer
+  B additionally found `__tests__/mobile/tap-targets.test.ts` **already documents this
+  exact false-positive shape** from an even earlier run's flawed scan ("An earlier version
+  banned every bare `hitSlop={N}` literal, which forced four `hitSlop={12}` →
+  `TapSlop.defaultLabel` rewrites that changed no behaviour at all — 12 was already
+  correct for a 24pt line box" — and separately, "on `results.tsx` ... reported a
+  compliant 48pt back-link as a 44pt violation"). Dropped via `git rebase --onto` before
+  it ever reached a PR. **This is a DO-NOT-RE-FLAG: do not re-propose changing
+  `hitSlop={12}` on `mobile/src/components/paywall-sheet.tsx`, `mobile/src/app/
+  room-type.tsx`, `mobile/src/app/results.tsx`, or `mobile/src/app/photo.tsx` without new
+  evidence that their rendered text is NOT the default (24pt) type.**
+
+### Merge outcome + gate
+All 3 changes committed atomically (per Run 136's lesson — committed before review, not
+after), reviewed as isolated commits by 2 fresh Sonnet reviewers each (6 reviews total for
+the 3 shipped changes, 2 more for the abandoned mobile change), bundled into one PR (#780)
+off the session's single branch, auto-merge enabled, subscribed to PR activity. Squash-
+merged to default at `b7d775b`. Local re-verification pre-merge: `tsc` clean, **2786
+tests** (0 regressions), determinism clean, eslint 0/0 on touched files, mobile `tsc` +
+`expo lint` clean, `bash scripts/run-journeys.sh --public-only` 19/19 green (authed a11y
+tier requires Supabase service-role env not available in this local container; CI's
+`journeys` job covers it as a required check). No migrations, no secrets, no new
+PENDING_OPS entries, no ROADMAP box ticked (none of the 3 are named Track/DoD line items).
+
+### Lessons learned
+1. **A scorecard/scout finding needs a currency check against LIVE code before
+   implementation, every time — even (especially) a well-cited independent audit.** All
+   of QUALITY_SCORECARD.md's named in-control gaps from 07-27 were already fixed by Run
+   120 the same day; the document is simply stale. Cheap to verify (a few greps per
+   claim), expensive to skip (would have wasted a full implement+verify+review cycle
+   re-doing already-shipped work, or worse, reverting a correct fix back to a "fixed"
+   state matching the stale scorecard's description).
+2. **Two independently-working reviewers converging on the same real defect from a bare
+   diff, with no coordination, is strong signal the defect is real — but so is a single
+   reviewer citing a source-of-truth the repo already contains.** The mobile tap-target
+   abandonment was caught twice over: by direct code-reading (ThemedText's actual
+   line-height) AND by an existing test file that had already documented and refuted the
+   identical false-positive shape from a prior run. When a scout's finding sounds exactly
+   like an already-fixed bug class, checking whether the "bug" survives the SPECIFIC
+   detail that made the original fix necessary (here: font size / line-height, not just
+   "does this button have `hitSlop={12}`") is the check that would have caught it before
+   implementation, not just before merge.
+3. **A uniform fix across N similar-looking violations can be wrong if the violations
+   aren't actually structurally identical.** The focus-page heading fix's first draft
+   treated all 8 orphaned h3s the same way (promote to h2), but 5 of them were nested
+   subsections of an unlabeled card while 3 were true flat page-level siblings — visually
+   identical (both "an h3 with no h2 above it"), structurally different. Worth checking
+   the actual DOM nesting (not just "is there an h2 above this in source order") before
+   applying a batch fix to a set of superficially-similar headings.
+4. **A test-suite regression from your OWN diff, caught locally before any reviewer sees
+   it, is the gate working as intended, not a setback.** The dashboard badge fix's first
+   version failed `warm-cta-contrast.test.ts` locally (text-white on a warm fill, 3.32:1
+   in dark) — fixed in the same working session before committing, so no reviewer cycle
+   was spent on a defect the local gate already caught for free.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 138** (last ran Run 134, 2026-08-01; this run did not run one,
+  consistent with the ~1-per-3-4-runs cadence — next run should run it).
+- **QUALITY_SCORECARD.md is now MEANINGFULLY STALE** (as_of 2026-07-27, and this run
+  found essentially all of its named in-control gaps already fixed) — a future run
+  should treat its `top_gaps` as a starting POINTER to re-verify, not a ready-to-implement
+  list; expect most items to already be resolved, and the DATA_BACKEND persistence gap
+  (functional_reality, held C for 6+ cycles) and business_case_strength (Pro Annual gated
+  off pending migration 021 + `ANNUAL_BILLING_ENABLED`) remain the two genuinely
+  HUMAN-GATED items, unchanged.
+- **DO-NOT-RE-FLAG (this run's addition):** the 4 mobile `hitSlop={12}` call sites listed
+  above under "ABANDONED" — already investigated twice now (this run and whatever run
+  added `__tests__/mobile/tap-targets.test.ts`'s explicit refutation comment) and
+  confirmed NOT a bug. Carrying forward all prior DO-NOT-RE-FLAG entries unchanged.
