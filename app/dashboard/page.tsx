@@ -750,10 +750,10 @@ export default function DashboardPage() {
 
             return (
               <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Building
-                </h3>
+                </h2>
 
                 {!buildingConfirmed ? (
                   /* ── Search state ── */
@@ -846,11 +846,11 @@ export default function DashboardPage() {
           {/* Floor plan upload section — sits between building research and room photos */}
           {projectId && (
             <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
                 <FileImage className="h-4 w-4" />
                 Do you have a floor plan?
                 <span className="text-xs font-normal text-muted-foreground normal-case tracking-normal ml-1">— would help with design</span>
-              </h3>
+              </h2>
               <p className="text-xs text-muted-foreground mb-3">
                 Drop in a floor plan image or PDF and we&apos;ll pull room dimensions, wall features, and layout — so every piece we pick fits exactly where it belongs.
               </p>
@@ -860,10 +860,10 @@ export default function DashboardPage() {
 
           {/* Room photos section */}
           <div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
               <Camera className="h-4 w-4" />
               Room Photos
-            </h3>
+            </h2>
             <div className="space-y-4">
               {roomSections.map((section) => (
                 <RoomUploadSection
