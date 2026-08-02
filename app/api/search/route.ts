@@ -16,6 +16,7 @@ import { userOwnsRoom } from "@/lib/auth/ownership";
 import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 import { getMeter } from "@/lib/observability/margin-meter";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
+import { normalizeMissingCategories } from "@/lib/utils/category-normalization";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -274,11 +275,11 @@ export async function POST(request: Request) {
     ? categories
     : ["rug", "coffee_table", "accent_chair"];
 
-  const missingCategories: string[] = rawCategories
-    .map((c: string | { category: string }) => typeof c === "string" ? c : c.category)
-    // Drop categories already covered by verified, user-confirmed identifications —
-    // the identifiedContext tells the model WHY, this just avoids wasted queries.
-    .filter((cat: string) => !identifiedCategories.has(cat.toLowerCase()));
+  // Drop categories already covered by verified, user-confirmed identifications —
+  // the identifiedContext tells the model WHY, this just avoids wasted queries.
+  // Also drops malformed entries (e.g. a rich object with no `category` string)
+  // instead of crashing on them.
+  const missingCategories: string[] = normalizeMissingCategories(rawCategories, identifiedCategories);
 
   if (identifiedCategories.size > 0) {
     console.log(

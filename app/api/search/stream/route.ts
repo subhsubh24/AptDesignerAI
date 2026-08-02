@@ -11,6 +11,7 @@ import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
 import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
+import { normalizeMissingCategories } from "@/lib/utils/category-normalization";
 
 /**
  * SSE streaming search endpoint.
@@ -277,14 +278,14 @@ export async function POST(request: Request) {
     recommendationMockups,
   };
 
-  // Categories can be strings or rich objects { category, search_title, specs }
+  // Categories can be strings or rich objects { category, search_title, specs }.
+  // Malformed entries (e.g. a rich object with no `category` string) are dropped
+  // instead of becoming `undefined` in the list passed downstream.
   const rawCategories = categories && categories.length > 0
     ? categories
     : ["rug", "coffee_table", "accent_chair"];
 
-  const missingCategories: string[] = rawCategories.map(
-    (c: string | { category: string }) => typeof c === "string" ? c : c.category
-  );
+  const missingCategories: string[] = normalizeMissingCategories(rawCategories, new Set());
 
   // Build search hints from rich category objects
   const categoryHints: Record<string, string> = {};
