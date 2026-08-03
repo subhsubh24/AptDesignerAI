@@ -6650,3 +6650,115 @@ PENDING_OPS entries, no ROADMAP box ticked (none of the 3 are named Track/DoD li
   above under "ABANDONED" — already investigated twice now (this run and whatever run
   added `__tests__/mobile/tap-targets.test.ts`'s explicit refutation comment) and
   confirmed NOT a bug. Carrying forward all prior DO-NOT-RE-FLAG entries unchanged.
+
+---
+
+## Run 138 (2026-08-03)
+
+DEEP AUDIT was due (last ran Run 134, 2026-08-01; ~4-run cadence) but this run opted for a
+5-Haiku-scout sweep (security/RLS, performance, design-bar/a11y, correctness/dead-code,
+mobile) instead of the full holistic audit format, given the strong signal from Run 137
+that `docs/quality/QUALITY_SCORECARD.md` (as_of 2026-07-27) is stale — nearly everything it
+named as an in-control gap was already fixed by Run 120+. **Next run should still run a
+proper full DEEP AUDIT** (this one was scout-sweep-shaped, not the complete lens rotation);
+this is a partial substitute, not a skip.
+
+**Scorecard re-verification (before trusting any of it):** spot-checked 6 of the scorecard's
+named top_gaps directly against live code before treating any as actionable — ALL were
+already fixed, confirming Run 137's finding and extending it: account-deletion storage purge
+(no `.remove(` hits found — already fixed), `docs/app-privacy.md`'s false "location not
+collected" claim (the offending line is gone), `ManualScorecardView.tsx`'s emerald/blue/amber
+ordinal-score encoding (no matches — already fixed), `gemini.ts` image-fetch batching (already
+inside the concurrency-gated path at the one live call site), `mockups/route.ts` `readdirSync`
+(no matches — Run 137 already fixed this one, per its own log entry), and
+`evaluate-set/route.ts`'s fan-out (already `pLimit`-capped). **The scorecard is now
+meaningfully more stale than Run 137 flagged — treat literally ALL of its named top_gaps as
+"verify first," not "implement."**
+
+**Scout findings, evaluated:**
+- Security/RLS: CLEAN. No new findings; the one historical item (saved_designs enumeration)
+  is confirmed already fixed by migration 030.
+- Correctness/dead-code: CLEAN. One trivial dead export (`estimateTokens` in
+  `context-truncation.ts`, test-only usage) — not worth a change on its own.
+- Mobile: CLEAN. The one finding was the same `hitSlop={12}` pattern already on the
+  DO-NOT-RE-FLAG list above — re-confirmed, not re-implemented.
+- Design-bar/a11y: scout flagged `toast.tsx` and `badge.tsx`'s success/warning/info/
+  destructive variants (raw emerald/amber/blue/red) as "three competing accent colors."
+  **Investigated and rejected as a false positive**: `app/globals.css` has no semantic
+  success/warning/info token (only one warm `--accent`), so these ARE the base semantic
+  state-color vocabulary the rest of the design system reuses (e.g. `badge.tsx`'s `success`
+  variant is exactly what `dashboard/page.tsx`'s ad-hoc emerald pills duplicate instead of
+  reusing) — not the decorative-competing-accent anti-pattern VISION.md's design bar
+  targets (arbitrary/decorative multi-hue, not conventional state semantics). The scout's
+  other findings (dashboard/products/setup/waitlist pages using raw emerald classes instead
+  of reusing `Badge`'s `success` variant) are a real, mild "ad-hoc vs. reuse-the-system"
+  inconsistency but were left for a future run — moderate value, five scattered files,
+  needs visual verification this run didn't have bandwidth for; **not a DO-NOT-RE-FLAG**,
+  just deferred.
+- Performance: 4 candidates. The unbounded room fan-out in `analyze-apartment/route.ts` was
+  real (no cap anywhere on rooms-per-project, feeding both an LLM fan-out and a deliberately
+  *serial* persistence loop inside a 300s `maxDuration`) — **implemented**. The "serial N+1
+  persistence" finding turned out to be the SAME serial loop, already documented in-code as
+  intentional (per-room error isolation) — not a bug, correctly not touched. The raw-`<img>`
+  findings were riskier than they first looked: `SharedDesignView.tsx`'s product `image_url`
+  comes from arbitrary external retailer domains, not the `next.config.ts` `remotePatterns`
+  allowlist (Supabase/Google/Gemini only) — naively swapping to `next/image` would 400 on
+  most real product images, a regression disguised as an optimization. Correctly not touched;
+  worth flagging for whoever eventually works the `next/image` adoption item in the
+  scorecard's `performance` dimension (needs either a domain allowlist expansion or an
+  `unoptimized` fallback, not a blind swap). The typeahead full-table-scan finding was
+  judged borderline/low-impact (500-row `.limit()`, not truly unbounded) and skipped.
+
+**Implemented: 1 change.** `fix(perf): cap analyze-apartment fan-out at 20 rooms, surface
+truncation` (#782) — capped the room fan-out to the oldest 20 (generous for any real
+apartment) to keep total latency (fan-out + serial persistence) under the route's 300s
+`maxDuration`, since exceeding it previously failed the WHOLE analysis and discarded all
+already-incurred LLM spend. Reviewer A's first pass correctly caught a real follow-on defect
+in the first draft: capping silently and permanently excludes rooms beyond 20 with zero
+signal to the caller (a 200 response indistinguishable from full success). Fixed in one
+follow-up commit by adding `rooms_analyzed`/`rooms_total`/`rooms_truncated` to the success
+response; re-reviewed and approved. Two new regression tests (cap behavior + both truncation-
+field states).
+
+### Lessons learned
+1. **A stale scorecard doesn't just risk redundant work — it risks reintroducing regressions
+   if trusted uncritically.** Every one of the 6 spot-checked top_gaps this run was already
+   fixed; blindly "fixing" any of them (e.g. "restoring" a location-collection disclosure
+   that's already correct) would have been pure churn at best and a real diff for no reason
+   at worst. The cheap check (a few greps/reads per claim) keeps paying for itself run after
+   run — this is now the third consecutive run to catch this. **The scorecard needs a fresh
+   grading cycle from the independent Quality Auditor routine; the loop cannot fix this
+   itself (it never writes the scorecard).**
+2. **A scout finding that looks like a design-bar violation can be the established, correct
+   pattern instead — check whether the system actually offers no better alternative before
+   flagging.** `toast.tsx`/`badge.tsx`'s red/amber/blue/emerald state colors LOOK like "three
+   competing accent colors" out of context, but the design system has exactly one accent
+   token (`--accent-warm`) and no semantic success/warning/info tokens — so these component-
+   level state colors are the base vocabulary other surfaces are meant to reuse, not a
+   violation of it. The tell: check whether a "correct" version of the pattern exists
+   elsewhere in the token system before treating a raw-Tailwind-color hit as a violation.
+3. **A route-level fan-out cap that fixes an availability problem can create a silent
+   data-loss problem if the response shape doesn't change too.** Capping without surfacing
+   the cap is a strictly worse trade for the excluded data's owner (a hard failure is at
+   least visible and retryable; a masked partial success is not). Reviewer A's catch here is
+   the general shape to watch for on ANY cap/truncation/sampling fix: the mechanism can be
+   correct while the OBSERVABILITY of the mechanism's effect is the actual missing piece.
+
+### Rotation guide for next run
+- **DEEP AUDIT still due** — this run's scout sweep is a partial substitute, not a full
+  holistic audit; run the complete lens rotation (correctness/dead-code, security/RLS,
+  performance, a11y/design-bar, functional-reality RUN, quality-scorecard reconcile,
+  tests/evals, dependency/config health, artifact freshness) next time.
+- **QUALITY_SCORECARD.md is now stale across THREE consecutive runs** (Run 136, 137, 138 all
+  found some or all of its named gaps already fixed) — this is now a recurring pattern worth
+  a `loop: harness improvement proposal` issue if a future run confirms a 4th time; not yet
+  opened this run since 3 is the pattern threshold and each run's specific findings differed
+  slightly (not literally the same non-signal repeated).
+- **Deferred, not forgotten:** the dashboard/products/setup/waitlist ad-hoc-emerald-instead-
+  of-`Badge`-success-variant consistency cleanup (5 files) — moderate value, needs visual
+  verification, file-disjoint from everything else. A `next/image` adoption pass on
+  `SharedDesignView.tsx` and similar needs the `remotePatterns` allowlist question resolved
+  first (arbitrary external product-image domains vs. Supabase/Google-only allowlist) —
+  do NOT blindly swap raw `<img>` to `next/image` on product-image URLs without solving that.
+- **DO-NOT-RE-FLAG (carried forward + this run's confirmation):** all prior entries unchanged;
+  the 4 mobile `hitSlop={12}` sites re-confirmed clean again this run (2nd confirmation).
