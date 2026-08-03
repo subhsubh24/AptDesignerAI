@@ -6762,3 +6762,143 @@ field states).
   do NOT blindly swap raw `<img>` to `next/image` on product-image URLs without solving that.
 - **DO-NOT-RE-FLAG (carried forward + this run's confirmation):** all prior entries unchanged;
   the 4 mobile `hitSlop={12}` sites re-confirmed clean again this run (2nd confirmation).
+
+---
+
+## Run 139 (2026-08-03)
+
+DEEP AUDIT still due (last full pass Run 134, 2026-08-01) — this run again ran a
+5-Haiku-scout sweep rather than the complete lens rotation, three consecutive runs now
+(137, 138, 139) that owed but deferred the full audit. **This is now a pattern; the next
+run should treat the full holistic audit as non-optional**, not just "still due."
+
+**Scouts:** security/RLS (whole-repo), correctness/dead-code (whole-repo), and three
+TARGETED scouts on named open items — G4 email-verification-link idempotency, the
+Run 137/138-deferred dashboard-badge design-bar inconsistency, and an F3 eval gold-set
+diversity gap.
+
+**Security/RLS scout re-flagged an already-settled false positive.** It found 4 UPDATE
+RLS policies (`profiles`, `projects`, `rooms`, `saved_designs`) with `USING` but no
+`WITH CHECK` and framed it as a real ownership-reassignment hole. A migration was
+written and sent to two reviewers — **both independently rejected it**, citing
+documented Postgres behavior (USING is reused as WITH CHECK when the latter is omitted
+on UPDATE/ALL policies) and, critically, Reviewer B found this EXACT pattern already
+investigated and refuted at Run 48/51, with existing DO-NOT-RE-FLAG language in this
+very file. **The scout should have grepped this file for "WITH CHECK" / "USING" before
+surfacing the finding** — the DO-NOT-RE-FLAG list exists precisely to prevent this, and
+a security-flavored finding bypassing that check because "security always clears the
+bar" is a real gap in this run's scout instructions, not a one-off. Abandoned before
+ever being pushed to a branch — no PR, no review-cycle spend beyond the two review
+calls themselves.
+
+**Shipped 2 merged + 1 pushed-not-merged, all file-disjoint:**
+
+1. **`fix(design-bar)` dashboard badge → `Badge variant="success"`** (#788, merged).
+   The site-specific fix Run 138 deferred (needs-visual-verification): the "Apartment
+   analyzed" pill duplicated `Badge`'s success variant with hand-rolled emerald classes.
+   A second candidate site (Run 137/138's "building researched" indicator) had a genuine
+   visual mismatch (lighter background) and was correctly left untouched — NOT batched
+   in just to make the diff look bigger. Tightened `off-system-palette-ratchet`'s ceiling
+   58→52 in the same commit. 2/2 APPROVE first round.
+
+2. **`fix(auth)` G4 password-reset link idempotency** (#789, pushed, NOT merged — see
+   below). Closes the "email-verification link idempotency" half of the long-open G4
+   item (the other half, login lockout/backoff, stays owner-config-blocked as documented).
+   **Round 1 (both REQUEST_CHANGES) caught a REAL security bug**, not a nitpick: the
+   first version fell back to a bare `supabase.auth.getSession()` check on a failed
+   `verifyOtp()`, treating "a session exists in this browser for ANY reason" as proof of
+   "I personally just redeemed THIS link." On a shared/public machine, another user's
+   still-live session (or the current user's own unrelated login) would let a dead or
+   garbage reset link through as "ready" — a real password-reset bypass, not a UX nit.
+   Fixed by writing a `localStorage` marker keyed on the EXACT `token_hash` right after a
+   successful `verifyOtp`, only falling back to "ready" on a later failure when that
+   specific token's marker is present AND a session still exists.
+   **Round 2:** Reviewer B APPROVE outright; Reviewer A also confirmed the security fix
+   is sound ("I couldn't construct a path where the marker is set for a token the
+   calling browser didn't actually redeem") but REQUEST_CHANGES on a narrower ground —
+   the tests only covered the extracted pure decision function, not the actual wiring
+   sequence, and both round-1 bugs were sequencing bugs. Addressed by extracting the
+   full sequence into a dependency-injected `redeemResetLink()` and adding integration
+   tests hitting exactly the scenarios Reviewer A named (including a direct
+   re-assertion that an unrelated token's marker does NOT unlock a different token —
+   the shared-machine bypass, re-proven closed). **Per the loop's 2-review-cycle cap,
+   this fix was NOT sent back for a fresh cycle-3 review** — pushed as an open PR (#789)
+   with FYI issue #790 asking for a follow-up look, per "push the branch + open an FYI
+   issue, move on." The code itself has full reviewer sign-off on its security
+   properties across the two cycles that DID run; only the added test's own quality is
+   unreviewed.
+
+3. **`test(F3)` first bedroom gold-eval fixture** (#791, merged after 2 review cycles).
+   Both existing fixtures are `living_room`/warm-Scandinavian; this adds `bedroom` +
+   `high_end` budgetMode coverage. **Round 1 (both REQUEST_CHANGES) caught a fixture
+   with a FALSE PREMISE**, and it's worth internalizing exactly how: `userContext` said
+   "the floor is completely bare" to justify `requiredCategories: ["area_rug"]` — the
+   fixture author had viewed the image at `w=800` and missed a small gray rug at the
+   foot of the bed, clearly visible at `w=1600`. Reviewer B caught it by actually
+   fetching and looking at the photo rather than trusting the fixture's own description.
+   **Round 2 is the more interesting lesson:** the author tried a harder, unprimed
+   `mustKeep: ["nightstand"]` assertion (a genuinely unspoiled test of visual
+   perception), ran it LIVE against the real pipeline twice, and it FAILED both times —
+   the model's `what_is_working` output was consistently short (2 vague items) and
+   didn't reliably name the nightstand. **This is real LLM sampling variance, not a
+   broken pipeline or a broken fixture** — and the correct response was to abandon that
+   assertion rather than keep re-rolling or rephrasing until it happened to pass, which
+   would have been the exact "reverse-engineered from a captured run" anti-pattern F3
+   explicitly forbids. Landed on `paletteIncludes`-only, matching the existing
+   `living-room-warm-sofa.json` fixture's proven shape, broadened to 14 terms grounded
+   in the actual photo, verified stable across 3 live runs. Both reviewers independently
+   re-fetched the source photo before approving — this pattern (reviewers verifying a
+   claimed visual fact by looking themselves, not trusting the diff's prose) caught a
+   real defect once already this run and is worth repeating deliberately.
+
+### Lessons learned
+1. **"Security always clears the value bar" does not mean "skip the DO-NOT-RE-FLAG
+   check for security findings."** A scout re-surfaced an RLS finding this file already
+   settled as a false positive at Run 48/51. The value-bar priority for security work is
+   about ranking REAL findings above other work, not an exemption from verifying a
+   finding is real in the first place. Any scout prompt implying "security findings
+   always ship" should also say "check loop-memory's DO-NOT-RE-FLAG list first."
+2. **A live, non-deterministic eval assertion needs to survive being run more than
+   once before it's trustworthy — one green run proves almost nothing.** The
+   `mustKeep: ["nightstand"]` attempt this run passed on neither of its two live
+   attempts; had it passed on a first try and been committed without a second run, it
+   would have shipped a flaky test indistinguishable (from the diff alone) from a solid
+   one. The `paletteIncludes` fixture that DID ship was run 3 times specifically because
+   a single green run is not evidence of stability for a live-model assertion.
+3. **When a reviewer's rejection reason is "I looked at the actual artifact and your
+   premise is factually wrong" (not a logic bug), the fix is not tuning the assertion —
+   it's re-establishing ground truth first.** The false "bare floor" claim traced back
+   to viewing the source photo at a smaller resolution and missing a small object in a
+   corner. The general lesson: when a fixture/test encodes a claim about an external
+   artifact (an image, a file, a page), verify that claim at the SAME fidelity a
+   reviewer would use to check it, not a lower one convenient for a quick look.
+4. **Losing uncommitted work by switching git branches mid-edit is a real, avoidable
+   failure mode in a multi-branch run.** This run briefly discarded an in-progress edit
+   by running `git checkout <other-branch> -- .` before committing it. No actual work
+   was lost (the edit was small and immediately redone), but the fix — commit each
+   change to its branch IMMEDIATELY after editing, before touching any other branch —
+   is now the standing discipline for any run juggling multiple parallel branches in one
+   working directory.
+
+### Rotation guide for next run
+- **DEEP AUDIT is now overdue across 3 consecutive runs (137, 138, 139)** — the next
+  run should run the FULL holistic lens rotation (correctness/dead-code, security/RLS,
+  performance, a11y/design-bar, functional-reality RUN, quality-scorecard reconcile,
+  tests/evals, dependency/config health, artifact freshness), not another scout-sweep
+  substitute, regardless of how clean recent scout sweeps have looked.
+- **Follow up on PR #789** (G4 reset-link idempotency, FYI issue #790): a fresh
+  reviewer pass confirming the added wiring-level tests satisfy Reviewer A's cycle-2
+  ask, then merge. The security properties are already fully reviewer-confirmed across
+  2 cycles; this is a test-quality check only.
+- **The pre-existing `studio-living-keep-brass-lamp` live-eval fixture failed/timed out
+  in two full-diagnosis-file live runs this run** (unrelated to any change made this
+  run — confirmed via `git log` that this run didn't touch that fixture or its test
+  block). Worth a dedicated look: either genuine pipeline flakiness on that specific
+  fixture's category-detection, or a prompt/timeout issue worth tightening.
+- **QUALITY_SCORECARD.md staleness status unchanged this run** (not re-checked; prior
+  3 consecutive runs, 136-138, found it stale). A future run should still watch for a
+  4th confirmation before opening the `loop: harness improvement proposal` issue.
+- **DO-NOT-RE-FLAG (carried forward, no changes):** all prior entries unchanged. The
+  4-UPDATE-policies-missing-WITH-CHECK finding from this run does NOT need a new
+  DO-NOT-RE-FLAG entry — it's already covered by the existing Run 48/51 entry on the
+  same "USING without WITH CHECK" pattern; this run's scout simply didn't check it.
