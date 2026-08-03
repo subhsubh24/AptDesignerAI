@@ -490,7 +490,17 @@ ${synthInput}
       tokens_used: totalTokens,
     });
 
-    return NextResponse.json({ summary: analysis });
+    return NextResponse.json({
+      summary: analysis,
+      // Surfaces the MAX_ROOMS_PER_ANALYSIS cap to the caller — without this a
+      // project with more rooms than the cap would get a silent, indistinguishable-
+      // from-full-success partial analysis every time it's re-run (the cap always
+      // re-selects the same oldest rooms, so no client-visible signal here means no
+      // way for the user to ever learn some rooms were skipped).
+      rooms_analyzed: rooms.length,
+      rooms_total: allRooms.length,
+      rooms_truncated: allRooms.length > rooms.length,
+    });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("[analyze-apartment] Error:", errorMessage, err);

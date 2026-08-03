@@ -422,5 +422,55 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
     const persistedIds = new Set(diagnosesInserts.map((d) => d.room_id));
     for (let i = 0; i < 20; i++) expect(persistedIds.has(`room-${i}`)).toBe(true);
     for (let i = 20; i < 25; i++) expect(persistedIds.has(`room-${i}`)).toBe(false);
+
+    // The cap must be visible to the caller — a silent partial analysis (identical
+    // response shape to a full success) would leave the user with no way to learn
+    // 5 of their 25 rooms were never analyzed.
+    const body = await res.json();
+    expect(body.rooms_analyzed).toBe(20);
+    expect(body.rooms_total).toBe(25);
+    expect(body.rooms_truncated).toBe(true);
+  });
+
+  it("reports rooms_truncated: false when every room fits under the cap", async () => {
+    mockUserOwnsProject.mockResolvedValue(true);
+
+    const usage = { input_tokens: 1, output_tokens: 1 };
+    mockChat.mockImplementation(async (args: { messages: unknown }) => {
+      const text = JSON.stringify(args.messages);
+      if (text.includes("synthesize")) {
+        return { content: JSON.stringify({ overall: "apartment narrative" }), usage };
+      }
+      return { content: JSON.stringify({ summary: "S", score: 7, keep: [], replace: [], add: [] }), usage };
+    });
+
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: (table: string) => {
+        if (table === "projects") {
+          return {
+            select: () => ({ eq: () => ({ single: async () => ({ data: { id: "proj-1" }, error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "rooms") {
+          return {
+            select: () => ({ eq: () => ({ order: async () => ({ data: [roomA, roomB], error: null }) }) }),
+            update: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "room_diagnoses") {
+          return { insert: async () => ({ error: null }) };
+        }
+        return {};
+      },
+    });
+
+    const res = await analyzeApartmentPost(jsonReq({ project_id: "proj-1" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rooms_analyzed).toBe(2);
+    expect(body.rooms_total).toBe(2);
+    expect(body.rooms_truncated).toBe(false);
   });
 });
