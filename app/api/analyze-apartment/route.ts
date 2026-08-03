@@ -21,6 +21,16 @@ import { userOwnsProject } from "@/lib/auth/ownership";
 // the Vercel Pro ceiling and covers the documented worst-case pipeline latency.
 export const maxDuration = 300;
 
+// There is no cap elsewhere on how many rooms a project can have, and this
+// route both fans out one Gemini call per room and then persists results in a
+// SERIAL loop (each write awaited before the next, by design — see the
+// persistence loop below). With enough rooms the combined latency can exceed
+// maxDuration, which fails the whole apartment analysis (wasting the LLM
+// spend already incurred) rather than degrading gracefully. 20 comfortably
+// covers a real apartment's rooms (bed/bath/living/dining/kitchen/office/
+// etc.) while bounding worst-case latency and per-request spend.
+const MAX_ROOMS_PER_ANALYSIS = 20;
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -89,15 +99,25 @@ export async function POST(request: Request) {
     .single();
 
   // Load all rooms with their images
-  const { data: rooms } = await supabase
+  const { data: allRooms } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("project_id", project_id)
     .order("created_at", { ascending: true });
 
-  if (!rooms || rooms.length === 0) {
+  if (!allRooms || allRooms.length === 0) {
     return NextResponse.json({ error: "No rooms found" }, { status: 400 });
   }
+
+  if (allRooms.length > MAX_ROOMS_PER_ANALYSIS) {
+    console.warn(
+      `[analyze-apartment] project ${project_id} has ${allRooms.length} rooms, ` +
+        `capping analysis to the oldest ${MAX_ROOMS_PER_ANALYSIS}`,
+    );
+  }
+  const rooms = allRooms.length > MAX_ROOMS_PER_ANALYSIS
+    ? allRooms.slice(0, MAX_ROOMS_PER_ANALYSIS)
+    : allRooms;
 
   // Building research context (reused by every per-room call)
   const buildingResearchObj = project?.building_research as Record<string, unknown> | undefined;
