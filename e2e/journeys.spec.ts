@@ -517,9 +517,11 @@ test.describe("authenticated journeys", () => {
       //
       // So: ask for the rule BY ID, and fail on any violation regardless of
       // impact. Scoped to these six because these are the routes whose skips
-      // are actually fixed; app/dashboard, app/gallery, app/page.tsx and
-      // rooms/[roomId]/focus still skip and are disclosed as open, so a
-      // repo-wide version of this would be red on arrival.
+      // are actually fixed; app/dashboard, app/page.tsx and rooms/[roomId]/focus
+      // still skip and are disclosed as open, so a repo-wide version of this
+      // would be red on arrival. (app/gallery's h1->h3 skip was closed
+      // separately — a "Recent transformations" h2 now sits before the card
+      // grid — so it is no longer in this disclosed-open list.)
       //
       // WHAT IT DOES NOT COVER, said plainly: the seed above creates an EMPTY
       // project and room, so these pages render their empty states. The
