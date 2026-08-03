@@ -119,7 +119,7 @@ describe("room-diagnosis live evals — run with RUN_EVALS=1", () => {
   );
 
   it.skipIf(!evalsEnabled())(
-    "bedroom-modern-minimalist: first bedroom fixture — cool neutral palette, suggests a rug for the bare floor",
+    "bedroom-modern-minimalist: first bedroom fixture — recognizes a cool neutral palette from an unprimed userContext",
     async () => {
       const gold = cases.find((c) => c.id === "bedroom-modern-minimalist");
       expect(gold, "bedroom-modern-minimalist fixture missing").toBeTruthy();
