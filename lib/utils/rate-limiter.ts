@@ -186,6 +186,13 @@ export const RATE_LIMITS = {
    */
   sharedDesign: { maxRequests: 60, windowMs: 60_000 },
   /**
+   * Public mobile billing-config read — 60 per minute PER IP. Unauthenticated
+   * (any user of the mobile app calls it before signing in), and cheap (no DB
+   * or LLM call, just an env-var read) — the limit exists as a baseline against
+   * trivial abuse, not because the endpoint is expensive.
+   */
+  mobileBillingConfig: { maxRequests: 60, windowMs: 60_000 },
+  /**
    * Public waitlist double-opt-in confirmation — 10 per 15 minutes PER IP. This
    * GET is unauthenticated (the unguessable token is the only auth) and, on a
    * matching pending row, writes the DB and fires a welcome email. Keying on the

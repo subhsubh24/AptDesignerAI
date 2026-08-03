@@ -9,6 +9,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors, Spacing, TapSlop } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
+import { fetchAnnualBillingEnabled } from '@/lib/billing-config';
+import { shouldOfferPackage } from '@/lib/paywall-annual-gate';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
 import {
   classifyProductShape,
@@ -70,17 +72,18 @@ type DisplayOption = {
 // Shown when RC offerings haven't loaded yet or RC is not configured. These
 // carry no purchasable package, so they must not promise a trial either: with
 // no product to read, we cannot know whether one exists.
+//
+// Monthly-only, deliberately: Pro Annual is a real product (migration 021,
+// docs/BUSINESS_CASE.md), but per lib/billing/stripe.ts's isAnnualBillingEnabled()
+// it ships GATED OFF on web until the owner applies that migration and flips
+// ANNUAL_BILLING_ENABLED — a planned lever, not a live one. This fallback
+// previously listed Annual first with a "Best value" badge and left it the
+// default pre-selected plan, presenting a not-yet-live tier as the paywall's
+// primary offer before any real pricing loaded. If/when the owner turns the
+// annual product on in App Store Connect / Play Console, RevenueCat's real
+// offering surfaces it through packagesToOptions() below — this fallback only
+// needs to describe what is actually purchasable today.
 const FALLBACK_OPTIONS: DisplayOption[] = [
-  {
-    pkg: null,
-    label: 'Annual',
-    price: '$399 / year',
-    subline: '$33.25 per month · billed yearly',
-    badge: 'Best value',
-    hasFreeTrial: false,
-    isRecurring: true,
-    isRestorable: true,
-  },
   {
     pkg: null,
     label: 'Monthly',
@@ -96,6 +99,7 @@ const FALLBACK_OPTIONS: DisplayOption[] = [
 function packagesToOptions(
   offering: PurchasesOffering,
   eligibility: Record<string, number> | null,
+  annualBillingEnabled: boolean,
 ): DisplayOption[] {
   const isIOS = Platform.OS === 'ios';
   return offering.availablePackages
@@ -106,6 +110,9 @@ function packagesToOptions(
     // white-screen the paywall (this app has no error boundary). Drop the
     // unpurchasable package instead of crashing on it.
     .filter((pkg) => pkg.product != null)
+    // See lib/paywall-annual-gate.ts for why this must not simply show
+    // whatever the live RC offering contains.
+    .filter((pkg) => shouldOfferPackage(pkg.packageType === PACKAGE_TYPE.ANNUAL, annualBillingEnabled))
     .map((pkg) => {
       const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
       const isMonthly = pkg.packageType === PACKAGE_TYPE.MONTHLY;
@@ -172,6 +179,11 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
     // this revenue surface — without it the resolve/reject fires state updates
     // on a gone component (React warning + wasted work).
     let cancelled = false;
+    // Fetched alongside the offering (not awaited sequentially) so a slow
+    // config check never delays the sheet — and fails closed to `false`
+    // (see fetchAnnualBillingEnabled) so a network hiccup can only ever HIDE
+    // the annual option, never wrongly show one the backend can't grant.
+    const annualEnabledPromise = fetchAnnualBillingEnabled();
     Purchases.getOfferings()
       .then(async (offerings) => {
         if (cancelled) return;
@@ -196,9 +208,10 @@ export function PaywallSheet({ visible, onDismiss, onPurchaseSuccess }: Props) {
               console.warn('[paywall] intro-eligibility lookup failed', err);
             }
           }
+          const annualBillingEnabled = await annualEnabledPromise;
           if (cancelled) return;
 
-          const opts = packagesToOptions(current, eligibility);
+          const opts = packagesToOptions(current, eligibility, annualBillingEnabled);
           // If every package was unpurchasable (no product), keep the static
           // fallback display + leave offeringLoaded false so the CTA's
           // no-package path warns rather than showing an empty, priceless sheet.
