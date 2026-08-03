@@ -287,3 +287,118 @@ on incomplete evidence. My Run 3 git verification may have been limited by this 
 - Verify the CAN-SPAM fix guards the RENDERED email, not the env var, and that a test ratchets it.
 - Do not let the gate-met status of a prior run anchor the next grade. Grade the artifact, not the
   history.
+
+---
+
+## Run 5 — 2026-08-03
+
+**Overall: B · ship_gate_met: FALSE** (was C / false at Run 4 — a genuine improvement, not a wash:
+6 of Run 4's 8 named top_gaps confirmed fixed against real code)
+
+Graded GROWTH_STATUS (as_of 2026-08-01, Growth Agent Run 18) + BUSINESS_CASE (unchanged since
+commit bd795f9, 2026-07-28, after the Product Factory's take-rate correction) with six fresh,
+independent, adversarial per-dimension graders, each explicitly tasked to re-verify Run 4's
+specific claimed fixes against real code/scripts/citations rather than trust the Factory's
+self-report. Read GTM_AUDIT_MEMORY first and diffed against Run 4.
+
+### Grades
+| Dimension | R1 | R2 | R3 | R4 | R5 | Ship-critical | Δ vs R4 |
+|---|---|---|---|---|---|---|---|
+| Metric integrity | A | A+ | A+ | A | **A** | ★ | = |
+| Business-case honesty | F | B | A | B | **B** | ★ | = (different reason) |
+| Experiment validity | A | A | A | C | **B** | | ↑ |
+| Roadmap-steer justification | A+ | A+ | A+ | A | **A** | ★ | = |
+| Self-validation honesty | A | A | A+ | C | **A** | ★ | ↑↑ (gate-relevant) |
+| PMF read accuracy | A+ | A+ | A+ | B | **B** | | = |
+| Compliance | A | A | A+ | B | **A** | | ↑ |
+| Artifact freshness | B | A | A+ | C | **C** | | = (different findings) |
+
+### What genuinely fixed (verified against code/scripts, not self-report)
+1. **Self-validation honesty C → A (closes issue #717).** Both Run-4 findings hold up as fixed:
+   the false "MRR/churn already surface via internal_metrics_api" claim is gone and replaced with
+   an accurate description of what `lib/growth/metrics.ts` actually exposes (no `mrr` field,
+   grep-confirmed); Vercel Analytics is now declared in the validation block with accurate
+   citations. A full `package.json` audit found no other undeclared live dependency. One narrow
+   new nit: a stale/non-existent commit hash (`0e0f901`) cited for QUALITY_SCORECARD.md's
+   "last touch" — the described substance is still accurate, but the citation doesn't reproduce.
+2. **Compliance B → A (closes issue #719).** The waitlist-welcome template now renders a real
+   unsubscribe link + physical address; a real no-login unsubscribe endpoint + migration exist;
+   a test now guards the rendered footer content (Run 4's "no test guards it" finding closed).
+   Product Hunt upvote solicitation removed from press-kit.md. Two minor, honestly-disclosed
+   residual gaps: the compliance gate still keys on the env var rather than rendered content
+   (mitigated by the new test), and migration 031 is code-complete but not yet applied to prod.
+3. **Business-case honesty: Run 4's TWO specific findings both genuinely fixed (closes issue
+   #718), but a NEW, different disclosure gap replaced them, holding this at B.** The two
+   sensitivity figures now reproduce exactly and are registered in `analysis/figures.json`; the
+   84%→58.1% churn conflation is corrected and self-disclosed. But the 2026-07-28 take-rate
+   correction (verified as a uniform 1.214286× multiplier, not a selective flattering adjustment)
+   left the "shippable-today" ARR figures ($121,339/$136,762) without the same "steady-state, not
+   year-1" caveat the $149.3K base case earned after Run 71. Independently re-derived: this
+   scenario's year-1 exit run-rate is ~$73.5K — BELOW the floor — while the doc calls the
+   steady-state figure "over the floor" for "today's transactable product" with no year-1 caveat.
+   Not gamed; a real disclosure-rigor asymmetry. **New top_gap, tracked as a new issue.**
+4. **Experiment validity C → B (updates issue #721, not yet closed).** The void Decorist "0
+   complaints" datum is genuinely retracted and correctly re-filed as CONFIRMING evidence for
+   theme 3. A real direct-competitor disconfirming data point (RoomGPT, 4.6/5 despite quoted
+   failures) now exists — closing Run 4's "zero direct competitors in disconfirming" gap. Not yet
+   A: disconfirming coverage remains theme-2-only; themes 1/3/4 still lack theme-specific
+   counter-evidence despite a genuine, honest-negative search attempt (Run 17).
+5. **Artifact freshness: EARLY30 (Run 4's most serious finding) fully and cleanly fixed (partial
+   close on issue #720, kept open for remaining gaps).** The live waitlist copy and all four
+   downstream GTM assets are now consistent — no more contradictory-code-vs-no-code-required
+   split. OG image, app name, and /support page references also confirmed fixed. Held at C, not
+   raised, because two lesser Run-4 findings are only half-fixed or have recurred: (a)
+   email-welcome-sequence.md — the sibling file to the one Run 15 fixed — still has stale
+   pre-engine language; (b) docs/analytics.md's missing-event gap has RECURRED with a new event
+   (`mockup_limit_paywall_shown`, shipped 2026-07-30, after the original fix) — the identical
+   failure mode, days later.
+
+### What held at A, with the same trivial nit unaddressed across runs (worth flagging as a pattern)
+- **Metric integrity A → A** (down from A+ at Runs 2-3, held since Run 4). New nit this run: 2 of
+  5 RoomGPT App Store reviewers cited as "1-star" are actually 2-star per the live page's raw
+  rating field — inflates cited severity, unflagged through 2 subsequent "re-verify" runs.
+- **Roadmap-steer justification A → A** (held since Run 4). Zero GTM-authored steers reached
+  ROADMAP/VISION, reconfirmed via full GitHub-API history reconstruction past the shallow local
+  clone. The SAME Run-4 nit (a Havenly markup figure inconsistently labeled "directly-quoted" vs
+  "WebSearch-synthesized-only" in two nearby fields of the same document) has now survived FOUR
+  consecutive runs (15, 16, 17, 18) despite each claiming to re-verify prior work — a genuine
+  process gap worth naming even though it never affected a steer.
+- **PMF read accuracy B → B** (held since Run 4, gap unaddressed). No disclosure that the pmf
+  block's 5 fields have zero data path in `lib/growth/metrics.ts` — the same "unbuilt, not merely
+  unconnected" disclosure Run 15 correctly added for stripe_reporting/mrr was never extended to
+  pmf, and no owner_blocker/next_action asks for activation/retention instrumentation.
+
+### Ship gate
+NOT MET, but closer than Run 4: only 2 dimensions miss the bar now (business_case_honesty B,
+artifact_freshness C), down from 4 at Run 4. Every other ship-critical dimension is A/A+.
+
+### Issue tracking this run
+- Closed #717 (self_validation_honesty), #719 (compliance), #718 (business_case_honesty — Run 4's
+  specific findings fixed) as completed.
+- Updated #720 (artifact_freshness) and #721 (experiment_validity) to reflect partial fixes and
+  the specific gaps that remain, keeping them open.
+- Filed new issues for: the business_case_honesty shippable-today disclosure gap (ship-critical,
+  the new top_gap), and pmf_read_accuracy's unbuilt-disclosure gap (never previously filed).
+
+### Methodological note carried forward
+This repo's local clone is SHALLOW (`.git/shallow` present) — confirmed again this run. The
+roadmap-steer sweep used the GitHub API to reconstruct full history rather than trusting local
+`git log`, per Run 4's standing methodological note. Continue this practice every run.
+
+### Notes for next run
+- Re-check whether the new business-case disclosure gap is fixed: does the shippable-today
+  ARR figure ($121,339/$136,762) now carry a "steady-state, not year-1" caveat with the ~$73.5K
+  year-1 read stated alongside, matching the treatment already given to the $149.3K base case?
+- Re-check artifact_freshness: is email-welcome-sequence.md's stale pre-engine language fixed to
+  match email-lifecycle.md? Is docs/analytics.md updated to include mockup_limit_paywall_shown
+  (and any newer event that may have shipped since)? Consider whether a preflight check tying
+  FunnelEvent's member count to docs/analytics.md's documented count would close this class of
+  gap permanently rather than requiring a fresh catch each run.
+- Re-check experiment_validity: has theme-specific disconfirming evidence been added for themes
+  1, 3, or 4 (not just theme 2)? Confidence should stay at "emerging" unless a theme's source
+  count genuinely crosses the counting_rule threshold.
+- Two trivial-but-persistent nits worth a one-line fix each: the RoomGPT 1-star/2-star
+  mischaracterization (metric_integrity) and the Havenly markup provenance-labeling contradiction
+  (roadmap_steer_justification) — both have now survived multiple runs despite being cheap fixes.
+- Do not let the gate-being-closer status anchor the next grade upward. Re-run every script and
+  re-fetch every citation cold, exactly as this run did.
