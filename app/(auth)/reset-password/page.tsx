@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, KeyRound, LinkIcon } from "lucide-react";
+import { resolveRedeemedStatus, redeemedMarkerKey } from "@/lib/auth/reset-link-idempotency";
 
 // Minimum enforced by the signup route (MIN_PASSWORD there). Keep them equal —
 // a stricter rule here would reject passwords the product already issued.
@@ -62,27 +63,46 @@ export default function ResetPasswordPage() {
     void (async () => {
       try {
         if (tokenHash) {
+          const redeemedKey = redeemedMarkerKey(tokenHash);
           const { error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: "recovery",
           });
           if (cancelled) return;
-          if (verifyError) {
-            // A SECOND click on the same link — a double-tap, an email
-            // client's link-preview prefetch, or the user reopening the
-            // email — redeems an already-consumed token, which verifyOtp
-            // reports identically to a genuinely expired one. Before
-            // showing "expired," check whether this browser already holds
-            // the recovery session the first click established (Supabase
-            // persists it in localStorage, shared across tabs of this
-            // origin): if so, the link isn't dead, just already used —
-            // let the user proceed to set their password instead of
-            // sending them back for a link they don't need.
+
+          if (!verifyError) {
+            // Mark THIS exact token redeemed so a later re-open of the same
+            // link (double-tap, or an email client's link-preview prefetch
+            // racing the user's own click) can be recognized below without
+            // trusting ambient session state (see reset-link-idempotency.ts
+            // for why that would be unsafe on a shared machine).
+            try {
+              window.localStorage.setItem(redeemedKey, "1");
+            } catch {
+              // Storage unavailable (private mode, disabled) — a re-open of
+              // this link just won't be recognized as already-redeemed;
+              // still safe, only less forgiving.
+            }
+            setStatus("ready");
+          } else {
+            // verifyOtp fails identically for "already consumed a moment
+            // ago" and "genuinely expired/invalid" — only a marker scoped to
+            // THIS token_hash, set above by a prior success in THIS browser,
+            // can tell them apart.
+            let alreadyRedeemedHere = false;
+            try {
+              alreadyRedeemedHere = window.localStorage.getItem(redeemedKey) === "1";
+            } catch {
+              alreadyRedeemedHere = false;
+            }
             const { data } = await supabase.auth.getSession();
             if (cancelled) return;
-            setStatus(data.session ? "ready" : "invalid");
-          } else {
-            setStatus("ready");
+            setStatus(
+              resolveRedeemedStatus({
+                alreadyRedeemedHere,
+                hasActiveSession: !!data.session,
+              }),
+            );
           }
           // Drop the one-time token from the address bar so it isn't left in
           // history, bookmarks, or a shared screenshot.
