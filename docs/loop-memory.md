@@ -6902,3 +6902,122 @@ calls themselves.
   4-UPDATE-policies-missing-WITH-CHECK finding from this run does NOT need a new
   DO-NOT-RE-FLAG entry — it's already covered by the existing Run 48/51 entry on the
   same "USING without WITH CHECK" pattern; this run's scout simply didn't check it.
+
+---
+
+## Run 140 (2026-08-03)
+
+**DEEP AUDIT finally run in full** — overdue across 3 consecutive runs (137, 138, 139;
+last full pass Run 134, 2026-08-01). This run ran the complete lens rotation instead of
+another scout-sweep substitute: correctness & dead-code, security & RLS, performance &
+cost, accessibility & design-bar, and a combined test/eval-coverage + artifact-freshness
++ dependency/config-health pass (5 Haiku scouts).
+
+**Correctness & dead-code:** CLEAN — no findings above the value bar; consistent with
+Runs 135/136/139's clean results on this lens.
+
+**Security & RLS:** CLEAN — all 31 migrations RLS-correct, `SECURITY DEFINER` functions
+pin `search_path`, all 13 admin-client call sites correctly scoped, no leaked secrets.
+Independently re-confirmed the UPDATE-policies-missing-WITH-CHECK pattern flagged at
+Run 139 is still correctly on the DO-NOT-RE-FLAG list (Run 48/51) — scout checked first
+this time, so no re-litigation.
+
+**Performance & cost:** CLEAN — LLM cost-contract compliance holds (every `.chat()` call
+has an explicit `thinkingConfig`), hot-path parallelization holds (search, evaluate-set,
+analyze-apartment all already batched). Two known-deferred items re-confirmed, not
+re-flagged: sequential per-user lookups in the daily cron email routes (deferred Run 112,
+low-traffic/non-hot-path), and cost-ledger coverage limited to 2 routes (deferred Run 115,
+architectural).
+
+**Accessibility & design-bar:** TWO findings. (1) **`/gallery` skipped h1→h3 with no h2**
+(WCAG 1.3.1) — real, fixed this run (see below). (2) Dashboard `StepIndicator` uses raw
+`text-emerald-600`/`text-emerald-400` instead of the `lib/scoring/verdicts.ts` token
+ladder — genuine design debt, but the off-system-palette-ratchet is currently at its exact
+ceiling (52/52) with this usage already counted in it, so it's not an active violation,
+just unconverted legacy. Left open — not urgent, batch with a future palette-cleanup pass.
+
+**Test/eval coverage + artifact freshness + deps:** Four candidates surfaced, none
+actionable this run — each is worth recording so the next audit doesn't reopen them
+without cause. (1) A scout flagged `docs/BUSINESS_CASE.md` (as_of 2026-07-29) as "stale"
+because Run 139 independently raised the store_readiness/artifact_integrity/security_rls
+quality-scorecard grades — **this is a misapplication of the ROADMAP's own rule**:
+building/fixing/grading does NOT move the ARR model; only pricing, conversion, retention,
+margin, and reach levers do (ROADMAP: "building more FEATURES does NOT change the number —
+only levers, pricing, margin, reach, and real data do"). No behavioral/pricing input
+changed, so no recompute is warranted — declining to act on this, and noting the
+distinction explicitly so a future scout doesn't manufacture the same false-staleness
+work. (2) Transitive high-severity npm vulnerabilities (brace-expansion, PostCSS) via
+Next.js 16.2.11, with `npm audit fix` proposing a breaking downgrade to Next 9.3.3 — no
+clean patch path exists; tracked as tech debt pending a Next.js release, not actionable
+now. (3) `supabase: any` on a few core-pipeline call sites (diagnosis-expansion-pipeline,
+infer-preferences, mockup-upload) — likely unavoidable given the Supabase SDK's own
+typing pattern; marginal. (4) `lib/agents` module coverage (orchestrator, fit-scorer,
+scene-assembler) remains weak but is actively closing via ongoing F2/F3 work (Runs
+132-139); not a fresh finding.
+
+**Two real, file-disjoint fixes shipped**, both addressing independently-named,
+ship-critical gaps rather than scout-discovered churn:
+
+1. **`fix(business-case)` mobile paywall no longer offers gated-off Pro Annual** (#794,
+   **merged**). The independent `docs/quality/QUALITY_SCORECARD.md`'s `business_case_strength`
+   dimension (ship-critical, held at B) named a precise gap: the mobile paywall doesn't
+   mirror the business case's own annual-gating assumption (`isAnnualBillingEnabled()`,
+   migration 021 unapplied — Pro Annual is a real but not-yet-live lever). Two-round
+   review: round 1 — Reviewer A approved a fallback-copy-only version, Reviewer B
+   REQUEST_CHANGES'd because the REAL RevenueCat-offering path (`packagesToOptions()`)
+   had no gate at all, so a live annual package would have been fully purchasable (a
+   charge with no backend entitlement to grant it). Round 2 — added a new public,
+   rate-limited `/api/mobile/billing-config` route exposing the same flag the web pricing
+   page already renders publicly, and a `shouldOfferPackage()` filter; Reviewer B
+   approved outright, Reviewer A confirmed the fix correct and fail-closed but named one
+   concrete follow-up (the filter had zero test coverage since mobile has no RN runner) —
+   addressed directly in the same commit (extracted to a pure predicate in a new
+   `mobile/src/lib/paywall-annual-gate.ts`, covered by a dedicated vitest file) rather
+   than spending a third review cycle on a mechanical, unambiguous request. Gate green:
+   2795 tests (+7 new), tsc/lint/determinism clean on both root and `mobile/`.
+
+2. **`fix(a11y)` /gallery heading-hierarchy fix** (#795, pushed, auto-merge enabled,
+   CI pending at time of writing). Added a real `<h2>` ("Recent transformations") above
+   the card grid rather than promoting the card `<h3>`s to `<h2>` — the latter would have
+   zeroed an existing `e2e/journeys.spec.ts` assertion that counts `>=2` h3 headings
+   scoped to `<main>` on this exact page. Also corrected a stale inline comment in that
+   same spec file that still listed `/gallery` among routes with a disclosed-open heading
+   skip. Both reviewers APPROVE, round 1. Gate green: tsc/eslint clean on both touched
+   files, 2788 tests unaffected (no unit tests target this page directly).
+
+### Lessons learned
+1. **When a reviewer names a concrete, mechanical follow-up** (e.g. "extract this filter
+   into a tested pure predicate"), addressing it directly in the same commit is more
+   efficient than spending a separate review cycle under the 2-cycle cap — once a
+   verifiable test exists proving the exact concern, a third adversarial pass adds little
+   over re-running the deterministic gate. Reserve full re-review cycles for genuinely
+   ambiguous or judgment-based requests, not mechanical ones with an unambiguous fix.
+2. **"Quality/security/design improved" is NOT a trigger to recompute the business case.**
+   A scout conflated the independent Quality Auditor raising several scorecard grades
+   with a reason to re-run the ARR model. The ROADMAP is explicit that only pricing,
+   conversion, retention, margin, and reach levers move the number — future scouts
+   flagging BUSINESS_CASE.md "staleness" should check whether an actual INPUT changed,
+   not whether unrelated quality metrics moved.
+3. **"Mobile has zero test coverage" is a shallow-search false positive.** A `find
+   mobile -iname "*.test.*"` search returns 0 because mobile's pure-logic modules
+   (`paywall-disclosure.ts`, `paywall-trial.ts`, `purchase-outcome.ts`, and now
+   `paywall-annual-gate.ts`) are tested from ROOT-level `__tests__/billing/*.test.ts`
+   files importing through the `@/mobile/src/lib/...` alias (root `vitest.config.ts`
+   only includes `__tests__/**`, not `mobile/src/**`, so the tests can't live inside
+   `mobile/`). A future scout/audit claiming mobile has no coverage should check
+   `__tests__/billing/`, `__tests__/auth/mobile-*`, and `__tests__/mobile/` first.
+
+### Rotation guide for next run
+- **DEEP AUDIT cadence restored** — this run ran the full 5-lens rotation after 3
+  overdue runs; resume the normal ~daily/~4-run due-check next time (do not let it slip
+  to overdue-by-default again).
+- **Confirm PR #795 merged** (gallery heading fix) — auto-merge was enabled and both
+  reviewers approved; if CI failed for an unrelated reason, diagnose and re-push.
+- **Follow up on PR #789** (G4 reset-link idempotency, open since Run 139) if still
+  unmerged — an FYI issue (#790) is already filed asking for one more review pass.
+- Dashboard `StepIndicator` raw-emerald-text (within the palette ratchet, not urgent) —
+  candidate for a future design-bar cleanup batch, not standalone.
+- `studio-living-keep-brass-lamp` live-eval fixture flakiness (noted Run 139) — still
+  unaddressed, worth a dedicated look.
+- **DO-NOT-RE-FLAG (this run's additions):** none new. All prior entries unchanged;
+  the security/RLS scout correctly checked this file before reporting clean this time.
