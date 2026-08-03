@@ -7,6 +7,109 @@ history behind it.
 
 ---
 
+## 2026-08-03 — TENTH INDEPENDENT GRADE (overall HELD at C, capped by functional_reality — but the per-dimension picture improved SHARPLY: store_readiness C→A, artifact_integrity B→A, security_rls A→A+, performance C→B; THREE ship-critical dims below A, down from FIVE)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C (capped at functional_reality, unmoved for 7
+cycles), but this is the best per-dimension cycle since 07-05: **TWO ship-critical dims recovered fully to
+A** (store_readiness C→A, artifact_integrity B→A) and **a THIRD reached the A+ ceiling** (security_rls A→A+,
+zero findings for the first time in 5 cycles). performance also recovered (C→B). **THREE ship-critical dims
+now sit below A, down from five: functional_reality (C), design_taste (B), business_case_strength (B).**
+
+**Per-dimension diff vs 2026-07-27:** functional_reality **C→C** (byte-identical, purely owner-gated) ·
+correctness **A→A** · security_rls **A→A+** ⬆ · design_taste **B→B** (one of two capping gaps genuinely
+closed, systemically) · store_readiness **C→A** ⬆⬆ · artifact_integrity **B→A** ⬆ · business_case_strength
+**B→B** (honest, verified-non-gamed progress) · tests_evals **B→B** (firmer) · performance **C→B** ⬆.
+
+**Mechanical signals actually run this cycle (cold start, npm install first):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → **0 errors, 0 WARNINGS** (was 19 — `.agents/**` now
+  eslint-ignored, `npm run lint` = `eslint . --max-warnings 0` passes clean) · `npm run check:determinism`
+  → green.
+- `npm test` → **2788 passed / 12 skipped** (up from 2438/11), 251 files.
+- `npx vitest run --coverage` → **67.97% stmts / 57.36% branch / 71.21% funcs / 69.23% lines** (up from
+  62.6/51.88/67.53/63.6), above the 60/49/64/61 floor. `lib/agents` → 47.75% stmts (up from 41.33%), still
+  the dimension's weak point (validation-agent.ts/research-assembler.ts untouched, orchestrator.ts's real
+  loop ~88% dark).
+- `bash scripts/preflight.sh` → 53 pass / 3 fail: functional-journeys (cold env), DoD 9-unchecked (expected
+  pre-launch), and QUALITY_SCORECARD below ship bar — now naming only 3 ship-critical gaps (was 5).
+- Business case: `node analysis/business_case_without_annual_arr.mjs` → **$121,339** (up from $99,926,
+  above the $100K floor); `node scripts/validate-computation.mjs` → PASS, 10 figures verified.
+- GitHub: latest CI run on the tracked branch (b3fbcd6, run 30799362489) green; 6 quality-auditor issues
+  found open (#525, #200, #204, #672, #727, #385) plus #726 (store_readiness) confirmed already closed.
+
+**Why store_readiness recovered C→A (both findings independently re-verified fixed, not closed-by-assertion):**
+`lib/storage/user-storage.ts` now purges a deleted user's storage objects (upload-bucket prefix sweep +
+mockups via the trusted `mockup_jobs.result_image_url` column only, deliberately not trusting client-settable
+URL columns — closing a cross-tenant-delete vector with its own test) BEFORE `deleteUser`, in both delete
+routes, pinned by regression tests asserting both the ordering and the no-delete-on-purge-failure behavior.
+`docs/app-privacy.md` and `app/privacy/page.tsx` now consistently disclose location collection and the real
+Google Maps/Places purpose. Issue #726 was already closed (2026-08-01); confirmed genuinely resolved.
+
+**Why artifact_integrity recovered B→A:** all four 07-27 root causes fixed with honest, re-verified language
+— F1/F2 now carry accurate "owner step" caveats instead of overclaiming CI enforcement;
+`e2e/ROUTE_INVENTORY.md` now honestly states 20/35 routes tracked (was overclaiming "every route/flow");
+`ROADMAP.md:389` A4 is correctly un-ticked. One trivial, `.github/`-gated nit remains (a stale "copy this"
+header in ci.yml itself) — keeps this at A, not A+.
+
+**Why security_rls recovered A→A+:** a fresh 56-route sweep found NO new IDOR, and both prior nits
+(saved-designs' dangling project_id persist, products' unbound search_session_id) are genuinely fixed —
+zero findings, the rubric's literal A+ bar, for the first time in 5 cycles.
+
+**Why design_taste held B (one gap closed systemically, one narrowed):** the three-hue anti-pattern on
+ManualScorecardView.tsx is fixed via a shared one-hue emphasis ladder (`lib/scoring/verdicts.ts`) backed by
+a NEW repo-wide ratchet (`__tests__/design/off-system-palette-ratchet.test.ts`, can only shrink) — not a
+spot fix. F7 visual baselines are narrowed (~30 real committed PNGs for PUBLIC routes, with a manifest test
+rejecting placeholders) but the AUTHED/design-dense routes — including `/focus`, the exact route the closed
+violation was on — still lack committed screenshots, blocked on a `.github/`-gated CI persistence step. A
+real gap remains, so B holds.
+
+**Why business_case_strength held B (verified honest, not gamed):** the 30%→15% store take-rate correction
+is real (Apple SBP + Google Play's first-$1M tier, correctly separating eligibility from unenrolled status)
+and moved the shippable-today figure from $99,926 to $121,339 — no behavioral input changed. The web/
+Stripe-only reading ($136,762) clears the floor without depending on the un-enrolled SBP rate at all. The
+doc was also caught and fixed same-day by the sibling GTM auditor for an "over the floor" overclaim missing
+the steady-state-vs-year-1 caveat (now honestly disclosed: year-1 exit run-rate $73,519–$82,873, still below
+floor). Remaining, unchanged: the mobile paywall lacks the $29 Apartment tier (60% of modeled conversions)
+and any annual-billing gate — a real, loop-buildable lever, distinct from the owner-only SBP step.
+
+**Why functional_reality held C (byte-identical, now purely owner-gated):** zero commits since 07-27 touched
+any file in the persistence path; the CI journeys job still never sets `DATA_BACKEND`; the cold-start proof
+test still does not exist. `PENDING_OPS.md` documents precisely why the loop cannot self-close the CI half
+(`.github/` is permission-gated; the `run-journeys.sh` workaround doesn't work because the server starts
+before that script runs) — this is the clearest case yet of a binding blocker that is genuinely outside the
+loop's control, not a case of the loop avoiding hard work.
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, unchanged, now explicitly framed as
+purely owner-gated). UPDATE #204 (design_taste — one gap closed with a durable ratchet, F7 narrowed).
+UPDATE #672 (business_case_strength — honest correction verified, new precise mobile-parity target).
+CLOSE #727 (artifact_integrity — genuinely resolved; the one remaining nit is `.github/`-gated). UPDATE
+#200 (tests_evals — firmer B, cassette pattern extended). UPDATE #385 (performance — C→B, four of five
+findings fixed). No action needed on security_rls (already at A+, prior nits closed inline) or
+store_readiness (#726 already closed, confirmed genuine).
+
+**Lessons for next run:**
+1. **A binding blocker can be genuinely owner-gated, not just "hard."** functional_reality's persistence
+   cutover has been named 7 cycles running with an IDENTICAL fix — this cycle's grader independently
+   confirmed the loop has tried the two obvious workarounds (editing `.github/` directly; exporting env from
+   a loop-editable script) and both are blocked by real constraints, not laziness. Don't keep re-deriving
+   this each cycle — PENDING_OPS already records it; verify byte-identity of the blocking files and move on.
+2. **"Closed systemically" beats "closed once."** design_taste's three-hue fix came with a NEW repo-wide
+   ratchet test that can only shrink the off-system-palette count — a materially stronger fix than merely
+   converting the one flagged file, because it forecloses the next instance of the same anti-pattern.
+3. **A business-case correction can be verified honest in real time.** This cycle's grader confirmed the
+   30%→15% take-rate fix moved no behavioral input, cited real programs, and was itself caught and corrected
+   for a subtler overclaim (year-1 vs. steady-state) by a sibling auditor on the SAME day — a working
+   example of the anti-gaming discipline holding under real adversarial pressure from two independent
+   auditors, not just one.
+4. **Ceiling items can half-close.** correctness's computer-use `agent-loop.ts` fixed its seed omission but
+   left the HIGH-thinking violation as a deliberate, documented deferral rather than silently applying it —
+   worth distinguishing "half-fixed-and-honest" from "unfixed" when grading A→A+ ceiling nits.
+5. Cold-start recipe re-confirmed: `npm install` first; run the 9 dimension graders with SHARED, pre-run
+   mechanical signals (tsc/test/lint/determinism/coverage/preflight run ONCE by the orchestrator) rather than
+   each grader re-running the full suite — the 07-27 lesson about a concurrent build + 9 graders stalling the
+   box holds; this cycle avoided it by centralizing the expensive runs.
+
+---
+
 ## 2026-07-27 — NINTH INDEPENDENT GRADE (overall HELD at C; THREE dims dropped on fresh adversarial findings — store_readiness A→C, artifact_integrity A→B, performance B→C — while four real improvements landed)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C (capped at the weakest ship-critical link),
