@@ -67,9 +67,23 @@ export default function ResetPasswordPage() {
             type: "recovery",
           });
           if (cancelled) return;
-          // An expired or already-used link fails here — that is the ONLY
-          // reliable signal, so it drives the "expired" screen.
-          setStatus(verifyError ? "invalid" : "ready");
+          if (verifyError) {
+            // A SECOND click on the same link — a double-tap, an email
+            // client's link-preview prefetch, or the user reopening the
+            // email — redeems an already-consumed token, which verifyOtp
+            // reports identically to a genuinely expired one. Before
+            // showing "expired," check whether this browser already holds
+            // the recovery session the first click established (Supabase
+            // persists it in localStorage, shared across tabs of this
+            // origin): if so, the link isn't dead, just already used —
+            // let the user proceed to set their password instead of
+            // sending them back for a link they don't need.
+            const { data } = await supabase.auth.getSession();
+            if (cancelled) return;
+            setStatus(data.session ? "ready" : "invalid");
+          } else {
+            setStatus("ready");
+          }
           // Drop the one-time token from the address bar so it isn't left in
           // history, bookmarks, or a shared screenshot.
           window.history.replaceState(null, "", window.location.pathname);
