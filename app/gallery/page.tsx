@@ -166,6 +166,7 @@ export default function GalleryPage() {
 
         {/* Grid */}
         <section className="max-w-7xl mx-auto px-6 md:px-8 pb-20">
+          <h2 className="text-headline mb-8">Recent transformations</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {EXAMPLES.map((ex) => (
               <article
