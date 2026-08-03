@@ -10,7 +10,7 @@ arr_year1:
 planning_case: base
 floor_usd: 100000
 floor_met_year1: false
-time_to_floor: "$149.3K is the STEADY-STATE base ARR; the year-1 exit run-rate is ~$70-73K because the Pro subscriber pools compound over time, so the floor is still NOT met in year 1; the prior ~year-3 crossing now arrives earlier at the corrected take rate, but the exact crossing has not been re-derived and is deliberately not restated here"
+time_to_floor: "$149.3K is the STEADY-STATE base ARR; the year-1 exit run-rate is $71,207 (registered, analysis/business_case_scenario_b_year1_arr.mjs) because the Pro subscriber pools compound over time, so the floor is still NOT met in year 1; the prior ~year-3 crossing now arrives earlier at the corrected take rate, but the exact crossing has not been re-derived and is deliberately not restated here"
 channel_priced: store
 as_of: 2026-07-29
 ```
@@ -340,12 +340,15 @@ Total MRR: $12,442  →  ARR: ~$149,300/year ✓✓ (+23% vs monthly-only model)
 > **Steady-state, not year-1.** The $149,300 above is the ARR once the monthly/annual Pro
 > pools have filled to steady state. Because those pools are fed by only ~12 + 4 net-new
 > subs/month against 7%/2.4% monthly churn, they compound over years: the **year-1 exit
-> run-rate is ~$70–73K**, so the floor is still **NOT met in year 1** (see the summary block's
-> `floor_met_year1: false`). The 2026-07-28 take-rate correction raised the LEVEL, not the ramp
-> — the pools fill at exactly the same rate — so the crossing arrives earlier than the previous
-> ~year-3 estimate, but that crossing has **not been re-derived** and is deliberately not
-> restated as a number here. The steady-state figure is the right planning anchor for whether
-> the model *can* clear the floor; the ramp is the honest timeline for *when*.
+> run-rate is $71,207** (`analysis/business_case_scenario_b_year1_arr.mjs`, registered in
+> `analysis/figures.json`, verified by `node scripts/validate-computation.mjs` — replaces the
+> previously-uncomputed "~$70–73K" prose range with an exact, reproducible figure, 2026-08-03), so
+> the floor is still **NOT met in year 1** (see the summary block's `floor_met_year1: false`). The
+> 2026-07-28 take-rate correction raised the LEVEL, not the ramp — the pools fill at exactly the
+> same rate — so the crossing arrives earlier than the previous ~year-3 estimate, but that crossing
+> has **not been re-derived** and is deliberately not restated as a number here. The steady-state
+> figure is the right planning anchor for whether the model *can* clear the floor; the ramp is the
+> honest timeline for *when*.
 
 ARR is unchanged by acquisition mix: **organic share moves marketing COST and net margin, not
 revenue.** Installs × retention × conversion × price set the $149.3K ARR; the acquisition mix
@@ -367,7 +370,7 @@ honest question is net margin.
 > revenue that survives the commission changed.
 
 **Verdict:** The base case clears the **$100K ARR floor** at its **steady-state** $149.3K
-regardless of acquisition mix (year-1 exit run-rate ~$70–73K, i.e. the floor is not met in year
+regardless of acquisition mix (year-1 exit run-rate $71,207, i.e. the floor is not met in year
 1; the pools compound toward it). At the honest 40%-organic anchor it is now **net-margin
 positive** (+$25.5K) rather than break-even — but that margin is thin enough that driving
 non-paid share toward 50%+ remains the difference between a viable business and a fragile one.
@@ -441,12 +444,28 @@ The rate is now in the model.
 | Net on $29 one-time | $24.65 (85.0%) | $27.86 (96.1%) |
 | Net on $49/month | $41.65 (85.0%) | $46.94 (95.8%) |
 | Net on $399/year | $339.15 (85.0%) | $384.34 (96.3%) |
-| Shippable-today ARR | **$121,339** | **$136,762** |
+| Shippable-today ARR (steady-state) | **$121,339** | **$136,762** |
+| Shippable-today ARR (**year-1 exit run-rate**) | **$73,519** | **$82,873** |
 
 Every headline figure in this document is priced on the **store** channel — the lower of the two
 at every price point — so an unqualified number here is the harder one to beat. Web/Stripe is
 the better-margin channel and is the one live today, which is why the shippable-today case is
 quoted at both ends of the band rather than at a blended mix that no source supports.
+
+> **Steady-state, not year-1 — the same caveat the $149.3K base case carries, now applied here
+> too.** ADDED 2026-08-03 per the independent GTM Auditor (`GTM_SCORECARD.md`,
+> `business_case_honesty`): the $121,339 / $136,762 figures above are computed via the identical
+> multi-year Pro-subscriber-pool-fill formula as Scenario B's $149,300 — which already carries a
+> "steady-state, not year-1" box below — but had been quoted as "the honest number for TODAY's
+> transactable product... over the floor" with no equivalent caveat. Registered and reproducible
+> (`analysis/business_case_without_annual_year1_arr.mjs` / `..._year1_web_arr.mjs`, verified by
+> `node scripts/validate-computation.mjs`): the **year-1 exit run-rate is $73,519 (store) /
+> $82,873 (web) — BELOW the $100K floor on either channel.** The steady-state figures are real and
+> useful as the planning ceiling once the Pro subscriber pools fill against 7% monthly churn (this
+> takes years, same mechanism as Scenario B) — but "shippable-today... over the floor" is only true
+> at steady state, not in year 1. Read the steady-state row as *what this product's current,
+> already-built pricing/paywall CAN earn once it has run long enough to fill*, and the year-1 row
+> as *what it earns in its first 12 months* — both honest, neither substitutable for the other.
 
 Two caveats kept deliberately load-bearing:
 - The 15% store rate holds only **below $1M in annual proceeds**. Above it, both stores revert
@@ -532,12 +551,15 @@ If Scenario B inputs slip:
   `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
   2026-07-28 from $93,556; at the corrected take rate this downside now CLEARS the floor,
   where before it did not.
-- Annual mix stays at 0% (the current live state — annual billing is gated off, see above): ARR is
-  **$121,339** on the store channel and **$136,762** on web/Stripe — over the floor on either, and
-  ~$28K below the annual-tier model. This is the honest number for TODAY'S transactable product;
-  the $149.3K figure requires shipping the annual-billing cutover (migration 021 +
-  `ANNUAL_BILLING_ENABLED`). Re-priced 2026-07-28 from $99,926: that reading missed the floor by
-  ~$74 purely on a 30% commission this business pays on neither channel at this scale.
+- Annual mix stays at 0% (the current live state — annual billing is gated off, see above): STEADY-STATE
+  ARR is **$121,339** on the store channel and **$136,762** on web/Stripe — over the floor on
+  either, and ~$28K below the annual-tier model. This is the honest steady-state number for
+  TODAY'S transactable product, once its Pro-subscriber pool has filled; **the year-1 EXIT
+  run-rate is $73,519 (store) / $82,873 (web) — BELOW the $100K floor on either channel** (see the
+  "steady-state, not year-1" box above). The $149.3K figure requires shipping the annual-billing
+  cutover (migration 021 + `ANNUAL_BILLING_ENABLED`). Re-priced 2026-07-28 from $99,926: that
+  reading missed the floor by ~$74 purely on a 30% commission this business pays on neither
+  channel at this scale.
 - Annual renewal churn rises to 40% (→ 1 − 0.6^(1/12) ≈ 4.17%/month effective): Annual pool shrinks
   ~43%. ARR **$125,331** (`analysis/business_case_sensitivity_annual_churn40_arr.mjs`, registered in
   `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
@@ -557,7 +579,7 @@ and the growth model doesn't work regardless of installs.
 ## The honest statement
 
 The base case (Scenario B) shows a credible path to a **steady-state $149.3K ARR** — 49% above
-the $100K floor — but it is neither automatic nor instant: the year-1 exit run-rate is ~$70–73K,
+the $100K floor — but it is neither automatic nor instant: the year-1 exit run-rate is $71,207,
 so the floor is **not met in year 1**; it is reached as the monthly/annual Pro pools compound. The **floor is
 revenue-secured** at 4,000 installs × 4% conversion regardless of acquisition mix; the honest
 constraint is **net margin**, which is

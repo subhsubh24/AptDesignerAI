@@ -1,6 +1,13 @@
 # Email welcome sequence — AptDesignerAI waitlist
 
-Staged drafts for the waitlist welcome sequence. **Do not send until the owner connects the email platform (e.g. Mailchimp, Resend, Loops) and approves the content.** These are templates — update placeholder URLs and dates before activating.
+Staged drafts for the waitlist welcome sequence. **CORRECTED (GTM Factory, per GTM Auditor Run 5's
+`artifact_freshness` finding): Email 1's send engine is already CODE-COMPLETE, not "do not send
+until connected" — `app/api/waitlist/confirm/route.ts` calls `sendEmail()` with the
+`waitlist_welcome_1` stage directly on double-opt-in confirmation, no webhook or Edge Function
+needed. It ships in dry-run only because `RESEND_API_KEY` + `RESEND_FROM_EMAIL` are unset
+(`PENDING_OPS.md connect-email-resend`) — an owner env-var step, not a build gap. See "Notes for
+owner" below for what remains unbuilt (Emails 2–4) vs. what is only owner-env-gated (Email 1).
+These are templates — update placeholder URLs and dates before activating.
 
 Tone: calm, informed, a little warm. Like a knowledgeable friend who happens to have design school taste. No hype, no emoji.
 
@@ -129,7 +136,21 @@ Thank you for waiting.
 
 ## Notes for owner
 
-- Decide the real early-access discount (see `PENDING_OPS.md` `waitlist-early-discount-coupon`), create the Stripe coupon, then fill in the placeholders in Email 3 and Email 4 above with your actual code/percentage before sending.
-- Replace App Store / Play Store placeholder URLs with live links once submitted.
-- All four emails should be loaded into your email platform and activated as an automation on waitlist signup (trigger: new row in `waitlist_emails` table, or via webhook from the `POST /api/waitlist` endpoint).
-- Recommended platform: Loops, Resend + custom templates, or Mailchimp. The `POST /api/waitlist` endpoint currently only inserts the email — you'll need to connect a webhook or use Supabase Edge Functions to sync signups to your email platform.
+CORRECTED (GTM Factory, per GTM Auditor Run 5, `artifact_freshness`): this section previously
+described a pre-engine product for all four emails ("you'll need to connect a webhook or use
+Supabase Edge Functions") that no longer matches what has shipped for Email 1. Mirrors the same
+correction `docs/email-lifecycle.md` received at Run 15 for its own sequences.
+
+1. **Email 1: sending engine is CODE-COMPLETE, not webhook-gated.** `app/api/waitlist/confirm/route.ts`
+   calls `sendEmail()` with the `waitlist_welcome_1` stage directly on double-opt-in confirmation —
+   no webhook, no Edge Function, no separate email-platform integration (`lib/email` sends through
+   Resend directly). It ships in dry-run only until the owner sets `RESEND_API_KEY` +
+   `RESEND_FROM_EMAIL` (`PENDING_OPS.md connect-email-resend`) — an env-var step, not a build gap.
+2. **Emails 2–4 are genuinely NOT wired to any trigger.** No cron, webhook, or scheduled job sends
+   the Day-3, Day-7, or launch-day emails — `vercel.json`'s only crons are
+   `activation-emails`/`habit-emails`/`winback-emails`, all post-signup lifecycle, none waitlist-day-N.
+   This is a real Product-Factory backlog item (a day-N waitlist-drip cron reading
+   `waitlist_emails.confirmed_at`), not an owner env-var step.
+3. Decide the real early-access discount (see `PENDING_OPS.md` `waitlist-early-discount-coupon`), create the Stripe coupon, then fill in the placeholders in Email 3 and Email 4 above with your actual code/percentage before sending.
+4. Replace App Store / Play Store placeholder URLs with live links once submitted.
+5. Email 4 (launch day) is intentionally manual-trigger, not cron — it should fire once, deliberately, when the owner flips the app live, not on a schedule.
