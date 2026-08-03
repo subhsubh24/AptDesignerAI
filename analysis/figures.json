@@ -48,6 +48,27 @@
       "value": 136762,
       "tolerance": 1,
       "cites": "docs/BUSINESS_CASE.md 'Channel economics' -- the WEB/Stripe reading of the shippable-TODAY case (Scenario B inputs, annual gated off), priced at Stripe's published 2.9% + $0.30 (+0.7% Billing on recurring) instead of a store commission. Registered 2026-07-28 alongside the store reading so BOTH ends of the channel band are mechanically verified, not just the one that is quoted."
+    },
+    {
+      "id": "business_case_without_annual_year1_arr",
+      "script": "analysis/business_case_without_annual_year1_arr.mjs",
+      "value": 73519,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'Channel economics' / 'Annual mix stays at 0%' -- the YEAR-1 EXIT run-rate (not steady-state) for the shippable-TODAY case on the store channel. Added 2026-08-03 per the GTM Auditor's business_case_honesty finding that $121,339/$136,762 were quoted 'over the floor' with no year-1 caveat despite using the identical multi-year pool-fill formula as the $149.3K base case (which does carry one). $73,519 is BELOW the $100K floor."
+    },
+    {
+      "id": "business_case_without_annual_year1_web_arr",
+      "script": "analysis/business_case_without_annual_year1_web_arr.mjs",
+      "value": 82873,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'Channel economics' -- the YEAR-1 EXIT run-rate for the shippable-TODAY case on the WEB/Stripe channel, paired with business_case_without_annual_year1_arr's store reading. Added 2026-08-03, same rationale."
+    },
+    {
+      "id": "business_case_scenario_b_year1_arr",
+      "script": "analysis/business_case_scenario_b_year1_arr.mjs",
+      "value": 71207,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md Scenario B 'Steady-state, not year-1' box -- replaces the previously-uncomputed prose range ('~$70-73K') with an exact, reproducible year-1 exit run-rate. Added 2026-08-03 for FACTORY_STANDARD S22 (computed, not eyeballed)."
     }
   ]
 }

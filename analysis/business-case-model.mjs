@@ -157,3 +157,50 @@ export function computeScenario(
     totalMRR, arr, channel,
   };
 }
+
+/**
+ * Year-1 EXIT run-rate (annualized month-12 MRR), not the steady-state ARR `computeScenario`
+ * returns. Subscriber pools are STOCKS fed by a constant monthly inflow against churn outflow —
+ * they take years to fill (FACTORY_STANDARD §22: computed, not eyeballed). Apartment revenue is a
+ * FLOW (one-time purchases), not a pool, so it is already at its "steady" rate from month 1 and
+ * needs no fill-up. Month-by-month recurrence (not the closed form) so the fill is auditable:
+ *   pool(t) = pool(t-1) * (1 - churn) + newSubsThisMonth,  pool(0) = 0.
+ * Same parameters/defaults as `computeScenario` so a caller can diff the two directly.
+ */
+export function computeYear1ExitRunRate(
+  installsPerMonth,
+  conversionRate,
+  annualShareOfPro = ANNUAL_SHARE_OF_PRO,
+  monthlyChurn = MONTHLY_CHURN,
+  annualEffectiveMonthlyChurn = ANNUAL_EFFECTIVE_MONTHLY_CHURN,
+  channel = DEFAULT_CHANNEL,
+) {
+  const activeAtPaywall = installsPerMonth * DAY30_RETENTION;
+  const paidConversions = activeAtPaywall * conversionRate;
+
+  const apartmentBuyers = paidConversions * APARTMENT_MIX;
+  const apartmentMRR = apartmentBuyers * netRevenue(APARTMENT_PRICE, channel, false);
+
+  const newPro = paidConversions * PRO_MIX;
+  const newMonthlyPro = newPro * (1 - annualShareOfPro);
+  const newAnnualPro = newPro * annualShareOfPro;
+
+  let monthlyPool = 0;
+  let annualPool = 0;
+  for (let month = 1; month <= 12; month++) {
+    monthlyPool = monthlyPool * (1 - monthlyChurn) + newMonthlyPro;
+    annualPool = annualShareOfPro > 0 ? annualPool * (1 - annualEffectiveMonthlyChurn) + newAnnualPro : 0;
+  }
+
+  const monthlyProMRR = monthlyPool * netRevenue(PRO_MONTHLY_PRICE, channel, true);
+  const annualProMRR = annualPool * (netRevenue(PRO_ANNUAL_PRICE, channel, true) / 12);
+
+  const month12MRR = apartmentMRR + monthlyProMRR + annualProMRR;
+  const year1ExitArr = month12MRR * 12;
+
+  return {
+    activeAtPaywall, paidConversions, apartmentBuyers, apartmentMRR,
+    newPro, monthlyPool, annualPool, monthlyProMRR, annualProMRR,
+    month12MRR, year1ExitArr, channel,
+  };
+}

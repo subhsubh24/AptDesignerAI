@@ -1976,3 +1976,180 @@ against `/__agentproxy/status`.
   run, ~35 days elapsed since Run 1). No new blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 19 — 2026-08-03
+
+### Branch/PR housekeeping (before any GTM work)
+This run's designated branch (`claude/beautiful-cori-s6jizp`) had a clean working tree, zero
+commits ahead/behind the current default branch (`claude/ai-apartment-design-app-iHAdb`, force-synced
+via `git fetch` + `git branch -f`), and no open PR against it (`search_pull_requests
+head:claude/beautiful-cori-s6jizp` returned zero results). No reset needed.
+
+### What we found
+- **The independent GTM Auditor's Run 5 pass landed since Run 18** (`docs/growth/GTM_SCORECARD.md`,
+  commit `46f5eaa`, #784, `as_of: 2026-08-03`): overall **C -> B**, `ship_gate_met` still `false`.
+  Six fresh, independent, adversarial per-dimension graders re-verified all 8 of Run 4's named
+  top_gaps against real code/scripts/citations. Six are confirmed genuinely fixed
+  (`self_validation_honesty` C->A, `compliance` B->A, `experiment_validity` C->B, both
+  `business_case_honesty` Run-4 defects). Two dimensions still miss the ship-gate bar:
+  `business_case_honesty` (B, a NEW disclosure-rigor gap) and `artifact_freshness` (C, two
+  half-fixed/recurred findings). Per GTM_STANDARD S8, these named top_gaps were this run's
+  highest-priority work — fixed before any new demand-signal research.
+- `docs/quality/QUALITY_SCORECARD.md` (independent Quality Auditor) is unchanged since Run 16 —
+  verified via the GitHub API (`mcp__github__list_commits`), not local git (see below for why):
+  still `as_of: 2026-07-27`, overall C, `ship_gate_met: false`, five ship-critical dims below A.
+- **This session's local git is a SHALLOW clone** (`.git/shallow` present, only 50 commits deep) —
+  a fact this doc had never previously named for itself, though the GTM Auditor's own Run 5 pass
+  named exactly this risk for its `roadmap_steer_justification` check ("confirmed .git/shallow is
+  present locally, so a local-only sweep would silently miss history"). This mattered directly this
+  run (see the self_validation_honesty finding below).
+- Re-verified `PENDING_OPS.md` directly: `as_of` is still `2026-07-28`, unchanged since Run 17, and
+  every growth-relevant item (`set-site-gate-password`, `connect-email-resend`,
+  `apply-migration-031`, `set-metrics-token`, `set-cron-secret`,
+  `enroll-apple-small-business-program`, `apply-migration-021`, `set-email-physical-address`,
+  `waitlist-early-discount-coupon`) is still `status: open`.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a FIFTEENTH time: still
+  `connect_rejected`/gateway 502 to CONNECT, identical signature to every prior probe, cross-checked
+  against `/__agentproxy/status` `recentRelayFailures` (2026-08-03T05:15:32Z).
+  `trustpilot.com/review/havenly.com` still returns HTTP 403, re-confirmed via both WebFetch and a
+  direct curl through the agent-proxy.
+
+### What we built this run (fixing every GTM Auditor Run 5 top_gap)
+- **SHIP-CRITICAL `business_case_honesty` fix.** Added a "steady-state, not year-1" caveat to
+  `docs/BUSINESS_CASE.md`'s shippable-today ARR figures ($121,339 store / $136,762 web), which are
+  computed via the identical multi-year Pro-subscriber-pool-fill formula as the $149.3K base case —
+  which already carries this caveat — but had been quoted as "over the floor" with no equivalent
+  disclosure. Rather than cite the auditor's own ad-hoc ~$73.5K estimate, wrote a new
+  `computeYear1ExitRunRate()` month-by-month pool-fill function in
+  `analysis/business-case-model.mjs` (FACTORY_STANDARD §22: computed, not eyeballed) and two new
+  registered scripts: `analysis/business_case_without_annual_year1_arr.mjs` → **$73,519** (store),
+  `..._year1_web_arr.mjs` → **$82,873** (web) — both confirm the auditor's read exactly and are
+  BELOW the $100K floor. Also registered `business_case_scenario_b_year1_arr.mjs` → **$71,207**,
+  replacing the doc's own previously-uncomputed "~$70-73K" prose range for Scenario B's existing
+  disclosure box with an exact figure. `node scripts/validate-computation.mjs` now verifies **10**
+  figures (up from 7), all PASS.
+- **`artifact_freshness` fix #1**: `docs/analytics.md` was missing `mockup_limit_paywall_shown`
+  (the 11th `FunnelEvent`, shipped 2026-07-30) and its own footnote falsely claimed "covers all 10"
+  — added the row (with its real fire site, `focus/page.tsx:757`) and corrected the footnote to 11.
+- **`artifact_freshness` fix #2**: `docs/email-welcome-sequence.md` still told the owner "you'll
+  need to connect a webhook" / "do not send until the owner connects the email platform" for ALL
+  four emails — but Email 1's send is CODE-COMPLETE (verified by reading
+  `app/api/waitlist/confirm/route.ts`: it calls `sendEmail()` with stage `waitlist_welcome_1`
+  directly on double-opt-in confirmation), only `RESEND_API_KEY`-gated. Corrected the header and
+  "Notes for owner" to distinguish Email 1 (built, env-gated) from Emails 2–4 (genuinely unwired —
+  verified via `vercel.json`'s cron list, which has no waitlist-day-N job), mirroring the correction
+  `docs/email-lifecycle.md` already received at Run 15.
+- **`roadmap_steer_justification` fix.** `GROWTH_STATUS.md`'s `positioning_implication` called the
+  $511-vs-$265 Havenly markup example "directly-quoted" while theme 3's own `sources` field three
+  lines away has always said it "stays WebSearch-synthesized only" — a self-identified contradiction
+  that survived Runs 15–18. Corrected the wording; the underlying positioning read is unaffected.
+- **`metric_integrity` fix.** Run 16's RoomGPT citation described Deezy16 and Leviana Grace as
+  "1-star reviewers," but the live App Store page shows both are actually 2-star (per the auditor).
+  The quoted review TEXT was always verbatim-accurate; only the star-count characterization was
+  wrong. Per this file's own append-only practice and `GROWTH_STATUS.md`'s parallel practice, kept
+  Run 16's original text VERBATIM and added the correction as new text (same pattern as Run 7's
+  Pro-Annual correction).
+- **`pmf_read_accuracy` fix.** Added an `unbuilt_disclosure` to `GROWTH_STATUS.md`'s `pmf` block:
+  verified via `grep -n "activation_rate\|retention_d\|organic_share_rate\|activation\|retention\|
+  referral" lib/growth/metrics.ts` that all 5 pmf fields have ZERO code path (no activation event,
+  no return-cohort query, no share/referral query anywhere in the codebase). Added a matching
+  next_action asking for activation/retention instrumentation, mirroring the disclosure already made
+  for `stripe_reporting`/`mrr_usd`.
+- **`experiment_validity` fix (theme-specific disconfirming).** Re-attempted Havenly's own App Store
+  review page (`apps.apple.com/us/app/havenly-interior-design/id1149153371`) — which 503'd twice in
+  Run 18 — and it fetched CLEANLY this run: VERBATIM-VERIFIED, **4.4/5 average across 4.9K
+  ratings** (a genuine disconfirming datum mirroring RoomGPT's theme-2 entry from Run 16) plus three
+  new named/dated confirming quotes from a NEW source type (App Store reviews, not BBB/press) —
+  Sarah Groom (2019-08-17, order-service complaint), Amber_Energy (2018-08-29, timeline complaint),
+  Jclor (2022-03-24, 3D-rendering-mismatch complaint) — that corroborate theme 3's core fulfillment
+  complaint. Theme 3 moves from `cited_count` 5/`verbatim_count` 4 to **6/5**. A theme-1
+  disconfirming attempt (furniture-shopping-is-easy survey search) was an HONEST NEGATIVE: the only
+  candidate source, `3dcloud.com`, is a visualization-tool vendor arguing for its own product
+  category — the same undisclosed-competitor-promotion problem already flagged for First Chair — not
+  cited. Themes 1 and 4 still carry no theme-specific disconfirming datum after repeated attempts.
+  Held `confidence` at "emerging" (unchanged): the confirming-side per-theme bar only theme 3 moved.
+- **`self_validation_honesty` finding independently RE-CHECKED, not auto-applied.** The auditor's one
+  remaining nit claimed `GROWTH_STATUS.md`'s `gtm_scorecard` validation entry's "last touch 0e0f901"
+  citation for `QUALITY_SCORECARD.md` "does not reproduce" and that the real last touch is `38a79b5`.
+  Per maker≠checker this run verified rather than trusted the auditor's own claim — and it does NOT
+  hold. This session's local git is shallow (see above), so re-checked via the GitHub API
+  (`mcp__github__list_commits` on the file path, then `mcp__github__get_commit` on `38a79b5`) instead
+  of local git. Result: commit `0e0f9017ec7e888f9c1a9a7e752fc3732e1293e0` GENUINELY EXISTS and IS the
+  most recent commit touching `docs/quality/QUALITY_SCORECARD.md` (2026-07-27, "NINTH independent
+  grade"); `38a79b5`'s own file list (fetched via the API) touches `docs/BUSINESS_CASE.md` (the
+  take-rate correction), NOT `QUALITY_SCORECARD.md` at all. The prior citation was correct all along
+  and is left unchanged in `GROWTH_STATUS.md`; the auditor's nit on this specific point does not
+  reproduce. Recorded transparently in both `GROWTH_STATUS.md` and here so a future run or auditor
+  pass does not re-assume this nit is real without independently re-checking it.
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of`/`demand_signal.as_of` to 2026-08-03; updated the
+  `internal_metrics_api` probe count to 15; rewrote the `web_research` and `gtm_scorecard` validation
+  entries to reflect this run's findings (including the shallow-clone caveat); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 19th consecutive circuit-breaker run.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (15th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND the independent QUALITY_SCORECARD still
+  reports `ship_gate_met: false` — HARD BLOCK per GTM_STANDARD S6/S13 Gate 1. Zero outreach drafts.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads competition data; no new information since Run 3.
+- Did not enqueue social drafts or touch the email lifecycle sends: `awaiting_connect: true`, no
+  channel connected; unchanged since Run 1.
+- Did not touch `ROADMAP.md` / `VISION.md`: nothing this run clears the S3 bar for a steer — the
+  business-case fix is an honesty/disclosure correction (no ARR level changed), and the new
+  theme-3 demand-signal citation strengthens already-live positioning rather than opening a new
+  direction.
+- Did not blindly apply the auditor's `self_validation_honesty` nit: independently re-verified it
+  first (via the GitHub API, since local git is shallow) and found it does not reproduce — see above.
+  This is maker≠checker working in both directions: the GTM Factory does not treat the independent
+  Auditor's findings as infallible any more than the Auditor treats the Factory's self-report as
+  reliable.
+
+### Independent review (maker ≠ checker)
+Spawned a fresh reviewer subagent before committing, given this run's edits include a ship-critical
+business-case change with new computed figures, and several citation/provenance corrections
+(RoomGPT star-rating, Havenly markup wording, the self_validation_honesty re-check) — told to
+adversarially re-verify each against the primary source/script rather than trust the prose. See
+resolution below.
+
+### Verification (before committing)
+`npm install` (materializes `js-yaml` etc. into a fresh `node_modules`, no `package.json` change)
+then `node scripts/validate-gtm.mjs` — OK. `node scripts/validate-computation.mjs` — **10 figures
+verified, PASS** (up from 7; the 3 new year-1 scripts all reproduce to the dollar, re-run twice each
+for determinism per the gate's own check). Independently re-parsed the `GROWTH_STATUS` YAML block
+with `js-yaml` and spot-checked `as_of`, `demand_signal.as_of`/`confidence`, theme 3's
+`cited_count`/`verbatim_count`, the `pmf` block's new key, and the learnings/next_actions/
+owner_blockers array lengths — all correct. Re-fetched Havenly's App Store page twice (once for the
+summary rating, once for individually-quoted reviews) to confirm the citation is genuinely
+re-fetchable, not a one-off fluke. Re-ran the `aptdesignerai.com`/metrics-API/Trustpilot probes
+directly via curl through the agent-proxy, cross-checked against `/__agentproxy/status`.
+
+### Lessons learned
+- **Maker≠checker runs in both directions.** This run is the first to independently re-verify an
+  Auditor-named finding and find it does NOT hold (the QUALITY_SCORECARD commit-hash nit). The
+  Auditor is a fresh, adversarial, independent check on the Factory — but it is not infallible, and
+  its own shallow-clone risk (which it correctly named for its OWN check) applied equally to a
+  different check it ran without applying that same caution. Blindly "fixing" a correct citation to
+  match an incorrect auditor claim would have been a real regression dressed up as compliance.
+- **A shallow local clone is a standing, not one-off, risk for this session type.** `.git/shallow`
+  is present in this environment; any claim resting on "last touch via `git log`" should route
+  through the GitHub API (`mcp__github__list_commits`/`get_commit`) instead, every time, not just
+  when a discrepancy is already suspected.
+- **A "503 twice" finding is not necessarily a durable structural gap.** Run 18 recorded Havenly's
+  App Store page as newly site-blocked, joining Trustpilot/consumeraffairs.com. A single retry this
+  run showed it was a transient failure, not a durable block — worth a cheap retry before permanently
+  filing a source as unreachable, especially when (as here) it closes a real audit-named gap.
+- **Prefer computing the auditor's own ad-hoc estimate over citing it as-is.** The auditor's
+  business_case_honesty finding cited an unregistered ~$73.5K estimate. Writing and registering the
+  actual reproducible script (which reproduced to $73,519, essentially exact) is stronger evidence
+  than either citing the auditor's number verbatim or re-deriving it by hand a second time — it
+  becomes a permanent, re-runnable fact instead of a one-off calculation quoted from a review.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1–18? YES — circuit breaker remains FIRED (Run 19, 19th consecutive
+  run, ~37 days elapsed since Run 1). No new owner blocker this run (the pmf-instrumentation gap is
+  a Product-Factory build note, not an owner env-var step). Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
