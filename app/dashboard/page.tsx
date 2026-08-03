@@ -970,10 +970,10 @@ export default function DashboardPage() {
     return (
       <PageTransition className="max-w-3xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium mb-4">
+          <Badge variant="success" className="inline-flex items-center gap-2 mb-4">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Apartment analyzed · ready to design
-          </div>
+          </Badge>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Pick a room to start with</h1>
           <p className="text-muted-foreground mt-3 max-w-lg mx-auto leading-relaxed">
             We recommend the room you spend the most time in. Don&apos;t worry — you can
