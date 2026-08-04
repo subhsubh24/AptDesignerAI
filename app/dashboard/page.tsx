@@ -1150,9 +1150,12 @@ function StepIndicator({ done, active, label }: { done?: boolean; active?: boole
   return (
     <div className={cn(
       "flex items-center gap-3 py-1",
-      done && "text-emerald-600 dark:text-emerald-400",
-      active && "text-accent-warm font-medium",
-      !done && !active && "text-muted-foreground"
+      // A finished step RECEDES (one-hue ladder, lib/scoring/verdicts.ts) so
+      // the active step's accent-warm is the only thing pulling the eye —
+      // same convention as the diagnosis streaming steps. Done vs. not-yet-
+      // reached stays legible via the CheckCircle2/empty-circle icon, not hue.
+      (done || (!done && !active)) && "text-muted-foreground",
+      active && "text-accent-warm font-medium"
     )}>
       {done ? (
         <CheckCircle2 className="h-4.5 w-4.5" />
