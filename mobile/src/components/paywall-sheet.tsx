@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { RC_KEY } from '@/lib/rc-init';
 import { fetchAnnualBillingEnabled } from '@/lib/billing-config';
 import { shouldOfferPackage } from '@/lib/paywall-annual-gate';
+import { FALLBACK_OPTIONS } from '@/lib/paywall-fallback';
 import { resolveFreeTrial } from '@/lib/paywall-trial';
 import {
   classifyProductShape,
@@ -68,33 +69,6 @@ type DisplayOption = {
    */
   isRestorable: boolean;
 };
-
-// Shown when RC offerings haven't loaded yet or RC is not configured. These
-// carry no purchasable package, so they must not promise a trial either: with
-// no product to read, we cannot know whether one exists.
-//
-// Monthly-only, deliberately: Pro Annual is a real product (migration 021,
-// docs/BUSINESS_CASE.md), but per lib/billing/stripe.ts's isAnnualBillingEnabled()
-// it ships GATED OFF on web until the owner applies that migration and flips
-// ANNUAL_BILLING_ENABLED — a planned lever, not a live one. This fallback
-// previously listed Annual first with a "Best value" badge and left it the
-// default pre-selected plan, presenting a not-yet-live tier as the paywall's
-// primary offer before any real pricing loaded. If/when the owner turns the
-// annual product on in App Store Connect / Play Console, RevenueCat's real
-// offering surfaces it through packagesToOptions() below — this fallback only
-// needs to describe what is actually purchasable today.
-const FALLBACK_OPTIONS: DisplayOption[] = [
-  {
-    pkg: null,
-    label: 'Monthly',
-    price: '$49 / month',
-    subline: 'Billed monthly · cancel anytime',
-    badge: null,
-    hasFreeTrial: false,
-    isRecurring: true,
-    isRestorable: true,
-  },
-];
 
 function packagesToOptions(
   offering: PurchasesOffering,
