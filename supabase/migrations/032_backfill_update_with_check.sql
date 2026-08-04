@@ -14,9 +14,10 @@
 -- row. A caller who already owns a row could issue an UPDATE that rewrites
 -- its ownership column (`user_id` on projects/saved_designs, or repointing
 -- `rooms.project_id` at a project it doesn't own) and the policy alone would
--- not stop it. Newer tables already close this (e.g. `refine_messages`,
--- `stripe_customers`) — this migration backfills the same shape onto the
--- three tables from the initial schema that predate the pattern.
+-- not stop it. A newer table already carries this shape (see
+-- 027_user_email_preferences.sql's UPDATE policy, which pairs USING with
+-- WITH CHECK) — this migration backfills the same shape onto the three
+-- tables from the initial schema that predate the convention.
 --
 -- App code today never lets a client set these columns directly (whitelisted
 -- update fields, no user_id/project_id in any PATCH body), so this is
