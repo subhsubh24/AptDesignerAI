@@ -830,16 +830,13 @@ export default function DashboardPage() {
                   const fp = br.floor_plan as Record<string, unknown> | undefined;
                   const hasFloorPlan = fp?.found === true;
                   return (
-                    <Badge
-                      variant="success"
-                      className="mt-3 w-full justify-start gap-2 rounded-xl px-3 py-2.5 text-xs font-normal"
-                    >
+                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         Building researched — {String(br.building_style || "style identified")}
                         {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
                       </span>
-                    </Badge>
+                    </div>
                   );
                 })()}
               </div>

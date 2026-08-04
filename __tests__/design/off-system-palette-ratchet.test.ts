@@ -100,7 +100,7 @@ const OFF_SYSTEM = new RegExp(
  * effect on `total` (excluded either way), but honest about WHY: see the
  * app/page.tsx entry above.
  */
-const MAX_OFF_SYSTEM = 44;
+const MAX_OFF_SYSTEM = 50;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's
