@@ -7106,3 +7106,119 @@ them without new information:**
   unaddressed, worth a dedicated look.
 - **DO-NOT-RE-FLAG (this run's additions):** none new. All prior entries unchanged;
   the security/RLS scout correctly checked this file before reporting clean this time.
+
+## Run 142 (2026-08-04)
+
+**Hill-climb first.** No open PRs on entry (all of Run 141's work — #789 — had merged). DEEP
+AUDIT last ran in full Run 140 (2026-08-03, same-day-minus-one) — not due yet on the ~daily/
+~4-run cadence, so this run went straight to a 5-Haiku scout sweep: security/RLS, tests_evals
+coverage (targeted at `lib/agents/validation-agent.ts`, named twice in QUALITY_SCORECARD and in
+Run 141's own rotation guide), design-bar slop, reliability/perf, and a quality-gate status
+check. QUALITY_SCORECARD's remaining ship-critical gaps (`functional_reality` — blocked on a
+`.github/`-only CI env-var edit the loop cannot make; `design_taste` — blocked on committing
+authed/design-dense screenshots, same owner-gated blocker) were re-confirmed still genuinely
+out of reach this run, not re-litigated. `business_case_strength`'s named gap (mobile Apartment
+one-time tier) was left as Run 141 scoped it — a real but not-loop-buildable gap pending an
+owner-side RevenueCat product config.
+
+**A scout false positive worth recording.** The quality-gate scout reported 159 `mobile/`
+TypeScript errors, which would have contradicted every prior run's "mobile tsc clean" claims
+and implied CI itself was broken. Verified directly before trusting it: `mobile/node_modules`
+was simply never installed in that scout's sandbox, so `tsc` fell back to the ROOT
+`node_modules` for DOM/lib types and produced spurious errors reaching into unrelated
+`@supabase`/`@types/google.maps` type declarations. `npm install` inside `mobile/` (844
+packages) fixed it; `cd mobile && npx tsc --noEmit` came back clean. Recorded so a future run
+doesn't chase a phantom regression from the same missing-install artifact.
+
+**Six file-disjoint changes shipped, all through 2/2 independent review.**
+1. **`fix(security)` #799** — backfilled `WITH CHECK` onto three legacy UPDATE RLS policies
+   (`projects`/`rooms`/`saved_designs`, from `001_initial_schema.sql`/`011_saved_designs.sql`)
+   that had `USING` only. Postgres RLS on UPDATE validates the OLD row via `USING` but never the
+   NEW row without `WITH CHECK` — a caller who owns a row could in principle rewrite its
+   ownership column. Defense-in-depth (app code never exposes these columns to a client PATCH
+   today), but RLS, not the app layer, is the documented boundary. Two review rounds, both
+   comment-only fixes: Reviewer A caught the migration's own "HOW TO VERIFY" comment claimed a
+   `WITH CHECK` violation silently matches 0 rows (that's the `USING`-mismatch behavior; a
+   `WITH CHECK` failure raises a hard Postgres error) — corrected. Reviewer B caught the header's
+   precedent citation (`refine_messages`, `stripe_customers`) was wrong — neither actually pairs
+   `USING`+`WITH CHECK` on UPDATE (one has no UPDATE policy, the other is service-role-only);
+   corrected to the real match, `027_user_email_preferences.sql`, verified directly before
+   citing it. Migration 032, HUMAN-APPLIED, recorded in PENDING_OPS.md with apply/verify steps.
+2. **`perf(search)` #800** — `/api/search/stream` fetched project, room diagnosis, and the prior
+   search session sequentially despite all three depending only on already-known IDs; wrapped in
+   `Promise.all`, bringing it to full parity with the already-parallelized non-stream
+   `/api/search` route (and extending the pattern to the third query, which the non-stream route
+   doesn't have). Both reviewers approved first round.
+3. **`perf(diagnosis)` #801** — `/api/diagnosis/stream`'s project fetch and
+   `inferUserPreferences()` call ran sequentially even though the code's own comment said
+   "parity with non-stream route" — the non-stream route was already parallel, the stream route
+   wasn't. Fixed via `Promise.all`, preserving the stream route's existing `.catch(() => null)`
+   best-effort error handling. Both reviewers approved first round; Reviewer A noted (non-
+   blocking) that `inferUserPreferences` never actually rejects internally, making the `.catch`
+   defense-in-depth rather than load-bearing — and that the non-stream route lacks the same
+   `.catch` for literal textual symmetry, a cosmetic nit for a future run, not a bug.
+4. **`fix(design-bar)` #798** — dashboard `StepIndicator`'s raw `text-emerald-600` "done" state
+   converted to the one-hue-emphasis-ladder `text-muted-foreground` convention (a finished step
+   recedes so the active step's `accent-warm` is the only thing pulling the eye — same pattern
+   already shipped on the diagnosis streaming steps). **The first version of this PR ALSO
+   converted a "Building researched" pill to `Badge variant="success"` — Reviewer B caught that
+   PR #788 (Run 139) had already investigated this EXACT site and deliberately left it alone**
+   ("a second site had a genuine visual mismatch and was correctly left alone," per #788's own
+   commit message). Forcing it into `Badge` required overriding nearly every Badge default
+   (`rounded-full`→`rounded-xl`, `py-0.5`→`py-2.5`, plus `w-full`/`justify-start`/`font-normal`)
+   just to fight the component back into its original banner shape, and silently dropped the
+   visible border and shifted background saturation — a real, previously-flagged mismatch
+   reintroduced, not a clean reuse. Reverted that half before merge, keeping only the
+   StepIndicator fix (which both reviewers independently confirmed sound); corrected
+   `MAX_OFF_SYSTEM` from an over-claimed 44 down to the accurate 50 (52 − 2, not 52 − 8). A
+   genuine maker≠checker catch — recorded so a future run doesn't re-attempt the Building-
+   researched conversion without new information.
+5. **`fix(design-bar)` #803** — applied lesson #4 immediately: waitlist-confirmed's success
+   checkmark badge converted from raw `bg-emerald-500/10`/`text-emerald-500` to
+   `bg-accent-warm/10`/`text-accent-warm` — but this time by literally reusing an IDENTICAL div
+   (same `h-16 w-16 rounded-2xl` shape, same icon sizing) already present one branch above in the
+   same file for the sibling "invalid" state. Zero className overrides, zero dropped visual
+   features — both reviewers explicitly checked this against #4's near-miss and confirmed it was
+   the clean case, not the trap. Off-system-palette ratchet: 52 → 50 (#798) → 48 (#803).
+6. **`test(F)` #802** — `lib/agents/validation-agent.ts`'s composite math-cap branch
+   (`validateProductSet`, lines ~1477-1478) hand-assigns `mathEntry.color_score` →
+   `mathCaps.color_fit` and `mathEntry.material_score` → `mathCaps.material_fit` with no
+   type-level protection against a copy-paste swap of the two right-hand sides. The existing
+   test only asserted the composite score came down, not that the RIGHT dimension was capped —
+   a swap would still compile, still cap something, still pass. Added a differential test:
+   compute the fixture's real `color_score`/`material_score`, verify up front that correct vs.
+   swapped wiring actually diverge (the dimension weights differ, 0.20 vs 0.18, so a swap is
+   detectable), then assert `validateProductSet`'s real output matches `computeFinalHarmonyScore`
+   called directly with the correct mapping. **Verified the test actually catches the bug it
+   targets**: manually swapped the two assignments in `validation-agent.ts`, confirmed this exact
+   test failed (9 vs. expected 9.1), then reverted cleanly (`git diff` empty on the production
+   file afterward). Both reviewers independently re-ran the same sabotage-and-revert themselves
+   and confirmed the same result before approving.
+
+**Merged-tree gate GREEN**, re-verified after all six merges: `npx tsc --noEmit` clean, **2807
+tests** (0 skip-only regressions, +1 net from the new wiring test), `npm run check:determinism`
+clean, `npx eslint .` 0/0, `cd mobile && npx tsc --noEmit` clean. No ROADMAP box ticked — none
+of the six changes are named Track/DoD line items (RLS/design-bar/perf/test fixes below the
+Track-item granularity); `business_case_strength`/`design_taste`/`tests_evals` grades stay owned
+and re-graded by the independent Quality Auditor, not self-ticked here.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 144** (last full pass Run 140, 2026-08-03; this run's scout sweep is a
+  partial substitute, not the complete lens rotation — check the date gap before defaulting to
+  another scout-only run again).
+- **Two ship-critical QUALITY_SCORECARD dimensions remain genuinely owner-gated**, not
+  loop-buildable: `functional_reality` (needs a `.github/` CI env-var edit — `DATA_BACKEND:
+  "supabase"` in the journeys job) and `design_taste` (needs committed authed/design-dense
+  screenshots, same `.github/`-adjacent blocker). Re-confirm the blocker is unchanged before
+  re-scoping either — don't re-derive the same wall from scratch.
+- **`business_case_strength`'s mobile-Apartment-tier gap stays deferred** per Run 141's
+  reasoning (a live RevenueCat product config is the actual missing piece, not code) — re-read
+  `mobile/src/components/paywall-sheet.tsx` fresh before re-scoping, since the annual-gate half
+  (#794) already landed and the scorecard grading it may be stale by the time of the next read.
+- **Mobile scout sandboxes must run `npm install` inside `mobile/` before trusting a `tsc`
+  result from there** — the missing-`node_modules` false positive this run wasted scout budget
+  and could have wasted implementation budget too if not caught before acting on it.
+- **DO-NOT-RE-FLAG (this run's additions):** the "Building researched" pill on `/dashboard`
+  stays raw-emerald deliberately (PR #788's original call, re-confirmed this run) — do not
+  convert it to `Badge` without a genuine visual re-verification (screenshot) showing the
+  mismatch no longer applies.

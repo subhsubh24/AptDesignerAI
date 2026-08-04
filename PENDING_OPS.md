@@ -245,6 +245,29 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### 032_backfill_update_with_check.sql — security: WITH CHECK on legacy UPDATE policies (added 2026-08-04, Run 142, PR #799)
+
+`projects`, `rooms`, and `saved_designs` (`001_initial_schema.sql` / `011_saved_designs.sql`) had UPDATE RLS policies with a `USING` clause only, no `WITH CHECK` — so RLS validated which rows a caller could touch but never validated the NEW row values. Defense-in-depth (app code never lets a client set the affected ownership columns today), but RLS is the documented security boundary, not the app layer.
+
+```sh
+psql $DATABASE_URL -f supabase/migrations/032_backfill_update_with_check.sql
+```
+
+**Verify:**
+```sql
+select polname, pg_get_expr(polwithcheck, polrelid) as with_check
+from pg_policy
+where polname in (
+  'Users can update own projects',
+  'Users can update own rooms',
+  'Users can update own saved designs'
+);
+-- Expected: all three now have a non-null with_check expression.
+```
+As an authenticated user who owns row X: `UPDATE projects SET user_id = '<some other uuid>' WHERE id = '<X>';` must now raise `ERROR: new row violates row-level security policy` (previously would have succeeded).
+
+---
+
 ### Supabase auth rate limits — the server-side half of G4 login lockout/backoff (added 2026-07-25, Run 113, Track G4)
 
 Run 113 closed the **user-enumeration** half of ROADMAP G4 on the web sign-in path (`lib/auth/login-errors.ts` — a wrong password, an unknown address, an unconfirmed account, a banned account and an SSO-managed address now all return one identical message). The **lockout/backoff** half is still open, and the loop deliberately did not fake it:
