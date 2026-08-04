@@ -45,7 +45,10 @@
 --
 --   As an authenticated user who owns row X, attempt:
 --     UPDATE projects SET user_id = '<some other uuid>' WHERE id = '<X>';
---   -- Expected: 0 rows updated (previously would have succeeded).
+--   -- Expected: ERROR: new row violates row-level security policy for
+--   -- table "projects" (a WITH CHECK failure raises a hard error, unlike a
+--   -- USING mismatch, which silently matches 0 rows). Previously this
+--   -- update would have succeeded.
 
 ALTER POLICY "Users can update own projects" ON projects
   WITH CHECK (user_id = auth.uid());
