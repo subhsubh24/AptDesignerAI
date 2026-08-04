@@ -74,35 +74,36 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ error: "Room not found" }), { status: 404 });
   }
 
-  // Fetch project for full building/apartment context
-  const { data: project } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("id", room.project_id)
-    .single();
-
-  // Fetch room diagnosis for design direction
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("*")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  // Project, room diagnosis, and the prior search session are all keyed off
+  // room_id/room.project_id independently of each other — fetch them in
+  // parallel to save two round-trips on this hot streaming entry point,
+  // mirroring the non-stream /api/search route. Destructured by position, not
+  // completion order, so ordering stays deterministic.
+  const [{ data: project }, { data: diagnosis }, { data: priorSession }] = await Promise.all([
+    // Fetch project for full building/apartment context
+    supabase.from("projects").select("*").eq("id", room.project_id).single(),
+    // Fetch room diagnosis for design direction
+    supabase
+      .from("room_diagnoses")
+      .select("*")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    // Load loop memory from the most recent completed session for this room
+    // so the new run seeds itself (tried queries + audit trend) instead of
+    // cold-starting. Best-effort — a fresh room simply has no prior session.
+    supabase
+      .from("search_sessions")
+      .select("tried_queries_json, audit_history_json, stats_json")
+      .eq("room_id", room_id)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const designProfile = buildDesignProfile(project);
-
-  // Load loop memory from the most recent completed session for this room so
-  // the new run seeds itself (tried queries + audit trend) instead of cold-
-  // starting. Best-effort — a fresh room simply has no prior session.
-  const { data: priorSession } = await supabase
-    .from("search_sessions")
-    .select("tried_queries_json, audit_history_json, stats_json")
-    .eq("room_id", room_id)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
 
   // Create search session
   const { data: session, error: sessionError } = await supabase
