@@ -36,6 +36,7 @@ vi.mock("@/lib/ai/gemini", () => ({
 
 const { validateProductSet } = await import("@/lib/agents/validation-agent");
 const { computeSetMathScores } = await import("@/lib/validation/set-math");
+const { computeFinalHarmonyScore } = await import("@/lib/scoring/harmony-composite");
 
 /**
  * A genuinely incoherent set — the case the enforcement layer exists for. It
@@ -201,6 +202,58 @@ describe("validateProductSet — deterministic math cap", () => {
 
     const flags = flagsOf(await validateProductSet(CLASHING_PRODUCTS, ROOM_CONTEXT));
     expect(flags[0].harmony_score).toBeLessThan(10);
+  });
+
+  it("wires color_score to color_fit and material_score to material_fit — never swapped", async () => {
+    // The composite branch (validation-agent.ts:1477-1478) hand-assigns
+    // mathEntry.color_score -> mathCaps.color_fit and mathEntry.material_score
+    // -> mathCaps.material_fit. Nothing type-checks that assignment: a copy-paste
+    // swap of the two right-hand sides would still compile and would still cap
+    // SOMETHING, so "the score came down" (the existing composite test above)
+    // cannot catch it. This drives validateProductSet end-to-end and compares
+    // its output against computeFinalHarmonyScore called directly with the
+    // CORRECT mapping — verified to diverge from the SWAPPED mapping first, so
+    // the assertion is guaranteed to actually distinguish the two.
+    const math = computeSetMathScores(CLASHING_PRODUCTS, ROOM_CONTEXT);
+    const mathEntry = math.per_product.find((p) => p.title === CAPPED_TITLE)!;
+    // Precondition: color_score and material_score must differ meaningfully,
+    // or a swap would be a no-op and this test would be vacuous.
+    expect(Math.abs(mathEntry.color_score - mathEntry.material_score)).toBeGreaterThan(0.1);
+
+    const subScores = {
+      color_fit: 10, spatial_fit: 10, material_fit: 10,
+      style_coherence: 10, cross_room_fit: 10, functional_fit: 10,
+    };
+    const correct = computeFinalHarmonyScore(
+      subScores,
+      { color_fit: mathEntry.color_score, material_fit: mathEntry.material_score },
+      "rug",
+      [],
+      CAPPED_TITLE,
+    );
+    const swapped = computeFinalHarmonyScore(
+      subScores,
+      { color_fit: mathEntry.material_score, material_fit: mathEntry.color_score },
+      "rug",
+      [],
+      CAPPED_TITLE,
+    );
+    expect(correct.harmony_score, "fixture must distinguish correct vs. swapped wiring").not.toBe(
+      swapped.harmony_score,
+    );
+
+    llmReturns({
+      isValid: true,
+      confidence: 9,
+      issues: [],
+      product_flags: [
+        { title: CAPPED_TITLE, category: "rug", harmony_score: 10, reason: "perfect", sub_scores: subScores },
+      ],
+      pairwise_conflicts: [],
+    });
+
+    const flags = flagsOf(await validateProductSet(CLASHING_PRODUCTS, ROOM_CONTEXT));
+    expect(flags[0].harmony_score).toBe(correct.harmony_score);
   });
 
   it("does not cap a set the real math rates well", async () => {
