@@ -11,8 +11,8 @@
  * before the network round-trip resolves saw only the subscription, never
  * the cheaper option the pricing model is actually built around.
  *
- * Unlike Pro Annual (mirrored in FALLBACK_OPTIONS is deliberately excluded —
- * see paywall-annual-gate.ts), the Apartment tier carries no equivalent
+ * Unlike Pro Annual — which is deliberately excluded from FALLBACK_OPTIONS,
+ * see paywall-annual-gate.ts — the Apartment tier carries no equivalent
  * backend gate: `STRIPE_PRICE_IDS.apartment` (lib/billing/stripe.ts) is live
  * unconditionally, so there is no "not yet enabled" state to protect against
  * here — only a display gap to close.
@@ -58,6 +58,11 @@ export const FALLBACK_OPTIONS: FallbackOption[] = [
     badge: null,
     hasFreeTrial: false,
     isRecurring: false,
+    // A persistent unlock (every room in the apartment, kept), not a spent
+    // credit — the same NON_CONSUMABLE shape classifyProductShape() assumes
+    // by default for a real Apartment product. Inert here regardless: this
+    // only feeds purchaseDisclosure's copy, since `pkg: null` means the
+    // Restore Purchases button's own behavior is unaffected by this field.
     isRestorable: true,
   },
   {

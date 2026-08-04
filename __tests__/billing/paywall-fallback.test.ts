@@ -18,6 +18,15 @@ describe("FALLBACK_OPTIONS — the mobile paywall's pre-load display", () => {
     expect(labels).toContain("Monthly");
   });
 
+  it("lists the Apartment tier first — the low-commitment entry point is the default", () => {
+    // The whole point of this fallback is that a buyer who opens the paywall
+    // before RC's real offering loads sees the cheap entry tier, not just the
+    // subscription. A future edit that silently reorders the array back to
+    // Monthly-first would regress that intent while still passing a plain
+    // membership assertion.
+    expect(FALLBACK_OPTIONS[0]?.label).toBe("Apartment");
+  });
+
   it("prices the Apartment tier at its real, live $29 one-time price", () => {
     const apartment = FALLBACK_OPTIONS.find((o) => o.label === "Apartment");
     expect(apartment?.price).toBe("$29 one-time");
