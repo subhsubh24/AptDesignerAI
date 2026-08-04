@@ -126,20 +126,19 @@ export async function POST(request: Request) {
           input_json: { room_type: room.room_type, image_count: imageUrls.length },
         });
 
-        const { data: project } = await supabase
-          .from("projects")
-          .select("*")
-          .eq("id", room.project_id)
-          .single();
+        // Project (keyed on room.project_id) and inferred user preferences
+        // (keyed on room_id) are independent of each other -- fetch them
+        // concurrently, matching the non-stream /api/diagnosis route.
+        const [{ data: project }, inferredPreferences] = await Promise.all([
+          supabase
+            .from("projects")
+            .select("*")
+            .eq("id", room.project_id)
+            .single(),
+          inferUserPreferences(supabase, room.project_id, room_id).catch(() => null),
+        ]);
 
         const profile = buildDesignProfile(project);
-
-        // Infer user preferences (parity with non-stream route).
-        const inferredPreferences = await inferUserPreferences(
-          supabase,
-          room.project_id,
-          room_id,
-        ).catch(() => null);
         if (profile && inferredPreferences) {
           profile.inferredPreferences = inferredPreferences;
         }
