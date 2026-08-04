@@ -32,8 +32,8 @@ export default async function WaitlistConfirmedPage({ searchParams }: Props) {
                 <AlertCircle className="h-8 w-8 text-accent-warm" />
               </div>
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10">
-                <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-warm/10">
+                <CheckCircle2 className="h-8 w-8 text-accent-warm" />
               </div>
             )}
           </div>
