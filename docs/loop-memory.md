@@ -7222,3 +7222,53 @@ and re-graded by the independent Quality Auditor, not self-ticked here.
   stays raw-emerald deliberately (PR #788's original call, re-confirmed this run) — do not
   convert it to `Badge` without a genuine visual re-verification (screenshot) showing the
   mismatch no longer applies.
+
+## Run 143 (2026-08-04)
+
+**Correction to Run 141/142's `business_case_strength` read — half the gap WAS loop-buildable.**
+Both prior runs deferred the mobile-Apartment-tier gap entirely as "pending an owner-side
+RevenueCat product config, not code." That framing conflated two separate things. Reading
+`packagesToOptions()` (mobile/src/components/paywall-sheet.tsx) directly: it is already fully
+generic — it reads `productCategory`/`productType` off whatever RevenueCat actually returns
+(via `classifyProductShape`, mobile/src/lib/paywall-disclosure.ts) rather than hardcoding a
+fixed tier set, so a real Apartment product configured in App Store Connect/Play Console will
+already render correctly through that path with zero code changes needed — that half really is
+owner-only, as previously concluded. But `FALLBACK_OPTIONS` — the static array shown before RC's
+offering resolves, or whenever RC is unconfigured (e.g. any dev build with no API key) — was a
+hardcoded, code-only array that listed just "$49/month," full stop. That half was never gated on
+any owner action; it was a plain oversight in a hand-written literal. Fixed in PR #805: extracted
+`FALLBACK_OPTIONS` into a new pure module `mobile/src/lib/paywall-fallback.ts` (matching the
+established convention of pulling paywall pure-logic into `lib/` for vitest coverage, since
+there's no RN test runner here) and added the $29 one-time Apartment tier, listed first to match
+`app/pricing/page.tsx`'s own tier order. Two independent reviewers (correctness/security;
+value/phase-fit) both APPROVED first round; addressed three non-blocking nits in one follow-up
+commit — a garbled docstring sentence, an unjustified `isRestorable: true` on the new option, and
+(Reviewer A's specific, good catch) a missing order-assertion test: the original tests checked
+membership and price strings but not that Apartment is `FALLBACK_OPTIONS[0]`, so a future edit
+could silently move it back behind Monthly and still pass every existing assertion. Merged with
+CI fully green (`verify`/`build`/`mobile`/`journeys`/`lint`/`validate-gtm`/`validate-capabilities`).
+**Lesson for future runs:** when a scorecard gap names a specific file/behavior, read that file
+before accepting a prior run's "not loop-buildable" verdict at face value — a gap can have both
+an owner-gated half and a plain code half bundled into one sentence, and only the owner-gated half
+actually blocks.
+
+**Run scope note.** This run was deliberately scoped to one deeply-verified, well-reviewed change
+rather than the full multi-scout parallel sweep (no scout subagents were spawned; the target was
+identified directly from the QUALITY_SCORECARD's `top_gaps` + a prior run's own rotation-guide
+pointer, which was sufficient signal). DEEP AUDIT was not re-run this run (last full pass Run 140,
+2026-08-03, due ~Run 144 per Run 142's own rotation guide — still on schedule, not yet overdue by
+the time this run started). No new scout findings to report; the security/RLS, functional_reality,
+and design_taste blockers noted in Run 142's rotation guide were not re-probed and should be
+re-confirmed fresh next run rather than assumed unchanged from this entry.
+
+### Rotation guide for next run
+- **DEEP AUDIT due ~Run 144** (last full pass Run 140, 2026-08-03) — this run did not reset that
+  clock; still due next run.
+- **Two ship-critical QUALITY_SCORECARD dimensions remain genuinely owner-gated**, not
+  loop-buildable, per Run 142's read (not re-verified this run): `functional_reality` (needs a
+  `.github/` CI env-var edit) and `design_taste` (needs committed authed/design-dense
+  screenshots, same `.github/`-adjacent blocker). Re-confirm before re-scoping.
+- **`business_case_strength`'s remaining piece is genuinely owner-only** (a live RevenueCat
+  Apartment product in App Store Connect/Play Console) now that the code-only fallback-display
+  half shipped this run (#805) — do not re-scope the mobile paywall again without a fresh
+  QUALITY_SCORECARD re-grade naming a new, specific gap first.
