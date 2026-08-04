@@ -830,13 +830,16 @@ export default function DashboardPage() {
                   const fp = br.floor_plan as Record<string, unknown> | undefined;
                   const hasFloorPlan = fp?.found === true;
                   return (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950 rounded-xl px-3 py-2.5 border border-emerald-200 dark:border-emerald-800">
+                    <Badge
+                      variant="success"
+                      className="mt-3 w-full justify-start gap-2 rounded-xl px-3 py-2.5 text-xs font-normal"
+                    >
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                       <span>
                         Building researched — {String(br.building_style || "style identified")}
                         {hasFloorPlan && fp?.total_sqft ? ` · ~${String(fp.total_sqft)} sqft` : ""}
                       </span>
-                    </div>
+                    </Badge>
                   );
                 })()}
               </div>
@@ -1150,9 +1153,12 @@ function StepIndicator({ done, active, label }: { done?: boolean; active?: boole
   return (
     <div className={cn(
       "flex items-center gap-3 py-1",
-      done && "text-emerald-600 dark:text-emerald-400",
-      active && "text-accent-warm font-medium",
-      !done && !active && "text-muted-foreground"
+      // A finished step RECEDES (one-hue ladder, lib/scoring/verdicts.ts) so
+      // the active step's accent-warm is the only thing pulling the eye —
+      // same convention as the diagnosis streaming steps. Done vs. not-yet-
+      // reached stays legible via the CheckCircle2/empty-circle icon, not hue.
+      (done || (!done && !active)) && "text-muted-foreground",
+      active && "text-accent-warm font-medium"
     )}>
       {done ? (
         <CheckCircle2 className="h-4.5 w-4.5" />
