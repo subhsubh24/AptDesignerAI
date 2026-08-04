@@ -7007,6 +7007,91 @@ ship-critical gaps rather than scout-discovered churn:
    `mobile/`). A future scout/audit claiming mobile has no coverage should check
    `__tests__/billing/`, `__tests__/auth/mobile-*`, and `__tests__/mobile/` first.
 
+---
+
+## Run 141 (2026-08-04)
+
+**Hill-climb first, per the routine.** `gh`-equivalent (GitHub MCP) `list_pull_requests` showed
+exactly one open PR — #789 (G4 reset-link idempotency), pushed at the end of Run 140 after
+hitting the 2-review-cycle cap with FYI issue #790 asking for one more look. DEEP AUDIT was
+run in full just last run (Run 140, same day) — not due again yet, so this run skipped straight
+to scouting/follow-up rather than re-running the full lens rotation.
+
+**PR #789 follow-up (the run's primary shipped work).** Fetched the diff and spawned one fresh,
+independent Sonnet reviewer with no prior context on the branch, scoped narrowly per #790's ask:
+does the newly-added wiring coverage (`__tests__/auth/reset-link-idempotency.test.ts`, the
+extracted `redeemResetLink()` in `lib/auth/reset-link-idempotency.ts`) genuinely prove the
+sequencing both prior review cycles found bugs in, not just the pure decision table? Verdict:
+APPROVE — the reviewer confirmed the test file exercises the real call order (verifyOtp → marker
+write/read → getSession), asserts `getSession` is never called on the success path, and directly
+re-proves the shared-machine bypass stays closed (an unrelated token's marker cannot unlock a
+different token). One residual gap was named as non-blocking: no test touches `page.tsx` itself,
+only the adapters it forwards into `redeemResetLink()` — a disclosed, reasonable trade-off given
+the file has no RTL/DOM test runner and the forwarding is a few trivial one-liners. CI was already
+green (all checks passed) at review time, so merged directly (squash, e491a6c) rather than via
+auto-merge. Closed FYI issue #790 with the reviewer's findings. Updated ROADMAP.md G4: email-
+verification link idempotency is now CLOSED (the password-reset confirmation link is this app's
+only email-based token-redemption link); the sole remaining G4 item is login lockout/backoff,
+which stays owner-config-gated (Supabase's own auth rate limits, or moving sign-in server-side) —
+unchanged reasoning from Run 113/117.
+
+**Scoped but did NOT ship two other candidates — recording why, so a future run doesn't re-open
+them without new information:**
+- **QUALITY_SCORECARD's business_case_strength gap** ("no $29 Apartment one-time tier and no
+  isAnnualBillingEnabled-equivalent gate anywhere in mobile") is PARTLY STALE: the scorecard's
+  10th grade (commit 15007fe, #793) predates PR #794 (also Run 140, later the same day), which
+  added exactly the annual-billing gate mirror (`mobile/src/lib/paywall-annual-gate.ts`,
+  `shouldOfferPackage()`) the gap names. Read `mobile/src/components/paywall-sheet.tsx` closely
+  this run: `packagesToOptions()` is NOT hardcoded to Annual/Monthly — it maps generically over
+  whatever `offering.availablePackages` RevenueCat returns, and `lib/paywall-disclosure.ts`'s
+  `classifyProductShape()` already has full, tested support for one-time/non-recurring/
+  non-restorable products (the Apartment tier's actual shape). So a live RC "Apartment" package
+  would already render correctly through the existing code path — the remaining gap is that
+  `FALLBACK_OPTIONS` (the static list shown only before RC's offering loads) lists just "Monthly,"
+  and that RevenueCat's dashboard has no Apartment product configured at all (an owner-side RC
+  config step, not a code gap, per the billing/secrets guardrail — "live keys / production billing
+  config stay human-applied"). Adding a non-purchasable `pkg: null` "Apartment $29" entry to
+  FALLBACK_OPTIONS would display a price with no product behind it (the existing `handlePurchase`
+  path already warns "Pricing unavailable" for any `pkg: null` selection) — judged not clearly
+  value-bar-clearing (a placeholder a user could tap into a dead-end) versus the real fix (owner
+  configures the RC product). Left G4/business_case_strength's mobile-parity code as-is; the next
+  independent quality grading pass should re-read `mobile/src/components/paywall-sheet.tsx` fresh
+  rather than repeat the pre-#794 finding verbatim.
+- **`lib/agents/research-assembler.ts`**, named twice in QUALITY_SCORECARD's tests_evals gap as
+  stuck at near-zero coverage, does NOT currently exist in the repo
+  (`grep -rli "research.assembler\|researchAssembler"` across the whole tree, excluding
+  node_modules/.git, returns zero hits). Either it was renamed/removed by an earlier run and the
+  scorecard's citation is stale, or it lives under a name this grep didn't match — worth the next
+  DEEP AUDIT's tests_evals lens re-verifying the actual file path before citing it again.
+  `lib/agents/validation-agent.ts` (the other named file, confirmed to exist, 1538 lines, real
+  test files already present at `__tests__/agents/validation-agent.test.ts` and
+  `-math-cap.test.ts`) is real, LLM-orchestration-heavy code where meaningfully raising coverage
+  needs the same cassette-mocking-the-Gemini-boundary pattern used for
+  `diagnosis-pipeline-cassette.test.ts` — scoped as a legitimate but non-trivial follow-on, not
+  attempted this run for lack of remaining budget; a good target for the next run's tests_evals
+  work specifically (extend the cassette pattern here, per the scorecard's own RAISE-to-A guidance).
+
+### Lessons learned
+1. **A scorecard/audit finding can go stale mid-cycle when a later PR the same day fixes part of
+   it.** #793's business_case_strength grade and #794's mobile paywall fix landed on the same day
+   (2026-08-03) in that order — the grade genuinely predates the fix. Before treating a named gap
+   as still-open, check whether a merge since the grade's `as_of` commit already addressed it
+   (`git log --oneline <gap-commit>..HEAD -- <named file>`), rather than re-implementing something
+   already shipped.
+2. **A named file in an audit finding should be grep-confirmed to exist before scoping work
+   against it.** `research-assembler.ts` doesn't exist in this tree; chasing a citation without
+   verifying the path first would have wasted the run on a nonexistent target.
+
+### Rotation guide for next run
+- DEEP AUDIT last ran in full Run 140 (2026-08-03) — not due yet on the ~daily/~4-run cadence;
+  the next run should still check before defaulting to another scout-sweep substitute.
+- `lib/agents/validation-agent.ts` cassette-style coverage extension is a good, scoped tests_evals
+  target (non-critical, but named twice; the cassette pattern from
+  `diagnosis-pipeline-cassette.test.ts` is the template).
+- Re-verify where `research-assembler.ts`'s functionality actually lives (renamed? merged into
+  another file? genuinely removed?) before the next tests_evals audit cites it again.
+- No new PENDING_OPS items this run (no migrations, no new secrets).
+
 ### Rotation guide for next run
 - **DEEP AUDIT cadence restored** — this run ran the full 5-lens rotation after 3
   overdue runs; resume the normal ~daily/~4-run due-check next time (do not let it slip
