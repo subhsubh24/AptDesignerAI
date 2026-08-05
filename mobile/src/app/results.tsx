@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { AccessibilityInfo, ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -268,6 +269,7 @@ export default function ResultsScreen() {
       setShowPaywall(true);
       return;
     }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSaveState('saving');
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -413,7 +415,10 @@ export default function ResultsScreen() {
                   hitSlop={TapSlop.defaultLabelPadded}
                   accessibilityRole="button"
                   accessibilityLabel="Try again"
-                  onPress={() => run(imageUri, roomType)}
+                  onPress={() => {
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    run(imageUri, roomType);
+                  }}
                 >
                   <ThemedText style={{ color: colors.accentForeground, fontWeight: '600' }}>
                     Try Again
