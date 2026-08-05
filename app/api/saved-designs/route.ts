@@ -72,27 +72,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Fetch room details. Fail loud on a read error: the ownership guard above
-  // already proved this room exists and is owned, so an error here is a transient
-  // DB failure — persisting a snapshot titled "Untitled Room" with a null
+  // Fetch room details and the latest diagnosis. These two reads are
+  // independent (both key only on room_id, neither depends on the other), so
+  // run them concurrently — same pattern as the products/bundles fetch below.
+  //
+  // Fail loud on a room read error: the ownership guard above already proved
+  // this room exists and is owned, so an error here is a transient DB
+  // failure — persisting a snapshot titled "Untitled Room" with a null
   // room_type would be a silently-degraded save the user can't tell apart from a
   // good one. Surface it so the client can retry (F4.1 SIDE-EFFECT INTEGRITY).
-  const { data: room, error: roomError } = await supabase
-    .from("rooms")
-    .select("name, room_type")
-    .eq("id", room_id)
-    .single();
+  const [
+    { data: room, error: roomError },
+    { data: diagnosis },
+  ] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select("name, room_type")
+      .eq("id", room_id)
+      .single(),
+    supabase
+      .from("room_diagnoses")
+      .select("diagnosis_json, design_direction_json")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (roomError) return apiError("saved-designs", roomError);
-
-  // Fetch latest diagnosis (area_analysis)
-  const { data: diagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("diagnosis_json, design_direction_json")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   if (!diagnosis?.diagnosis_json) {
     return NextResponse.json({ error: "No analysis found for this room" }, { status: 404 });
@@ -175,34 +182,41 @@ export async function POST(request: NextRequest) {
   // invariant that a saved design's project_id is always one of the caller's
   // own projects. Bind every client-supplied id, then persist what the binding
   // returned; never persist the raw input alongside a check that rejected it.
-  let boundProjectId: string | null = null;
-  if (project_id) {
-    const { data: project } = await supabase
-      .from("projects")
-      .select("name, building_name")
-      .eq("id", project_id)
+  // The project-binding fetch and the existing-design lookup below are
+  // independent (the project fetch keys on project_id/user_id, the existing
+  // lookup keys on room_id/user_id — neither depends on the other's result),
+  // so run them concurrently — same pattern as the products/bundles fetch
+  // above. When project_id is absent, skip the query and resolve to the same
+  // shape a Supabase maybeSingle() miss would ({ data: null, error: null }).
+  const [{ data: project }, { data: existing, error: existingError }] = await Promise.all([
+    project_id
+      ? supabase
+          .from("projects")
+          .select("name, building_name")
+          .eq("id", project_id)
+          .eq("user_id", userId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    // Upsert: if a saved design for this room already exists, update it.
+    // Fail loud on a read error rather than treating an errored existence check
+    // as "no existing design": falling through to the INSERT branch below would
+    // create a DUPLICATE saved_designs row for a room that already has one
+    // (defeating the upsert and corrupting the user's saved list). A transient
+    // read error must return 500 so the client retries, never a silent second row.
+    supabase
+      .from("saved_designs")
+      .select("id")
       .eq("user_id", userId)
-      .maybeSingle();
+      .eq("room_id", room_id)
+      .maybeSingle(),
+  ]);
 
-    if (project) {
-      boundProjectId = project_id;
-      (snapshot.metadata as Record<string, unknown>).project_name = project.name;
-      (snapshot.metadata as Record<string, unknown>).building_name = project.building_name;
-    }
+  let boundProjectId: string | null = null;
+  if (project) {
+    boundProjectId = project_id as string;
+    (snapshot.metadata as Record<string, unknown>).project_name = project.name;
+    (snapshot.metadata as Record<string, unknown>).building_name = project.building_name;
   }
-
-  // Upsert: if a saved design for this room already exists, update it.
-  // Fail loud on a read error rather than treating an errored existence check as
-  // "no existing design": falling through to the INSERT branch below would create
-  // a DUPLICATE saved_designs row for a room that already has one (defeating the
-  // upsert and corrupting the user's saved list). A transient read error must
-  // return 500 so the client retries, never a silent second row.
-  const { data: existing, error: existingError } = await supabase
-    .from("saved_designs")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("room_id", room_id)
-    .maybeSingle();
 
   if (existingError) return apiError("saved-designs", existingError);
 
