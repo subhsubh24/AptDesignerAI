@@ -268,9 +268,9 @@ where polname in (
 
 ---
 
-### 032_backfill_update_with_check.sql — security: WITH CHECK on legacy UPDATE policies (added 2026-08-04, Run 142, PR #799)
+### 032_backfill_update_with_check.sql — hardening: pin explicit WITH CHECK on legacy UPDATE policies (added 2026-08-04, Run 142, PR #799; description corrected Run 145)
 
-`projects`, `rooms`, and `saved_designs` (`001_initial_schema.sql` / `011_saved_designs.sql`) had UPDATE RLS policies with a `USING` clause only, no `WITH CHECK` — so RLS validated which rows a caller could touch but never validated the NEW row values. Defense-in-depth (app code never lets a client set the affected ownership columns today), but RLS is the documented security boundary, not the app layer.
+`projects`, `rooms`, and `saved_designs` (`001_initial_schema.sql` / `011_saved_designs.sql`) had UPDATE RLS policies with a `USING` clause only, no explicit `WITH CHECK`. **Correction (Run 145):** a reviewer on the follow-on migration 033 (below) caught that Postgres automatically reuses `USING` as the implicit `WITH CHECK` for `UPDATE`/`ALL` policies when none is given — so these policies were already validating new row values against the same ownership predicate before this migration; there was no unvalidated-write gap and never was one (the original entry here claimed the "NEW row values" were never validated and that a spoofing UPDATE "would have succeeded" — both false, verified against documented Postgres RLS semantics). The migration is still worth applying: pinning `WITH CHECK` explicitly means a future `ALTER POLICY ... USING (...)` that only means to change row visibility can no longer silently drift the write-time check along with it.
 
 ```sh
 psql $DATABASE_URL -f supabase/migrations/032_backfill_update_with_check.sql
@@ -285,9 +285,10 @@ where polname in (
   'Users can update own rooms',
   'Users can update own saved designs'
 );
--- Expected: all three now have a non-null with_check expression.
+-- Expected: all three now have an explicit, non-null with_check expression
+-- (previously null/absent in the catalog, even though the check was already
+-- being enforced implicitly).
 ```
-As an authenticated user who owns row X: `UPDATE projects SET user_id = '<some other uuid>' WHERE id = '<X>';` must now raise `ERROR: new row violates row-level security policy` (previously would have succeeded).
 
 ---
 
