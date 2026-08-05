@@ -2153,3 +2153,112 @@ directly via curl through the agent-proxy, cross-checked against `/__agentproxy/
   a Product-Factory build note, not an owner env-var step). Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 20 — 2026-08-05
+
+### What we found
+- Branch hygiene: the designated branch (`claude/beautiful-cori-n1r6ac`) had no open PR and was 18
+  commits behind the default branch (`claude/ai-apartment-design-app-iHAdb`) with zero commits of
+  its own — reset it to the default branch's current tip (`0f214fd`, Run 143 ledger) before starting
+  new work, rather than stacking on a stale base.
+- No new independent auditor pass landed since Run 19: `docs/growth/GTM_SCORECARD.md` is still Run 5
+  (`as_of: 2026-08-03`, overall B, `ship_gate_met: false`) and `docs/quality/QUALITY_SCORECARD.md` is
+  still `as_of: 2026-08-03` (overall C, `ship_gate_met: false`, held on `functional_reality` for a
+  7th consecutive cycle — a purely owner-gated CI/persistence-cutover step per `PENDING_OPS.md`).
+  Both re-read directly this run, not inferred from Run 19's account.
+- Independently spot-checked (not re-assumed) that Run 19's fixes to every GTM Auditor Run 5
+  `top_gap` are still live in the actual files: `docs/BUSINESS_CASE.md` still carries the "$73,519
+  store / $82,873 web" year-1 exit-run-rate caveat next to the shippable-today figures (grep-
+  verified at the cited line numbers); `docs/analytics.md` still lists all 11 `FunnelEvent`s with an
+  accurate "covers all 11" footnote; `docs/email-welcome-sequence.md` still correctly states Email
+  1's send engine is code-complete, not webhook-gated. Nothing to re-fix here.
+- `PENDING_OPS.md` re-verified directly: `as_of` is still `2026-07-28`, unchanged since Run 17 (now
+  spanning Runs 17–20), and every growth-relevant item (`set-site-gate-password`,
+  `connect-email-resend`, `apply-migration-031`, `set-metrics-token`, `set-cron-secret`,
+  `enroll-apple-small-business-program`, `apply-migration-021`, `set-email-physical-address`,
+  `waitlist-early-discount-coupon`) is still `status: open`.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a SIXTEENTH time: still
+  `connect_rejected` / gateway 502 to CONNECT, identical signature to every prior probe, cross-
+  checked against `/__agentproxy/status` `recentRelayFailures` (2026-08-05T05:14:08Z/09Z).
+  `trustpilot.com/review/havenly.com` still returns HTTP 403 to direct WebFetch, re-confirmed
+  directly. Funnel remains 0/null across every metric.
+
+### What we built this run
+- **Demand-signal research (`docs/growth/GROWTH_STATUS.md`)**: per Run 19's own `next_action`
+  ("consider a fresh angle for theme 1... a primary retailer-side source... rather than another
+  aggregate-statistics or vendor-promotional search"), targeted theme 1 with exactly that angle — a
+  returns-cost/logistics data source, not another shopping-time-cost aggregate. Found a genuinely
+  new, directly-fetched, non-competitor, dated source: `eightx.co/blog/average-furniture-and-home-
+  return-rate-benchmarks` (a returns-analytics vendor blog, published 2026-07-01, aggregating
+  NRF/Happy Returns 2025 + YouGov 2025 + ClaimLane 2026 + public 10-K filings) — VERBATIM-VERIFIED
+  via direct WebFetch: "Furniture's online return rate is about 22.7%, roughly 3 points above the
+  19.3% all-category online average," with "Size/space mismatch: ~58%" as "the dominant driver" of
+  furniture returns and "Color/material gap: ~44%," plus a large-furniture return costing "$55-108
+  all-in." This is theme 1's first quantified DOWNSTREAM-COST evidence (distinct from its existing
+  eMarketer/First Chair/Baymard/HN search-TIME-cost evidence) and a materially different source type
+  (returns-analytics/logistics vendor). Theme 1 moves from `cited_count` 4/`verbatim_count` 3 to
+  **5/4**.
+- The SAME fresh-angle search applied to theme 4 (does AR view-in-room measurably reduce furniture
+  returns) surfaced only vendor-promotional content from companies that sell AR/3D visualization TO
+  furniture retailers (`cylindo.com`, `orbe3d.com`, `elsner.com`, `theplanner.studio`,
+  `sodawebmedia.com`, `1center.co` — the identical undisclosed-competitor-promotion problem already
+  flagged for First Chair/glamar.io/3dcloud.com in prior runs), plus an unverifiable
+  WebSearch-synthesized claim attributed to "Snap + Publicis" (4,028 shoppers, up to 58% return
+  reduction) that a direct follow-up search could not trace to a checkable primary source — and Snap
+  is itself a conflicted party (sells AR ad/lens products commercially). Per this doc's standing
+  anti-fabrication practice, correctly **NOT cited** — an honest negative for theme 4.
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of`/`demand_signal.as_of` to 2026-08-05; refreshed
+  the `internal_metrics_api`, `web_research`, and `gtm_scorecard` validation entries with this run's
+  16th probe and the Run-19-fix spot-check; refreshed `learnings`/`next_actions`/`owner_blockers` for
+  the 20th consecutive circuit-breaker run. Ran `npm install` (materializes `js-yaml` into a fresh
+  `node_modules`, no `package.json` change) then `node scripts/validate-gtm.mjs` — OK.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (16th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (both QUALITY_SCORECARD
+  and — as data, not this loop's gate — GTM_SCORECARD) — GTM_STANDARD §6/§13 Gate 1 stays hard-off.
+  Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: the new theme-1 citation
+  strengthens already-live positioning (real/buyable, multi-retailer, persistent-spatial-grounding)
+  rather than opening a new direction, and is nowhere near the §3 bar (quantified, statistically
+  significant, causally revenue-linked) for a steer.
+- Did not spawn a maker≠checker reviewer: the only substantive edit this run is a single new
+  demand-signal citation (research-only) — no landing/email/ASO copy, campaign, pricing/positioning
+  claim, outreach draft, or roadmap/vision/business-case steer shipped, matching this doc's own
+  precedent (Runs 5, 6, 8, 9, 16–18) for when a routine S4/S5 update does and doesn't warrant one.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced — the demand-signal finding needs no
+  owner step, and every existing growth blocker is already tracked there.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads competition data; no new information since Run 3.
+
+### Lessons learned
+- **Following a prior run's own next_action literally paid off.** Run 19 named the exact angle that
+  would work for theme 1 ("a primary retailer-side source... returns/exchange-rate disclosure") —
+  taking that instruction at face value (searching for returns-COST data specifically, not another
+  shopping-time survey) surfaced a genuinely new, citable source on the first attempt, after three
+  prior runs (12, 14, 17) had tried more generic angles on this theme with thinner results.
+- **The same fresh-angle technique doesn't transfer automatically across themes.** Applying the
+  identical "primary cost-data source" angle to theme 4 hit a wall the returns-cost angle didn't:
+  every AR-adoption/return-reduction source in this space is sold BY a vendor with a direct
+  commercial stake in AR/3D visualization adoption — a structural conflict-of-interest problem theme
+  1's returns-analytics space didn't have (eightx.co sells returns-analytics tooling, not
+  furniture-AR, so it has no obvious stake in this product's core furniture-shopping thesis either
+  way). Worth naming explicitly for the next attempt at theme 4: the search needs to specifically
+  filter for NON-AR-vendor sources (consumer research orgs, neutral logistics analysts, or a named
+  retailer's own disclosure), not just "a different query."
+- **A specific, unverifiable statistic dressed up with a real-sounding attribution ("Snap +
+  Publicis," "4,028 shoppers") is exactly the kind of claim S10's verbatim-verification requirement
+  exists to catch.** WebSearch's first-pass synthesis presented this as settled fact; a direct
+  follow-up search for the primary study could not confirm the specific numbers, and the named party
+  (Snap) turned out to be commercially conflicted. Treating a plausible-sounding synthesized stat as
+  citable without tracing it to a primary, checkable source would have been a real integrity failure
+  in a demand-signal doc that other work (positioning, business-case reconciliation) leans on.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1–19? YES — circuit breaker remains FIRED (Run 20, 20th consecutive
+  run, ~39 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
