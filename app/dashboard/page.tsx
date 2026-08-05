@@ -981,6 +981,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        <h2 className="sr-only">Your rooms</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {roomSections.map((section) => {
             const hasImages = (roomImages[section.key]?.length || 0) > 0;
