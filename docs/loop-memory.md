@@ -7272,3 +7272,115 @@ re-confirmed fresh next run rather than assumed unchanged from this entry.
   Apartment product in App Store Connect/Play Console) now that the code-only fallback-display
   half shipped this run (#805) — do not re-scope the mobile paywall again without a fresh
   QUALITY_SCORECARD re-grade naming a new, specific gap first.
+
+---
+
+## Run 144 (2026-08-05) — DEEP AUDIT due (last full pass Run 140, 2026-08-03). Scoped 4-scout sweep + 3 file-disjoint changes. The run's lesson: **a scout's "Supabase ✓" host claim was wrong for the compare/products pages (arbitrary retailer CDN, not Supabase) but right for room-image-gallery — verifying each claim first, not batching on scout say-so, avoided shipping a real next/image crash risk on the wrong file.**
+
+### State on entry
+- Cold container; `node_modules` absent at root (mobile's was present). Baseline GREEN after
+  `npm install`: web tsc, **2813 tests** / 12 skip, determinism, eslint 0/0.
+- DEEP AUDIT **due** (last full pass Run 140, 2026-08-03, per Run 143's own rotation guide) — ran
+  a 4-Haiku-scout sweep (security/RLS, correctness+perf+coverage, mobile, design-bar/a11y) as a
+  scoped substitute for the full 8-lens rotation, given this run's time budget.
+- No open PRs on entry — clean state.
+
+### Scout yield: 2 lenses CLEAN, 2 produced real leads — one of which needed correction before shipping
+- security/RLS **CLEAN** (independently re-verified: 26/26 tables RLS-enabled, WITH CHECK backfill
+  from Run 142 holds, SECURITY DEFINER functions correctly hardened, no secrets). mobile **CLEAN**
+  (tsc clean, no stubs/TODOs, $29 Apartment fallback from Run 143/#805 confirmed intact).
+- The correctness/perf scout correctly reconfirmed two long-standing QUALITY_SCORECARD gaps
+  (`lib/store/embedding-index.ts`'s pgvector-unused N+1, sequencing with the owner-gated
+  DATA_BACKEND cutover; `validation-agent.ts`/research-assembler.ts coverage) and flagged 16
+  `<img>`→`next/image` candidates as "Supabase ✓" hosts. **This claim was wrong for the majority of
+  them**: reading `lib/agents/product-extractor.ts` directly showed `product.image_url` is scraped
+  from arbitrary retailer product pages (Wayfair/Amazon/CB2/etc via Tavily), not Supabase-hosted —
+  confirmed by the ratchet test's OWN docstring ("most images come from arbitrary retailer CDNs
+  that would each need a remotePatterns host entry"). Only `RoomImageGallery` (room photos, backed
+  by `room_images.storage_path`, genuinely Supabase Storage) was actually safe, and that was
+  verified independently before touching anything, not assumed from the scout's "Supabase ✓" tag.
+- The design-bar scout's heading-hierarchy and off-system-color findings were both verified
+  correct on direct read, with one important exception caught before implementing: one of the 6
+  color hits it listed was `app/dashboard/page.tsx:833`'s "Building researched" pill — the EXACT
+  site Run 139/#788 investigated and deliberately left raw-emerald, re-confirmed by Run 142. Fixed
+  the other 6 (genuinely new sites) and left that one alone, per the standing DO-NOT-RE-FLAG entry.
+
+### Shipped — 3 file-disjoint, one required a review-driven correction
+1. **`fix(a11y)` #808** — dashboard room-picker's h1→h3 heading skip (no h2), same defect class as
+   PR #795's `/gallery` fix. One-line `sr-only` h2. Both reviewers APPROVE, first round.
+2. **`fix(design-bar)` #809** — 6 off-system raw colors (amber/emerald) on the room-setup page,
+   the product-evaluation reasons/risks list, and the waitlist form's success states, onto
+   `text-accent-warm`/`text-foreground`/`text-muted-foreground`. The reasons/risks conversion
+   deliberately drops hue-coding for an emphasis ladder (full-ink for positive, muted for
+   negative) — Reviewer B explicitly checked this wasn't the toast/badge categorical-status trap
+   (both list items already carry a distinct icon glyph AND a section header, so color was
+   redundant, not load-bearing) before approving. Off-system-palette ratchet: 48→42, independently
+   recounted by a reviewer via a standalone script replicating the test's exact logic (not just
+   trusting the test's own pass/fail) before confirming the new ceiling.
+3. **`perf(images)` #810** — `RoomImageGallery` raw `<img>` → `next/image`. **Reviewer A's first-
+   round REQUEST_CHANGES was a real, confirmed defect**: `isAcceptableStoredImageUrl`
+   (lib/utils/image-url.ts) has no host allowlist — it accepts any `https:` URL or internal
+   relative path — while `POST /api/rooms/[roomId]/images` is directly callable with an arbitrary
+   `image_url` in the body. `next/image` throws a hard runtime error for a src whose host isn't in
+   `next.config.ts`'s `remotePatterns`, so a `room_images` row with an unexpected host would crash
+   the room detail page instead of degrading like the old `<img>` did — verified directly by
+   reading both the validator and the write route before accepting the finding. Fixed with a
+   `canOptimize()` host check mirroring `remotePatterns`, falling back to the original raw `<img>`
+   for any non-matching host. Because the fallback branch keeps one literal `<img>` in source, the
+   raw-`<img>` ratchet's static count is genuinely unchanged at 30 — an earlier, premature 30→29
+   edit was caught and reverted once this was clear, verified by recounting independent of the
+   test file. Second-round reviewer confirmed the fix fully closes the crash risk (checked
+   `next/image`'s actual throw behavior, not just the presence of a guard) and that the ratchet-
+   unchanged claim holds once the ratchet's own comment-stripping is applied.
+
+### Merge outcome + gate
+- 3 separate branches/PRs (#808–#810), reviewed and merged in sequence. Merged-tree gate GREEN,
+  re-verified fresh after all three merges: `npx tsc --noEmit` clean, **2813 tests** (0 net change
+  — none of the three changes added tests, all were fix-in-place with an existing ratchet
+  asserting the new count), `npm run check:determinism` clean, `npx eslint .` 0/0, `cd mobile &&
+  npx tsc --noEmit` clean.
+- **Reviewer verdicts: 6 first-round + 2 second-round on the #810 correction.** One REQUEST_CHANGES
+  (on #810), and it was a real, substantive finding, not a nitpick — the same pattern as every
+  prior run's "every blocking review finding was real" observation held again.
+- No migrations, no new PENDING_OPS entries, no ROADMAP box ticked (none of the three changes are
+  named Track/DoD line items — a11y/design-bar/perf fixes below Track-item granularity, same as
+  Run 142/143's pattern).
+
+### Lessons learned
+1. **A scout's host claim ("Supabase ✓") was right for one file and wrong for most of the rest it
+   was attached to — the fix is verifying the SOURCE of the data (grep the extractor/agent code),
+   not trusting a label the scout attached to a grep hit.** Product images in this app are scraped
+   from arbitrary retailer pages; only user-uploaded room/floor-plan photos and AI-generated
+   mockups are genuinely Supabase-hosted. A next/image conversion on the wrong file would have
+   shipped a real crash risk; this run's own #810 correction shows even the RIGHT file needed a
+   defense-in-depth fallback because the write-path validator doesn't itself enforce a host
+   allowlist — "verified as Supabase-hosted today" and "guaranteed to stay that way" are different
+   claims, and only the second is safe to build a non-degrading `next/image` conversion on.
+2. **Fixing a ratchet-adjacent number requires recomputing it independently, not trusting the
+   diff's own arithmetic** — the #810 correction is a clean example: the first version's ratchet
+   edit (30→29) was arithmetically consistent with removing one `<img>`, but became wrong the
+   moment the fix added a fallback branch back in, and it was only caught by recounting from
+   scratch rather than incrementing/decrementing the old number.
+3. **A scoped 4-scout sweep (vs. the full 8-lens rotation) is a legitimate substitute when time
+   budget is tight, PROVIDED it still covers security/RLS every run (the highest-consequence
+   lens) and the sweep's own findings are verified before acting** — this run's real defect-
+   avoidance came entirely from verification discipline, not sweep breadth.
+
+### Carry-forward
+- **DEEP AUDIT next due ~Run 148** (this run counts as the due pass, scoped; a full 8-lens rotation
+  is still owed within the next few runs if this scoped version leaves any lens thin — security/
+  RLS, mobile, correctness/perf, and design-bar/a11y were covered this run; accessibility beyond
+  heading order, dependency/config health, and artifact-freshness were NOT covered and should be
+  picked up next).
+- Two ship-critical QUALITY_SCORECARD dimensions remain genuinely owner-gated (`functional_reality`,
+  `design_taste`'s F7 screenshots) — unchanged, not re-probed this run beyond what's stated above.
+- `lib/store/embedding-index.ts`'s pgvector RPC fix is real and loop-buildable in isolation, but
+  its own scorecard gap explicitly says to sequence it with the owner-gated DATA_BACKEND cutover
+  (would be dead code before that lands) — left deliberately unbuilt, not missed.
+- `research-assembler.ts` (named in QUALITY_SCORECARD's tests_evals gap) does not exist in this
+  repo — likely a stale reference to `shopping-researcher.ts` (which already has coverage) or a
+  planned-but-never-created file. Worth flagging to the independent Quality Auditor rather than
+  guessing which file was meant.
+- `validation-agent.ts` test coverage (13.06%, unchanged for 2 cycles) remains open — a minimal
+  real test would mock `geminiProvider.chat()` to exercise the revision-coercion branches
+  (lines ~472-479, 969-976), not just import-and-call-with-defaults.
