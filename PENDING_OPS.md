@@ -245,6 +245,29 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### 033_design_profiles_saved_items_with_check.sql — hardening: pin explicit WITH CHECK on design_profiles/saved_items policies (added 2026-08-05, Run 145)
+
+`design_profiles` and `saved_items` (`001_initial_schema.sql`) each have a `FOR ALL` RLS policy ("Users can manage own design profiles" / "Users can manage own saved items") with a `USING` clause only, no explicit `WITH CHECK`. Per Postgres' documented behavior, a `FOR ALL`/`UPDATE` policy with no `WITH CHECK` automatically reuses its `USING` expression as the check — so these policies were already validating INSERT/UPDATE new-row values against `user_id = auth.uid()`; there is no unvalidated-write gap and never was one. This migration pins that check explicitly in the policy catalog rather than closing a live vulnerability. The real value: once WITH CHECK is explicit, a future `ALTER POLICY ... USING (...)` that only means to change row visibility can no longer silently change the write-time check along with it (today it would, since the implicit WITH CHECK always mirrors USING).
+
+```sh
+psql $DATABASE_URL -f supabase/migrations/033_design_profiles_saved_items_with_check.sql
+```
+
+**Verify:**
+```sql
+select polname, pg_get_expr(polwithcheck, polrelid) as with_check
+from pg_policy
+where polname in (
+  'Users can manage own design profiles',
+  'Users can manage own saved items'
+);
+-- Expected: both rows now show an explicit, non-null with_check expression
+-- of `(user_id = auth.uid())` in pg_policy (previously null/absent in the
+-- catalog, even though the check was already being enforced implicitly).
+```
+
+---
+
 ### 032_backfill_update_with_check.sql — security: WITH CHECK on legacy UPDATE policies (added 2026-08-04, Run 142, PR #799)
 
 `projects`, `rooms`, and `saved_designs` (`001_initial_schema.sql` / `011_saved_designs.sql`) had UPDATE RLS policies with a `USING` clause only, no `WITH CHECK` — so RLS validated which rows a caller could touch but never validated the NEW row values. Defense-in-depth (app code never lets a client set the affected ownership columns today), but RLS is the documented security boundary, not the app layer.
