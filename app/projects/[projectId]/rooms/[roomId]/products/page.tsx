@@ -636,7 +636,7 @@ export default function ProductsPage() {
                         <ul className="space-y-1.5">
                           {detailEval.reasoning.top_reasons.map((r, i) => (
                             <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                              <CheckCircle2 className="h-3.5 w-3.5 text-foreground mt-0.5 shrink-0" />
                               {r}
                             </li>
                           ))}
@@ -650,7 +650,7 @@ export default function ProductsPage() {
                         <ul className="space-y-1.5">
                           {detailEval.reasoning.risks.map((r, i) => (
                             <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                              <X className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                              <X className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                               {r}
                             </li>
                           ))}

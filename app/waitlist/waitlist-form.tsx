@@ -81,8 +81,8 @@ export function WaitlistForm() {
   if (state === "pending") {
     return (
       <div className="flex flex-col items-center gap-3 py-4 animate-in fade-in duration-300">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-          <MailCheck className="h-6 w-6 text-emerald-500" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-warm/10">
+          <MailCheck className="h-6 w-6 text-accent-warm" />
         </div>
         <p className="text-base font-semibold">Check your inbox</p>
         <p className="text-sm text-muted-foreground text-center max-w-xs">
@@ -208,7 +208,7 @@ function ReferralShare({ code }: { code: string | null }) {
           className="flex-1 h-9 rounded-lg border bg-background px-3 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-warm/50"
         />
         <Button type="button" variant="outline" size="sm" onClick={copy} aria-label="Copy referral link" className="shrink-0">
-          {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-accent-warm" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
       {/* Announce the copy result to screen readers (the icon change alone is silent). */}
