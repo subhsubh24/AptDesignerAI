@@ -388,22 +388,14 @@ function ProductScorecard({
       isBestPick && "border-accent-warm/40 ring-1 ring-accent-warm/30"
     )}>
       <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? "Collapse" : "Expand"} ${product.title || "product"} scorecard`}
-        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        // Mouse-only convenience: a bigger click target than the chevron
+        // button alone. Not a keyboard/AT stop — the nested chevron button
+        // below is the single accessible control for this toggle (own
+        // aria-expanded/aria-label, natively focusable). Giving this div its
+        // own role="button"/tabIndex/aria-* would create a second,
+        // identically-labeled focus stop for the same action.
+        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={onToggle}
-        onKeyDown={(e) => {
-          // Only act on keys that originate on the row itself — never on ones
-          // bubbling up from the nested link or expand/collapse button, or
-          // we'd preventDefault their own Enter/Space and double-fire onToggle.
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
       >
         {product.image_url && (
           // eslint-disable-next-line @next/next/no-img-element
