@@ -99,8 +99,16 @@ const OFF_SYSTEM = new RegExp(
  * ordinal ladder) moved to CATEGORICAL_EXEMPT instead of converting — same net
  * effect on `total` (excluded either way), but honest about WHY: see the
  * app/page.tsx entry above.
+ *
+ * 42 -> 36: the dashboard's "Building researched" status badge carried six raw
+ * emerald classes (text/bg/border, each with a dark: pair) for what is a
+ * single positive-state badge, not a ranked ladder. Converted to the same
+ * `bg-accent-warm/10 text-accent-warm-strong border-accent-warm/20` token
+ * pattern already used for equivalent status badges in app/page.tsx and
+ * app/shared/[token]/SharedDesignView.tsx — no dark: variants needed since
+ * the accent-warm tokens are theme-aware CSS variables.
  */
-const MAX_OFF_SYSTEM = 42;
+const MAX_OFF_SYSTEM = 36;
 
 /**
  * Strip block + line comments so a palette name discussed in PROSE (this file's
