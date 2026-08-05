@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { RoomImage } from "@/lib/types/database";
 
 interface RoomImageGalleryProps {
@@ -14,13 +15,14 @@ export function RoomImageGallery({ images }: RoomImageGalleryProps) {
       {images.map((image) => (
         <div
           key={image.id}
-          className="aspect-video rounded-lg overflow-hidden bg-muted"
+          className="relative aspect-video rounded-lg overflow-hidden bg-muted"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={image.image_url}
             alt={image.caption || "Room photo"}
-            className="h-full w-full object-cover"
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+            className="object-cover"
           />
         </div>
       ))}

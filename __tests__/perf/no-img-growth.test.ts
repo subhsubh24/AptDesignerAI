@@ -28,10 +28,10 @@ const RAW_IMG = /<img\b/g;
 
 /**
  * Current committed count of raw `<img>` ELEMENTS. Only ever ratchet this DOWN.
- * (30 == the number of inline `eslint-disable @next/next/no-img-element`
+ * (29 == the number of inline `eslint-disable @next/next/no-img-element`
  * comments, i.e. every real usage is individually silenced.)
  */
-const MAX_RAW_IMG = 30;
+const MAX_RAW_IMG = 29;
 
 /**
  * Strip block + line comments so a `<img>` mentioned in prose (a code comment
