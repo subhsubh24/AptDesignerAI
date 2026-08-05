@@ -176,6 +176,16 @@ export default function SavedDesignsScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedView style={[styles.header, { borderColor: colors.border }]}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={TapSlop.smallLabel}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <ThemedText type="small" style={{ color: colors.accent }}>
+              ‹ Back
+            </ThemedText>
+          </Pressable>
           <ThemedText type="title">Saved Designs</ThemedText>
           {state.status === 'done' && state.designs.length > 0 && (
             <ThemedText type="small" style={{ color: colors.mutedForeground }}>
