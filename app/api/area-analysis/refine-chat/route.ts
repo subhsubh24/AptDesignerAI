@@ -47,13 +47,30 @@ const TRACKED_FIELDS = [
   "what_it_needs",
 ];
 
+/**
+ * Value-equality check for a single tracked field. Most TRACKED_FIELDS are
+ * primitives (design_direction, style_name, spatial_layout, ...) or arrays of
+ * primitives — for those, reference/strict equality already answers "did it
+ * change", and a distinct primitive is never equal, so JSON.stringify is
+ * skipped entirely. Only when at least one side is a non-null object/array
+ * (e.g. what_it_needs) do we need JSON.stringify to tell "different
+ * reference, same content" from "actually changed".
+ */
+function analysisValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const aIsObj = typeof a === "object" && a !== null;
+  const bIsObj = typeof b === "object" && b !== null;
+  if (!aIsObj && !bIsObj) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function diffAnalysis(
   oldA: Record<string, unknown>,
   newA: Record<string, unknown>,
 ): string[] {
   const changed: string[] = [];
   for (const f of TRACKED_FIELDS) {
-    if (JSON.stringify(oldA?.[f]) !== JSON.stringify(newA?.[f])) changed.push(f);
+    if (!analysisValueEqual(oldA?.[f], newA?.[f])) changed.push(f);
   }
   return changed;
 }
