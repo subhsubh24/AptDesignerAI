@@ -294,8 +294,8 @@ describe("tap-target call sites", () => {
     // then "the scan processes 29" — and both were wrong, the second because it
     // was not recounted after the detection holes above were closed. Pinning it
     // exactly means the next miscount fails here instead of shipping in prose.
-    // 33 measured + 1 layout-sized = 34 = every `<Pressable` in mobile/src.
-    expect(measured).toBe(33);
+    // 34 measured + 1 layout-sized = 35 = every `<Pressable` in mobile/src.
+    expect(measured).toBe(34);
   });
 
   it("scans a non-trivial number of files, and actually finds Pressables", () => {
