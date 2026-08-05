@@ -245,6 +245,28 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### 033_design_profiles_saved_items_with_check.sql — security: WITH CHECK on design_profiles/saved_items policies (added 2026-08-05, Run 145)
+
+`design_profiles` and `saved_items` (`001_initial_schema.sql`) each had a `FOR ALL` RLS policy ("Users can manage own design profiles" / "Users can manage own saved items") with a `USING` clause only, no `WITH CHECK` — the same gap 032 closed for `projects`/`rooms`/`saved_designs`, just on a `FOR ALL` policy instead of a dedicated UPDATE policy, so it also leaves INSERT unvalidated. Neither table has a live API endpoint today (defense-in-depth, not an active exploit), but RLS is the documented security boundary here, not app-code discipline.
+
+```sh
+psql $DATABASE_URL -f supabase/migrations/033_design_profiles_saved_items_with_check.sql
+```
+
+**Verify:**
+```sql
+select polname, pg_get_expr(polwithcheck, polrelid) as with_check
+from pg_policy
+where polname in (
+  'Users can manage own design profiles',
+  'Users can manage own saved items'
+);
+-- Expected: both now have a non-null with_check expression.
+```
+As an authenticated user who owns row X: `UPDATE design_profiles SET user_id = '<some other uuid>' WHERE id = '<X>';` must now raise `ERROR: new row violates row-level security policy` (previously would have succeeded). Same for `saved_items`.
+
+---
+
 ### 032_backfill_update_with_check.sql — security: WITH CHECK on legacy UPDATE policies (added 2026-08-04, Run 142, PR #799)
 
 `projects`, `rooms`, and `saved_designs` (`001_initial_schema.sql` / `011_saved_designs.sql`) had UPDATE RLS policies with a `USING` clause only, no `WITH CHECK` — so RLS validated which rows a caller could touch but never validated the NEW row values. Defense-in-depth (app code never lets a client set the affected ownership columns today), but RLS is the documented security boundary, not the app layer.
