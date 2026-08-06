@@ -70,7 +70,14 @@ function DesignCard({
   return (
     <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       {design.thumbnail_url ? (
-        <Image source={{ uri: design.thumbnail_url }} style={styles.cardThumb} contentFit="cover" transition={200} />
+        <Image
+          source={{ uri: design.thumbnail_url }}
+          style={styles.cardThumb}
+          contentFit="cover"
+          transition={200}
+          accessible
+          accessibilityLabel={`Thumbnail for ${design.title}`}
+        />
       ) : (
         <View style={[styles.cardThumb, { backgroundColor: colors.backgroundElement }]} />
       )}

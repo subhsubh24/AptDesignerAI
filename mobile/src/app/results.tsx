@@ -369,6 +369,8 @@ export default function ResultsScreen() {
                 style={styles.roomPhoto}
                 contentFit="cover"
                 transition={300}
+                accessible
+                accessibilityLabel={`Photo of your ${roomLabel.toLowerCase()}`}
               />
               <ThemedView style={styles.photoLabel}>
                 <ThemedText type="small" style={{ color: colors.mutedForeground }}>
@@ -554,6 +556,12 @@ export default function ResultsScreen() {
                   },
                 ]}
                 accessibilityRole="button"
+                accessibilityLabel={
+                  quotaLoading && saveState === 'idle' ? 'Checking…' :
+                  saveState === 'idle' ? 'Save design' :
+                  saveState === 'saving' ? 'Saving…' :
+                  saveState === 'saved' ? 'Saved' : 'Retry save'
+                }
                 accessibilityState={{ disabled: quotaLoading || saveState === 'saving' || saveState === 'saved' }}
                 onPress={saveState === 'idle' || saveState === 'save_error' ? saveDesign : undefined}
                 disabled={quotaLoading || saveState === 'saving' || saveState === 'saved'}
@@ -572,6 +580,7 @@ export default function ResultsScreen() {
                 { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
               ]}
               accessibilityRole="button"
+              accessibilityLabel="Back to home"
               onPress={() => router.push('/')}
             >
               <ThemedText style={[styles.buttonText, { color: colors.text }]}>

@@ -186,6 +186,7 @@ export default function PhotoCaptureScreen() {
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Analyze this room"
                   onPress={handleAnalyze}
                 >
                   <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
@@ -199,6 +200,7 @@ export default function PhotoCaptureScreen() {
                     { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Choose a different photo"
                   onPress={() => setSelectedImageUri(null)}
                 >
                   <ThemedText style={{ color: colors.text }}>Choose a different photo</ThemedText>
@@ -212,6 +214,7 @@ export default function PhotoCaptureScreen() {
                     { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Choose from library"
                   onPress={pickFromGallery}
                 >
                   <ThemedText style={[styles.buttonText, { color: colors.accentForeground }]}>
@@ -225,6 +228,7 @@ export default function PhotoCaptureScreen() {
                     { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel="Take a photo"
                   onPress={takePhoto}
                 >
                   <ThemedText style={{ color: colors.text }}>Take a Photo</ThemedText>
@@ -234,6 +238,7 @@ export default function PhotoCaptureScreen() {
                   style={({ pressed }) => [styles.skipButton, { opacity: pressed ? 0.6 : 1 }]}
                   hitSlop={TapSlop.defaultLabelPadded}
                   accessibilityRole="button"
+                  accessibilityLabel="Skip for now"
                   onPress={() => router.push('/')}
                 >
                   <ThemedText style={{ color: colors.textSecondary, fontSize: 14 }}>
