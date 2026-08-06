@@ -133,20 +133,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { data: room } = await supabase
-    .from("rooms")
-    .select("*")
-    .eq("id", room_id)
-    .single();
+  // Independent reads (both keyed only on room_id, no dependency between
+  // them) — parallelized to save one DB round-trip per refine turn.
+  const [{ data: room }, { data: latestDiagnosis }] = await Promise.all([
+    supabase.from("rooms").select("*").eq("id", room_id).single(),
+    supabase
+      .from("room_diagnoses")
+      .select("diagnosis_json")
+      .eq("room_id", room_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
-
-  const { data: latestDiagnosis } = await supabase
-    .from("room_diagnoses")
-    .select("diagnosis_json")
-    .eq("room_id", room_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   if (!latestDiagnosis) {
     return NextResponse.json(

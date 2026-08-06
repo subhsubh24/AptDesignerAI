@@ -167,6 +167,7 @@ export function LoginScreen({ onSignup }: LoginScreenProps) {
 
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel={loading ? 'Signing in…' : 'Sign in'}
                 accessibilityState={{ disabled: loading, busy: loading }}
                 style={({ pressed }) => [
                   styles.primaryButton,
