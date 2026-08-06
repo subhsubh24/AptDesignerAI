@@ -3,6 +3,8 @@ import { Dimensions, StyleSheet, useColorScheme } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { Colors } from '@/constants/theme';
+
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
@@ -12,7 +14,7 @@ export function AnimatedSplashOverlay() {
 
   if (!visible) return null;
 
-  const backgroundColor = colorScheme === 'dark' ? '#141211' : '#faf9f7';
+  const backgroundColor = Colors[colorScheme === 'dark' ? 'dark' : 'light'].background;
 
   const splashKeyframe = new Keyframe({
     0: {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
+import { logServerError } from "@/lib/utils/api-error";
 
 const CACHE = new Map<string, { url: string; attributions: string[]; ts: number }>();
 const TTL = 24 * 60 * 60 * 1000; // 24h
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!detailsRes.ok) {
+      logServerError("places-photo:details", new Error(`Places details ${detailsRes.status} ${detailsRes.statusText}`));
       return NextResponse.json({ error: "places lookup failed" }, { status: 502 });
     }
 
@@ -91,7 +93,8 @@ export async function GET(req: NextRequest) {
     CACHE.set(placeId, { url: finalUrl, attributions, ts: Date.now() });
 
     return NextResponse.json({ photoUrl: finalUrl, attributions });
-  } catch {
+  } catch (error) {
+    logServerError("places-photo", error);
     return NextResponse.json({ error: "photo fetch failed" }, { status: 502 });
   }
 }
