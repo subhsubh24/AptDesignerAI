@@ -2262,3 +2262,132 @@ directly via curl through the agent-proxy, cross-checked against `/__agentproxy/
   run, ~39 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 21 — 2026-08-07
+
+### Branch/PR housekeeping (before any GTM work)
+This run's designated branch (`claude/beautiful-cori-mcqftp`) had a clean working tree, zero
+commits ahead/behind the current default branch (`claude/ai-apartment-design-app-iHAdb`, force-synced
+via `git fetch`), and no unique commits of its own. No reset needed.
+
+### What we found
+- **A new independent QUALITY_SCORECARD pass landed since Run 20** (commit `15007fe`, #793,
+  `as_of: 2026-08-03`, "10th independent grade"): overall HELD at C (still capped by
+  `functional_reality`, unchanged 7 cycles) but ship-critical dimensions below A dropped from 5 to
+  3 — `store_readiness` C→A, `artifact_integrity` B→A, `security_rls` A→A+ all recovered this
+  cycle. The three still below A: `functional_reality` (C — an owner-gated CI/persistence-cutover
+  step per `PENDING_OPS.md` `ci-journeys-data-backend`/`cutover-to-persistent-data`, both
+  `status: open`), `design_taste` (B), `business_case_strength` (B). `ship_gate_met` stays `false`
+  — both GTM_STANDARD §6 outbound lanes stay hard-off, the same conclusion as every prior run, but
+  genuine forward progress worth naming: down from 5 sub-A ship-critical dims to 3 in one cycle.
+- `docs/growth/GTM_SCORECARD.md` is unchanged since Run 19/20 — still Run 5 (`as_of: 2026-08-03`,
+  overall B, `ship_gate_met: false`); re-verified via `git log -3` (last touch `46f5eaa`, #784).
+- Independently spot-checked (not re-assumed) that Run 19's fixes to every GTM Auditor Run 5
+  `top_gap` are still live: `docs/BUSINESS_CASE.md` still carries the "$73,519 store / $82,873 web"
+  year-1 exit-run-rate caveat; `grep -n "FunnelEvent =" -A 15 lib/analytics.ts` still shows exactly
+  11 members, matching `docs/analytics.md`'s "covers all 11" footnote. Confirmed via
+  `git log --oneline 113d8a8..HEAD -- <marketing docs>` that **zero** commits touched any GTM-owned
+  marketing doc (store-listing, press-kit, email-lifecycle, social-drafts, content-calendar,
+  OUTREACH, BUSINESS_CASE, analytics, email-welcome-sequence) between Run 20 and this run's HEAD —
+  nothing to re-fix.
+- `PENDING_OPS.md` re-verified directly: `as_of` is still `2026-07-28`, unchanged since Run 17 (now
+  spanning Runs 17–21), and every growth-relevant item is still `status: open`. No `MARKETING_HOLD`
+  or `MARKETING_APPROVED` file exists; `PENDING_OPS.md` carries no `approved_channels:` list;
+  `GROWTH_STATUS.md` carries no `marketing:`/Gate-1/Gate-2 block yet — none of GTM_STANDARD §13's
+  approval machinery has been engaged, correctly (readiness is not yet proven).
+- Re-probed `https://aptdesignerai.com/` a SEVENTEENTH time (curl through the agent-proxy): still
+  `connect_rejected` / gateway 502 to CONNECT, identical signature, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (`2026-08-07T05:14:18Z`). Funnel remains 0/null.
+
+### What we built this run
+- **Demand-signal research (`docs/growth/GROWTH_STATUS.md`)**: per Run 20's `next_action`, targeted
+  theme 4 (AR view-in-room trust gap, stuck at 2 cited/1 verbatim since Run 12) with the two fresh
+  angles it named. **Angle 1 — neutral consumer-research org:** found Deloitte's "Augmented
+  shopping: The quiet revolution" (`deloitte.com/us/en/insights/topics/emerging-technologies/
+  augmented-shopping-3d-technology-retail.html`) — a genuinely neutral, non-vendor publisher (no AR
+  product to sell) — but on read it carries no quantified consumer-trust/hesitation survey data at
+  all, only an unnamed furniture retailer's self-reported conversion stats (65-69%) and a
+  promotional quote from that retailer's own VP. Correctly **NOT cited**: a neutral PUBLISHER
+  reporting promotional content from a commercially-interested SOURCE is not neutral evidence,
+  regardless of who runs the blog. **Angle 2 — a competitor's own disclosed AR usage/satisfaction
+  data:** attempted to finally verbatim-verify theme 4's existing IKEA Place citation, which has sat
+  as "WebSearch-synthesized only, not independently re-fetched" since it first appeared in Run 5 —
+  six runs without anyone actually re-attempting the fetch. Discovered the standalone IKEA Place app
+  (`apps.apple.com/us/app/ikea-place/id1279244498`) now **404s**: a follow-up search confirmed IKEA
+  folded the "scan your room" AR feature into its main IKEA app (`id1452164827`), fetched cleanly
+  this run — 4.8/5 across 145K ratings, no AR-specific complaint visible in the fetched review
+  sample. Correctly did **NOT** cite the main app's rating as theme-4 evidence either way: 145K
+  ratings span the ENTIRE shopping app (search, delivery, click-and-collect), not the AR feature
+  specifically, so a strong aggregate with no visible AR-specific complaint is inconclusive, not a
+  real disconfirming datum — citing it would dress up a dead end as progress. Recorded the dead-app
+  finding directly inside theme 4's `sources` field (not just in a learning) so a future run does
+  not waste a probe on the same 404'd id.
+- Theme 4 `cited_count`/`verbatim_count` stay UNCHANGED at 2/1 — the theme's FIFTH consecutive
+  honest negative (Runs 14, 17, 19, 20, 21). Held `confidence` at "emerging" (unchanged since Run
+  6).
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of`/`demand_signal.as_of` to 2026-08-07; refreshed
+  the `internal_metrics_api` (17th probe), `web_research`, and `gtm_scorecard` validation entries
+  (the latter now also reports the new QUALITY_SCORECARD Run 10 pass as DATA); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 21st consecutive circuit-breaker run. Ran
+  `npm install` (materializes `js-yaml` into a fresh `node_modules`, no `package.json` change) then
+  `node scripts/validate-gtm.mjs` — OK.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (17th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (both
+  QUALITY_SCORECARD, still 3 sub-A ship-critical dims despite this run's real progress, and
+  GTM_SCORECARD as data) — GTM_STANDARD §6/§13 Gate 1 stays hard-off. Zero outreach drafts this run,
+  correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: nothing this run clears the
+  §3 bar for a steer — both demand-signal findings this run are honest negatives (a source correctly
+  not cited, a dead app correctly not treated as new evidence), not new positioning data, and the
+  QUALITY_SCORECARD read is DATA about product readiness, not something this loop's own findings
+  would justify steering on.
+- Did not spawn a maker≠checker reviewer: every edit this run is research/validation (a scorecard
+  data-read, a re-verified consistency spot-check, and two demand-signal negative findings) — no
+  landing/email/ASO copy, campaign, pricing/positioning claim, outreach draft, or roadmap/vision/
+  business-case steer shipped, matching this doc's own precedent for when a routine S4/S5 update
+  does and doesn't warrant one.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced — every growth blocker found this run
+  is already tracked there, and the QUALITY_SCORECARD/GTM_SCORECARD findings are both already-open
+  items with no new owner-actionable step.
+- Did not re-attempt theme 1/2/3 demand-signal research: Run 20 already strengthened theme 1 this
+  cycle; the standing next_action pointed specifically at theme 4, and it was worth using the run's
+  research budget there rather than re-probing already-adequately-corroborated themes.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads competition data; no new information since Run 3.
+
+### Lessons learned
+- **A citation marked "not yet independently verified" needs an expiry, not just a repeated label.**
+  Theme 4's IKEA Place citation carried the same "WebSearch-synthesized only, not independently
+  re-fetched" note for six runs (Run 5 through Run 20) without anyone actually re-attempting the
+  fetch in that window — and when finally re-attempted this run, the underlying app no longer
+  exists. A stale "not yet verified" note can silently decay into a stale "no longer even
+  fetchable" fact if no run periodically re-attempts it, not just re-cites the same note.
+- **A neutral PUBLISHER is not the same guarantee as neutral CONTENT.** Deloitte's own page is not
+  commercially conflicted, but the specific consumer-trust claim needed for theme 4 wasn't there —
+  what WAS there was an interview-style case study quoting a retailer's own marketing VP. The
+  publisher's neutrality doesn't transfer to every claim reported inside its pages; each specific
+  citable fact still needs its own source-of-truth check, not just a domain-level trust heuristic.
+- **An "inconclusive" finding and a "disconfirming" finding are not the same, and conflating them is
+  a real integrity risk.** IKEA's main-app 4.8/5 rating LOOKS like a disconfirming datum (strong
+  rating despite AR being present in the app) in the same shape as RoomGPT/Havenly's disconfirming
+  entries from prior runs — but those apps are AR/design-SPECIFIC, so their aggregate ratings
+  plausibly reflect the feature in question. IKEA's rating spans an entire general-purpose shopping
+  app where AR is one minor feature among many (search, delivery, click-and-collect); diluting a
+  narrow claim with a broad aggregate would have been citation laundering, not evidence. Worth a
+  standing check for future App Store citations: does the app's PRIMARY use case match the theme
+  being evidenced, or is AR/the-relevant-feature a minor part of a much bigger app?
+- **A real ship-readiness improvement (QUALITY_SCORECARD Run 10) is worth recording prominently even
+  though it changes zero GTM actions this run** — it is the single most important trend line this
+  loop watches (down from 5 to 3 sub-A ship-critical dims), and burying it as a one-line aside would
+  understate real progress toward the outreach-unlock gate.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1–20? YES — circuit breaker remains FIRED (Run 21, 21st consecutive
+  run, ~41 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
