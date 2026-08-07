@@ -73,14 +73,19 @@ export const PRIORITY_BADGE: Record<AssessmentPriority, string> = {
   high: "border-transparent bg-foreground text-background",
   // An OPAQUE accent fill rather than a tint, and the reason is worth keeping.
   //
-  // A tinted accent pill is a contrast trap here. In dark mode
-  // --accent-warm-strong and --accent-warm are the same value, so tinting the
-  // fill with the same hue as the text eats the contrast: at /15 this measured
-  // 4.28:1 on a dark card, under the AA floor. Dropping to /10 cleared it at
-  // 4.61:1 — but only when composited directly onto the card. This pill also
-  // renders inside a `bg-muted/50` row wrapper in app/saved/[id]/page.tsx, and
-  // that DOUBLE composite lands at 4.49:1 — under the floor again, and the kind
-  // of surface a flat "tint over card" model never asks about.
+  // A tinted accent pill was a contrast trap here. At the time this was
+  // written, dark mode gave --accent-warm-strong and --accent-warm the SAME
+  // value, so tinting the fill with the same hue as the text ate the
+  // contrast: at /15 this measured 4.28:1 on a dark card, under the AA floor.
+  // Dropping to /10 cleared it at 4.61:1 — but only when composited directly
+  // onto the card. This pill also renders inside a `bg-muted/50` row wrapper
+  // in app/saved/[id]/page.tsx, and that DOUBLE composite lands at 4.49:1 —
+  // under the floor again, and the kind of surface a flat "tint over card"
+  // model never asks about. (Issue #711 later gave --accent-warm-strong its
+  // own, lighter dark-mode value specifically so single-layer tinted pills
+  // elsewhere clear AA without going opaque — but a tint-on-tint stack, which
+  // this pill's nesting is, is still unsafe regardless of the token value, so
+  // the opaque-fill decision below still holds.)
   //
   // Going opaque removes the whole class of problem instead of tuning around
   // it: an opaque fill is independent of whatever it is nested inside, so no
@@ -116,9 +121,12 @@ export function priorityBadge(priority: string | null | undefined): string {
  * cards had one (`bg-emerald-100` / `bg-amber-100`), and the obvious token
  * translation — an `accent-warm/10` chip under an `accent-warm-strong` icon —
  * measured 4.49:1 in dark mode, UNDER the AA floor, for exactly the reason
- * PRIORITY_BADGE documents below: dark mode gives `--accent-warm-strong` and
- * `--accent-warm` the same value, so tinting the fill with the icon's own hue
- * eats the contrast. The guard caught it before it shipped. Rather than tune a
+ * PRIORITY_BADGE documents below: at the time, dark mode gave
+ * `--accent-warm-strong` and `--accent-warm` the same value, so tinting the
+ * fill with the icon's own hue ate the contrast (issue #711 later separated
+ * the two tokens, but this pill nests a tint inside a wrapper's own tint — a
+ * stack that stays unsafe regardless of the token value). The guard caught it
+ * before it shipped. Rather than tune a
  * third opacity, the icon now sits bare on the card — which is also how the
  * other three consumers have always rendered this pair, so the presentations
  * converged instead of diverging again.

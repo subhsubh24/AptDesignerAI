@@ -139,18 +139,25 @@
   /* Lifted from #d4733e (equal to --accent-warm) after measuring against every
      surface this token actually renders on, not just --background (issue
      #711). #d4733e cleared AA as text on a bg-accent-warm/15 pill over
-     --background (5.0:1) but FAILED over --card (4.28:1 at 15% tint) and
+     --background (4.64:1) but FAILED over --card (4.28:1 at 15% tint) and
      --surface-elevated (4.00:1) — the surfaces `Badge variant="warm"` and the
      warm-outline/warm-ghost buttons actually render on throughout the app.
      #dd8351 clears AA (>=4.5:1) against EVERY real (background/card/
      surface-elevated/muted) x (5%/10%/15% tint) combination — verified in
      __tests__/design/warm-pill-contrast.test.ts, which composites the tint
      the same way a browser does rather than trusting one spot measurement.
-     This value alone is not sufficient against a TINT-ON-TINT stack (e.g. the
-     pill nested inside a bg-primary/5 panel that used to exist on the /focus
-     page) — that case was fixed by giving the nested pill's containing panel a
-     SOLID background instead, so no composite is ever more than one alpha
-     layer deep. See issue #711 for the full measured contrast tables. */
+     This value alone is not sufficient against a TINT-ON-TINT stack — three
+     such cases were found and fixed by giving the nested pill's containing
+     surface a SOLID background instead (the /focus Design Direction panel,
+     the /saved share-panel's warm-ghost hover tint, and the /pricing
+     "Most popular" badge straddling a gradient card edge — the last two
+     given solid pill fills instead, since their surroundings aren't a single
+     flat surface). This is a source-level property a CSS-token test cannot
+     enumerate exhaustively (see the test file's own docstring); if you add a
+     NEW `bg-accent-warm/N` or `variant="warm"`/`warm-outline`/`warm-ghost`
+     usage nested inside another translucent (bg-*/N or bg-gradient-to-*)
+     surface, check it by hand. See issue #711 for the full measured contrast
+     tables. */
   --accent-warm-strong: #dd8351;
   /* Inverted relative to light, and deliberately so: the dark theme lightens the
      warm accent to #d4733e so it reads against a dark surface, which drops white

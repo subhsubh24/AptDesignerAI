@@ -128,7 +128,17 @@ export default function PricingPage() {
               >
                 {tier.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge variant="warm" className="shadow-warm-sm">
+                    {/* Solid fill, not the tinted `variant="warm"` pill: this badge
+                        straddles the card's top edge, so it sits partly over the
+                        card's own bg-accent-warm/5 gradient tint (a tint-on-tint
+                        stack, issue #711) and partly over whatever is outside the
+                        card — neither of which a single CSS surface token can
+                        describe precisely. A solid fill makes its contrast
+                        independent of either. */}
+                    <Badge
+                      variant="warm"
+                      className="shadow-warm-sm bg-accent-warm text-accent-warm-on-solid border-transparent"
+                    >
                       <Sparkles className="h-3 w-3 mr-1" />
                       Most popular
                     </Badge>
