@@ -12,6 +12,48 @@ redundant.
 - Evals: `npm run eval` · Determinism: `npm run check:determinism`
 - CI runs all of the above; it must be green before merge.
 
+## The board
+
+Work is tracked on the **Linear team `AptDesignerAI`**. The MCP connector is
+configured globally — no `.mcp.json` entry, and no API key in this repo. Verify
+with a `list_issues` call before writing anything; if that fails, see LOUD
+FALLBACK below.
+
+The board does not replace the gate. `scripts/preflight.sh` and CI still decide
+what is true; the board decides only *who is working on what* and *what counts
+as finished*.
+
+- **Claim before you build.** Read open issues by priority, assign the one you
+  pick to yourself, move it to `In Progress` — before writing code. Assignment
+  is atomic server-side, so a failed assign means another run got there first;
+  take the next item rather than contesting it. Without this step two concurrent
+  runs silently build the same thing and one of them wastes a whole run.
+- **The acceptance check is the definition of done, not your judgement of it.**
+  Every issue carries a command the *next* run can execute — `bash
+  scripts/preflight.sh`, `npx vitest run <file>`, a `grep` that must return
+  nothing. If you cannot write that command, the issue is not ready to be
+  worked; sharpen it until you can. "I reviewed it and it looks right" is the
+  failure mode this rule exists to kill.
+- **On close, comment the acceptance check as run — the command AND what it
+  printed.** Never the word "done". A closed issue with no output is a claim,
+  not a result, and weeks later nobody can tell the difference between work that
+  shipped and work that was merely believed to have shipped.
+- **File what you find, in the same run.** A gap noticed mid-run and mentioned
+  only in the run summary is gone once the summary scrolls away. If you surface
+  a risk, a follow-up, or a shortcut you took, it becomes an issue before the
+  run ends — with an acceptance check like any other.
+- **Loud fallback.** If Linear is unreachable or the team is missing, say so
+  prominently at the top of the run report, append the work to `TODO.md` in the
+  same shape (title, why, acceptance check), and carry on. A down board must
+  never block a run; a board that is skipped silently is worse than no board.
+- **Maker ≠ checker.** Whoever audits does not fix. An auditor that fixes its
+  own findings has graded its own work, which is the thing independent review
+  exists to prevent. Auditors file issues; the build loop picks them up and
+  fixes them. This mirrors the split already in place between the product
+  factory and the Quality / GTM auditor routines.
+
+Do not invent work to fill the board. An empty board is a truthful board.
+
 ## LLM cost contract (load-bearing — do not regress)
 <important if="touching provider/model selection, a .chat() call, thinkingConfig, escalation, gemini.ts, deepseek.ts, or the harness-ratchet/provider-floors tests">
 Full reasoning + the test ratchets: `.claude/rules/llm-cost-contract.md`. These
