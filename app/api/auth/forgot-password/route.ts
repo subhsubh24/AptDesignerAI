@@ -94,21 +94,47 @@ function isRateLimited(ip: string): boolean {
 // requested a reset for that address, which is a signal about the address). The
 // suppressed request simply mints and sends nothing.
 //
-// RESIDUAL TIMING SIGNAL (known, accepted, and distinct from an existence
-// oracle). A suppressed request skips the `generateLink` network round-trip,
-// so it returns measurably faster than the first request in a window. That
-// leaks "this exact address string already had a mint in the current window"
-// — NOT "this account exists": `generateLink` runs (and costs the same time)
-// for unregistered addresses too, since the enumeration-safety property
-// depends on treating known and unknown addresses identically up to that call.
-// The cooldown key is address-agnostic — anyone can put ANY string (real
-// account or not) on cooldown by requesting it once — so the timing only ever
-// confirms recent REQUEST activity the observer already caused or could
-// trivially cause themselves, not account existence. A synthetic delay on the
-// suppressed path was considered and rejected: real `generateLink` latency is
-// network-variable, so a fixed synthetic delay wouldn't achieve genuine parity
-// and would just add a second, differently-shaped timing signal (a suspiciously
-// uniform delay) without closing the first.
+// THE SLOT IS CONSUMED ON THE MINT ATTEMPT, NOT ON DELIVERY — and this is
+// deliberately different from an earlier revision of this file, which released
+// the slot whenever nothing was delivered (unknown address, provider decline,
+// no token, a throw, or an undelivered send). That release existed to protect
+// the account owner from a run of failures burning the window — but it created
+// an EXPLOITABLE TIMING ORACLE, caught in review: `generateLink` always runs
+// (and costs a real network round-trip) on the FIRST request for any address,
+// registered or not, so request 1 looks identical either way. But an
+// unregistered address's `generateLink` call always ERRORS, which released the
+// slot every time — so request 2+ for a nonexistent address kept taking the
+// slow path forever, while request 2+ for a REAL, successfully-delivered
+// address was suppressed and fast. Two requests, a stopwatch, no guessing:
+// fast second response ⇒ the account exists. That is precisely the existence
+// oracle property (2) at the top of this file exists to prevent, and it is a
+// real, cheap, two-request probe — not a theoretical one.
+//
+// The fix is to make request 2+ behave IDENTICALLY (fast, no `generateLink`
+// call) regardless of whether request 1 succeeded, errored, or the send later
+// failed to deliver. So the slot is consumed the moment a mint is ATTEMPTED —
+// see the single `claimEmailSend` call site below, before the `generateLink`
+// try/catch — and nothing later ever gives it back. This closes the oracle
+// completely: after request 1 (always slow, for any address), every later
+// request in the window is fast, for any address, real or not.
+//
+// THE COST OF CLOSING IT, stated rather than hidden: a real user whose OWN
+// mint attempt fails for a reason that isn't their fault (a transient
+// `generateLink`/provider outage, not "no such account") cannot get a fresh
+// mint for the rest of the window — up to 15 minutes — because there is no
+// signal this route can use to distinguish "that failure was transient, give
+// them another try" from "that address doesn't exist, don't leak it" without
+// reopening the exact oracle above (the two cases would need to behave
+// differently on request 2, and that difference IS the leak). This is a
+// narrower, DIFFERENT tradeoff than the "quota burned by an attacker" fear
+// the per-recipient control exists to avoid in the first place: it is not
+// attacker-triggerable (an attacker cannot make Resend's API fail for an
+// address they don't control), it requires an actual transient failure (rare),
+// and it is bounded and self-healing (`EXPIRES the per-recipient cooldown`
+// below pins that bound). Between "a rare, bounded, self-healing retry delay"
+// and "a cheap, reliable way to learn which emails have accounts," the latter
+// is the worse failure for this route to ship, so that is the tradeoff made
+// here.
 //
 // The key is a SHA-256 of the normalised address, not the address: this Map
 // outlives the request, and a long-lived in-memory list of everyone who forgot
@@ -127,29 +153,16 @@ function isRateLimited(ip: string): boolean {
 // closes the single/low-concurrency overwrite case fully, which is the live
 // bug (#712) this exists to fix.
 //
-// WHY THIS IS NOT A DENIAL OF SERVICE ON THE ACCOUNT OWNER.
-//
-// A claim is RELEASED whenever no mail actually went out (unknown address,
-// provider decline, throw, or undelivered send) — so a run of failures cannot
-// burn the one-per-window slot and leave the real owner suppressed with an
-// empty inbox. Being on cooldown carries a real guarantee: a recovery link for
-// this address WAS accepted by the provider in the last 15 minutes, addressed
-// to the owner's own inbox regardless of who asked for it. So "check your
-// email" is not a fake success.
-//
-// TWO LIMITS ON THAT GUARANTEE, stated rather than glossed. (1) `delivered`
-// means Resend returned 200, not that the message cleared the recipient's spam
-// filter. (2) Whether that link is still VALID when the owner asks depends on
-// the Supabase project's OTP expiry — an owner-controlled dashboard setting
-// this codebase never reads, so no claim is made about it here (see
-// PENDING_OPS `verify-otp-expiry-vs-reset-quota`). If that expiry is ever
-// configured at or below 15 minutes, RATE_WINDOW_MS (the shared cooldown
-// window below) must shrink to match, or an owner who was flooded could find
-// their one delivered link already dead.
-//
-// The residual is small and bounded: an owner who deleted the earlier mail as
-// suspicious waits out the window. `EXPIRES the per-recipient cooldown` pins
-// that bound so nobody can quietly widen it.
+// WHAT "ON COOLDOWN" GUARANTEES NOW. Weaker than before, and stated precisely:
+// being on cooldown means a mint was ATTEMPTED for this address in the last 15
+// minutes — NOT that mail was necessarily delivered. For the common case
+// (attempt succeeds, mail sends) this is the same real guarantee as before: a
+// recovery link reached the owner's own inbox regardless of who asked for it.
+// Whether that link is still VALID when the owner checks depends on the
+// Supabase project's OTP expiry — an owner-controlled dashboard setting this
+// codebase never reads (see PENDING_OPS `verify-otp-expiry-vs-reset-quota`).
+// If that expiry is ever configured at or below 15 minutes, RATE_WINDOW_MS
+// (the shared cooldown window below) must shrink to match.
 const RESET_COOLDOWN_MAX_MINTS = 1;
 const emailBucket = new Map<string, { count: number; resetAt: number }>();
 
@@ -161,7 +174,8 @@ function emailQuotaKey(email: string): string {
  * Claim the mint slot for this address. Returns false when the address is
  * already on cooldown for the current window — the caller must then mint
  * nothing (so the already-mailed token is never overwritten) and still return
- * the neutral body.
+ * the neutral body. The slot is never given back once claimed, regardless of
+ * what happens next — see the ENUMERATION SAFETY note above for why.
  */
 function claimEmailSend(email: string): boolean {
   if (rateLimitBypassedForTest()) return true; // CI journey suite only
@@ -175,17 +189,6 @@ function claimEmailSend(email: string): boolean {
   if (entry.count >= RESET_COOLDOWN_MAX_MINTS) return false;
   entry.count++;
   return true;
-}
-
-/**
- * Give the mint slot back. Called on every path where the claim did NOT result
- * in a delivered message, so the cooldown tracks real mail rather than mere
- * attempts — see the note above for why that is what keeps this from denying
- * the account owner their own recovery.
- */
-function releaseEmailSend(email: string): void {
-  const entry = emailBucket.get(emailQuotaKey(email));
-  if (entry && entry.count > 0) entry.count--;
 }
 
 /**
@@ -336,12 +339,11 @@ export async function POST(req: NextRequest) {
     console.error("[auth/forgot-password] generateLink threw:", err);
   }
 
-  if (!resetUrl) {
-    // Nothing will be mailed — unknown address, provider declined, no token, or
-    // a throw. Give the claim back so a run of failures cannot burn the quota
-    // and leave the real owner suppressed with an empty inbox.
-    releaseEmailSend(email);
-  }
+  // If resetUrl stayed null — unknown address, provider declined, no token, or
+  // a throw — the mint slot claimed above is intentionally NOT given back: see
+  // "THE SLOT IS CONSUMED ON THE MINT ATTEMPT, NOT ON DELIVERY" above
+  // `claimEmailSend` for why releasing it here used to make this route a
+  // two-request account-existence timing oracle.
 
   if (resetUrl) {
     const { subject, html, text } = buildPasswordResetEmail(resetUrl);
@@ -353,13 +355,14 @@ export async function POST(req: NextRequest) {
     // send settles (the same primitive lib/observability/margin-meter.ts uses),
     // so the effect is still real and its failure still logged; it simply
     // stops happening on the clock the caller can measure.
+    //
+    // The mint slot is likewise NOT released if `delivered` comes back false
+    // here — same reasoning as above, and the same call is the reason this
+    // path used to look different (slow vs. fast on request 2) depending on
+    // whether the address existed.
     const send = sendEmail({ to: email, subject, html, text, stage: "password_reset" }).then(
       (result) => {
         if (!result.delivered) {
-          // The claim bought a message that never arrived — hand it back, or the
-          // owner's next attempt is suppressed against an inbox with nothing in
-          // it. This is the same claim-then-release shape the lifecycle crons use.
-          releaseEmailSend(email);
           console.error(
             "[auth/forgot-password] reset email not delivered:",
             result.error ?? (result.dryRun ? "dry-run" : "unknown"),
@@ -367,7 +370,6 @@ export async function POST(req: NextRequest) {
         }
       },
       (err) => {
-        releaseEmailSend(email);
         console.error("[auth/forgot-password] reset email threw:", err);
       },
     );

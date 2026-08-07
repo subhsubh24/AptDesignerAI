@@ -272,49 +272,57 @@ describe("POST /api/auth/forgot-password", () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT let failed attempts burn the quota — the owner is never suppressed against an empty inbox", async () => {
-    // THE property that keeps the per-recipient cap from being a denial of
-    // service on the account owner. Two reviewers raised it independently.
+  it("does NOT distinguish a nonexistent address from a suppressed real one by timing — the mint slot is never released", async () => {
+    // THE property that closes the two-request account-existence timing
+    // oracle a reviewer found in an earlier revision of this route. That
+    // revision released the mint slot whenever nothing was delivered — which
+    // included EVERY attempt for an unregistered address (generateLink always
+    // errors for one), so request 2+ for a nonexistent address always took the
+    // slow path (a real generateLink call), while request 2+ for a real,
+    // delivered address was suppressed and fast. A stopwatch alone could then
+    // tell the two apart in exactly 2 requests.
     //
-    // If the quota counted ATTEMPTS, an attacker (or an unknown address, or a
-    // flaky provider) could burn it having delivered nothing, and the real
-    // owner's next request would return "check your email" over an empty inbox
-    // — breaking this route's priority (1), NO FAKE SUCCESS, for the one user
-    // who actually needs the link.
-    //
-    // It counts DELIVERED MAIL instead: every path that sends nothing releases
-    // its claim. So being over quota carries a guarantee — working links are
-    // already sitting in that inbox.
-    const victim = freshEmail();
-
-    // 3 attempts for an address with no account: nothing is mailed.
+    // The fix: the slot is consumed on the ATTEMPT, not the outcome, so a
+    // second request behaves identically — no generateLink call, same
+    // response — whether or not the first attempt found an account.
+    const nobody = freshEmail();
     mockGenerateLink.mockResolvedValue({ data: null, error: { message: "User not found" } });
-    for (let i = 0; i < 3; i++) await POST(req({ email: victim }, freshIp()));
-    expect(mockSendEmail).not.toHaveBeenCalled();
 
-    // The owner now asks for their own reset. It must still send.
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "tok_owner" } },
-      error: null,
-    });
-    const owner = await POST(req({ email: victim }, freshIp()));
-    expect(owner.status).toBe(200);
-    expect(mockSendEmail).toHaveBeenCalledTimes(1);
-    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: victim }));
+    const first = await POST(req({ email: nobody }, freshIp()));
+    expect(first.status).toBe(200);
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1); // the real, slow path
+
+    // A later request for the SAME nonexistent address must be suppressed —
+    // no second generateLink call — exactly like a real, already-delivered
+    // address would be. This is the assertion that would have failed against
+    // the release-on-failure design: it used to call generateLink again here.
+    const second = await POST(req({ email: nobody }, freshIp()));
+    expect(second.status).toBe(200);
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it("releases the claim when the provider accepted nothing", async () => {
-    // Same property on the other failure path: sendEmail resolving undelivered.
+  it("does not release the mint slot when the provider accepts nothing (delivered: false) — a real transient failure costs the rest of the window, not the enumeration property", async () => {
+    // The accepted tradeoff, pinned: unlike the earlier release-on-failure
+    // design, a delivery failure for a REAL address now also holds the slot
+    // for the rest of the window — see "THE COST OF CLOSING IT" in the route's
+    // own comment for why this is judged the lesser failure (rare, not
+    // attacker-triggerable, bounded/self-healing) versus reopening the timing
+    // oracle above.
     const victim = freshEmail();
     mockSendEmail.mockResolvedValue({ delivered: false, dryRun: false, error: "provider down" });
-    for (let i = 0; i < 3; i++) await POST(req({ email: victim }, freshIp()));
-    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+
+    const first = await POST(req({ email: victim }, freshIp()));
+    expect(first.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
 
     mockSendEmail.mockResolvedValue({ delivered: true, dryRun: false, id: "msg_ok" });
-    await POST(req({ email: victim }, freshIp()));
-    // A 4th send was attempted rather than suppressed, because the first three
-    // delivered nothing.
-    expect(mockSendEmail).toHaveBeenCalledTimes(4);
+    const second = await POST(req({ email: victim }, freshIp()));
+    expect(second.status).toBe(200);
+    // Suppressed, not retried: the earlier undelivered attempt already
+    // consumed the address's one mint for this window.
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
   });
 
   it("EXPIRES the per-recipient cooldown, so the mint slot is not a permanent denial", async () => {
