@@ -146,17 +146,26 @@
      surface-elevated/muted) x (5%/10%/15% tint) combination — verified in
      __tests__/design/warm-pill-contrast.test.ts, which composites the tint
      the same way a browser does rather than trusting one spot measurement.
-     This value alone is not sufficient against a TINT-ON-TINT stack — three
-     such cases were found and fixed by giving the nested pill's containing
-     surface a SOLID background instead (the /focus Design Direction panel,
-     the /saved share-panel's warm-ghost hover tint, and the /pricing
-     "Most popular" badge straddling a gradient card edge — the last two
-     given solid pill fills instead, since their surroundings aren't a single
-     flat surface). This is a source-level property a CSS-token test cannot
-     enumerate exhaustively (see the test file's own docstring); if you add a
-     NEW `bg-accent-warm/N` or `variant="warm"`/`warm-outline`/`warm-ghost`
-     usage nested inside another translucent (bg-*/N or bg-gradient-to-*)
-     surface, check it by hand. See issue #711 for the full measured contrast
+     This value alone is not sufficient against a TINT-ON-TINT stack — FOUR
+     such cases were found (across two review rounds — each round's own fix
+     was independently re-audited and a further site was found, which is why
+     this is now stated as an ongoing risk class rather than a closed list)
+     and fixed by giving the nested pill a SOLID background/fill instead: the
+     /focus Design Direction panel (solid panel), the /saved share-panel's
+     warm-ghost hover tint (solid panel), the /pricing "Most popular" badge
+     straddling a gradient card edge (solid pill), and the landing-page hero
+     mockup's "9.1" match-score badge inside a `.glass` card over a decorative
+     gradient (solid pill — measured 4.37:1 in light mode, under AA). This is
+     a source-level property a CSS-token test cannot enumerate exhaustively
+     (see the test file's own docstring) — TWO more nested-tint composites are
+     KNOWN to exist and were measured to still clear AA with margin
+     (ManualScorecardView.tsx's row badge, compare/page.tsx's "Best" cell), so
+     they were left as-is rather than churned, but they are not verified by
+     any test and could regress silently on a future token change. If you add
+     a NEW `bg-accent-warm/N` or `variant="warm"`/`warm-outline`/`warm-ghost`
+     usage nested inside another translucent (a fractional-opacity `bg-` utility
+     or a `bg-gradient-to-` fill) surface, check it by hand. See issue #711
+     for the full measured contrast
      tables. */
   --accent-warm-strong: #dd8351;
   /* Inverted relative to light, and deliberately so: the dark theme lightens the
