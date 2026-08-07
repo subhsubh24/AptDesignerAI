@@ -245,7 +245,7 @@ Return a JSON object with this exact structure:
     "lighting_temperature": "Single value: 'warm' (2700-3000K), 'neutral' (3500-4000K), or 'cool' (4500-5000K+). Must reconcile with natural light direction observed in photos and the recommended palette.",
     "style_notes": "string - 3-4 sentences on overall style direction. MUST reference the client's specific identity and lifestyle (age, personality, hosting habits, aesthetic sensibility) and explain how the design serves THEIR life specifically. Connect material/style choices to who they are as a person."
   },
-  "missing_categories": ["rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", etc.],
+  "missing_categories": ["area_rug", "coffee_table", "accent_chair", "art", "floor_lamp", "throw_pillows", etc.],
   "action_list": [
     {
       "priority": 1,
@@ -440,7 +440,7 @@ ${analysisJson}
 ## DERIVATION RULES
 
 ### missing_categories
-Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys (e.g., "rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "wall_art", "plant"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15). Do NOT include items the client wants to keep.
+Derive from \`diagnosis.missing_furniture_categories\`. Normalize to snake_case keys (e.g., "area_rug", "coffee_table", "accent_chair", "floor_lamp", "throw_pillows", "wall_art", "plant"). Include ALL missing items across essential/standard/finishing tiers (typically 8-15). Do NOT include items the client wants to keep.
 
 Finishing tier checklist — include any that are missing and relevant:
 candles, baskets, books_styled, greenery_small, greenery_tall, sculptures, frames, poufs,
@@ -476,12 +476,12 @@ ${priorities.length > 0 ? `- Weight priorities: ${priorities.join(", ")}` : ""}
 JSON only. No prose, no markdown fences.
 
 {
-  "missing_categories": ["rug", "coffee_table", "accent_chair", "wall_art", "floor_lamp", "throw_pillows", "plant", "candles"],
+  "missing_categories": ["area_rug", "coffee_table", "accent_chair", "wall_art", "floor_lamp", "throw_pillows", "plant", "candles"],
   "action_list": [
     {
       "priority": 1,
       "action": "Area rug at least 8x10, wool or wool-blend, warm neutral with subtle texture — extends beyond front legs of sofa to anchor seating area",
-      "category": "rug",
+      "category": "area_rug",
       "placement": "Centered in front of the sofa, extending under the front legs, between the sofa and the TV wall",
       "reasoning": "Current rug (5x7) is drastically undersized for the L-shaped sectional; properly scaled rug anchors the seating zone and adds warm texture flagged as missing"
     },
