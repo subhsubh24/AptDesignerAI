@@ -167,7 +167,15 @@ export default async function RoomPage({
                 <span className="text-sm text-white/70">
                   {ROOM_TYPE_LABELS[room.room_type] || room.room_type}
                 </span>
-                <Badge variant="warm" className="capitalize">
+                {/* Solid (not alpha-tinted) fill: this badge sits over an arbitrary
+                    user photo behind a gradient scrim, so no CSS-token contrast
+                    check can verify a tinted background here (issue #711) — a
+                    SOLID fill makes its contrast independent of whatever photo
+                    renders behind it, same as the proven warm CTA fill. */}
+                <Badge
+                  variant="warm"
+                  className="capitalize bg-accent-warm text-accent-warm-on-solid border-transparent"
+                >
                   {room.budget_mode}
                 </Badge>
                 <Badge variant={room.status === "completed" ? "success" : "secondary"} className="capitalize">

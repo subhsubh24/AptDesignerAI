@@ -33,6 +33,7 @@ the fussiness of a decorative logotype. Use the SVG at `public/wordmark.svg`.
 | Text Secondary | `#6b6560` | `#9e9893` | Supporting copy, captions |
 | Accent | `#b4501e` | `#d4733e` | CTAs, highlights, accent borders |
 | Accent Foreground | `#faf9f7` | `#141211` | Text on accent backgrounds |
+| Accent (strong text) | `#a3441a` | `#dd8351` | `text-accent-warm-strong` — accent-coloured TEXT on a tinted `bg-accent-warm/N` pill (badges, warm-outline/ghost buttons). Deeper/lighter than the base Accent because it has to clear AA against the tinted surface, not the page background — see `--accent-warm-strong` in `app/globals.css`. |
 | Border | `#e8e5e1` | `#2a2724` | Card borders, dividers |
 | Card | `#f5f4f2` | `#1e1c1a` | Elevated surfaces |
 | Muted Foreground | `#9e9893` | `#706b67` | Placeholder text, quiet labels |
