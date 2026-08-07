@@ -136,9 +136,38 @@
   --accent: #2e2a26;
   --accent-foreground: #ede9e3;
   --accent-warm: #d4733e;
-  /* Dark accent-warm already clears AA as text on the tinted pill (5.0:1); keep
-     the strong token equal so the shared utility renders identically in dark. */
-  --accent-warm-strong: #d4733e;
+  /* Lifted from #d4733e (equal to --accent-warm) after measuring against every
+     surface this token actually renders on, not just --background (issue
+     #711). #d4733e cleared AA as text on a bg-accent-warm/15 pill over
+     --background (4.64:1) but FAILED over --card (4.28:1 at 15% tint) and
+     --surface-elevated (4.00:1) — the surfaces `Badge variant="warm"` and the
+     warm-outline/warm-ghost buttons actually render on throughout the app.
+     #dd8351 clears AA (>=4.5:1) against EVERY real (background/card/
+     surface-elevated/muted) x (5%/10%/15% tint) combination — verified in
+     __tests__/design/warm-pill-contrast.test.ts, which composites the tint
+     the same way a browser does rather than trusting one spot measurement.
+     This value alone is not sufficient against a TINT-ON-TINT stack — FOUR
+     such cases were found (across two review rounds — each round's own fix
+     was independently re-audited and a further site was found, which is why
+     this is now stated as an ongoing risk class rather than a closed list)
+     and fixed by giving the nested pill a SOLID background/fill instead: the
+     /focus Design Direction panel (solid panel), the /saved share-panel's
+     warm-ghost hover tint (solid panel), the /pricing "Most popular" badge
+     straddling a gradient card edge (solid pill), and the landing-page hero
+     mockup's "9.1" match-score badge inside a `.glass` card over a decorative
+     gradient (solid pill — measured 4.37:1 in light mode, under AA). This is
+     a source-level property a CSS-token test cannot enumerate exhaustively
+     (see the test file's own docstring) — TWO more nested-tint composites are
+     KNOWN to exist and were measured to still clear AA with margin
+     (ManualScorecardView.tsx's row badge, compare/page.tsx's "Best" cell), so
+     they were left as-is rather than churned, but they are not verified by
+     any test and could regress silently on a future token change. If you add
+     a NEW `bg-accent-warm/N` or `variant="warm"`/`warm-outline`/`warm-ghost`
+     usage nested inside another translucent (a fractional-opacity `bg-` utility
+     or a `bg-gradient-to-` fill) surface, check it by hand. See issue #711
+     for the full measured contrast
+     tables. */
+  --accent-warm-strong: #dd8351;
   /* Inverted relative to light, and deliberately so: the dark theme lightens the
      warm accent to #d4733e so it reads against a dark surface, which drops white
      to 3.32:1 — a FAIL. Near-black on that same fill is 5.41:1, and 7.50:1 on the

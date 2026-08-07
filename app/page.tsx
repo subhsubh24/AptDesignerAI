@@ -134,7 +134,18 @@ export default function LandingPage() {
                             <div className="text-sm font-medium truncate">West Elm Harmony Sofa</div>
                             <div className="text-xs text-muted-foreground">Perfect scale fit for your space</div>
                           </div>
-                          <Badge variant="warm" className="shrink-0">9.1</Badge>
+                          {/* Solid fill, not the tinted `variant="warm"` pill: this
+                              badge sits inside a `.glass` (translucent) card over a
+                              decorative gradient + scrim mockup — a multi-layer
+                              composite no CSS surface token can describe, and
+                              issue #711 measured the tinted version at 4.37:1 in
+                              light mode, under AA. */}
+                          <Badge
+                            variant="warm"
+                            className="shrink-0 bg-accent-warm text-accent-warm-on-solid border-transparent"
+                          >
+                            9.1
+                          </Badge>
                         </div>
                       </div>
                     </div>

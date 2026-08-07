@@ -237,9 +237,15 @@ export default function SavedDesignDetailPage() {
         </div>
       </div>
 
-      {/* Share panel — visible when sharing is enabled */}
+      {/* Share panel — visible when sharing is enabled. Solid (not tinted)
+          background: the "Copy link" button inside is `variant="warm-ghost"`,
+          which paints its own bg-accent-warm/10 tint on hover — that used to
+          stack with this panel's own bg-accent-warm/5 tint, the same
+          two-alpha-layer composite issue #711 fixed on /focus. --muted is
+          opaque, so the button's hover tint only ever composites against ONE
+          surface. */}
       {isPublic && shareUrl && (
-        <div className="flex items-center gap-2 p-3 rounded-xl border border-accent-warm/30 bg-accent-warm/5">
+        <div className="flex items-center gap-2 p-3 rounded-xl border border-accent-warm/30 bg-muted">
           <Globe className="h-4 w-4 text-accent-warm shrink-0" />
           <p className="text-xs text-muted-foreground flex-1 truncate">{shareUrl}</p>
           <Button variant="warm-ghost" size="sm" className="shrink-0 gap-1" onClick={handleCopyLink}>

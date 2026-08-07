@@ -1040,7 +1040,12 @@ export default function FocusPage() {
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl border bg-primary/5">
+              {/* Solid (not tinted) panel background — a bg-primary/5 tint here used
+                  to stack with the pill's own bg-accent-warm/15 tint below it,
+                  compositing two alpha layers into a single-layer contrast token
+                  can't account for. --muted is opaque, so the pill only ever
+                  composites against ONE surface (see issue #711). */}
+              <div className="p-3 rounded-xl border bg-muted">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="font-semibold text-sm">Design Direction</h3>
                   {areaAnalysis.style_name && (
