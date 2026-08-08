@@ -42,6 +42,24 @@ as finished*.
   only in the run summary is gone once the summary scrolls away. If you surface
   a risk, a follow-up, or a shortcut you took, it becomes an issue before the
   run ends — with an acceptance check like any other.
+- **Decide, don't park.** Nothing waits on the owner. If a judgement call is
+  needed — scope, priority, architecture, a tradeoff between two defensible
+  options — make it, write down what you chose and why in a comment, and keep
+  going. `Backlog` means *not yet prioritised*, never *awaiting Subh*. An
+  imperfect decision that is recorded beats a perfect one that never gets made,
+  because a recorded decision is reversible and a stalled cycle is not
+  recoverable. The only things that genuinely stop at the owner are outside the
+  sandbox, not judgement calls: real-money spend, live secrets, prod migrations
+  by hand, publishing under their identity.
+- **A structural bar is not a decision — record it once and move on.** Some work
+  is impossible from an unattended run rather than undecided; the clearest case
+  is anything under `.github/`, which trips a sensitive-file permission prompt
+  that hangs a headless run. When you hit one: leave the issue in `Todo`, say in
+  a comment exactly what is barred and what remains, and take the next item.
+  Do NOT re-derive the same blocker every run — read the latest comment before
+  claiming, and skip what a previous run already proved it cannot finish. Three
+  consecutive runs each rediscovering the same `.github/` bar is the waste this
+  rule exists to stop.
 - **Loud fallback.** If Linear is unreachable or the team is missing, say so
   prominently at the top of the run report, append the work to `TODO.md` in the
   same shape (title, why, acceptance check), and carry on. A down board must
@@ -53,6 +71,35 @@ as finished*.
   factory and the Quality / GTM auditor routines.
 
 Do not invent work to fill the board. An empty board is a truthful board.
+
+## Model policy (SONNET-MAX — this repo only)
+
+This project runs **Sonnet-max**: `claude-sonnet-5` is the ceiling. Never request
+`claude-opus-*` for yourself or any subagent — that capacity is reserved for
+another project, and spending it here is a failure even where it would do the
+work better.
+
+`FACTORY_STANDARD.md` names Opus as the maker/auditor tier. **This cap overrides
+it.** The shared doc is byte-identical across all five product repos, so it is
+deliberately not edited for one product; the override is stated here and in each
+routine prompt instead.
+
+The tier split, and why it is shaped this way:
+
+| Tier | Model |
+|---|---|
+| Orchestrator / maker | `claude-sonnet-5` |
+| Readiness auditors at the ship gate | `claude-sonnet-5`, **≥4** (not ≥3) |
+| Per-change reviewers (2/change) | `claude-sonnet-4-6` — deliberately *not* upgraded |
+| Scouts / deep audit | `claude-haiku-4-5-20251001` |
+
+Two of those are load-bearing and easy to "tidy" into a regression. The auditor
+count is 4 rather than 3 because under the cap the maker and its auditors share
+a model family, so the model-diversity half of maker ≠ checker is gone and more
+independent samples buy some of it back. And the reviewers stay one model behind
+the orchestrator on purpose — that gap is the only structural model diversity
+left, sitting exactly where most defects are caught. Raising the reviewers to
+match the orchestrator would look like an upgrade and would quietly remove it.
 
 ## LLM cost contract (load-bearing — do not regress)
 <important if="touching provider/model selection, a .chat() call, thinkingConfig, escalation, gemini.ts, deepseek.ts, or the harness-ratchet/provider-floors tests">
