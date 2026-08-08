@@ -126,6 +126,27 @@ jobs:
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
         run: node scripts/validate-capabilities.mjs
 
+  # SECURITY INVARIANTS gate — RLS coverage + client-secret leak. This is the SAME script
+  # scripts/preflight.sh calls, so the two can never drift.
+  #
+  # Why this job exists at all: `migrate` below auto-applies migrations to PROD on every push to
+  # the default branch, and justifies dropping the human schema checkpoint by citing "the RLS gate
+  # pre-merge". That gate lived ONLY inside preflight.sh, which no CI job runs — so the stated
+  # mitigation did not exist mechanically, and a migration creating a public table without RLS
+  # could merge and reach prod. Supabase exposes the whole public schema to the anon key via
+  # PostgREST, so that is a live tenant-data leak. `migrate` now DEPENDS on this job.
+  security-invariants:
+    name: security-invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: RLS coverage + client-secret leak
+        run: node scripts/check-security-invariants.mjs
+
   # GTM honesty gate (the GTM analog of validate-capabilities): fails closed if a GROWTH_STATUS
   # metric is reported with no connected source (fabrication risk), or the GTM scorecard is malformed.
   validate-gtm:
@@ -196,9 +217,14 @@ jobs:
             echo "::error::app did not become ready on :3100"; tail -150 /tmp/app.log; exit 1
           fi
           bash scripts/run-journeys.sh
-      - name: App server log (on failure)
-        if: failure()
-        run: tail -200 /tmp/app.log || true
+      # a11y + public-pages specs run against the SAME served app — the expensive part (build,
+      # ephemeral Supabase, browser install) is already paid for above, so this is nearly free.
+      # They existed with npm scripts but no CI job invoked either, so neither had ever run:
+      # a test nothing executes is not a gate, it only looks like one. run-journeys.sh runs
+      # journeys.spec.ts and nothing else, which is exactly how the stale h1 regexes in
+      # public-pages.spec.ts survived unnoticed.
+      - name: Accessibility + public-pages specs (same served app)
+        run: npx playwright test e2e/a11y.spec.ts e2e/public-pages.spec.ts
       - name: App server log (on failure)
         if: failure()
         run: tail -200 /tmp/app.log || true
@@ -212,7 +238,7 @@ jobs:
   # migration chain on a throwaway DB. Enable Supabase PITR/backups before setting the secrets.
   migrate:
     name: migrate prod (auto-apply on push to default branch)
-    needs: [verify, build, journeys]
+    needs: [verify, build, journeys, security-invariants]
     if: github.event_name == 'push' && github.ref == 'refs/heads/claude/ai-apartment-design-app-iHAdb'
     runs-on: ubuntu-latest
     concurrency: migrate-prod-apt
