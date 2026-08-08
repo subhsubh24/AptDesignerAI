@@ -180,8 +180,12 @@ export default function GalleryPage() {
                 )}>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
 
-                  {/* Palette chips */}
-                  <div className="absolute top-4 left-4 flex gap-1.5">
+                  {/* Palette chips — illustrative only (the room's sampled
+                      colors add nothing a screen reader user can act on;
+                      the style label + highlights below already carry the
+                      real content), so hide them from the accessibility
+                      tree rather than announcing N unlabeled swatches. */}
+                  <div className="absolute top-4 left-4 flex gap-1.5" aria-hidden="true">
                     {ex.palette.map((c, i) => (
                       <div
                         key={i}
