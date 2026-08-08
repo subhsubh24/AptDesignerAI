@@ -908,9 +908,11 @@ A box stays `[x]` ONLY if an independent auditor CONFIRMS it. If ANY auditor fin
 gap → UN-TICK that box, queue the fix, and DO NOT open the issue this run — keep building.
 
 **Declaration rule.** Open `FACTORY: ready for submission` ONLY when BOTH gates pass —
-preflight exits 0 AND all ≥3 adversarial auditors independently fail to find any real gap
-— and PASTE both the preflight output AND the readiness-audit findings (who verified what)
-into the issue as evidence.
+preflight exits 0 AND all ≥4 adversarial auditors independently fail to find any real gap
+(≥4, not ≥3: the orchestrator and its auditors now share the claude-sonnet-5 model family,
+so the count was raised to compensate for the lost model-diversity half of maker != checker
+— see AGENTS.md's model-split section) — and PASTE both the preflight output AND the
+readiness-audit findings (who verified what) into the issue as evidence.
 
 **A weak business case RE-OPENS building (the loop-back).** A `ready` declaration is BLOCKED
 while the honest median is below the $100K floor — and the response is NOT to open the issue,

@@ -245,6 +245,24 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Wire `scripts/check-security-invariants.mjs` into a required CI job before `migrate` (added 2026-08-08, PR #836, Track F/security — APT-1)
+
+`.github/workflows/ci.yml`'s `migrate` job auto-applies `supabase/migrations/*` to **prod** on every push to the default branch, and its own comment cites "the 2-reviewer + RLS gate pre-merge" as the mitigation. That RLS gate (GATE 6 in `scripts/preflight.sh`) only ever ran when someone manually executed the full multi-minute `preflight.sh` — no CI job ran it, so a migration that `CREATE TABLE`s without `ENABLE ROW LEVEL SECURITY` could merge and auto-apply to prod with nothing catching it pre-merge. Supabase exposes the whole public schema to the anon key via PostgREST, so an unguarded public table is a live tenant-data leak; the same risk applies to a `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` client-secret leak.
+
+PR #836 extracted that check into a standalone, independently-runnable script — `node scripts/check-security-invariants.mjs` — that `scripts/preflight.sh` GATE 6 now calls (so the two can never drift). What remains is wiring it into `.github/workflows/ci.yml` as a required job ahead of `migrate`; the loop cannot make this change itself (editing anything under `.github/` trips a sensitive-file permission prompt that hangs an unattended run).
+
+**Owner step:**
+1. Add a job to `.github/workflows/ci.yml` (or a step inside an existing early job) that runs:
+   ```yaml
+   security-invariants:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - run: node scripts/check-security-invariants.mjs
+   ```
+2. Add `security-invariants` to `migrate`'s `needs:` list (and to the branch protection required-checks list alongside `verify`/`build`/`mobile`/`lint`/`journeys`), so a migration that fails the check cannot merge, let alone auto-apply to prod.
+3. **Verify:** open a throwaway PR that appends a `CREATE TABLE` with no `ENABLE ROW LEVEL SECURITY` to a scratch migration file → the new job should fail red and block `migrate`; revert.
+
 ### 033_design_profiles_saved_items_with_check.sql — hardening: pin explicit WITH CHECK on design_profiles/saved_items policies (added 2026-08-05, Run 145)
 
 `design_profiles` and `saved_items` (`001_initial_schema.sql`) each have a `FOR ALL` RLS policy ("Users can manage own design profiles" / "Users can manage own saved items") with a `USING` clause only, no explicit `WITH CHECK`. Per Postgres' documented behavior, a `FOR ALL`/`UPDATE` policy with no `WITH CHECK` automatically reuses its `USING` expression as the check — so these policies were already validating INSERT/UPDATE new-row values against `user_id = auth.uid()`; there is no unvalidated-write gap and never was one. This migration pins that check explicitly in the policy catalog rather than closing a live vulnerability. The real value: once WITH CHECK is explicit, a future `ALTER POLICY ... USING (...)` that only means to change row visibility can no longer silently change the write-time check along with it (today it would, since the implicit WITH CHECK always mirrors USING).
