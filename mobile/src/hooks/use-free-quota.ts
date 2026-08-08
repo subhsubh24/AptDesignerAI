@@ -25,7 +25,13 @@ export function useFreeSaveQuota(): FreeQuotaHook {
         const n = parseInt(raw ?? '0', 10);
         setSavesUsed(isNaN(n) ? 0 : n);
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        // Read failed (permissions, corruption) — fall back to the initial
+        // savesUsed=0 state (already set) rather than leaving isLoading stuck
+        // true. Not silent: logged so a real device issue is observable,
+        // matching the convention in paywall-sheet.tsx / use-push-notifications.
+        console.warn('[free-quota] getItem failed', err);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -35,7 +41,19 @@ export function useFreeSaveQuota(): FreeQuotaHook {
     const current = parseInt(raw ?? '0', 10);
     const next = (isNaN(current) ? 0 : current) + 1;
     setSavesUsed(next);
-    await AsyncStorage.setItem(STORAGE_KEY, String(next));
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, String(next));
+    } catch (err: unknown) {
+      // In-memory state (setSavesUsed above) already reflects the increment
+      // for this session, so the CTA still hides at the right count right
+      // now. The failure is a persistence gap: on next app launch the count
+      // reads stale from storage and under-counts. The server is the real
+      // enforcement point (this hook is a client-side UX hint only, see
+      // FREE_SAVES_LIMIT above), so under-counting can't grant an extra
+      // server-side save — but it's still worth surfacing rather than
+      // swallowing so a real device issue is observable.
+      console.warn('[free-quota] setItem failed — save count may not persist across app restarts', err);
+    }
   }, []);
 
   return {

@@ -102,7 +102,14 @@ export default function SavedDesignDetailPage() {
         setShareToken(data.share_token ?? null);
         setIsPublic(data.is_public ?? false);
       })
-      .catch(() => router.push("/saved"))
+      .catch((err: unknown) => {
+        // Redirect either way (a dead link shouldn't strand the user on a
+        // blank page), but don't swallow WHY — a network error and a
+        // genuine 404 look identical to the user; only the console tells
+        // them apart when debugging a report of "my saved design vanished."
+        console.error("[saved-design] failed to load design", id, err);
+        router.push("/saved");
+      })
       .finally(() => setLoading(false));
   }, [id, router]);
 
