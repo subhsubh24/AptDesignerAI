@@ -245,6 +245,39 @@ OWNER_ACTIONS:
 
 ## Pending
 
+### Apply the Linear-issue-filing prompt fix to the Quality Auditor + GTM Auditor routines (added 2026-08-08, Run 152 — APT-9)
+
+Both auditor routines' prompts still instruct them to file findings as **GitHub** issues (step 4), while the product factory now claims work from **Linear** (`AptDesignerAI` team) — so auditor findings are invisible to the factory. The fix is fully drafted (see below) but this and every prior factory-loop session structurally cannot apply it:
+
+```
+$ update_trigger(trigger_id: "trig_01Hiu9iTrqgMzQWdPQuFZEdG", prompt: "...")
+update_trigger: this routine was created via "http_api", not by an agent. Agents can
+only update routines they created (via create_trigger). A routine's own session may
+still disable itself (enabled=false only).
+```
+
+Both `trig_01Hiu9iTrqgMzQWdPQuFZEdG` (Quality Auditor) and `trig_01EQkT44rW5guBG42VEPjw9M` (GTM Auditor) were provisioned via the HTTP API (i.e. by the owner/dashboard), not via an agent's `create_trigger` call — so no factory-loop session, ever, can write to them. Only the owner (via the claude.ai Routines/dashboard UI, or any owner-authenticated path outside this MCP tool's agent-only `update_trigger`) can apply this.
+
+Two new Linear labels the fixed prompts reference already exist on the team: `source:quality-auditor` and `source:gtm-auditor` (created 2026-08-08, alongside the existing `type:factory`) — no further label setup needed.
+
+**Owner step:** open each routine's prompt editor and replace step (4) — and, for the Quality Auditor, step (5)'s cross-reference — with the text below. Everything else in each prompt (cron, model, sources, connectors) stays unchanged.
+
+**Quality Auditor (`trig_01Hiu9iTrqgMzQWdPQuFZEdG`) — replace step (4):**
+```
+(4) FILE THE GAPS: for the top gaps -- especially ANY ship_critical dimension below A -- open or UPDATE a Linear issue on team `AptDesignerAI` titled 'quality: <dimension> <grade> -> raise to A' with the specific gap + evidence + a runnable acceptance check the factory can execute, labelled `type:factory` and `source:quality-auditor` so the factory can tell an audit finding from an owner-filed one (both labels already exist on the team; create them only if missing). Do NOT fix it yourself. Avoid duplicates -- search existing issues and update one rather than opening a new one. Keep the drive-to-A+ BOUNDED: only name specific, value-bar-clearing improvements (no gold-plating a non-ship-critical dimension).
+```
+**...and step (5):**
+```
+(5) REPORT = THE DASHBOARD, NOT EMAIL: do NOT create a Gmail draft or any digest -- the docs/quality/QUALITY_SCORECARD.md you just wrote IS the dashboard's source of truth (overall + per-dimension grades + ship_gate_met + ordered top_gaps), which the owner reviews on the DASHBOARD. For a ship-critical regression (a ship_critical dimension below A), open or UPDATE the existing 'quality: <dimension>' Linear issue from step (4) (the dashboard reads Linear) -- but never an email.
+```
+
+**GTM Auditor (`trig_01EQkT44rW5guBG42VEPjw9M`) — replace step (4):**
+```
+(4) FILE THE GAPS: for the top gaps -- especially ANY ship_critical dimension below A, or any fabricated metric / gamed number / speculative steer you found -- open or UPDATE a Linear issue on team `AptDesignerAI` titled 'gtm-quality: <dimension> <grade> -> raise to A' with the specific gap + evidence + a runnable acceptance check the GTM Factory can execute, labelled `type:factory` and `source:gtm-auditor` so the factory can tell an audit finding from an owner-filed one (both labels already exist on the team; create them only if missing). Do NOT fix it yourself; avoid duplicates -- search existing issues and update one rather than opening a new one.
+```
+
+**Verify:** the next Quality Auditor run (Mondays 09:30 UTC) leaves its top_gap as an `APT-` Linear issue with an acceptance check, and opens no GitHub issue for it; same for the next GTM Auditor run.
+
 ### Wire `scripts/check-security-invariants.mjs` into a required CI job before `migrate` (added 2026-08-08, PR #836, Track F/security — APT-1)
 
 `.github/workflows/ci.yml`'s `migrate` job auto-applies `supabase/migrations/*` to **prod** on every push to the default branch, and its own comment cites "the 2-reviewer + RLS gate pre-merge" as the mitigation. That RLS gate (GATE 6 in `scripts/preflight.sh`) only ever ran when someone manually executed the full multi-minute `preflight.sh` — no CI job ran it, so a migration that `CREATE TABLE`s without `ENABLE ROW LEVEL SECURITY` could merge and auto-apply to prod with nothing catching it pre-merge. Supabase exposes the whole public schema to the anon key via PostgREST, so an unguarded public table is a live tenant-data leak; the same risk applies to a `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` client-secret leak.
