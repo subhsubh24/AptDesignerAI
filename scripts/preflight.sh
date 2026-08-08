@@ -99,10 +99,15 @@ else
 fi
 
 info "Running test suite..."
-if npm test -- --reporter=verbose 2>&1 | tail -5 | grep -q "failed\|Error"; then
-  fail "Tests — one or more tests failed (run 'npm test' for details)"
-else
+# Decide pass/fail from the real exit code, never a tailed text scan: vitest's
+# summary can run longer than a few lines (coverage note, reporter footer,
+# unhandled-error section), which pushed "failed" out of a fixed tail window
+# and let a genuinely red suite pass this gate (APT-2).
+if TEST_OUT="$(npm test -- --reporter=verbose 2>&1)"; then
   pass "Tests — all passed"
+else
+  fail "Tests — one or more tests failed (run 'npm test' for details)"
+  printf '%s\n' "$TEST_OUT" | tail -30
 fi
 
 info "Running determinism check..."
@@ -113,10 +118,13 @@ else
 fi
 
 info "Running production build..."
-if npm run build 2>&1 | tail -10 | grep -q "Failed\|Error\|error"; then
-  fail "Production build — failed (run 'npm run build' for details)"
-else
+# Same exit-code fix as the test gate above (APT-2): a Next.js compile failure
+# can print error detail well past a fixed 10-line tail window.
+if BUILD_OUT="$(npm run build 2>&1)"; then
   pass "Production build — succeeded"
+else
+  fail "Production build — failed (run 'npm run build' for details)"
+  printf '%s\n' "$BUILD_OUT" | tail -30
 fi
 
 info "Running mobile TypeScript check..."
@@ -623,76 +631,23 @@ else fail "QUALITY_SCORECARD: independent quality grade is BELOW the ship bar"; 
 # used for shared/internal admin-only tables. A created-but-RLS-less public table
 # is a wide-open tenant-data leak. This makes RLS coverage a MECHANICAL gate
 # rather than resting on migration review (QUALITY_SCORECARD security_rls raise).
+#
+# Lives in a standalone script (scripts/check-security-invariants.mjs, APT-1) so
+# a pre-merge CI job can run the EXACT SAME check preflight does — until this run,
+# GATE 6 only ran at ship-declaration time, long after a bad migration could
+# already be merged and auto-applied to prod. preflight calling that script (not
+# reimplementing it inline) means the two can never drift apart again.
 echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo "  GATE 6 — Security invariants (RLS coverage + client-secret leak)"
 echo "════════════════════════════════════════════════════════════════"
 
-if RLS_CHECK="$(python3 - <<'PYEOF' 2>&1
-import re, glob, os, sys
-created, rls = {}, set()
-for path in sorted(glob.glob("supabase/migrations/*.sql")):
-    sql = open(path).read().lower()
-    for m in re.finditer(r'create table (?:if not exists )?(?:public\.)?([a-z_][a-z0-9_]*)', sql):
-        created.setdefault(m.group(1), os.path.basename(path))
-    for m in re.finditer(r'alter table (?:public\.)?([a-z_][a-z0-9_]*)\s+enable row level security', sql):
-        rls.add(m.group(1))
-    # Shared/internal tables enable RLS via a dynamic loop:
-    #   do $$ ... array['tbl_a','tbl_b'] ... execute format('alter table
-    #   public.%I enable row level security', t) ... $$;
-    # Harvest those table names, but ONLY from an array[...] literal INSIDE a
-    # do-block that actually enables RLS — never from anywhere in the file. A
-    # stray quoted literal elsewhere (a default value, an enum comparison) must
-    # not be able to mask a genuinely unguarded table.
-    # Assumes the repo convention (migration 016): a plain `$$`-delimited do-block
-    # with an `array[...]` table list. A tagged `do $tag$ ... $tag$` block or a
-    # bare-literal `execute format(..., 'tbl')` would be missed here — but that
-    # fails SAFE (the table is flagged uncovered, blocking the gate), it never
-    # masks a real leak. Keep new RLS migrations on the array[...] convention.
-    for block in re.findall(r'do\s+\$\$(.*?)\$\$', sql, re.S):
-        if "enable row level security" not in block:
-            continue
-        for arr in re.findall(r'array\s*\[(.*?)\]', block, re.S):
-            for m in re.finditer(r"'([a-z_][a-z0-9_]*)'", arr):
-                rls.add(m.group(1))
-missing = sorted(t for t in created if t not in rls)
-if missing:
-    print("RLS_MISSING: " + ", ".join(f"{t} ({created[t]})" for t in missing))
-    sys.exit(1)
-print(f"OK — {len(created)} public tables, all ENABLE ROW LEVEL SECURITY")
-PYEOF
-)"; then
-  pass "RLS coverage — ${RLS_CHECK#OK — }"
+if SECOUT="$(node scripts/check-security-invariants.mjs 2>&1)"; then
+  pass "Security invariants — RLS coverage + client-secret leak, both clean"
+  printf '%s\n' "$SECOUT" | sed 's/^/    /'
 else
-  fail "RLS coverage — $RLS_CHECK (every public table must ENABLE ROW LEVEL SECURITY in supabase/migrations)"
-fi
-
-# No repo secret may be exposed to the browser bundle via a NEXT_PUBLIC_* name.
-# Legitimate public values (NEXT_PUBLIC_SUPABASE_ANON_KEY, *_SITE_KEY, *_URL) are
-# fine — only SECRET / SERVICE_ROLE / PRIVATE names are ever meant to stay server-side.
-LEAK="$(grep -rniE 'NEXT_PUBLIC_[A-Z0-9_]*(SECRET|SERVICE_ROLE|PRIVATE)' \
-  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.env*' \
-  app lib components mobile scripts .env.example 2>/dev/null || true)"
-if [[ -z "$LEAK" ]]; then
-  pass "Client-secret leak — no secret exposed via a NEXT_PUBLIC_* env name"
-else
-  fail "Client-secret leak — a secret is exposed to the browser via a NEXT_PUBLIC_* name:"
-  echo "$LEAK" | sed 's/^/    /'
-fi
-
-# Mobile equivalent: EXPO_PUBLIC_* vars are inlined into the shipped app BINARY
-# at build time, so a secret leaked through one is UNREVOCABLE once released —
-# strictly worse than a NEXT_PUBLIC_* leak (which at least reships on deploy).
-# Same allowlist rationale — only SECRET / SERVICE_ROLE / PRIVATE names are ever
-# meant to stay server-side (EXPO_PUBLIC_SUPABASE_ANON_KEY / *_URL are fine).
-EXPO_LEAK="$(grep -rniE 'EXPO_PUBLIC_[A-Z0-9_]*(SECRET|SERVICE_ROLE|PRIVATE)' \
-  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.json' --include='*.env*' \
-  mobile .env.example 2>/dev/null || true)"
-if [[ -z "$EXPO_LEAK" ]]; then
-  pass "Client-secret leak (mobile) — no secret exposed via an EXPO_PUBLIC_* env name"
-else
-  fail "Client-secret leak (mobile) — a secret is baked into the app binary via an EXPO_PUBLIC_* name:"
-  echo "$EXPO_LEAK" | sed 's/^/    /'
+  fail "Security invariants FAILED — RLS coverage or client-secret leak violated:"
+  printf '%s\n' "$SECOUT" | sed 's/^/    /'
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -720,7 +675,10 @@ else
   green "Preflight PASSED — all $PASS checks green."
   echo ""
   warn "NOTE: This script verifies mechanical gates only."
-  warn "The ≥3 independent adversarial auditors (READINESS AUDIT GATE) must"
+  warn "The ≥4 independent adversarial auditors (READINESS AUDIT GATE) must"
   warn "ALSO pass in the same run before 'FACTORY: ready for submission' may open."
+  warn "(≥4, not ≥3: the orchestrator and its auditors now share the claude-sonnet-5"
+  warn "model family, so the count was raised to compensate for the lost model-"
+  warn "diversity half of maker != checker — see AGENTS.md.)"
   exit 0
 fi

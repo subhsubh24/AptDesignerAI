@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "eval": "RUN_EVALS=1 vitest run evals/__tests__",
     "check:determinism": "tsx scripts/check-determinism.ts",
+    "preflight": "bash scripts/preflight.sh",
     "test:e2e": "playwright test",
     "test:e2e:a11y": "playwright test e2e/a11y.spec.ts",
     "test:journeys": "playwright test e2e/journeys.spec.ts"
