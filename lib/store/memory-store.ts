@@ -232,7 +232,9 @@ class QueryBuilder {
 
     // Single
     if (this.singleMode) {
-      return { data: rows[0] || null, error: rows[0] ? null : null };
+      return rows[0]
+        ? { data: rows[0], error: null }
+        : { data: null, error: { message: "no rows returned" } };
     }
     if (this.maybeSingleMode) {
       return { data: rows[0] || null, error: null };
