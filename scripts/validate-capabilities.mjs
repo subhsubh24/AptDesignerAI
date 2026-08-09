@@ -26,7 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as yaml from "js-yaml";
+import yaml from "js-yaml";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = path.join(ROOT, "validation", "CAPABILITIES.yml");
