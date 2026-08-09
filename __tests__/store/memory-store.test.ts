@@ -12,7 +12,7 @@ import { createMemoryClient } from "@/lib/store/memory-store";
  * `error` rather than `data`.
  */
 describe("memory-store QueryBuilder.single()", () => {
-  it("returns an error when no row matches, mirroring supabase-js", async () => {
+  it("returns a PGRST116-coded error when no row matches, mirroring supabase-js", async () => {
     const client = createMemoryClient();
     const { data, error } = await client
       .from("projects")
@@ -22,6 +22,11 @@ describe("memory-store QueryBuilder.single()", () => {
 
     expect(data).toBeNull();
     expect(error).not.toBeNull();
+    // Real supabase-js's zero-row .single() error carries this exact code —
+    // app/api/rooms/[roomId]/route.ts branches 404-vs-500 on it, so a
+    // differently-shaped error here silently turns a 404 into a 500 under
+    // DATA_BACKEND=memory.
+    expect(error?.code).toBe("PGRST116");
   });
 
   it("returns the row with no error when exactly one row matches", async () => {
