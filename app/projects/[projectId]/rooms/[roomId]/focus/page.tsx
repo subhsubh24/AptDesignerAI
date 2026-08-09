@@ -1264,7 +1264,12 @@ export default function FocusPage() {
             })()}
 
             {/* Live phase progress */}
-            <div className="max-w-md mx-auto space-y-1.5">
+            <div
+              className="max-w-md mx-auto space-y-1.5"
+              role="status"
+              aria-live="polite"
+              aria-atomic="false"
+            >
               {SEARCH_PHASES.map((phase) => {
                 const match = searchPhases.find((p) => p.step === phase.key);
                 const isDone = match?.status === "completed";
