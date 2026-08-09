@@ -232,7 +232,15 @@ class QueryBuilder {
 
     // Single
     if (this.singleMode) {
-      return { data: rows[0] || null, error: rows[0] ? null : null };
+      return rows[0]
+        ? { data: rows[0], error: null }
+        : {
+            data: null,
+            error: {
+              message: "JSON object requested, multiple (or no) rows returned",
+              code: "PGRST116",
+            },
+          };
     }
     if (this.maybeSingleMode) {
       return { data: rows[0] || null, error: null };
