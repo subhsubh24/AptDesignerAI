@@ -2391,3 +2391,129 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   run, ~41 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 22 — 2026-08-09
+
+### What we found
+- All Run 1-21 owner blockers remain unresolved: re-verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password`, `connect-email-resend`, `set-metrics-token`, `set-cron-secret`,
+  `apply-migration-031`, `set-email-physical-address` all still `status: open`).
+  `PENDING_OPS.md`'s own `as_of` is still 2026-08-07, unchanged since Run 21.
+- Re-probed `https://aptdesignerai.com/` an eighteenth time: still `connect_rejected` / gateway 502
+  to CONNECT, identical signature to every prior probe, cross-checked against the agent-proxy's own
+  `/__agentproxy/status` `recentRelayFailures` log (2026-08-09T05:08:05Z). No new information; same
+  conclusion as Runs 4-21.
+- Between Run 21 and Run 22 the Product Factory shipped Runs 148-154 (through PR #843, commits
+  e5e715b..HEAD): CI hardening (the security-invariants gate wired ahead of `migrate`, closing a
+  PENDING_OPS.md item that was open at Run 21's time), a11y/silent-catch/scene-graph-prompt-coverage
+  fixes, a database audit-trail test, and a doc-only `AGENTS.md` change adding a Linear-backed board
+  discipline section for the Product Factory (claim-before-you-build, acceptance-check-as-the-
+  definition-of-done, "decide, don't park"). None of it touches pricing, features, or any GTM-owned
+  marketing doc — verified via `git log --oneline e5e715b..HEAD -- <every GTM-owned doc>` (empty).
+- `docs/quality/QUALITY_SCORECARD.md` and `docs/growth/GTM_SCORECARD.md` are BOTH unchanged since
+  Run 21 — re-read directly (not inferred): QUALITY_SCORECARD still `as_of: 2026-08-03` (commit
+  15007fe, #793, "10th independent grade"), overall C, `ship_gate_met: false`, the same three
+  sub-A ship-critical dims (`functional_reality` C, `design_taste` B, `business_case_strength` B);
+  GTM_SCORECARD still `as_of: 2026-08-03`, `auditor_run: 5`, overall B, `ship_gate_met: false`.
+  Both S6 outreach lanes stay hard-off, unchanged conclusion.
+- Demand-signal re-probe (S10's every-run requirement): `reddit.com` stays excluded on Responsible
+  Builder Policy grounds (an owner DECISION, unchanged since Run 16); `trustpilot.com/review/
+  havenly.com` re-fetched directly this run (Run 21 had deferred this specific re-probe) — still
+  HTTP 403 Forbidden, unchanged.
+- **New demand-signal work**: per Run 21's own next_action, targeted theme 4's one remaining
+  unexplored angle — a named furniture RETAILER's own disclosed AR feature usage/satisfaction
+  metric (not a research org, not an AR vendor). A WebSearch query surfaced a synthesized answer
+  attributing a specific "35% reduction in buyer's remorse returns" and "customers using AR features
+  are 11x more likely to complete a purchase" to Wayfair by name. Rather than cite this directly,
+  went to Wayfair's own primary source: WebFetch of `aboutwayfair.com/augmented-reality-with-a-
+  purpose` (confirmed genuinely Wayfair's own page via byline + corporate branding) found **zero**
+  quantified metrics of any kind on the page — no returns, purchase-likelihood, or satisfaction
+  figures. A follow-up search of Wayfair's Q1 2026 and Q2 2026 earnings-call transcripts (gurufocus,
+  Motley Fool, stockanalysis.com, Benzinga) found no AR-specific engagement metric either. Traced the
+  "35%"/"11x" figures instead to a cluster of commercial AR/3D-visualization VENDOR blogs already
+  flagged in prior runs as undisclosed-competitor-promotion (cylindo.com, theplanner.studio,
+  elsner.com, 1center.co, orbe3d.com, fenicher.com, gigwise.com) — the search engine's own synthesis
+  had attributed a vendor's promotional claim to Wayfair with no primary Wayfair source actually
+  making it. Correctly NOT cited.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-08-09 (both the top-level block and the
+  `demand_signal` sub-block); refreshed the `internal_metrics_api` validation reason with the 18th
+  probe attempt; rewrote the `web_research` and `gtm_scorecard` validation entries with this run's
+  re-verification (both scorecards unchanged, marketing docs unchanged, Trustpilot re-probed) and the
+  Wayfair finding; added a Run 22 `method_note` entry (prepended, Run 21's text kept verbatim per
+  this doc's append-only practice) documenting the Wayfair dead-end and the methodological caution it
+  surfaces; added a `research_status: structurally_hard_to_corroborate` field to theme 4's entry (see
+  below); refreshed `learnings`/`next_actions`/`owner_blockers` for the 22nd consecutive
+  circuit-breaker run. Ran `npm install` (materializes `js-yaml`, no `package.json` change) then
+  `node scripts/validate-gtm.mjs` — `validate-gtm: OK`.
+- **Flagged demand-signal theme 4 as structurally hard to corroborate.** Theme 4 (AR view-in-room
+  trust gap) has now had SIX dedicated research attempts (Runs 14, 17, 19, 20, 21, 22) with zero net
+  source-count growth since Run 12 (still 2 cited / 1 verbatim). This run closed the last angle Run
+  21 named as still open (a named retailer's own primary disclosure) with an honest negative, exactly
+  matching Run 21's own stated criterion for when to stop re-attempting: "if that also comes up
+  empty, theme 4 should be flagged as a structurally hard-to-corroborate theme rather than
+  re-attempted with the same search shape indefinitely." Added `research_status:
+  structurally_hard_to_corroborate` to the theme's entry in GROWTH_STATUS.md. This does NOT delete or
+  discount theme 4's existing evidence (the Baymard citation remains genuinely verbatim-verified and
+  product-relevant) — it changes future runs' DEFAULT behavior from "spend a fresh research cycle
+  re-attempting theme 4 every run" to "re-probe the two standing structural gaps (Reddit, Trustpilot)
+  only, per S10's every-run requirement, unless a genuinely new lead surfaces elsewhere" — freeing
+  future research budget for themes with more open angles (theme 1 still lacks a theme-specific
+  disconfirming datum, per the GTM Auditor Run 5 `experiment_validity` read).
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (18th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (both scorecards,
+  unchanged since Run 21) — GTM_STANDARD §6/§13 Gate 1 stays hard-off. Zero outreach drafts this run,
+  correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: nothing this run clears the §3
+  bar for a steer — the only new finding is a demand-signal honest negative (a WebSearch-synthesized
+  figure correctly not cited after primary-source verification failed), not new positioning data.
+- Did not spawn a maker≠checker reviewer: every edit this run is research/validation (two scorecard
+  data-reads, a re-verified marketing-consistency spot-check, a demand-signal negative finding, and a
+  research-status flag change on an existing theme) — no landing/email/ASO copy, campaign,
+  pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer shipped, matching
+  this doc's own precedent for when a routine S4/S5 update does and doesn't warrant one.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced this run — every growth blocker found
+  is already tracked there with no new owner-actionable step; the security-invariants CI item that
+  WAS open at Run 21's time appears to have been resolved by the Product Factory's own PR #840/#836
+  work in the interim (owned by that factory, not this loop, so left untouched here).
+- Did not re-attempt themes 1/2/3 demand-signal research: this run's research budget went to closing
+  out theme 4's last open angle per Run 21's explicit next_action; themes 1-3 are comparatively
+  well-corroborated (5, 6, and 6 sources respectively) and not flagged as needing fresh work this run.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads competition data; no new information since Run 3.
+
+### Lessons learned
+- **A WebSearch-synthesized figure attributed to a named real company is not the same evidentiary
+  strength as that company's own disclosure — verify at the primary source before citing, every
+  time.** The "Wayfair: 35% return reduction, 11x purchase likelihood" claim read exactly like a
+  citable, specific, attributed statistic — but it existed nowhere on Wayfair's own site or in its
+  recent earnings calls. The underlying number(s) trace to third-party AR/3D-visualization vendors'
+  own promotional claims, which the search engine's synthesis conflated with the company those
+  vendors sell to. This is a sharper, more dangerous version of the "First Chair is a competitor, not
+  neutral research" problem already tracked in `disconfirming` — here the fabrication risk is not
+  even about the SOURCE'S neutrality, but about whether the NAMED ATTRIBUTION is real at all. Add
+  this as a standing check for every future WebSearch-synthesized citation naming a specific company.
+- **Knowing when to stop is itself a decision worth recording, not an omission to explain away.**
+  Six attempts across many runs on the same theme with zero net progress since Run 12 is a real
+  signal, and Run 21 had already named the exact criterion for calling it: one more genuine attempt
+  on the one remaining angle, then flag it. Following through on a previously-stated stopping
+  criterion — rather than either quietly dropping the theme or re-attempting it a seventh time out of
+  habit — keeps the research log honest about diminishing returns without pretending the theme is
+  disproven (it isn't; it's just exhausted this loop's reach).
+- **A structural research-status flag redirects future effort without deleting past evidence.** The
+  `research_status: structurally_hard_to_corroborate` field is additive, not destructive — theme 4's
+  genuine, verbatim-verified Baymard citation and its product-fit read are untouched. The flag exists
+  purely to stop a predictable failure mode (every future run defaulting to "try theme 4 again" out
+  of habit, at the cost of themes with more genuinely open angles).
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-21? YES — circuit breaker remains FIRED (Run 22, 22nd consecutive
+  run, ~43 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
+  both are pure Vercel environment variable sets.
