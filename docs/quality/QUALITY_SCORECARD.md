@@ -18,332 +18,347 @@ up — it never grades itself.
 ```yaml
 QUALITY_SCORECARD:
   project: AptDesignerAI
-  as_of: 2026-08-03
+  as_of: 2026-08-10
   graded_by: quality-auditor          # independent routine; never the factory/maker
-  overall: C                          # HELD at C (capped by functional_reality, unmoved for 7 cycles) but the per-dimension picture IMPROVED SHARPLY — TWO ship_critical dims recovered fully to A (store_readiness C->A, artifact_integrity B->A) and a THIRD reached the A+ ceiling (security_rls A->A+, zero findings for the first time in 5 cycles), while performance recovered B (from C). Both store_readiness fixes were verified genuine, not closed-by-assertion: account deletion now purges storage BEFORE deleting the auth user (lib/storage/user-storage.ts purgeUserStorage, pinned by regression tests including a cross-tenant-delete guard), and docs/app-privacy.md + app/privacy/page.tsx now consistently disclose location collection and the real Maps/Places purpose. artifact_integrity's four named root causes (F1/F2 overclaim, 3 stale docs, A4 mistick) are all fixed with honest, re-verified language; one trivial nit remains (a stale .github/workflows/ci.yml header). design_taste closed its three-hue-anti-pattern gap SYSTEMICALLY (a new repo-wide off-system-palette ratchet, not a spot fix) but held B because F7's authed/design-dense screenshots (incl. /focus, the flagship route the violation was ON) remain uncommitted. business_case_strength's take-rate correction (30%->15%, real Apple SBP/Google Play programs) was independently verified as HONEST, not gaming — no behavioral input moved — but held B on a newly-precise, loop-buildable gap: the mobile paywall doesn't mirror the business case's own annual-gating/tier-mix assumptions. THREE ship_critical dims now sit below A, down from five: functional_reality (C, unchanged — a purely owner-gated CI/cutover step), design_taste (B), business_case_strength (B).
-  ship_gate_met: false                # true only when every ship_critical dim is A or A+ — THREE remain below A (functional_reality C, design_taste B, business_case_strength B), down from five last cycle
+  overall: C                          # HELD at C (capped by functional_reality, unmoved for an EIGHTH consecutive cycle) — but the per-dimension picture is MIXED, not uniformly better: business_case_strength genuinely RECOVERED B->A (the mobile paywall now ships the $29 Apartment tier + mirrors the web app's annual-billing kill-switch, closing issue #672 for real, verified end-to-end, no behavioral input moved) — but TWO other ship_critical dims DROPPED on fresh adversarial findings, the same pattern seen in the 07-13/07-27 cycles: security_rls A+->B (a fresh 57-route sweep found POST /api/area-analysis accepts an unbound client-supplied project_id that overrides the caller's own room's project, leaking another tenant's full project row — address, building_research, apartment_analysis — plus every sibling room's private diagnosis history into the response and the Gemini prompt; missed by 10 prior audit cycles) and artifact_integrity A->B (the standing .github/-gated stale-header nit persists, PLUS a fresh, verified overclaim: ROADMAP.md:739 claims "28 tests" cover reset-link-idempotency when the actual, sole test file has 11 — a ~2.5x inflation of a security-relevant closure claim). Net: FOUR ship_critical dims now sit below A (functional_reality C, security_rls B, design_taste B, artifact_integrity B) — UP from three last cycle, despite one genuine recovery. design_taste held B (palette-ratchet MAX_OFF_SYSTEM tightened further 48->42->36 via two more real token migrations, but F7's authed/design-dense screenshots, incl. /focus, remain uncommitted, unchanged). tests_evals and performance both held B on genuine incremental progress (validation-agent.ts coverage 13%->56.5% via a real cassette test; next/image adoption moved off zero).
+  ship_gate_met: false                # true only when every ship_critical dim is A or A+ — FOUR remain below A (functional_reality C, security_rls B, design_taste B, artifact_integrity B), up from three last cycle
   dimensions:
     functional_reality:
       grade: C
       ship_critical: true
       gap: >-
-        HELD at C for a SEVENTH consecutive cycle — a fresh independent grader confirmed the persistence
-        blocker is BYTE-IDENTICAL to 07-27: `grep -c "DATA_BACKEND" .github/workflows/ci.yml` -> 0;
-        lib/supabase/server.ts:23 still `return process.env.DATA_BACKEND === "supabase"` (default
-        memory). Zero commits since 07-27 touched e2e/journeys.spec.ts, lib/supabase/server.ts,
-        .github/workflows/ci.yml, or lib/store/memory-store.ts. journeys.spec.ts still self-admits the
-        gap (creates via the in-memory store; real Supabase is auth-only).
-        __tests__/supabase/data-backend.test.ts still concedes the real Postgres round-trip is "a
-        human-verified cutover step" — no cold-start proof test exists anywhere in the repo.
+        HELD at C for an EIGHTH consecutive cycle — a fresh independent grader confirmed the persistence
+        blocker is BYTE-IDENTICAL to 08-03: `grep -c "DATA_BACKEND" .github/workflows/ci.yml` -> 0;
+        lib/supabase/server.ts:22-24 still `return process.env.DATA_BACKEND === "supabase"` (default
+        memory), fail-loud logic unchanged. Of the ~50 commits since 08-03, only 4 touched a
+        persistence-adjacent file, and none set DATA_BACKEND: 0870137 (Node 20->24 CI bump — touched
+        ci.yml but only the node-version field in 5 jobs, env block untouched even though the file WAS
+        open for editing that day, proving the gate is a deliberate choice not a technical wall);
+        9391639 (memory-store .single() zero-row fix, a correctness improvement, not a cutover);
+        468b0ef (security-invariants gate wiring, unrelated); f1364b2 (housekeeping only).
+        `find __tests__ -iname "*cold-start*" -o -iname "*persistence*"` still returns only
+        mocked-client regression guards (analyze-apartment-persistence.test.ts,
+        saved-designs-*-persistence.test.ts) — no real write->restart->re-read + cross-user RLS-denial
+        proof test exists anywhere in the repo. e2e/journeys.spec.ts and
+        __tests__/supabase/data-backend.test.ts still self-admit the gap in unchanged language.
         PENDING_OPS.md confirms both blocking items (`ci-journeys-data-backend`,
-        `cutover-to-persistent-data`) remain status:open, and documents WHY the loop cannot self-close
-        the CI half: .github/ is a sensitive/permission-gated path, and the scripts/run-journeys.sh
-        workaround doesn't work because `npm run start &` launches the server BEFORE that script runs,
-        so an exported env var never reaches the already-running process. CI is otherwise green (latest
-        run 30799362489 on b3fbcd6, conclusion=success); `npm test` 2788 pass/12 skip (up from 2438/11);
-        `npx tsc --noEmit` clean. No new functional-reality regressions found across the 60+ PRs merged
-        since 07-27 (design/a11y/coverage/billing-cap work only — none touched the money path, auth, or
-        dashboard population). C not B (persistence is blocking for a retention-driven, sellable app); C
-        not D (everything else genuinely works, and every money-path signal stays green). RAISE to A:
-        this is now PURELY an owner-gated step, unchanged from last cycle's prescription — set
-        DATA_BACKEND: "supabase" in the CI journeys job's env block (a .github/ edit the loop cannot
-        make), add the cold-start round-trip proof test (write a saved design, restart, re-read, assert
-        survival + a second-user RLS denial), then make DATA_BACKEND=supabase the production default.
-        Migration 030 (share-token) must land BEFORE the cutover per PENDING_OPS. Tracked: #525 (update).
+        `cutover-to-persistent-data`) remain status:open with the same unchanged reasoning for why the
+        loop cannot self-close the CI half (.github/ is permission-gated; the run-journeys.sh env-export
+        workaround races the server's own startup). `npm test` 2944 pass/12 skip (up from 2788/12, all
+        net-positive correctness fixes — 550cecf/76571f8/9391639 correct real 500-vs-404
+        error-classification bugs across rooms/projects/search/analyze-apartment/saved-designs routes);
+        `npx tsc --noEmit` clean; `npx eslint .` 0/0. No new functional-reality regressions found across
+        the full commit window. C not B (persistence is blocking for a retention-driven, sellable app);
+        C not D (everything else genuinely works, every money-path signal green). RAISE to A: identical
+        prescription for the 8th cycle running — set DATA_BACKEND: "supabase" in the CI journeys job's
+        env block (a .github/ edit the loop cannot make), add the cold-start round-trip proof test, then
+        make DATA_BACKEND=supabase the production default. Migration 030 must land BEFORE the cutover.
+        Tracked: #525 (update — still open, unchanged root cause, now explicitly the sole item blocking
+        overall off C for 8 straight cycles).
     correctness:
       grade: A
       ship_critical: true
       gap: >-
-        Holds at A (fresh adversarial grader, cold). `npx tsc --noEmit` clean; `npm test` 2788 pass / 12
-        skip (up from 2438/11, 251 files); `npm run check:determinism` green; `npx eslint .` now 0 ERRORS
-        AND 0 WARNINGS (was 19 — .agents/** is now eslint-ignored, eslint.config.mjs:49, and `npm run
-        lint` = `eslint . --max-warnings 0` passes clean — see artifact_integrity). Billing webhook still
-        correct: signature verified before DB access (app/api/billing/webhook/route.ts:76-88), idempotent
-        via the pre-upsert status read (:103-117), DB failure 500s so Stripe retries. Zero empty catches
-        or stub/TODO markers found on billing/entitlements paths. Spot-checked 6 new test files
-        (direction-distance-format, lifestyle-fit-format, pairwise-proportions-format, set-math,
-        spatial-graph, waitlist/referral) — all genuine behavior assertions (boundary rounding, branch
-        presence/absence, uniqueness over 2000 draws, adjacency/dead-zone thresholds), not
-        formatter-string change-detectors; the 2438->2788 jump looks legitimate on this sample. Of the
-        three named A->A+ ceiling items, ONE is now partially fixed: lib/agents/computer-use/agent-loop.ts:279
-        now threads `seed: resolveSeed(undefined)` (was missing entirely) — the seed-omission half of
-        finding (3) is closed. The thinkingConfig half is UNCHANGED: `thinkingLevel: ThinkingLevel.HIGH`
-        is still hardcoded on task `computer_use` (not on the AGENTS.md allowed-HIGH list), now with an
-        honest comment arguing the task has a cheap deterministic verifier
-        (product-verifier.ts parseFinal()/hasData) and naming an escalation-ladder rewrite as the real
-        fix — a reviewed, deliberate deferral, not silent drift, but the cost-contract violation itself
-        persists. The other two ceiling items are untouched: no maxDuration sweep test exists
-        (`find __tests__ -iname "*maxduration*"` empty; only __tests__/api/auth-signup.test.ts:48-50
-        asserts one route) despite 12+ routes declaring maxDuration=300; harness-ratchet.test.ts:22 still
-        sets SCAN_DIRS=["lib","app"], so scripts/seed-product-embeddings.ts:102's live
-        geminiProvider.chat({...}) still has no thinkingConfig/seed and stays invisible by construction.
-        RAISE to A+: a transitive import-closure sweep test asserting maxDuration wherever the closure
-        touches lib/ai/*; extend SCAN_DIRS to scripts/ + add `generateContent(` as a ratchet marker; and
-        either land the computer-use escalation-ladder rewrite or add an explicit, seeded, ratchet-visible
-        allowed-HIGH exception for computer_use.
+        Holds at A (fresh adversarial grader, cold, independently re-ran every mechanical signal and
+        matched the orchestrator's numbers exactly). `npx tsc --noEmit` clean; `npm test` 2944 pass / 12
+        skip (up from 2788/12, 275 files); `npm run check:determinism` green (all 4 checks); `npx eslint .`
+        0 errors / 0 warnings. Billing webhook re-verified line-by-line, unchanged and correct: signature
+        verified before DB access, idempotent via the pre-upsert status read, DB failure 500s so Stripe
+        retries. Zero TODO/FIXME/XXX and zero empty-catch findings on billing/auth/agent paths across the
+        full ~50-commit window (one benign client-side catch in app/layout.tsx, unrelated). Spot-checked 6
+        commits since 08-03 (550cecf, 9391639, 76571f8, 9365bd2, 2face6b, c442f4c) — all genuine behavior
+        fixes with regression tests that fail against the pre-fix code, several caught by real independent
+        reviewer passes documented in the same commits. Of the THREE named A->A+ ceiling items: (1)
+        computer-use's hardcoded `ThinkingLevel.HIGH` deferral is unchanged, same honest comment intact;
+        (2) no maxDuration sweep test still exists despite 31 files declaring maxDuration, unchanged; (3)
+        harness-ratchet.test.ts's SCAN_DIRS=["lib","app"] still excludes scripts/ (root cause open), but
+        the ONE instance it produced last cycle is now fixed —
+        scripts/seed-product-embeddings.ts:102-121's live .chat() call now carries
+        thinkingConfig/DETERMINISTIC_SEED (landed 08-04, with a comment noting the ratchet still can't see
+        it). A FOURTH ceiling item is newly named, self-identified by the team rather than hidden:
+        lib/auth/ownership.ts's userOwnsRoom/userOwnsProject/userOwnsCandidateProduct discard the Supabase
+        query's `error` field and return Boolean(data) — a genuine DB failure during an IDOR-guarding
+        ownership check is indistinguishable from "not owned" and silently 404s instead of 500ing. Fails
+        closed (denies access, doesn't leak), not itself an auth bypass, and explicitly flagged as a
+        distinct follow-up in 550cecf's own commit message rather than buried — so it's graded as a named
+        ceiling item, not a drop. RAISE to A+: fix ownership.ts's error-swallowing; land the maxDuration
+        sweep test; extend SCAN_DIRS to scripts/; resolve the computer-use HIGH-thinking deferral.
     security_rls:
-      grade: A+
+      grade: B
       ship_critical: true
       gap: >-
-        RECOVERS to A+ — a fresh 56-route sweep (`find app/api -name route.ts` -> 56) found NO new IDOR,
-        and BOTH prior A+-ceiling nits are now genuinely fixed. app/api/saved-designs/route.ts:178-192,254
-        now persists a `boundProjectId` derived from the SAME ownership-bound fetch (not the raw,
-        possibly-empty client `project_id`) — closing the dangling-FK nit. app/api/products/route.ts:96-109
-        now binds `search_session_id` to `search_sessions.id + room_id` via the already-cleared room and
-        400s on a mismatch, rather than silently accepting an unbound id. Every route that binds one
-        client-supplied id then reads another was re-checked and holds the convention: bundles/route.ts
-        binds product_ids to room_id; bundles/evaluate resolves room_id from the bundle row itself (no
-        client-supplied room_id to spoof); mockups/route.ts binds both bundle_id and product_ids to
-        room_id; products/evaluate explicitly checks product.room_id !== room_id before scoring;
-        area-analysis/refine-chat derive project_id from room.project_id server-side, never trusting a
-        client value; picks/route.ts scopes rooms by projects.user_id. PATCH/PUT allowlists on
-        projects/rooms/products all use explicit ALLOWED_KEYS arrays excluding user_id/project_id/room_id
-        — no ownership-reassignment vector via PATCH body. Every route added or changed since 07-27 (9
-        commits touching analyze-apartment, mockups, diagnosis, floor-plan, search) retains
-        checkRateLimit/enforceWriteRateLimit + checkDailySpend where paid — no new provider-touching route
-        shipped without the standard guard stack. Secrets clean: `git ls-files | grep -iE
-        "\.env$|secret|credential"` empty; no NEXT_PUBLIC_*/EXPO_PUBLIC_* secret leakage. Mechanical
-        signals: `npx tsc --noEmit` clean; `npm test` 2788 pass/12 skip; preflight GATE 6 rerun green (26
-        public tables, all ENABLE ROW LEVEL SECURITY). Zero findings this cycle — the rubric's A+ bar (0
-        findings) is genuinely met for the first time in 5 cycles.
+        DROPS A+->B — a fresh, genuinely independent 57-route sweep (`find app/api -name route.ts` -> 57)
+        found a real, previously-missed cross-tenant IDOR, the same "bind one id, leave a second
+        client-supplied id unbound" class that has recurred across FIVE prior cycles (mockups product_ids,
+        saved-designs project_id, area-analysis GET room_id — all previously fixed). This is a NEW
+        instance in the same file as one of those prior fixes: app/api/area-analysis/route.ts POST handler
+        accepts `project_id` directly from the request body (line 121), binds ONLY `room_id` via
+        `userOwnsRoom` (lines 123-125), and then lets the client-supplied `project_id` OVERRIDE the
+        caller's own room's real project — `effectiveProjectId = project_id || room.project_id` (line
+        206) — with no `userOwnsProject` check anywhere. That id is then used to `select("*")` the full
+        `projects` row (line 208 — building_research, apartment_analysis, address/city/neighborhood) and
+        every sibling room's FULL room_diagnoses history (line 209) with no ownership check, folded into
+        the Gemini "BUILDING CONTEXT" / "APARTMENT-LEVEL ANALYSIS" prompt and reflected back in the
+        response's design_direction/summary fields — a real cross-tenant data leak (another tenant's
+        address, building research, and private per-room diagnosis history) plus LLM-cost abuse against a
+        tenant who never authorized the call, reachable by any authenticated caller who owns ANY room and
+        can guess/enumerate a project UUID. The route's own sibling (refine-chat) already derives
+        project_id server-side from the owned room and never accepts a client value — making this route an
+        outlier among its own siblings, not a repo-wide pattern. Everything else re-verified clean this
+        cycle: BOTH the c442f4c (design_profiles/saved_items WITH CHECK) and 2face6b (password-reset mint
+        cooldown) security fixes are genuine and correct; the two PRIOR A+ nits (saved-designs
+        boundProjectId, products search_session_id binding) remain fixed, no regression; all PATCH/PUT
+        allowlists still exclude user_id/project_id/room_id; no committed secrets; preflight GATE 6 green
+        (26/26 RLS). B not lower: read-only (no write/escalation path), requires an authenticated caller
+        who already owns a room (not anonymous), and is a narrowly-scoped single-route defect, not a
+        systemic pattern. RAISE to A: drop the `project_id` body param from
+        app/api/area-analysis/route.ts entirely (mirroring refine-chat's own pattern — derive project_id
+        server-side from the owned room) or gate it behind `userOwnsProject`, plus a regression test.
+        Tracked: NEW issue filed this cycle (area-analysis.ts is the same file #527 fixed a DIFFERENT
+        class of guard on in an earlier cycle — GET's missing room_id check; this is a distinct,
+        newly-discovered vector on the POST handler's project_id).
     design_taste:
       grade: B
       ship_critical: true
       gap: >-
-        Holds at B, but ONE of the two capping gaps genuinely and SYSTEMICALLY closed this cycle — not a
-        spot fix. The three-hue-ordinal anti-pattern named last cycle
-        (ManualScorecardView.tsx:140-142, emerald/blue/amber encoding a 0-10 score on the /focus flagship)
-        is fixed AND backed by a repo-wide ratchet: every score surface now routes through
-        lib/scoring/verdicts.ts's documented ONE-HUE EMPHASIS LADDER (getScoreColor/getScoreSurface/
-        VERDICT_COLORS — worst=muted, middle=warm accent, best=full-ink, zero emerald/blue/amber), and a
-        NEW test (__tests__/design/off-system-palette-ratchet.test.ts) caps off-system Tailwind colour
-        usage repo-wide at MAX_OFF_SYSTEM=52 (ratcheted DOWN from 82 across real conversions incl. this
-        one, same-day #788) — it can only shrink, and the remaining hits (toast/badge status variants,
-        illustrative photo-swatch content on the gallery page) are named, counted, pinned exemptions with
-        real reasoning, not loopholes. AUTHED_A11Y_ROUTES and DESIGN_DENSE_A11Y_ROUTES
-        (journeys.spec.ts:391,439) both still present, unmodified, and green (6 files / 63 tests). The
-        SECOND capping gap, F7 visual baselines, is materially narrowed but NOT closed: e2e/__screenshots__/
-        now holds ~30 real, non-placeholder PNGs (a manifest test decodes PNG headers to reject
-        0-byte/placeholder/orphaned files) — but EVERY captured file is `public-*`; the AUTHED and
-        DESIGN-DENSE routes (dashboard, /focus, setup/diagnosis/products/bundles/mockups/compare) are
-        wired to capture in CI but NOT committed, because persisting them requires the seeded
-        Supabase-local backend plus a .github/ step outside the loop's reach. docs/loop-memory.md records
-        real dual-axis (FUNCTIONAL+DESIGN) verdicts for the committed public set, and it genuinely caught
-        a real bug (a disabled-looking waitlist CTA) — proving the mechanism works where it runs.
-        Critically, /focus — the EXACT route that carried this cycle's closed violation — still has no
-        committed visual baseline, so the fix cannot yet be vision-verified in situ, only in source.
-        ROADMAP.md F7 correctly stays unticked. B not A: F7's DoD explicitly requires BOTH artifacts AND a
-        recorded dual-axis verdict for design-dense/authed routes, and that half is still absent — a real,
-        named, ship-critical gap, not a trivial nit. RAISE to A: commit real authed/design-dense
-        screenshots (the CI-side capture mechanism already exists; persisting requires the owner-gated
-        .github/ step) and record their dual-axis verdict, prioritizing /focus. Tracked: #204 (update —
-        one gap closed with a durable ratchet, one remains and is now more precisely scoped).
+        Holds at B — real, ongoing tightening on the palette axis, byte-for-byte unchanged on the F7
+        axis. `__tests__/design/off-system-palette-ratchet.test.ts` MAX_OFF_SYSTEM tightened further
+        48->42->36 via two more verified real token migrations since 08-03: 2bcfc9a moved 6 raw
+        emerald-500/amber-500 icon colors (setup/products/waitlist) onto the one-hue emphasis ladder
+        (text-accent-warm/text-foreground/text-muted-foreground); 93f7969 moved the dashboard's "Building
+        researched" badge off raw emerald onto the same pattern — both diffs read and confirmed real, not
+        cosmetic. Both design tests pass (`npx vitest run
+        __tests__/design/off-system-palette-ratchet.test.ts __tests__/design/warm-pill-contrast.test.ts`
+        -> 35/35). AUTHED_A11Y_ROUTES / DESIGN_DENSE_A11Y_ROUTES (journeys.spec.ts:391,439) still present
+        and wired. Three further a11y fixes verified genuine against their diffs: 370dc17 (real h2
+        sr-only fixing the dashboard's h1->h3 skip), a211214 (aria-live scoped correctly to the phase
+        list, not the ticking timer), 550cecf (mobile focus ring reuses the shared Button CVA's exact
+        focus-visible classes — token-consistent, not ad hoc); 0e69e64's warm-pill-contrast fix is notable
+        for surviving 3 real review-caught overclaiming rounds before landing with its own WCAG contrast
+        test — a positive process signal. Fresh slop hunt across recently-touched files (topbar, image
+        upload, dashboard, focus, waitlist) found zero new ad-hoc hex/emoji-iconography/purple-gradient
+        instances; repo-wide grep for purple/violet/fuchsia/indigo gradients -> zero hits. The CAPPING gap,
+        F7 visual baselines, is completely unchanged since 08-03: `find e2e/__screenshots__ -iname
+        "*.png" | wc -l` -> 30, every one still `public-*`, zero commits to the directory since 08-03.
+        /focus — the exact route the original three-hue violation was on — remains deliberately excluded
+        even from the axe-scan sweep (documented reason: triggers a live, slow LLM pipeline), so it stays
+        the single least-verified design-dense surface in the app. docs/loop-memory.md confirms every
+        intervening run (149-157) explicitly logged this as unchanged/owner-gated, not silently dropped.
+        B not A: F7's DoD requires BOTH committed artifacts AND a recorded dual-axis verdict for
+        design-dense/authed routes, and neither exists for that tier. RAISE to A: commit real
+        authed/design-dense screenshots (capture mechanism already exists in CI; persisting requires the
+        owner-gated .github/ step) and record their dual-axis verdict, prioritizing /focus. Tracked: #204
+        (update — palette axis tightened further and durably; F7 remains the sole capping gap, unchanged).
     store_readiness:
       grade: A
       ship_critical: true
       gap: >-
-        RECOVERS A — both C-dropping findings from 07-27 are genuinely fixed, independently re-verified,
-        not merely closed-by-assertion. (F1) lib/storage/user-storage.ts now exports `purgeUserStorage`,
-        sweeping upload buckets by `${userId}/` prefix listing plus generated mockups via the trusted
-        `mockup_jobs.result_image_url` column ONLY — deliberately NOT trusting client-settable
-        `saved_designs.thumbnail_url`/`projects.cover_image_url`, closing a cross-tenant-delete vector
-        pinned by __tests__/api/account-deletion-storage.test.ts:228-236. Called from BOTH
-        app/api/user/delete/route.ts:42 and app/api/mobile/account/route.ts:66 BEFORE `deleteUser`, and on
-        purge failure the route 500s WITHOUT calling deleteUser
-        (__tests__/api/user-delete.test.ts:103-114 pins both the ordering and the
-        no-deleteUser-on-purge-failure behavior; __tests__/api/mobile-account-delete.test.ts:96-104
-        mirrors it). (F2) docs/app-privacy.md:19-38,158 and app/privacy/page.tsx:50-54,142-146,212 now
-        AGREE: location is declared as building-coordinates (not device location, no permission
-        requested), the Google Maps/Places purpose is correctly described as address autocomplete + building
-        photos (not "product image search"), and the maps.googleapis.com-loads-on-every-page fact is now
-        explicitly disclosed to the user. Fresh sweep: mobile/eas.json build+submit profiles still real
-        (dev/preview/production, app-bundle, autoIncrement, appleId/ascAppId/appleTeamId via env); app icon
-        still a genuine 1024x1024 RGBA PNG; D3 store screenshots remain the sole HUMAN-gated Track D item
-        (expected, unchanged). Two PENDING_OPS items remain but are correctly scoped as owner/one-time-ops,
-        NOT code gaps: `refile-store-privacy-forms` (re-file the actual App Store Connect/Play Console
-        privacy FORMS to match the now-corrected docs) and `audit-orphaned-storage-objects` (a one-time
-        sweep for accounts deleted before this fix shipped, whose storage objects predate the purge). Zero
-        findings this cycle. Tracked: #726 (already closed 2026-08-01 — confirmed genuinely resolved, not
-        prematurely closed).
+        HOLDS A — a fresh grader independently re-verified both prior fixes are still genuinely in place,
+        no regression across the ~50 commits since 08-03 (only cosmetic/perf changes touched adjacent
+        code: haptics, refine-chat parallelization, ImageUploadZone rejection-state fix — none touch
+        purge/privacy logic). `lib/storage/user-storage.ts`'s purgeUserStorage still sweeps upload
+        buckets by `${userId}/` prefix plus mockups via the trusted mockup_jobs.result_image_url column
+        only, called BEFORE deleteUser in both delete routes; `npx vitest run
+        __tests__/api/account-deletion-storage.test.ts __tests__/api/user-delete.test.ts
+        __tests__/api/mobile-account-delete.test.ts` -> 30/30 passed. docs/app-privacy.md and
+        app/privacy/page.tsx re-read in full, still agree on location (building-address-derived
+        coordinates, never device GPS, no permission requested); `npx vitest run
+        __tests__/compliance/privacy-disclosure.test.ts` -> 8/8 passed. mobile/eas.json build+submit
+        profiles still real; app icon re-verified via direct PNG IHDR parse: 1024x1024, 8-bit RGBA;
+        bundle id `ai.aptdesigner.app` consistent; no expo-location or any location package anywhere in
+        mobile/, consistent with the no-permission claim. PENDING_OPS.md's two remaining items
+        (`refile-store-privacy-forms`, `audit-orphaned-storage-objects`) re-confirmed correctly scoped as
+        owner/one-time-ops, not silently reframed as code gaps. Track D cross-check: D1/D2/D4 ticked, D3
+        (device-captured store screenshots) remains the sole open item, correctly annotated as a HUMAN
+        step. Zero findings this cycle. Tracked: #726 (stays closed — confirmed still genuinely resolved).
     artifact_integrity:
-      grade: A
-      ship_critical: true
-      gap: >-
-        RECOVERS A. All four root causes named 07-27 are now fixed with honest, evidence-matched language,
-        not merely re-ticked. ROADMAP.md F1/F2 now carry accurate caveats — F1: "REMAINING: the CI lint
-        step runs bare npx eslint .; adding --max-warnings 0 there is an owner step, see PENDING_OPS"; F2:
-        the equivalent for coverage — both re-verified TRUE (ci.yml:39 still bare `npm test`, ci.yml:94
-        still bare `npx eslint .`; but scripts/preflight.sh GATE 1f DOES run `npm run test:coverage`, so
-        the floor is enforced in the readiness gate even though not yet in per-PR CI). e2e/ROUTE_INVENTORY.md:3
-        no longer overclaims "every route/flow" — it now states "20 of the 35 app/**/page.tsx routes appear
-        in the table; the other 15 are listed under Tracked gaps," an honest, self-checking count; the
-        stale "still needs adding" language at the old lines 60-61 is gone. ROADMAP.md:389 A4 is now
-        correctly UN-TICKED ([ ]) with an explanatory note matching PENDING_OPS.md's
-        `cutover-to-persistent-data: status open` — no longer a misleading claim. Spot-checked G1/G5/G6/G7/
-        C2/C4 ticks plus pricing consistency (lib/billing/stripe.ts $29/$49/$399 vs app/pricing/page.tsx vs
-        the rewritten docs/BUSINESS_CASE.md, including the new 15% store-rate figure) — all hold up, all
-        honestly caveat inert-until-owner-key states. preflight GATE 5 (business case/GROWTH_STATUS/
-        OWNER_ACTIONS YAML) and GATE 6 (RLS 26/26) both green; the QUALITY_SCORECARD ship-bar preflight
-        failure is a fair, by-design non-finding (the auditor's own gate correctly blocking on
-        ship_gate_met:false, not a bug). ONE nit remains and keeps this at A, not A+: .github/workflows/ci.yml:1-5
-        still carries the stale, self-contradictory "READY-TO-APPLY workflow — copy this to
-        .github/workflows/ci.yml" header on the file that already IS that workflow — a one-line, real
-        doc/reality mismatch, but .github/ is off-limits to the loop. RAISE to A+: an owner or a
-        .github/-authorized pass deletes the stale header. Tracked: #727 (close — genuinely resolved; the
-        one remaining nit is trivial and .github/-gated, not a code-level integrity defect).
-    business_case_strength:
       grade: B
       ship_critical: true
       gap: >-
-        Holds at B — genuine, honest progress, explicitly verified this cycle to be a REAL correction, NOT
-        gaming. The 30%->15% store take-rate correction (docs/BUSINESS_CASE.md, "Take-rate correction
-        2026-07-28") is real and well-sourced: Apple's Small Business Program and Google Play's first-$1M
-        fee tier are cited, genuine programs, and the doc correctly separates automatic ELIGIBILITY from
-        the owner-only ENROLLMENT action (PENDING_OPS.md `enroll-apple-small-business-program`,
-        status:open, blocks: business-case-store-channel). No behavioral input moved to hit the floor —
-        installs, day-30 retention (25%), conversion (4%), churn, and tier mix are UNCHANGED from last
-        cycle's B grade; only the commission rate was corrected, on both channels, to their real values.
-        `node analysis/business_case_without_annual_arr.mjs` -> $121,339 (up from $99,926); `node
-        scripts/validate-computation.mjs` -> "10 figure(s) verified... PASS." Crucially, the floor-clearing
-        claim does NOT rest solely on the un-enrolled SBP rate: the web/Stripe-only reading ($136,762
-        steady-state, Stripe's live 2.9% fee) needs no pending owner action at all. The doc was ALSO caught,
-        same-day, by the sibling GTM auditor overclaiming "$121,339/$136,762 over the floor" without the
-        steady-state-not-year-1 caveat the base case already carried, and fixed within the day (commit
-        2d079e6) — year-1 exit run-rate is now honestly disclosed at $73,519 (store) / $82,873 (web), BOTH
-        still below the floor, and floor_met_year1 stays false. UNRESOLVED gap, unchanged from last cycle:
-        mobile/src/components/paywall-sheet.tsx's FALLBACK_OPTIONS/packagesToOptions() still produce only
-        Annual/Monthly Pro — no $29 Apartment one-time tier (credited with 60% of modeled conversions in the
-        business case) and no isAnnualBillingEnabled-equivalent gate anywhere in mobile/ (all 9 real gate
-        call sites remain web-only) — so the model's own core assumptions are not mirrored in the app's
-        primary mobile purchase surface. This is a real, specific, LOOP-BUILDABLE lever (unlike SBP
-        enrollment, which is owner-only). RAISE to A: add the $29 Apartment tier to the mobile paywall and
-        mirror the web annual kill-switch there, so mobile monetization actually matches what the business
-        case models. Do NOT close any remaining gap by nudging a behavioral input (conversion/retention/
-        churn) — that is gaming and will be graded DOWN. Tracked: #672 (update — the honest floor-clearing
-        correction landed; the mobile-parity lever is the new, more precise RAISE-to-A target).
+        DROPS A->B — the standing .github/-gated nit is unchanged (`.github/workflows/ci.yml:1` still
+        carries the stale "READY-TO-APPLY workflow — copy this to .github/workflows/ci.yml" header,
+        byte-identical), AND a fresh sweep found a NEW, verified overclaim: ROADMAP.md:739 (Track G4,
+        "Run 141 / PR #789") states email-verification-link idempotency is "CLOSED" backed by "28 tests
+        [that] cover the decision table and the actual wiring sequence." Running the actual artifact —
+        `npx vitest run __tests__/auth/reset-link-idempotency.test.ts` — shows 11 passed, not 28
+        (confirmed independently via `grep -c "it("` and via git history showing the file was only ever
+        touched by the one commit that added exactly 11 tests). As a control, the two adjacent numeric
+        claims in the SAME paragraph (signup-errors.ts "6 tests", login-errors.ts "8 tests") were also run
+        and are dead-accurate (6 and 8), so this is an isolated, freshly-introduced ~2.5x inflation of a
+        security-relevant closure claim, not a systemic pattern — but it's exactly the class of drift this
+        dimension exists to catch, and it was NOT present at the 08-03 grade. Genuinely-verified positives
+        this cycle: 89cce77's "preflight gate integrity" fix is real, not overclaimed (preflight.sh now
+        does real if/then exit-status branching instead of tail-grep; scripts/check-security-invariants.mjs
+        exists as a standalone 162-line gate matching the commit's claim); e2e/ROUTE_INVENTORY.md's
+        "20 of 35 routes" count is still exactly correct against a fresh `find app -name page.tsx` (35);
+        pricing is consistent across stripe.ts/pricing page/the new mobile paywall $29 tier/BUSINESS_CASE.md,
+        with the mobile fallback module's own doc-comment correctly distinguishing "display before RC
+        loads" from "what RC actually sells" (honest, not an overclaim); PENDING_OPS.md's OWNER_ACTIONS
+        YAML re-parses cleanly, 33 items, spot-checked entries match code reality. B not lower: only two
+        named gaps, both narrow and non-systemic (one immutable/.github-gated, one an isolated numeric
+        error with the underlying fix itself genuine). RAISE to A: correct ROADMAP.md:739's test count
+        from 28 to 11 (a one-line fix, fully within the loop's reach, no owner gate); the .github/ header
+        remains owner-only. Tracked: reopen #727 (the prior close was correct for its own findings, but a
+        fresh overclaim has appeared since — same dimension, new instance, matching this rubric's own
+        "named-but-unfixed nit must eventually cost a letter" precedent).
+    business_case_strength:
+      grade: A
+      ship_critical: true
+      gap: >-
+        RECOVERS B->A — the single unresolved, loop-buildable gap named last cycle is now closed and
+        independently verified as GENUINE, not gamed. Commit 120d28c (#805, Aug 4) added: (1)
+        mobile/src/lib/paywall-fallback.ts's FALLBACK_OPTIONS now lists the $29 one-time Apartment tier
+        FIRST, then $49/mo Monthly — mirroring app/pricing/page.tsx's order and matching
+        lib/billing/stripe.ts's STRIPE_PRICE_IDS.apartment price exactly; (2)
+        mobile/src/lib/paywall-annual-gate.ts's shouldOfferPackage(isAnnualPackage, annualBillingEnabled)
+        filters the annual package out of BOTH the static fallback AND the live RC-loaded offering unless
+        the flag is on; (3) mobile/src/lib/billing-config.ts's fetchAnnualBillingEnabled() calls
+        app/api/mobile/billing-config/route.ts, which reads the SAME isAnnualBillingEnabled() source of
+        truth as the web checkout route (lib/billing/stripe.ts) — mobile and web cannot drift to different
+        answers — and fails CLOSED to false on any error/timeout (5s AbortController), so a network hiccup
+        can only ever hide the annual option, never wrongly show one the backend can't grant. `npx vitest
+        run __tests__/billing/paywall-annual-gate.test.ts __tests__/billing/paywall-fallback.test.ts
+        __tests__/api/mobile-billing-config.test.ts` -> 13/13 passed, assertions are substantive (exact
+        FALLBACK_OPTIONS order pinned, gate behavior pinned under both flag states, per-IP rate-limit
+        isolation on the route). `git log --since=2026-08-03 -- docs/BUSINESS_CASE.md` -> empty: this is
+        pure app-code, zero doc/wording changes, confirming no behavioral input was touched to produce
+        this result. Fresh business-case numbers re-derived and bit-identical: `node
+        analysis/business_case_without_annual_arr.mjs` -> $121,339; `node scripts/validate-computation.mjs`
+        -> "10 figure(s) verified... PASS." Hunted docs/BUSINESS_CASE.md for other named-but-unbuilt
+        levers: the two credited with uplift (waitlist referral loop, in-product web upsell) are both real
+        and built (migration 026, lib/waitlist/referral.ts, UpgradeCtaCard call sites); three further
+        levers are explicitly disclosed as NOT credited with any uplift — correctly conservative, not
+        overclaimed. A not A+: the web/Stripe-only reading clears the floor outright, and the mobile
+        parity gap that was the sole named blocker is genuinely closed — no further named,
+        value-bar-clearing gap remains at this time. Tracked: CLOSE #672 (the fix is real, complete,
+        end-to-end, and independently re-verified — not cosmetic).
     tests_evals:
       grade: B
       ship_critical: false
       gap: >-
         Holds at B, on firmer footing than last cycle. `npx vitest run --coverage` -> 67.97% stmts / 57.36%
-        branch / 71.21% funcs / 69.23% lines (up from 62.6/51.88/67.53/63.6), 2788 pass / 12 skip / 251
-        files (up from 2438/11/226). The named maker/checker files show a MIXED picture, not uniform
-        improvement: room-diagnostician.ts 0.94%->72.07% and fit-scorer.ts 2.42%->65.27% are real,
-        substantial jumps; but validation-agent.ts sits at 13.06% — IDENTICAL to last cycle, zero new
-        coverage — and research-assembler.ts is unchanged at ~1.5%; orchestrator.ts moved only
-        2.97%->11.66%, and that entirely from two pure helper functions (TokenBudget/cartesian) — the
-        actual fan-out/scoring loop (lines 655-3445) is still ~88% dark. CI STILL never gates coverage:
-        .github/workflows/ci.yml:39 runs bare `npm test` (= `vitest run`, no --coverage) — an owner step
-        per PENDING_OPS, unchanged. The cassette pattern was genuinely EXTENDED per last cycle's explicit
-        instruction: __tests__/integration/diagnosis-pipeline-cassette.test.ts (new, 326 lines) drives the
-        real two-pass diagnosis agent (Pass A, self-consistency, room-type gate, few-shot retrieval, Pass
-        B), mocking only the Gemini boundary — a real second hermetic money-path test, not a rename.
-        Sampled 7 newly-added test files (fit-scorer-batch, orchestrator-primitives, category-normalization,
-        sanitize-prompt-pii, diagnosis-validator, off-system-palette-ratchet, bundle-scorer): zero
-        change-detector patterns found (an improvement over last cycle's 7-of-41 formatter-string problem);
-        several explicitly reason about what NOT to assert to avoid brittleness (e.g.
-        orchestrator-primitives.test.ts cites a grep proving one code path has no caller and deliberately
-        skips asserting on it). IMPROVEMENT_LOG.md documents one genuine manual live RUN_EVALS run this
-        cycle — the new bedroom gold fixture (b3fbcd6) failed legitimately twice on real sampling variance,
-        was revised, then passed 3/3 live, with both reviewers independently re-fetching the source photo
-        to verify the fixture's premise — real evidence, but for 1 of 6 eval files and manual/local rather
-        than an automated repeatable CI signal; live-eval.yml is otherwise unchanged (still passes GREEN
-        with keys unset). RAISE to A: point ci.yml verify at `npm run test:coverage` (owner step); extend
-        the cassette pattern specifically to validation-agent.ts and research-assembler.ts (both untouched
-        this cycle despite being named twice now); grow orchestrator.ts coverage past its two pure helpers
-        into the actual fan-out/scoring loop. Tracked: #200 (update).
+        branch / 73.86% funcs / 71.84% lines (up from 67.97/57.36/71.21/69.23), 2944 pass / 12 skip / 275
+        files (up from 2788/12/251) — independently re-run and bit-identical to the orchestrator's numbers.
+        The single biggest driver is a genuine fix to a long-named weak spot:
+        `__tests__/integration/validation-agent-cassette.test.ts` (400 lines, a659293/#816) mocks only
+        geminiProvider.chat() and specifically exercises the three coercion paths named across prior
+        cycles (field present/absent/explicit-JSON-null all collapsing to undefined), moving
+        validation-agent.ts 13.06%->56.53% stmts — a real, substantial jump, not padding. A second genuine
+        0%->100% file landed (lib/db/agent-runs.ts, __tests__/db/agent-runs.test.ts, 6db689e/#842, real
+        insert/update + error-path + timestamp assertions), plus a new cost-contract-enforcement test
+        (__tests__/ai/thinking.test.ts, 6292196/#852, deliberately hardcodes its expected-tiers table
+        rather than deriving it from the source, avoiding the tautological-test trap). Spot-checked 4
+        newest test files, zero change-detector patterns found. UNCHANGED, now a THIRD straight cycle:
+        orchestrator.ts's actual fan-out/scoring loop (lines 655-3445) is still 11.66% stmts, byte-identical
+        to last cycle — zero incremental coverage despite being named repeatedly; the file previously cited
+        as "research-assembler.ts" (~1.5%) could not be located under that name this cycle (likely
+        renamed/mislabeled across audits) but its closest match, scene-assembler.ts, is still ~1.5% dark,
+        essentially untouched. CI STILL never gates coverage (ci.yml:39 runs bare `npm test`, owner step,
+        unchanged). docs/loop-memory.md Run 150 documents a genuine live-pipeline eval this cycle: the
+        diagnosis eval against real Gemini caught a real category-slug bug ("rug" vs "area_rug"), was
+        fixed, and reran green 5 times (2 by the author, 3 independently by a reviewer) — real evidence of
+        live evals running against the real pipeline, beyond the weekly owner-gated live-eval.yml. RAISE to
+        A: point ci.yml verify at `npm run test:coverage` (owner step); extend the cassette pattern to
+        orchestrator.ts's actual fan-out loop and to scene-assembler.ts — both now named for a THIRD
+        straight cycle with zero incremental coverage, which is itself becoming the more pressing gap than
+        the coverage percentage. Tracked: #200 (update).
     performance:
       grade: B
       ship_critical: false
       gap: >-
-        RECOVERS to B — four of the five findings named last cycle are genuinely fixed, each independently
-        re-verified live (not just by commit title). (1) app/api/mockups/route.ts's findCachedMockup now
-        uses fs.promises.readdir, not the blocking sync call — the event-loop-blocking defect is gone (the
-        O(all-mockups-ever) directory-scan cost itself remains architecturally, a lesser, separate concern).
-        (2) app/api/analyze-apartment/route.ts:29 adds MAX_ROOMS_PER_ANALYSIS=20, slices over-cap projects
-        and surfaces a warning (:113-120) — real and complete, matching the commit title exactly. (3)
-        app/api/products/evaluate-set/route.ts:26,172 now gates extraction through
-        pLimit(EXTRACT_CONCURRENCY=5), symmetric with the scoring phase below it (previously uncapped). (4)
-        The serial per-image fetch in lib/ai/gemini.ts and the unused resolveImageBlocks() helper are BOTH
-        fixed, non-superficially: a new shared lib/ai/image-fetch-gate.ts (imageFetchLimit, pLimit-based)
-        replaces what its own comment says were two INDEPENDENTLY-instantiated limiters that could double
-        real concurrency — a subtler bug than the one originally flagged, caught and fixed in the same
-        pass; resolveImageBlocks now has 6 real call sites (scene-assembler.ts, mockup-verifier.ts,
-        mockup-agent.ts x2, room-diagnostician.ts, greedy-decorator.ts) versus zero last cycle. All four
-        landed in the commit range around #732 (2026-07-29). UNCHANGED, still open: lib/store/embedding-index.ts:46
-        remains a full-table select("*") + in-memory cosine scan per crop, ivfflat index still unused;
-        next/image adoption still exactly 0 files repo-wide; no perf budget anywhere in CI
-        (.github/workflows/margin-eval.yml has only an unrelated cost ::warning::, not a real budget gate).
-        The raw-<img> growth ratchet (__tests__/perf/no-img-growth.test.ts) is still green and enforcing,
-        MAX_RAW_IMG steady at 30 (no regression, no further reduction this cycle). B not A: two real,
-        known-cost items (the embedding N+1, zero perf budget) remain fully untouched. B not C: this cycle
-        shows genuine, non-trivial architectural fixes — a shared concurrency gate, a bounded fan-out, an
-        async directory read — not just config bumps, and zero new regressions were introduced. RAISE to A,
-        cheapest-first: add even a crude bundle-size/Lighthouse budget gate to CI; sequence the
-        embedding-index pgvector RPC WITH the DATA_BACKEND cutover (it would be dead code before it lands);
-        adopt next/image on the whitelisted hosts next.config.ts already allows, ratcheting MAX_RAW_IMG down
-        as each page converts. Tracked: #385 (update).
+        HOLDS B — genuine, verified incremental progress on two more fronts, two known items still
+        untouched. next/image adoption moved off zero: components/rooms/room-image-gallery.tsx now renders
+        `next/image` for hosts matching next.config.ts's remotePatterns (Supabase/Google/Places), falling
+        back to raw `<img>` only for unrecognized hosts (fac45ea/#810) — a safety-reviewed conversion (a
+        reviewer caught that an unmatched host would otherwise hard-crash via next/image's remotePatterns
+        enforcement, and the fallback was added in response). The raw-`<img>` ratchet count did NOT drop
+        (MAX_RAW_IMG still 30) because the ratchet counts source-level `<img>` occurrences, not runtime
+        paths — the PR's own commit message honestly discloses this ("doesn't lower it either, honestly")
+        — so this is a real behind-the-scenes win the ratchet is structurally blind to; the "0 files" prior
+        characterization is now stale. c8e5787's "stop double-serializing" fix verified genuine:
+        refine-chat's diffAnalysis now short-circuits primitive comparisons before any JSON.stringify call.
+        9d09a4c's "parallelize independent DB fetches" verified genuine: saved-designs' POST handler now
+        runs two Promise.all pairs, each pair confirmed to have no data dependency between its two queries.
+        UNCHANGED, still open: lib/store/embedding-index.ts remains a full-table select("*") + in-memory
+        cosine scan (still correctly sequenced with the DATA_BACKEND/pgvector cutover — would be dead code
+        before that lands); no perf budget anywhere in CI. Fresh hunt across the ~50-commit window found no
+        new N+1 or blocking-I/O regression. B not A: the two standing known-cost items remain untouched and
+        the ratchet's blind spot toward safety-gated conversions like RoomImageGallery's means future real
+        wins may keep looking like no-ops without a metric change. RAISE to A, cheapest-first: update
+        no-img-growth.test.ts's stale "0 adoption" doc comment; extend the ratchet to distinguish
+        unconditional vs. host-gated raw `<img>` so future safety-reviewed conversions register as
+        progress; add a crude bundle-size/Lighthouse CI gate; sequence the embedding-index pgvector RPC
+        with the DATA_BACKEND cutover. Tracked: #385 (update).
   top_gaps:
     - dimension: functional_reality
       severity: critical
       gap: >-
-        THE long-standing binding blocker, held C for a SEVENTH consecutive cycle, now the SOLE reason
-        overall can't move off C (store_readiness and artifact_integrity both recovered to A this cycle;
-        security_rls reached A+). Byte-identical state to 07-27: the journeys CI job never sets
-        DATA_BACKEND (grep confirms 0 hits in .github/workflows/ci.yml), lib/supabase/server.ts:23 still
-        defaults to the in-memory store, and the real-Postgres cold-start proof test still does not exist.
-        PENDING_OPS.md documents precisely why the loop cannot self-close the CI half (.github/ is
-        permission-gated; the scripts/run-journeys.sh workaround doesn't work because the server starts
-        before that script runs) — this is now a PURELY owner-gated item, not a loop-fixable one. FIX
-        (owner): add DATA_BACKEND: "supabase" to the journeys job's env block, add the cold-start
-        write->restart->re-read + second-user-RLS-denial test, then flip the production default. Migration
-        030 must land first. Tracked: #525.
+        THE long-standing binding blocker, held C for an EIGHTH consecutive cycle, and now the SOLE
+        reason overall can't move off C. Byte-identical state to 08-03: the journeys CI job never sets
+        DATA_BACKEND (0 hits in .github/workflows/ci.yml, even in the one commit this cycle that opened
+        that exact file for a Node-version bump), lib/supabase/server.ts still defaults to the in-memory
+        store, and the real-Postgres cold-start proof test still does not exist. PENDING_OPS.md documents
+        precisely why the loop cannot self-close the CI half (.github/ is permission-gated; the
+        scripts/run-journeys.sh workaround doesn't work because the server starts before that script
+        runs) — this remains a PURELY owner-gated item, not a loop-fixable one. FIX (owner): add
+        DATA_BACKEND: "supabase" to the journeys job's env block, add the cold-start write->restart->
+        re-read + second-user-RLS-denial test, then flip the production default. Migration 030 must land
+        first. Tracked: #525.
+    - dimension: security_rls
+      severity: critical
+      gap: >-
+        Ship_critical, NEW this cycle — dropped A+->B on a fresh 57-route sweep. app/api/area-analysis/
+        route.ts's POST handler accepts a client-supplied `project_id` (line 121), binds only `room_id`,
+        and lets that unbound project_id OVERRIDE the caller's own room's real project (line 206),
+        fetching another tenant's full project row (address, building_research, apartment_analysis) plus
+        every sibling room's private diagnosis history (line 209) into the Gemini prompt and the response
+        — a genuine cross-tenant data leak plus LLM-cost abuse, reachable by any authenticated caller who
+        owns any room. Missed by 10 prior audit cycles; the route's own sibling (refine-chat) already
+        derives project_id server-side and never accepts a client value, making this route an outlier
+        among its own siblings rather than a repo-wide pattern. FIX: drop the project_id body param
+        (mirror refine-chat's pattern) or gate it behind userOwnsProject, plus a regression test. Tracked:
+        NEW issue filed this cycle.
+    - dimension: artifact_integrity
+      severity: high
+      gap: >-
+        Ship_critical, dropped A->B. The standing .github/-gated stale-header nit persists unchanged, PLUS
+        a fresh, verified overclaim: ROADMAP.md:739 claims "28 tests" cover reset-link-idempotency when
+        the actual, sole test file has 11 (confirmed by running it) — a ~2.5x inflation of a
+        security-relevant closure claim, isolated (two adjacent numeric claims in the same paragraph are
+        dead-accurate) but real and new since 08-03. FIX: correct ROADMAP.md:739's count from 28 to 11 (a
+        one-line fix, fully loop-reachable, no owner gate needed). Tracked: reopen #727.
     - dimension: design_taste
       severity: high
       gap: >-
-        Ship_critical, held B, but ONE of two capping gaps genuinely and systemically closed: the
-        three-hue-ordinal anti-pattern on ManualScorecardView.tsx is fixed via a shared one-hue emphasis
-        ladder (lib/scoring/verdicts.ts) backed by a NEW repo-wide ratchet
-        (__tests__/design/off-system-palette-ratchet.test.ts, MAX_OFF_SYSTEM=52, can only shrink).
-        Remaining: F7 visual baselines are narrowed but not closed — ~30 real PNGs now committed for PUBLIC
-        routes only; the AUTHED/design-dense routes (incl. /focus, the exact flagship the closed violation
-        was on) are captured in CI but not committed, blocked on a .github/ persistence step outside the
-        loop's reach. FIX: commit the authed/design-dense screenshots + record their dual-axis verdict,
-        prioritizing /focus. Tracked: #204.
-    - dimension: business_case_strength
-      severity: high
-      gap: >-
-        Ship_critical, held B, on genuinely stronger and independently-verified-honest footing. The
-        30%->15% store take-rate correction is real (Apple SBP/Google Play programs, correctly separating
-        eligibility from unenrolled status) and moved the shippable-today figure from $99,926 to $121,339 —
-        confirmed NOT gaming (no behavioral input changed). The web/Stripe-only reading ($136,762) clears
-        the floor without depending on the un-enrolled SBP rate at all. Remaining, unchanged: the mobile
-        paywall (mobile/src/components/paywall-sheet.tsx) still lacks the $29 Apartment tier (60% of
-        modeled conversions) and any annual-billing gate (all 9 real isAnnualBillingEnabled call sites are
-        web-only) — a real, loop-buildable lever, distinct from the owner-only SBP enrollment. FIX: add the
-        $29 tier + mirror the annual kill-switch in the mobile paywall so mobile monetization matches the
-        model's own assumptions. Tracked: #672.
+        Ship_critical, held B. The palette-ratchet axis tightened further and durably (MAX_OFF_SYSTEM
+        48->42->36 via two more verified real token migrations since 08-03). The capping gap, F7 visual
+        baselines, is completely unchanged: ~30 real PNGs committed for PUBLIC routes only; the
+        AUTHED/design-dense routes (incl. /focus, the exact flagship the original violation was on) are
+        captured in CI but not committed, blocked on a .github/ persistence step outside the loop's reach.
+        FIX: commit the authed/design-dense screenshots + record their dual-axis verdict, prioritizing
+        /focus. Tracked: #204.
     - dimension: performance
-      severity: medium
+      severity: low
       gap: >-
-        Not ship_critical. RECOVERED B (from C) — four of five findings from last cycle genuinely fixed:
-        mockups readdirSync now async, analyze-apartment fan-out capped at 20 rooms, evaluate-set extraction
-        now pLimit'd, and the gemini.ts serial-image-fetch + unused-resolveImageBlocks pair both fixed via a
-        new shared concurrency gate (lib/ai/image-fetch-gate.ts) that also caught a subtler double-limiter
-        bug in the same pass. Remaining: embedding-index.ts is still a full-table N+1 scan (ivfflat unused);
-        next/image adoption still 0; no perf budget anywhere in CI. FIX cheapest-first: add a bundle-size/
-        Lighthouse CI gate; sequence the pgvector RPC with the DATA_BACKEND cutover; adopt next/image on the
-        already-whitelisted hosts. Tracked: #385.
+        Not ship_critical. Held B on genuine incremental progress: next/image adoption moved off zero
+        (RoomImageGallery, safety-reviewed with a host-allowlist fallback) though the source-level ratchet
+        can't see the runtime win; refine-chat's double-serialization and saved-designs' sequential DB
+        fetches were both genuinely fixed. Remaining: embedding-index.ts's full-table N+1 scan (correctly
+        sequenced with the DATA_BACKEND cutover); no perf budget anywhere in CI. FIX cheapest-first: fix
+        the now-stale "0 adoption" doc comment; add a crude bundle-size/Lighthouse CI gate; sequence the
+        pgvector RPC with the DATA_BACKEND cutover. Tracked: #385 (update).
     - dimension: tests_evals
       severity: low
       gap: >-
-        Not ship_critical. Coverage up to 67.97/57.36/71.21/69.23 and a SECOND genuine hermetic cassette
-        money-path test landed (diagnosis-pipeline-cassette.test.ts), extending last cycle's
-        render-pipeline-cassette pattern as instructed. Unchanged: ci.yml:39 still runs bare `vitest run`
-        (coverage floor not CI-gated, owner step); validation-agent.ts and research-assembler.ts sit at the
-        SAME near-zero coverage as last cycle despite being named twice now; orchestrator.ts's actual
-        fan-out loop is still ~88% dark. FIX: point CI at test:coverage (owner); extend the cassette pattern
-        to validation-agent.ts/research-assembler.ts specifically. Tracked: #200.
+        Not ship_critical. Coverage up to 70.35/59.57/73.86/71.84 (2944 pass/12 skip/275 files). A
+        long-named weak spot genuinely closed this cycle: validation-agent.ts 13.06%->56.53% via a real
+        400-line cassette test exercising the exact previously-named coercion branches. Remaining, now a
+        THIRD straight cycle unchanged: orchestrator.ts's actual fan-out/scoring loop (lines 655-3445) is
+        still 11.66% stmts, zero incremental coverage; the near-1.5%-coverage agent file (closest match:
+        scene-assembler.ts) is likewise untouched. CI still doesn't gate coverage (owner step, unchanged).
+        FIX: point CI at test:coverage (owner); extend the cassette pattern to orchestrator.ts's real loop
+        and scene-assembler.ts specifically — now the more pressing gap than the aggregate percentage.
+        Tracked: #200 (update).
 ```
 
 ## How to read it (owner)
