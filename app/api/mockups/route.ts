@@ -18,7 +18,7 @@ import type { ImageSize, ImageAspectRatio } from "@/lib/ai/provider";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB, FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
 import { parsePagination } from "@/lib/utils/pagination";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
@@ -126,9 +126,8 @@ export async function GET(request: NextRequest) {
 
   const roomId = request.nextUrl.searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 300 });
 
@@ -173,9 +172,8 @@ export async function POST(request: Request) {
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Free-tier gate on the standard full-room render — per /pricing, an
   // Apartment-tier feature ("AI mockups of finished rooms") that the free tier
@@ -199,7 +197,7 @@ export async function POST(request: Request) {
     const { count: mockupCount } = await supabase
       .from("mockup_jobs")
       // mockup_jobs carries no user_id, so ownership is resolved through the
-      // room → project chain (same shape as userOwnsCandidateProduct).
+      // room → project chain (same shape as requireCandidateProductOwnership).
       .select("id, rooms!inner(projects!inner(user_id))", { count: "exact", head: true })
       .eq("rooms.projects.user_id", user.id)
       // A render that failed produced nothing, so it must not consume the

@@ -28,7 +28,7 @@ import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-pla
 import { enrichWhatItNeeds } from "@/lib/agents/whatitneeds-enricher";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { runWithMarginSession, withMarginOperation, getMarginContext } from "@/lib/observability/margin-context";
 import type { DesignDirection, IdentifiedProduct, ExtractedFloorPlan } from "@/lib/types/database";
 
@@ -63,9 +63,8 @@ export async function GET(request: NextRequest) {
   // this check any authenticated caller could pull another user's private
   // diagnosis JSON by guessing/enumerating a room_id (IDOR / cross-tenant read).
   // The POST + refine-chat siblings already guard; this closes the read leak.
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { data: diagnosis } = await supabase
     .from("room_diagnoses")
@@ -120,9 +119,8 @@ export async function POST(request: Request) {
   }
   const { room_id, project_id } = body as { room_id?: string; project_id?: string };
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // If another request for the same room is already running, wait for it.
   // Key includes user.id so concurrent requests from different users never share

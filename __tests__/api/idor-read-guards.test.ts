@@ -11,10 +11,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
   getCurrentUserId: vi.fn(),
 }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn(), userOwnsProject: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn(), requireProjectOwnership: vi.fn() }));
 
+import { NextResponse } from "next/server";
 import { createClient, getCurrentUserId } from "@/lib/supabase/server";
-import { userOwnsRoom, userOwnsProject } from "@/lib/auth/ownership";
+import { requireRoomOwnership, requireProjectOwnership } from "@/lib/auth/ownership";
 import { GET as productsGet } from "@/app/api/products/route";
 import { GET as refineChatGet, POST as refineChatPost } from "@/app/api/area-analysis/refine-chat/route";
 import { POST as savedDesignsPost } from "@/app/api/saved-designs/route";
@@ -22,8 +23,9 @@ import { GET as roomsGet, POST as roomsPost } from "@/app/api/rooms/route";
 
 const mockCreateClient = createClient as unknown as Mock;
 const mockGetCurrentUserId = getCurrentUserId as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
-const mockUserOwnsProject = userOwnsProject as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
+const mockRequireProjectOwnership = requireProjectOwnership as unknown as Mock;
+const notFoundResponse = () => NextResponse.json({ error: "Not found" }, { status: 404 });
 
 /** A chainable query stub whose terminal read resolves to `result`. */
 function queryStub(result: { data: unknown; error?: unknown }) {
@@ -49,8 +51,8 @@ function authed(user: { id: string } | null, from = () => queryStub({ data: [] }
 beforeEach(() => {
   mockCreateClient.mockReset();
   mockGetCurrentUserId.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsProject.mockReset();
+  mockRequireRoomOwnership.mockReset();
+  mockRequireProjectOwnership.mockReset();
   mockGetCurrentUserId.mockResolvedValue("attacker-1");
 });
 afterEach(() => vi.restoreAllMocks());
@@ -58,20 +60,20 @@ afterEach(() => vi.restoreAllMocks());
 describe("read-leak IDOR guards", () => {
   it("GET /api/products 404s when the caller does not own the room, without reading products", async () => {
     authed({ id: "attacker-1" });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await productsGet(
       new Request("http://localhost/api/products?room_id=victim-room"),
     );
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
   });
 
   it("GET /api/products serves data to the owner (guard does not break the happy path)", async () => {
     const rows = [{ id: "p1" }];
     authed({ id: "owner-1" }, () => queryStub({ data: rows }));
-    mockUserOwnsRoom.mockResolvedValue(true);
+    mockRequireRoomOwnership.mockResolvedValue(null);
 
     const res = await productsGet(
       new Request("http://localhost/api/products?room_id=own-room"),
@@ -83,20 +85,20 @@ describe("read-leak IDOR guards", () => {
 
   it("GET /api/area-analysis/refine-chat 404s when the caller does not own the room", async () => {
     authed({ id: "attacker-1" });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await refineChatGet(
       new NextRequest("http://localhost/api/area-analysis/refine-chat?room_id=victim-room"),
     );
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
   });
 
   it("GET /api/area-analysis/refine-chat serves chat history to the owner (guard does not block)", async () => {
     const msgs = [{ id: "m1", role: "user", content: "make it warmer" }];
     authed({ id: "owner-1" }, () => queryStub({ data: msgs }));
-    mockUserOwnsRoom.mockResolvedValue(true);
+    mockRequireRoomOwnership.mockResolvedValue(null);
 
     const res = await refineChatGet(
       new NextRequest("http://localhost/api/area-analysis/refine-chat?room_id=own-room"),
@@ -112,7 +114,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-refine" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const req = new NextRequest("http://localhost/api/area-analysis/refine-chat", {
       method: "POST",
@@ -121,7 +123,7 @@ describe("read-leak IDOR guards", () => {
     const res = await refineChatPost(req);
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-refine");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-refine");
     // The guard runs before the paid re-analysis: the room is never even read.
     expect(fromSpy).not.toHaveBeenCalledWith("rooms");
   });
@@ -135,7 +137,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "owner-refine" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(true);
+    mockRequireRoomOwnership.mockResolvedValue(null);
 
     const req = new NextRequest("http://localhost/api/area-analysis/refine-chat", {
       method: "POST",
@@ -143,7 +145,7 @@ describe("read-leak IDOR guards", () => {
     });
     await refineChatPost(req);
 
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "own-room", "owner-refine");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "own-room", "owner-refine");
     // Guard passed → the handler advanced to the room read it gates.
     expect(fromSpy).toHaveBeenCalledWith("rooms");
   });
@@ -154,7 +156,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const req = new NextRequest("http://localhost/api/saved-designs", {
       method: "POST",
@@ -163,7 +165,7 @@ describe("read-leak IDOR guards", () => {
     const res = await savedDesignsPost(req);
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
     // The guard runs before any snapshot read — the room_diagnoses table is never touched.
     expect(fromSpy).not.toHaveBeenCalledWith("room_diagnoses");
   });
@@ -178,7 +180,7 @@ describe("read-leak IDOR guards", () => {
       from: fromSpy,
     });
     mockGetCurrentUserId.mockResolvedValue("owner-1");
-    mockUserOwnsRoom.mockResolvedValue(true);
+    mockRequireRoomOwnership.mockResolvedValue(null);
 
     const req = new NextRequest("http://localhost/api/saved-designs", {
       method: "POST",
@@ -186,7 +188,7 @@ describe("read-leak IDOR guards", () => {
     });
     await savedDesignsPost(req);
 
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "own-room", "owner-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "own-room", "owner-1");
     // Guard passed → the handler advanced to the diagnosis snapshot read it gates.
     expect(fromSpy).toHaveBeenCalledWith("room_diagnoses");
   });
@@ -197,14 +199,14 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsProject.mockResolvedValue(false);
+    mockRequireProjectOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await roomsGet(
       new NextRequest("http://localhost/api/rooms?project_id=victim-project"),
     );
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
+    expect(mockRequireProjectOwnership).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
     // The guard runs before any rooms read — the rooms table is never touched.
     expect(fromSpy).not.toHaveBeenCalledWith("rooms");
   });
@@ -215,7 +217,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
       from: vi.fn(() => queryStub({ data: rows })),
     });
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const res = await roomsGet(
       new NextRequest("http://localhost/api/rooms?project_id=own-project"),
@@ -231,7 +233,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsProject.mockResolvedValue(false);
+    mockRequireProjectOwnership.mockResolvedValue(notFoundResponse());
 
     const req = new Request("http://localhost/api/rooms", {
       method: "POST",
@@ -240,7 +242,7 @@ describe("read-leak IDOR guards", () => {
     const res = await roomsPost(req);
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
+    expect(mockRequireProjectOwnership).toHaveBeenCalledWith(expect.anything(), "victim-project", "attacker-1");
     // The guard runs before the insert — the rooms table is never written.
     expect(fromSpy).not.toHaveBeenCalledWith("rooms");
   });
@@ -251,7 +253,7 @@ describe("read-leak IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const req = new Request("http://localhost/api/rooms", {
       method: "POST",
@@ -259,7 +261,7 @@ describe("read-leak IDOR guards", () => {
     });
     const res = await roomsPost(req);
 
-    expect(mockUserOwnsProject).toHaveBeenCalledWith(expect.anything(), "own-project", "owner-1");
+    expect(mockRequireProjectOwnership).toHaveBeenCalledWith(expect.anything(), "own-project", "owner-1");
     // Guard passed → the handler advanced to the rooms insert it gates.
     expect(fromSpy).toHaveBeenCalledWith("rooms");
     expect(res.status).toBe(201);

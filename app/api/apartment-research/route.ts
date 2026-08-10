@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsProject } from "@/lib/auth/ownership";
+import { requireProjectOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
@@ -479,8 +479,9 @@ export async function POST(request: Request) {
   // another user's room images into the research prompt and overwrite that
   // project's building_research (IDOR). No project_id → building-only research,
   // no project touched, so no check needed.
-  if (project_id && !(await userOwnsProject(supabase, project_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (project_id) {
+    const ownership = await requireProjectOwnership(supabase, project_id, user.id);
+    if (ownership) return ownership;
   }
 
   const searchContext = [

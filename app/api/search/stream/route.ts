@@ -6,7 +6,7 @@ import { loadUserFeedbackContext } from "@/lib/agents/user-feedback";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { logServerError } from "@/lib/utils/api-error";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import type { AgentContext } from "@/lib/agents/types";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { formatSceneGraphForPrompt } from "@/lib/agents/scene-reconciliation";
@@ -59,9 +59,8 @@ export async function POST(request: Request) {
   const spend = checkDailySpend(user.id);
   if (!spend.allowed) return dailySpendExceededResponse(spend);
 
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Fetch room
   const { data: room } = await supabase

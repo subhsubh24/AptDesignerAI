@@ -14,19 +14,21 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
   getCurrentUserId: vi.fn(),
 }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 // Guard must fire BEFORE the paid per-product scoring — spy so we can assert it.
 vi.mock("@/lib/agents/fit-scorer", () => ({ scoreProduct: vi.fn() }));
 
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { GET as areaAnalysisGet } from "@/app/api/area-analysis/route";
 import { POST as productsEvaluatePost } from "@/app/api/products/evaluate/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 const mockScoreProduct = scoreProduct as unknown as Mock;
+const notFoundResponse = () => NextResponse.json({ error: "Not found" }, { status: 404 });
 
 /** A chainable query stub whose terminal read resolves to `result`. */
 function queryStub(result: { data: unknown; error?: unknown }) {
@@ -42,7 +44,7 @@ function queryStub(result: { data: unknown; error?: unknown }) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
+  mockRequireRoomOwnership.mockReset();
   mockScoreProduct.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -54,14 +56,14 @@ describe("GET /api/area-analysis ownership guard", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await areaAnalysisGet(
       new NextRequest("http://localhost/api/area-analysis?room_id=victim-room"),
     );
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
     // The guard runs before any diagnosis read — the private table is never touched.
     expect(fromSpy).not.toHaveBeenCalledWith("room_diagnoses");
   });
@@ -73,7 +75,7 @@ describe("GET /api/area-analysis ownership guard", () => {
       auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(true);
+    mockRequireRoomOwnership.mockResolvedValue(null);
 
     const res = await areaAnalysisGet(
       new NextRequest("http://localhost/api/area-analysis?room_id=own-room"),
@@ -99,12 +101,12 @@ describe("POST /api/products/evaluate product↔room binding", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await productsEvaluatePost(evaluateBody("victim-room"));
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-1");
     expect(fromSpy).not.toHaveBeenCalledWith("candidate_products");
     expect(mockScoreProduct).not.toHaveBeenCalled();
   });
@@ -122,7 +124,7 @@ describe("POST /api/products/evaluate product↔room binding", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-1" } } }) },
       from: fromSpy,
     });
-    mockUserOwnsRoom.mockResolvedValue(true); // caller genuinely owns attacker-room
+    mockRequireRoomOwnership.mockResolvedValue(null); // caller genuinely owns attacker-room
 
     const res = await productsEvaluatePost(evaluateBody("attacker-room"));
 

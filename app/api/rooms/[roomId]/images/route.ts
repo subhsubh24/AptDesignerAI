@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
 import { isAcceptableStoredImageUrl } from "@/lib/utils/image-url";
 
@@ -28,9 +28,8 @@ export async function GET(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { data, error } = await supabase
     .from("room_images")
@@ -52,9 +51,8 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const limited = rateLimited(user.id);
   if (limited) return limited;
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (postOwnership) return postOwnership;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;
@@ -118,9 +116,8 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const limited = rateLimited(user.id);
   if (limited) return limited;
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const deleteOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (deleteOwnership) return deleteOwnership;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError, logServerError } from "@/lib/utils/api-error";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { parsePagination } from "@/lib/utils/pagination";
 import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
 
@@ -13,9 +13,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const roomId = searchParams.get("room_id");
   if (!roomId) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 100, maxLimit: 300 });
 
@@ -67,9 +66,8 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Bind every product to THIS room before creating the bundle. product_ids are
   // client-supplied and the memory-store query is not user-scoped, so owning the

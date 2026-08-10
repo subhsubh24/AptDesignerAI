@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { runRoomDiagnosis, reconcileStyleLabel } from "@/lib/agents/room-diagnostician";
 import { assembleRoomSceneGraph } from "@/lib/agents/scene-assembler";
 import { validateDiagnosisAsync } from "@/lib/agents/diagnosis-validator";
@@ -70,9 +70,8 @@ export async function POST(request: Request) {
   // client-supplied and the memory-store read is not user-scoped, so without
   // this check any authenticated caller could run diagnosis on — and write a
   // diagnosis row into — another user's room (IDOR + LLM-cost abuse).
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Fetch room + images
   const { data: room } = await supabase

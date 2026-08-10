@@ -4,7 +4,7 @@ import { apiError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { hasProEntitlementWeb, FREE_SAVE_LIMIT_WEB } from "@/lib/entitlements/web";
 
 export async function GET(request: NextRequest) {
@@ -68,9 +68,8 @@ export async function POST(request: NextRequest) {
   // their OWN saved_designs, then read them back — a cross-tenant data-exposure
   // IDOR. The optional project_id is bound to the user separately at its own
   // fetch below (it feeds only the metadata name/building_name).
-  if (!(await userOwnsRoom(supabase, room_id, userId))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, userId);
+  if (postOwnership) return postOwnership;
 
   // Fetch room details and the latest diagnosis. These two reads are
   // independent (both key only on room_id, neither depends on the other), so
@@ -170,7 +169,7 @@ export async function POST(request: NextRequest) {
   // are not user-scoped, so an unbound select would copy ANY tenant's project
   // name + building_name into the caller's saved_designs.metadata, readable back
   // via GET /api/saved-designs/[id] (cross-tenant read IDOR). Mirrors the
-  // userOwnsProject convention; a non-owned/absent project simply yields no
+  // requireProjectOwnership convention; a non-owned/absent project simply yields no
   // metadata (maybeSingle → null) rather than leaking or erroring.
   //
   // The SAME bound fetch decides what gets PERSISTED. Previously the row stored

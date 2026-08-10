@@ -11,7 +11,7 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // boundary. Mirrors app/api/bundles/route.ts:74-95.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
   RATE_LIMITS: { mockup: {}, recommendationMockup: {} },
@@ -44,11 +44,11 @@ vi.mock("@/lib/agents/room-architecture-extractor", () => ({
 vi.mock("@/lib/agents/format-floor-plan", () => ({ getRoomFromFloorPlan: vi.fn(() => undefined) }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as mockupsPost } from "@/app/api/mockups/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 
 /**
  * Build a Supabase stub for the standard-mode mockup POST.
@@ -158,8 +158,8 @@ function req(body: unknown) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsRoom.mockResolvedValue(true); // caller owns the target room in every case
+  mockRequireRoomOwnership.mockReset();
+  mockRequireRoomOwnership.mockResolvedValue(null); // caller owns the target room in every case
 });
 afterEach(() => vi.restoreAllMocks());
 

@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
  * rejecting ordinary requests. The concurrency gate ships alone.
  */
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
   RATE_LIMITS: { bundleEvaluate: { windowMs: 60_000, max: 10 } },
@@ -29,12 +29,12 @@ vi.mock("@/lib/agents/bundle-optimizer", () => ({ evaluateBundle: vi.fn() }));
 vi.mock("@/lib/design-context/build-profile", () => ({ buildDesignProfile: vi.fn() }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { extractFromUrl } from "@/lib/agents/product-extractor";
 import { POST } from "@/app/api/products/evaluate-set/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 const mockExtract = extractFromUrl as unknown as Mock;
 
 function request(body: unknown) {
@@ -71,10 +71,10 @@ function supabaseStub() {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockOwnsRoom.mockReset();
+  mockRequireRoomOwnership.mockReset();
   mockExtract.mockReset();
   mockCreateClient.mockResolvedValue(supabaseStub());
-  mockOwnsRoom.mockResolvedValue(true);
+  mockRequireRoomOwnership.mockResolvedValue(null);
   // A per-URL extraction failure is a normal result, not a thrown request — it
   // keeps these tests on the fan-out and off the save path.
   mockExtract.mockResolvedValue({ success: false, error: "stubbed" });

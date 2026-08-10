@@ -20,7 +20,7 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 //      regression there would trade activation for revenue.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
   RATE_LIMITS: { mockup: {}, recommendationMockup: {} },
@@ -71,13 +71,13 @@ vi.mock("@/lib/agents/room-architecture-extractor", () => ({
 vi.mock("@/lib/agents/format-floor-plan", () => ({ getRoomFromFloorPlan: vi.fn(() => undefined) }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { createAgentRun } from "@/lib/db/agent-runs";
 import { hasProEntitlementWeb, FREE_MOCKUP_LIMIT_WEB, FREE_RECOMMENDATION_MOCKUP_LIMIT_WEB } from "@/lib/entitlements/web";
 import { POST as mockupsPost } from "@/app/api/mockups/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 const mockHasPro = hasProEntitlementWeb as unknown as Mock;
 const mockCreateAgentRun = createAgentRun as unknown as Mock;
 
@@ -207,8 +207,8 @@ function req(body: unknown) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsRoom.mockResolvedValue(true);
+  mockRequireRoomOwnership.mockReset();
+  mockRequireRoomOwnership.mockResolvedValue(null);
   mockHasPro.mockReset();
   mockHasPro.mockResolvedValue(false);
   mockCreateAgentRun.mockClear();

@@ -26,7 +26,7 @@ import { apiError } from "@/lib/utils/api-error";
 import { createLogger } from "@/lib/logging/logger";
 import { embedImage } from "@/lib/ai/embeddings";
 import { insertEmbeddingWithRetry } from "@/lib/store/embedding-index";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend } from "@/lib/utils/spend-limiter";
 import type { DiagnosisData, IdentifiedProduct } from "@/lib/types/database";
@@ -90,9 +90,8 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const patchOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (patchOwnership) return patchOwnership;
 
   // Throttle the endpoint: the confirm path can trigger a paid Gemini embedding
   // (embedImage) on the self-learning write-back, so an un-throttled caller is a

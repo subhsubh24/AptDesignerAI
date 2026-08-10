@@ -19,7 +19,7 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // Follows the route-mock pattern in saved-designs-full-persistence.test.ts.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(), getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({ checkRateLimit: vi.fn(() => ({ allowed: true })) }));
 vi.mock("@/lib/entitlements/web", () => ({
   hasProEntitlementWeb: vi.fn(async () => true),
@@ -27,12 +27,12 @@ vi.mock("@/lib/entitlements/web", () => ({
 }));
 
 import { createClient, getCurrentUserId } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as savedDesignsPost } from "@/app/api/saved-designs/route";
 
 const mockCreateClient = createClient as unknown as Mock;
 const mockGetCurrentUserId = getCurrentUserId as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 
 type QueryResult = { data?: unknown; count?: number; error?: unknown };
 
@@ -122,9 +122,9 @@ function jsonReq(body: unknown): Request {
 beforeEach(() => {
   mockCreateClient.mockReset();
   mockGetCurrentUserId.mockReset();
-  mockUserOwnsRoom.mockReset();
+  mockRequireRoomOwnership.mockReset();
   mockGetCurrentUserId.mockResolvedValue("user-1");
-  mockUserOwnsRoom.mockResolvedValue(true);
+  mockRequireRoomOwnership.mockResolvedValue(null);
 });
 afterEach(() => vi.restoreAllMocks());
 

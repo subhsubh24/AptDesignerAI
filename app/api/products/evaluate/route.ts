@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -51,9 +51,8 @@ export async function POST(request: Request) {
   // client-supplied and the memory-store reads are not user-scoped, so without
   // this check any authenticated caller could score products against — and pull
   // the diagnosis/design context of — another user's room (IDOR + LLM-cost abuse).
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Fetch product, room, project, and diagnosis in parallel
   const [productRes, roomRes] = await Promise.all([
@@ -71,7 +70,7 @@ export async function POST(request: Request) {
   const product = productRes.data;
   const room = roomRes.data;
 
-  // Bind the client-supplied product_id to the owned room. userOwnsRoom(room_id)
+  // Bind the client-supplied product_id to the owned room. requireRoomOwnership(room_id)
   // proves the caller owns the ROOM, but product_id is a separate client value —
   // without this check a caller who owns room A could pass another user's
   // candidate product_id and have its data read + scored (IDOR). The data layer

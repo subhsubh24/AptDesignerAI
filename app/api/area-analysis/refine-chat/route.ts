@@ -15,7 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { getSystemPrompt } from "@/lib/prompts/system";
@@ -86,9 +86,8 @@ export async function GET(request: NextRequest) {
   // Ownership guard: room_id is client-supplied and the memory-store query is not
   // user-scoped, so without this check any authenticated caller could read
   // another user's refinement chat history (IDOR).
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { data: messages } = await supabase
     .from("refine_messages")
@@ -129,9 +128,8 @@ export async function POST(request: NextRequest) {
   // Ownership guard BEFORE re-running the full (paid) analysis: without it any
   // authenticated caller could append chat + drive the LLM refinement pipeline
   // on another user's room (IDOR + LLM-cost abuse + cross-tenant write).
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Independent reads (both keyed only on room_id, no dependency between
   // them) — parallelized to save one DB round-trip per refine turn.

@@ -13,7 +13,7 @@ import { NextRequest } from "next/server";
 // which has the identical array-vs-.single() shape.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsProject: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireProjectOwnership: vi.fn() }));
 vi.mock("@/lib/ai/gemini", () => ({ geminiProvider: { chat: vi.fn() } }));
 vi.mock("@/lib/db/agent-runs", () => ({
   createAgentRun: vi.fn(async () => ({ id: "run-1" })),
@@ -29,11 +29,11 @@ vi.mock("@/lib/utils/spend-limiter", () => ({
 }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsProject } from "@/lib/auth/ownership";
+import { requireProjectOwnership } from "@/lib/auth/ownership";
 import { GET as analyzeApartmentGet, POST as analyzeApartmentPost } from "@/app/api/analyze-apartment/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsProject = userOwnsProject as unknown as Mock;
+const mockRequireProjectOwnership = requireProjectOwnership as unknown as Mock;
 
 function jsonReq(body: unknown): Request {
   return new Request("http://localhost/api/analyze-apartment", {
@@ -48,8 +48,8 @@ function getReq(projectId: string): NextRequest {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsProject.mockReset();
-  mockUserOwnsProject.mockResolvedValue(true);
+  mockRequireProjectOwnership.mockReset();
+  mockRequireProjectOwnership.mockResolvedValue(null);
   mockCreateClient.mockResolvedValue({
     auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
   });
