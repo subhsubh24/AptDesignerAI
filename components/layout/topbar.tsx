@@ -237,7 +237,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
 
           {/* Mobile menu trigger */}
           <button
-            className="md:hidden h-11 w-11 flex items-center justify-center rounded-lg hover:bg-muted active:scale-95 active:transition-none transition-colors"
+            className="md:hidden h-11 w-11 flex items-center justify-center rounded-lg hover:bg-muted active:scale-95 active:transition-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
