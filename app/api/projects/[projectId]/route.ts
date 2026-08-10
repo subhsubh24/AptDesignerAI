@@ -19,7 +19,7 @@ export async function GET(
     .eq("user_id", user.id)
     .single();
 
-  if (error) return apiError("projects.byId", error);
+  if (error) return apiError("projects.byId", error, error.code === "PGRST116" ? 404 : 500, error.code === "PGRST116" ? "Not found" : "Something went wrong. Please try again.");
   return NextResponse.json(data);
 }
 
