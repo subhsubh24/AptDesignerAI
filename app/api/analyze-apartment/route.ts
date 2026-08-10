@@ -12,7 +12,7 @@ import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
-import { logServerError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { userOwnsProject } from "@/lib/auth/ownership";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
@@ -45,14 +45,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Load existing diagnoses and build summary
-  const { data: rooms } = await supabase
+  // Load existing diagnoses and build summary. This is a plain array select
+  // (no .single()), so Supabase returns `[]` for a genuine zero-room project
+  // and `null` only on a real query error — `!rooms` therefore means "the
+  // fetch failed," never "no rooms," and must not be reported as a 404.
+  const { data: rooms, error: roomsError } = await supabase
     .from("rooms")
     .select("*, room_diagnoses(*), room_images(*)")
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
 
-  if (!rooms) return NextResponse.json({ error: "No rooms found" }, { status: 404 });
+  if (!rooms) return apiError("analyze-apartment.rooms", roomsError ?? "Query returned no data");
 
   const summary = buildSummaryFromDiagnoses(rooms);
   return NextResponse.json({ summary });
@@ -91,21 +94,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Load project with building research
-  const { data: project } = await supabase
+  // Load project with building research. userOwnsProject already confirmed the
+  // project exists moments ago, so a genuine PGRST116 miss here means it was
+  // deleted in the race between that check and this fetch — same distinction
+  // search.room draws below and every sibling GET route already makes. The
+  // whole analysis depends on this row (buildDesignProfile, building-research
+  // context below), so either way it can't be silently treated as absent.
+  const { data: project, error: projectError } = await supabase
     .from("projects")
     .select("*")
     .eq("id", project_id)
     .single();
+  if (!project) {
+    if (projectError && projectError.code !== "PGRST116") {
+      return apiError("analyze-apartment.project", projectError);
+    }
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
-  // Load all rooms with their images
-  const { data: allRooms } = await supabase
+  // Load all rooms with their images. Plain array select (no .single()), so a
+  // real query error surfaces as `data: null`, distinct from a legitimately
+  // empty (but existing) project — don't conflate the two into one 400.
+  const { data: allRooms, error: allRoomsError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("project_id", project_id)
     .order("created_at", { ascending: true });
 
-  if (!allRooms || allRooms.length === 0) {
+  if (!allRooms) return apiError("analyze-apartment.allRooms", allRoomsError ?? "Query returned no data");
+  if (allRooms.length === 0) {
     return NextResponse.json({ error: "No rooms found" }, { status: 400 });
   }
 

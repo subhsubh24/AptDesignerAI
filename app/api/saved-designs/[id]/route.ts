@@ -24,7 +24,12 @@ export async function GET(
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiError(
+      "saved-designs.byId.get",
+      error ?? "Query returned no data",
+      error && error.code !== "PGRST116" ? 500 : 404,
+      error && error.code !== "PGRST116" ? "Something went wrong. Please try again." : "Not found",
+    );
   }
 
   return NextResponse.json(data);

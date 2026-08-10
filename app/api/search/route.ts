@@ -11,7 +11,7 @@ import type { IdentifiedProduct } from "@/lib/types/database";
 import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-search-candidates";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { userOwnsRoom } from "@/lib/auth/ownership";
 import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 import { getMeter } from "@/lib/observability/margin-meter";
@@ -55,19 +55,30 @@ export async function POST(request: Request) {
   }
 
   // Fetch room with images
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
 
-  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  if (!room) {
+    // userOwnsRoom already confirmed the room exists moments ago, so a miss
+    // here on a non-"zero rows" error is a real DB failure, not a genuine
+    // not-found — surface it as one so it isn't silently misreported.
+    if (roomError && roomError.code !== "PGRST116") {
+      return apiError("search.room", roomError);
+    }
+    return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  }
 
   // Project (keyed on room.project_id) and the latest room diagnosis (keyed on
   // room_id) are independent of each other — fetch them in parallel to save a
   // round trip on this hot search entry point. Results are destructured by
-  // position, not completion order, so ordering stays deterministic.
-  const [{ data: project }, { data: diagnosis }] = await Promise.all([
+  // position, not completion order, so ordering stays deterministic. Both are
+  // consumed with optional chaining below (a room may legitimately have no
+  // diagnosis yet), so a fetch error here doesn't fail the request — but a
+  // real DB error (not "zero rows") is still logged, not silently swallowed.
+  const [{ data: project, error: projectError }, { data: diagnosis, error: diagnosisError }] = await Promise.all([
     // Fetch project for full building/apartment context
     supabase.from("projects").select("*").eq("id", room.project_id).single(),
     // Fetch room diagnosis for design direction + what's working/not working
@@ -79,6 +90,12 @@ export async function POST(request: Request) {
       .limit(1)
       .single(),
   ]);
+  if (projectError && projectError.code !== "PGRST116") {
+    logServerError("search.project", projectError);
+  }
+  if (diagnosisError && diagnosisError.code !== "PGRST116") {
+    logServerError("search.diagnosis", diagnosisError);
+  }
 
   // Create search session
   const { data: session, error: sessionError } = await supabase

@@ -200,7 +200,9 @@ function toPartMediaResolutionLevel(
  * Part so the API tokenizes the media at that resolution. This is the only
  * supported path for ULTRA_HIGH, which is rejected at the top-level config.
  */
-async function convertMessages(
+// Exported for direct unit testing (__tests__/ai/gemini-conversion.test.ts) —
+// pure conversion logic, no behavior change from making it visible.
+export async function convertMessages(
   messages: AIMessage[],
   partMediaResolutionLevel?: string,
 ): Promise<{ role: string; parts: Record<string, unknown>[] }[]> {
@@ -365,7 +367,9 @@ async function convertMessages(
  * split those fields out here. The googleMaps tool entry keeps `enableWidget`
  * only (the field the API accepts inline).
  */
-function convertTools(tools?: GeminiTool[]): {
+// Exported for direct unit testing (__tests__/ai/gemini-conversion.test.ts) —
+// pure conversion logic, no behavior change from making it visible.
+export function convertTools(tools?: GeminiTool[]): {
   tools: Record<string, unknown>[] | undefined;
   toolConfig: Record<string, unknown> | undefined;
 } {
