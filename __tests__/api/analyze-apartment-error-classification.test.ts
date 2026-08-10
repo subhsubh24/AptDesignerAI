@@ -73,6 +73,22 @@ describe("POST /api/analyze-apartment — error classification", () => {
     expect(body.error).not.toContain("too many connections");
   });
 
+  it("returns 404, not 500, when the project fetch misses with PGRST116 (race after the ownership check)", async () => {
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: (table: string) => {
+        if (table === "projects") {
+          return { select: () => ({ eq: () => ({ single: async () => ({ data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } }) }) }) };
+        }
+        return {};
+      },
+    });
+    const res = await analyzeApartmentPost(jsonReq({ project_id: "proj-1" }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("Not found");
+  });
+
   it("returns 500, not '400 No rooms found', when the rooms fetch fails", async () => {
     mockCreateClient.mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },

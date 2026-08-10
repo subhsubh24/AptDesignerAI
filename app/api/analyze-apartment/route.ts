@@ -95,15 +95,22 @@ export async function POST(request: Request) {
   }
 
   // Load project with building research. userOwnsProject already confirmed the
-  // project exists moments ago, so a miss here is a real DB failure, not a
-  // genuine not-found — and the whole analysis depends on it (buildDesignProfile,
-  // building-research context below), so it can't be silently treated as absent.
+  // project exists moments ago, so a genuine PGRST116 miss here means it was
+  // deleted in the race between that check and this fetch — same distinction
+  // search.room draws below and every sibling GET route already makes. The
+  // whole analysis depends on this row (buildDesignProfile, building-research
+  // context below), so either way it can't be silently treated as absent.
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .select("*")
     .eq("id", project_id)
     .single();
-  if (!project) return apiError("analyze-apartment.project", projectError ?? "Query returned no data");
+  if (!project) {
+    if (projectError && projectError.code !== "PGRST116") {
+      return apiError("analyze-apartment.project", projectError);
+    }
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Load all rooms with their images. Plain array select (no .single()), so a
   // real query error surfaces as `data: null`, distinct from a legitimately

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { convertMessages, convertTools } from "@/lib/ai/gemini";
 import type { AIMessage } from "@/lib/ai/provider";
 
@@ -60,6 +60,11 @@ describe("convertTools", () => {
 });
 
 describe("convertMessages", () => {
+  // Stub cleanup lives here rather than at each stubbing test's end, so a
+  // thrown assertion earlier in a test can't leak its fetch stub into later
+  // tests.
+  afterEach(() => vi.unstubAllGlobals());
+
   it("converts a simple text message and maps assistant → model role", async () => {
     const messages: AIMessage[] = [
       { role: "user", content: "hello" },
@@ -160,7 +165,6 @@ describe("convertMessages", () => {
     expect(fetchSpy).toHaveBeenCalledWith("https://cdn.example/valid.jpg", expect.anything());
     // Its slot is dropped entirely — only the valid image's part remains.
     expect(result[0].parts).toEqual([{ inlineData: { mimeType: "image/jpeg", data: Buffer.from(bytes).toString("base64") } }]);
-    vi.unstubAllGlobals();
   });
 
   it("throws when EVERY image fails to load — never proceeds blind", async () => {
@@ -187,7 +191,6 @@ describe("convertMessages", () => {
     expect(result[0].parts).toEqual([
       { inlineData: { mimeType: "image/jpeg", data: Buffer.from(bytes).toString("base64") } },
     ]);
-    vi.unstubAllGlobals();
   });
 
   it("proceeds with partial visual context when only SOME images fail (not all)", async () => {
@@ -213,7 +216,6 @@ describe("convertMessages", () => {
     const result = await convertMessages(messages);
     // One slot resolved, the failed one dropped — not left as a placeholder.
     expect(result[0].parts).toEqual([{ inlineData: { mimeType: "image/png", data: Buffer.from(bytes).toString("base64") } }]);
-    vi.unstubAllGlobals();
   });
 
   it("applies mediaResolution extras only to image/* types, not file_uri PDFs", async () => {
@@ -258,6 +260,5 @@ describe("convertMessages", () => {
     const decode = (b64: string) => Buffer.from(b64, "base64").toString();
     expect(decode((result[0].parts[0].inlineData as { data: string }).data)).toBe(order[0]);
     expect(decode((result[1].parts[0].inlineData as { data: string }).data)).toBe(order[1]);
-    vi.unstubAllGlobals();
   });
 });
