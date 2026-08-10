@@ -91,4 +91,26 @@ describe("ImageUploadZone", () => {
     expect(await screen.findByText(/floor-plan\.pdf" isn't a supported image type/)).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it("a fresh rejection replaces a stale upload-failure message, rather than sitting behind it", async () => {
+    // Regression guard for a review-caught bug: uploadError only clears on a
+    // successful onDrop (never called for a rejected file) or the dismiss
+    // button — so a rejection landing after a prior FAILED upload must not
+    // leave the old, unrelated error message stuck on screen.
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "storage is down" }),
+    }) as unknown as typeof fetch;
+
+    render(<ImageUploadZone roomId="room-1" />);
+    const dropzone = getDropzone();
+
+    dropFile(dropzone, new File(["fake-bytes"], "sofa.jpg", { type: "image/jpeg" }));
+    expect(await screen.findByText("storage is down")).toBeInTheDocument();
+
+    dropFile(dropzone, new File(["%PDF-1.4"], "floor-plan.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText(/floor-plan\.pdf" isn't a supported image type/)).toBeInTheDocument();
+    expect(screen.queryByText("storage is down")).not.toBeInTheDocument();
+  });
 });
