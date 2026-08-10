@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { thinkingFor } from "@/lib/ai/thinking";
-import { DEFAULT_THINKING, type TaskType } from "@/lib/ai/models";
+import { DEFAULT_THINKING, type TaskType, type ThinkingTier } from "@/lib/ai/models";
 
 // lib/ai/thinking.ts is the LLM cost contract's enforcement point (AGENTS.md
 // "## Model policy" / .claude/rules/llm-cost-contract.md): every `.chat()`
@@ -8,29 +8,43 @@ import { DEFAULT_THINKING, type TaskType } from "@/lib/ai/models";
 // here (e.g. a fallback flip from "low" to "high") would not fail any
 // existing test, since nothing else in the suite pins thinkingFor's per-task
 // table — it would just quietly multiply spend on every downstream call.
-
-// Tasks NOT present in DEFAULT_THINKING must fall back to "low" (thinkingFor
-// / defaultThinking's documented default), not "minimal" or "high".
-const TASKS_WITHOUT_DEFAULT: TaskType[] = [
-  "mockup_image",
-  "mockup_image_fast",
-  "image_generation",
-  "computer_use",
-];
+//
+// EXPECTED_TIERS is a hardcoded literal, deliberately NOT derived from
+// DEFAULT_THINKING itself — asserting thinkingFor(task) against the very
+// table it reads from would pass even if that table silently changed (the
+// expected value would drift right along with the actual one). Pinning a
+// literal here is what actually catches a policy regression.
+const EXPECTED_TIERS: Record<TaskType, ThinkingTier> = {
+  apartment_analysis: "high",
+  area_analysis: "high",
+  diagnosis: "high",
+  validation: "low",
+  scoring: "low",
+  bundle: "low",
+  apartment_research: "low",
+  extraction: "minimal",
+  quick_score: "minimal",
+  quick_screen: "minimal",
+  search: "minimal",
+  search_brief: "low",
+  mockup_prompt: "low",
+  // Tasks with no DEFAULT_THINKING entry fall back to "low" (thinkingFor /
+  // defaultThinking's documented default), not "minimal" or "high".
+  mockup_image: "low",
+  mockup_image_fast: "low",
+  image_generation: "low",
+  computer_use: "low",
+};
 
 describe("thinkingFor", () => {
-  it.each(Object.entries(DEFAULT_THINKING) as [TaskType, string][])(
-    "routes %s to its configured DEFAULT_THINKING tier (%s)",
+  // EXPECTED_TIERS's type (Record<TaskType, ThinkingTier>) requires a literal
+  // entry for every member of the TaskType union — tsc fails to compile this
+  // file if a new task is ever added to models.ts without a decision being
+  // made here about its tier, so coverage can't silently go stale.
+  it.each(Object.entries(EXPECTED_TIERS) as [TaskType, ThinkingTier][])(
+    "routes %s to %s",
     (task, expected) => {
       expect(thinkingFor(task)).toEqual({ thinkingLevel: expected });
-    },
-  );
-
-  it.each(TASKS_WITHOUT_DEFAULT)(
-    "falls back to \"low\" for %s, which has no DEFAULT_THINKING entry",
-    (task) => {
-      expect(DEFAULT_THINKING[task]).toBeUndefined();
-      expect(thinkingFor(task)).toEqual({ thinkingLevel: "low" });
     },
   );
 
