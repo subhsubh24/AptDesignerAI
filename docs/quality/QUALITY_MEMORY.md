@@ -7,6 +7,122 @@ history behind it.
 
 ---
 
+## 2026-08-10 — ELEVENTH INDEPENDENT GRADE (overall HELD at C — business_case_strength genuinely RECOVERED B→A, but TWO other ship-critical dims DROPPED on fresh adversarial findings — security_rls A+→B on a NEW cross-tenant IDOR, artifact_integrity A→B on a fresh doc overclaim — netting FOUR ship-critical dims below A, up from three)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C for an EIGHTH consecutive cycle (still capped
+by functional_reality, byte-identical). The per-dimension picture is genuinely MIXED this cycle, not
+uniformly better or worse: **business_case_strength recovered B→A** (the mobile paywall now ships the real
+$29 Apartment tier and mirrors the web app's annual-billing kill-switch — verified end-to-end, no
+behavioral input moved, issue #672 closes) — but this is offset by **two ship-critical drops from fresh
+adversarial sweeps**, the same pattern seen repeatedly in this project's history (07-13, 07-20, 07-27):
+**security_rls A+→B** (a fresh 57-route sweep found a real, previously-missed cross-tenant IDOR on
+`app/api/area-analysis/route.ts`'s POST handler) and **artifact_integrity A→B** (a fresh doc/code numeric
+overclaim on ROADMAP.md's reset-link-idempotency test count, on top of the standing `.github/`-gated nit).
+Net: **FOUR ship-critical dims now sit below A** (functional_reality C, security_rls B, design_taste B,
+artifact_integrity B) — **up from three last cycle**, despite one genuine recovery.
+
+**Per-dimension diff vs 2026-08-03:** functional_reality **C→C** (byte-identical, still purely owner-gated)
+· correctness **A→A** (held; one new self-identified ceiling item, ownership.ts error-swallowing) ·
+security_rls **A+→B** ⬇⬇ (new cross-tenant IDOR on area-analysis project_id) · design_taste **B→B**
+(palette ratchet tightened further 48→42→36; F7 unchanged) · store_readiness **A→A** (held, re-verified) ·
+artifact_integrity **A→B** ⬇ (standing nit + fresh "28 tests" vs actual 11 overclaim) · business_case_strength
+**B→A** ⬆⬆ (mobile paywall $29 tier + annual gate genuinely built) · tests_evals **B→B** (validation-agent.ts
+13%→56.5%, orchestrator.ts unchanged) · performance **B→B** (next/image adoption off zero, two more real
+fixes verified).
+
+**Mechanical signals actually run this cycle (cold start, npm install first; run ONCE by the orchestrator
+and shared across all 9 dimension graders, per the established cold-start recipe):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → **0 errors, 0 warnings** · `npm run check:determinism` →
+  green (all 4 checks).
+- `npm test` → **2944 passed / 12 skipped** (up from 2788/12), 275 files (up from 251).
+- `npx vitest run --coverage` → **70.35% stmts / 59.57% branch / 73.86% funcs / 71.84% lines** (up from
+  67.97/57.36/71.21/69.23), above all floors.
+- `bash scripts/preflight.sh` → 51 pass / 3 fail: functional-journeys (cold env, expected), DoD
+  9-unchecked (expected pre-launch), and QUALITY_SCORECARD below ship bar — now naming 4 ship-critical
+  gaps (was 3).
+- Business case: `node analysis/business_case_without_annual_arr.mjs` → **$121,339** (bit-identical to
+  last cycle — the recovery came from app code, not a doc/number change); `node
+  scripts/validate-computation.mjs` → PASS, 10 figures verified.
+- ~50 commits landed since 2026-08-03; every dimension grader independently reviewed the commit window
+  for regressions in its own area as part of the fresh-sweep mandate, not just re-checked named gaps.
+
+**Why security_rls dropped A+→B (the most consequential finding this cycle, a genuine miss, not a
+regression):** `app/api/area-analysis/route.ts`'s POST handler accepts a client-supplied `project_id`
+(line 121), binds only `room_id` via `userOwnsRoom`, and lets that unbound `project_id` **override** the
+caller's own room's real project (`effectiveProjectId = project_id || room.project_id`, line 206) — then
+fetches another tenant's full `projects` row (address, building_research, apartment_analysis) plus every
+sibling room's **private diagnosis history** (line 209) with zero ownership check, folding all of it into
+the Gemini "BUILDING CONTEXT" prompt and reflecting it back in the response. This is exactly the
+"bind-one-id-leave-another-unbound" class that has now recurred across **six** documented instances since
+this project started grading security_rls (mockups product_ids/bundle_id, saved-designs project_id,
+area-analysis GET room_id, products search_session_id, and now area-analysis POST project_id) — each
+found by a *different* fresh sweep after a prior cycle declared the class closed. The route's own sibling,
+`refine-chat`, already derives `project_id` server-side from the owned room and never accepts a client
+value — so this is a real, narrowly-scoped outlier, not evidence the whole convention has broken down.
+Graded B not lower: read-only, requires an already-authenticated caller who owns some room (not
+anonymous), single-route scope.
+
+**Why artifact_integrity dropped A→B:** the standing `.github/`-gated stale-header nit is unchanged, and a
+fresh grader found ROADMAP.md:739 claims "28 tests" back a security-relevant "CLOSED" item
+(reset-link-idempotency) when the actual test file has 11 (verified by running it) — confirmed isolated,
+not systemic, by checking two adjacent numeric claims in the same paragraph (both exactly accurate). This
+matches the rubric's own precedent: a named-but-unfixed nit plus a fresh, concrete factual inflation is
+exactly the drift this dimension exists to catch.
+
+**Why business_case_strength recovered B→A (independently verified as genuine, not gamed):** commit
+120d28c (#805, Aug 4) added the $29 one-time Apartment tier to `mobile/src/lib/paywall-fallback.ts` (first
+in the list, mirroring the pricing page) and a real annual-billing gate
+(`mobile/src/lib/paywall-annual-gate.ts`'s `shouldOfferPackage`) wired through
+`mobile/src/lib/billing-config.ts`'s `fetchAnnualBillingEnabled()`, which calls the **same**
+`isAnnualBillingEnabled()` source of truth the web checkout route uses and fails closed to `false` on any
+error. The gate applies to both the static fallback AND the live RevenueCat-loaded offering. 13/13 relevant
+tests pass with substantive assertions (not change-detectors). `git log` confirms zero
+`docs/BUSINESS_CASE.md` commits since 08-03 — this was pure app code, no behavioral-input or doc-wording
+change, closing the gap issue #672 named as the sole remaining loop-buildable lever.
+
+**Why functional_reality held C (unchanged for an 8th cycle, notably even when `.github/` WAS opened):**
+one commit this cycle (0870137) did edit `.github/workflows/ci.yml` — a Node 20→24 runtime bump — proving
+the file isn't technically unreachable in every circumstance, yet the `DATA_BACKEND` env line still wasn't
+added even while that file was open for editing. This reinforces rather than undermines the "purely
+owner-gated" framing: no run, human-touched or not, has chosen to spend an edit on that specific line yet,
+and the loop's own two self-editable workarounds remain genuinely blocked for the reasons PENDING_OPS
+records. Grade holds at C.
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, unchanged, now the sole blocker off C
+for 8 cycles). NEW issue (security_rls — ship_critical A+→B, area-analysis project_id IDOR). REOPEN #727
+(artifact_integrity — the prior close was correct for its own findings; a fresh, distinct overclaim has
+appeared since). UPDATE #204 (design_taste — palette axis tightened further, F7 unchanged). CLOSE #672
+(business_case_strength — the mobile-parity lever is genuinely built and verified, not cosmetic). UPDATE
+#200 (tests_evals — validation-agent.ts closed, orchestrator.ts/scene-assembler.ts now the sharper target
+for a 3rd straight cycle). UPDATE #385 (performance — held B, two more genuine fixes).
+
+**Lessons for next run:**
+1. **A genuine per-dimension recovery and a genuine per-dimension drop can land in the SAME cycle, on
+   TWO different ship-critical dimensions, without either being fake.** business_case_strength's recovery
+   was independently verified as real and complete; security_rls's and artifact_integrity's drops were
+   independently verified as real, previously-missed findings. Grading each dimension on its own fresh
+   evidence — not on "did the overall number move" — is what keeps this honest in both directions.
+2. **The bind-one-id-leave-another-unbound IDOR class is now a SIX-time repeat offender across different
+   routes and different specific id pairs.** Every prior "fresh 5X-route sweep found zero findings" claim
+   has eventually been falsified by the NEXT cycle's sweep, five cycles running. Consider whether this
+   dimension needs a structural fix (a lint rule / grep-based CI check that flags any route reading a
+   second client-supplied id after binding a first) rather than relying on a fresh manual sweep to catch
+   the next instance — that would convert a recurring finding into a closed class.
+3. **`.github/` being edited once (for an unrelated reason) does not mean the persistence blocker is
+   suddenly reachable.** This cycle's grader correctly treated the Node-version-only edit as evidence the
+   gate is a deliberate scope choice, not a technical wall — worth watching whether a FUTURE `.github/`
+   edit ever bundles the `DATA_BACKEND` line, which would be the real signal to re-grade.
+4. **A "named-but-unfixed nit plus one fresh new finding" is enough to justify a full letter drop**, per
+   this rubric's own established precedent (07-27's artifact_integrity B-drop for the identical reason) —
+   applied consistently here rather than being lenient because the underlying G4 fix itself was genuine.
+5. Cold-start recipe re-confirmed and refined: `npm install` first; run the 9 dimension graders with
+   SHARED, pre-run mechanical signals (tsc/eslint/test/coverage/determinism/preflight run ONCE by the
+   orchestrator); this cycle additionally had each grader independently re-run its OWN cited test files
+   rather than trusting the orchestrator's aggregate numbers alone — worth keeping, since it's what
+   surfaced the security_rls and artifact_integrity findings a purely-aggregate check would have missed.
+
+---
+
 ## 2026-08-03 — TENTH INDEPENDENT GRADE (overall HELD at C, capped by functional_reality — but the per-dimension picture improved SHARPLY: store_readiness C→A, artifact_integrity B→A, security_rls A→A+, performance C→B; THREE ship-critical dims below A, down from FIVE)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C (capped at functional_reality, unmoved for 7
