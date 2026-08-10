@@ -86,12 +86,18 @@ export function ImageUploadZone({
     [roomId, imageType, onUploadComplete]
   );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
     onDrop,
     accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".heic"] },
     maxFiles: 1,
     multiple: false,
   });
+
+  // react-dropzone routes an unsupported file type to `fileRejections`, never
+  // to `onDrop`'s acceptedFiles — without reading it, a rejected drop (e.g. a
+  // PDF) produced zero feedback: no preview, no error, nothing. The user just
+  // sees nothing happen.
+  const rejectedFile = fileRejections[0]?.file;
 
   return (
     <div
@@ -100,7 +106,7 @@ export function ImageUploadZone({
         "relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors cursor-pointer",
         isDragActive
           ? "border-primary/50 bg-primary/5"
-          : uploadError
+          : uploadError || rejectedFile
           ? "border-destructive/40 bg-destructive/5"
           : "border-muted-foreground/25 hover:border-muted-foreground/50",
         uploading && "pointer-events-none",
@@ -145,8 +151,21 @@ export function ImageUploadZone({
         </div>
       )}
 
+      {/* Rejected file type (e.g. a PDF dropped on an image-only zone) */}
+      {rejectedFile && !uploading && !uploadError && !preview && (
+        <div className="flex flex-col items-center gap-2 text-center">
+          <AlertCircle className="h-7 w-7 text-destructive" />
+          <p className="text-xs text-destructive font-medium">
+            &quot;{rejectedFile.name}&quot; isn&apos;t a supported image type
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Click or drag to retry · HEIC, JPG, PNG, WEBP
+          </p>
+        </div>
+      )}
+
       {/* Idle state */}
-      {!uploading && !uploadError && !preview && (
+      {!uploading && !uploadError && !preview && !rejectedFile && (
         <>
           <Upload className="h-8 w-8 text-muted-foreground/50 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">
