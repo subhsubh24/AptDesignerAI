@@ -9,7 +9,7 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // bundle that lost ALL its products BEFORE the paid LLM call.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
   RATE_LIMITS: { bundleEvaluate: {} },
@@ -34,12 +34,12 @@ vi.mock("@/lib/agents/bundle-optimizer", () => ({
 }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { POST as evaluatePost } from "@/app/api/bundles/evaluate/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 const mockEvaluateBundle = evaluateBundle as unknown as Mock;
 
 // Build a Supabase stub whose bundle carries the given product_bundle_items rows
@@ -102,9 +102,9 @@ function req(body: unknown) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
+  mockRequireRoomOwnership.mockReset();
   mockEvaluateBundle.mockClear();
-  mockUserOwnsRoom.mockResolvedValue(true); // caller owns the room in every case
+  mockRequireRoomOwnership.mockResolvedValue(null); // caller owns the room in every case
 });
 afterEach(() => vi.restoreAllMocks());
 

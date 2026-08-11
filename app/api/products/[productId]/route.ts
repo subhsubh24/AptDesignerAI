@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
-import { userOwnsCandidateProduct } from "@/lib/auth/ownership";
+import { requireCandidateProductOwnership } from "@/lib/auth/ownership";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
 export async function PATCH(
@@ -14,9 +14,8 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const limited = enforceWriteRateLimit(user.id, "products:update");
   if (limited) return limited;
-  if (!(await userOwnsCandidateProduct(supabase, productId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const patchOwnership = await requireCandidateProductOwnership(supabase, productId, user.id);
+  if (patchOwnership) return patchOwnership;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let body: any;
@@ -91,9 +90,8 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const limited = enforceWriteRateLimit(user.id, "products:delete", DELETE_WRITE_LIMIT);
   if (limited) return limited;
-  if (!(await userOwnsCandidateProduct(supabase, productId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const deleteOwnership = await requireCandidateProductOwnership(supabase, productId, user.id);
+  if (deleteOwnership) return deleteOwnership;
 
   const { error } = await supabase.from("candidate_products").delete().eq("id", productId);
   if (error) return apiError("products.byId", error);

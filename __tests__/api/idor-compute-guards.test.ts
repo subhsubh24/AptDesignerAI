@@ -6,15 +6,17 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // model spend on — or write results into — another user's room. We mock
 // `userOwnsRoom` and assert a non-owner gets 404.
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as diagnosisPost } from "@/app/api/diagnosis/route";
 import { POST as bundlesEvaluatePost } from "@/app/api/bundles/evaluate/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
+const notFoundResponse = () => NextResponse.json({ error: "Not found" }, { status: 404 });
 
 function singleStub(data: unknown) {
   const chain: Record<string, unknown> = {};
@@ -33,7 +35,7 @@ function jsonReq(body: unknown): Request {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
+  mockRequireRoomOwnership.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -43,12 +45,12 @@ describe("compute/write IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-diag" } } }) },
       from: vi.fn(() => singleStub(null)),
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await diagnosisPost(jsonReq({ room_id: "victim-room" }));
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-diag");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-diag");
   });
 
   it("POST /api/bundles/evaluate 404s when the caller does not own the bundle's room", async () => {
@@ -59,11 +61,11 @@ describe("compute/write IDOR guards", () => {
       auth: { getUser: async () => ({ data: { user: { id: "attacker-bundle" } } }) },
       from: vi.fn(() => singleStub({ id: "b1", room_id: "victim-room", product_bundle_items: [] })),
     });
-    mockUserOwnsRoom.mockResolvedValue(false);
+    mockRequireRoomOwnership.mockResolvedValue(notFoundResponse());
 
     const res = await bundlesEvaluatePost(jsonReq({ bundle_id: "b1" }));
 
     expect(res.status).toBe(404);
-    expect(mockUserOwnsRoom).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-bundle");
+    expect(mockRequireRoomOwnership).toHaveBeenCalledWith(expect.anything(), "victim-room", "attacker-bundle");
   });
 });

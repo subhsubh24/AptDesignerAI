@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { parsePagination } from "@/lib/utils/pagination";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
 
 export async function GET(request: Request) {
@@ -18,9 +18,8 @@ export async function GET(request: Request) {
   // user-scoped, so without this check any authenticated caller could enumerate
   // another user's candidate products + evaluations (IDOR). The POST handler
   // already guards this way; the GET read was missing it.
-  if (!(await userOwnsRoom(supabase, roomId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
+  if (getOwnership) return getOwnership;
 
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 200, maxLimit: 500 });
 
@@ -50,9 +49,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   if (!body.room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, body.room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, body.room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Server-side input validation (client Zod is UX, not security): reject
   // oversized/wrong-typed writes before they reach the DB (Track G2). Types

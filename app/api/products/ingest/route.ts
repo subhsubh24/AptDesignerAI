@@ -6,7 +6,7 @@ import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { validateExternalUrl } from "@/lib/utils/url-validator";
 
 // Product extraction runs a vision/LLM call per request. Without an explicit
@@ -58,9 +58,8 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // Fetch room → project for design context. Pull room photos so the
   // extractor always has the target room as visual context (never forgets

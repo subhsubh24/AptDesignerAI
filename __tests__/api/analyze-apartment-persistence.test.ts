@@ -10,7 +10,7 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // plus the geminiProvider mock used across the agent tests.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsProject: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireProjectOwnership: vi.fn() }));
 vi.mock("@/lib/ai/gemini", () => ({ geminiProvider: { chat: vi.fn() } }));
 vi.mock("@/lib/db/agent-runs", () => ({
   createAgentRun: vi.fn(async () => ({ id: "run-1" })),
@@ -26,12 +26,12 @@ vi.mock("@/lib/utils/spend-limiter", () => ({
 }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsProject } from "@/lib/auth/ownership";
+import { requireProjectOwnership } from "@/lib/auth/ownership";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { POST as analyzeApartmentPost } from "@/app/api/analyze-apartment/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsProject = userOwnsProject as unknown as Mock;
+const mockRequireProjectOwnership = requireProjectOwnership as unknown as Mock;
 const mockChat = geminiProvider.chat as unknown as Mock;
 
 // Two rooms of the SAME type but distinct ids/names — the exact shape the bug
@@ -49,14 +49,15 @@ function jsonReq(body: unknown): Request {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsProject.mockReset();
+  mockRequireProjectOwnership.mockReset();
+  mockRequireProjectOwnership.mockResolvedValue(null);
   mockChat.mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe("analyze-apartment — per-room diagnosis persistence", () => {
   it("persists each same-type room's OWN analysis (no duplicate-type clobber)", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     // Route the AI response by which room's prompt it is. The synthesis call
     // contains BOTH room names, so match "synthesize" first.
@@ -133,7 +134,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   // stored verbatim into the action_list / missing_categories JSONB columns,
   // breaking the diagnosis page and the mockups placement map downstream.
   it("survives a non-array keep/replace/add and still persists array columns", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const usage = { input_tokens: 1, output_tokens: 1 };
     mockChat.mockImplementation(async (args: { messages: unknown }) => {
@@ -230,7 +231,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   // failed therefore used to walk the user into a flow with no data behind it,
   // having told them it worked — the exact fake-success class F4.1 forbids.
   it("reports failure when NO room diagnosis could be saved", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const usage = { input_tokens: 1, output_tokens: 1 };
     mockChat.mockImplementation(async (args: { messages: unknown }) => {
@@ -276,7 +277,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   // all-must-succeed check: 1 of 2 rooms saved is a real, useful partial result.
   // Failing the whole run would discard work the user already paid for.
   it("still succeeds when SOME rooms persist", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const usage = { input_tokens: 1, output_tokens: 1 };
     mockChat.mockImplementation(async (args: { messages: unknown }) => {
@@ -324,7 +325,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   // Not hypothetical: the route's own firstArray note records a shape bug that
   // took out every room in an apartment simultaneously.
   it("reports failure when every per-room analysis came back unusable", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const usage = { input_tokens: 1, output_tokens: 1 };
     // Empty content for BOTH the per-room calls and the synthesis call.
@@ -368,7 +369,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   // wasting the LLM spend already incurred. The route caps to the oldest
   // MAX_ROOMS_PER_ANALYSIS (20) rooms rather than attempting every room.
   it("caps analysis to the oldest 20 rooms when a project has more", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const manyRooms = Array.from({ length: 25 }, (_, i) => ({
       id: `room-${i}`,
@@ -433,7 +434,7 @@ describe("analyze-apartment — per-room diagnosis persistence", () => {
   });
 
   it("reports rooms_truncated: false when every room fits under the cap", async () => {
-    mockUserOwnsProject.mockResolvedValue(true);
+    mockRequireProjectOwnership.mockResolvedValue(null);
 
     const usage = { input_tokens: 1, output_tokens: 1 };
     mockChat.mockImplementation(async (args: { messages: unknown }) => {

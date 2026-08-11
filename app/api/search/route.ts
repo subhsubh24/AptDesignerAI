@@ -12,7 +12,7 @@ import { verifyTopSearchCandidates } from "@/lib/agents/computer-use/verify-sear
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { apiError, logServerError } from "@/lib/utils/api-error";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
 import { getMeter } from "@/lib/observability/margin-meter";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
@@ -50,9 +50,8 @@ export async function POST(request: Request) {
   const { room_id, categories, fillAllTiers } = body;
 
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
-  if (!(await userOwnsRoom(supabase, room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const roomOwnership = await requireRoomOwnership(supabase, room_id, user.id);
+  if (roomOwnership) return roomOwnership;
 
   // Fetch room with images
   const { data: room, error: roomError } = await supabase
@@ -62,7 +61,7 @@ export async function POST(request: Request) {
     .single();
 
   if (!room) {
-    // userOwnsRoom already confirmed the room exists moments ago, so a miss
+    // requireRoomOwnership already confirmed the room exists moments ago, so a miss
     // here on a non-"zero rows" error is a real DB failure, not a genuine
     // not-found — surface it as one so it isn't silently misreported.
     if (roomError && roomError.code !== "PGRST116") {

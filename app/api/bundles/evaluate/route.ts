@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -56,9 +56,8 @@ export async function POST(request: Request) {
   // caller owns the bundle's room (bundle → room → project → user) so no
   // authenticated caller can evaluate — or read the products of — another user's
   // bundle (IDOR + LLM-cost abuse).
-  if (!(await userOwnsRoom(supabase, bundle.room_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireRoomOwnership(supabase, bundle.room_id, user.id);
+  if (postOwnership) return postOwnership;
 
   // A nested-join row whose candidate_products FK was deleted comes back as
   // null. Left unfiltered, that null flows into evaluateBundle and derefs

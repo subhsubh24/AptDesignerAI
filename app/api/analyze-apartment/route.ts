@@ -13,7 +13,7 @@ import { buildDesignProfile } from "@/lib/design-context/build-profile";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { formatExtractedFloorPlanForPrompt } from "@/lib/agents/format-floor-plan";
 import { apiError, logServerError } from "@/lib/utils/api-error";
-import { userOwnsProject } from "@/lib/auth/ownership";
+import { requireProjectOwnership } from "@/lib/auth/ownership";
 
 // Long-running LLM pipeline route. Without an explicit maxDuration, Vercel
 // applies a short platform default and can kill the function mid-run — a
@@ -41,9 +41,8 @@ export async function GET(request: NextRequest) {
 
   // Ownership guard: the project_id is client-supplied — without this check any
   // authenticated caller could read another user's rooms + diagnoses (IDOR).
-  if (!(await userOwnsProject(supabase, projectId, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const getOwnership = await requireProjectOwnership(supabase, projectId, user.id);
+  if (getOwnership) return getOwnership;
 
   // Load existing diagnoses and build summary. This is a plain array select
   // (no .single()), so Supabase returns `[]` for a genuine zero-room project
@@ -90,11 +89,10 @@ export async function POST(request: Request) {
   // client-supplied — without this check any authenticated caller could drive a
   // full apartment analysis on (and write diagnoses into) another user's project
   // (IDOR + LLM-cost abuse + cross-tenant data pollution).
-  if (!(await userOwnsProject(supabase, project_id, user.id))) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const postOwnership = await requireProjectOwnership(supabase, project_id, user.id);
+  if (postOwnership) return postOwnership;
 
-  // Load project with building research. userOwnsProject already confirmed the
+  // Load project with building research. requireProjectOwnership already confirmed the
   // project exists moments ago, so a genuine PGRST116 miss here means it was
   // deleted in the race between that check and this fetch — same distinction
   // search.room draws below and every sibling GET route already makes. The

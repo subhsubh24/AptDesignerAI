@@ -53,9 +53,12 @@ export async function inferStyleLabel(direction: DesignDirection): Promise<strin
     ["Contemporary", /\bcontemporary\b/],
     ["Modern", /\bmodern\b/],
     ["Transitional", /\btransitional\b/],
+    // Compound style checked before its two components below — "Coastal"
+    // and "Bohemian" would otherwise match first and "Bohemian Coastal"
+    // would be unreachable whenever both terms appear together.
+    ["Bohemian Coastal", /\bboho coastal\b|\bbohemian coastal\b/],
     ["Coastal", /\bcoastal\b/],
     ["Farmhouse", /\bfarmhouse\b/],
-    ["Bohemian Coastal", /\bboho coastal\b|\bbohemian coastal\b/],
     ["Bohemian", /\bboho\b|\bbohemian\b/],
     ["Maximalist", /\bmaximalis[tm]\b/],
     ["Eclectic", /\beclectic\b/],

@@ -21,15 +21,15 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
  */
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/write-rate-limit", () => ({ enforceWriteRateLimit: vi.fn(() => null) }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as productsPost } from "@/app/api/products/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 
 const CALLER = "user-1";
 const OWN_ROOM = "room-own";
@@ -85,8 +85,8 @@ function jsonReq(body: unknown): Request {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsRoom.mockResolvedValue(true);
+  mockRequireRoomOwnership.mockReset();
+  mockRequireRoomOwnership.mockResolvedValue(null);
 });
 afterEach(() => vi.restoreAllMocks());
 

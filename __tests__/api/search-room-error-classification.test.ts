@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 // surface as a 500 rather than the misleading "Room not found" 404.
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/rate-limiter", () => ({
   checkRateLimit: vi.fn(() => ({ allowed: true })),
   RATE_LIMITS: { search: { maxRequests: 20, windowMs: 60_000 } },
@@ -18,11 +18,11 @@ vi.mock("@/lib/utils/spend-limiter", () => ({
 }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as searchPost } from "@/app/api/search/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 
 function jsonReq(body: unknown): Request {
   return new Request("http://localhost/api/search", {
@@ -46,8 +46,8 @@ function clientWithRoomFetch(roomResult: { data: unknown; error: unknown }) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsRoom.mockResolvedValue(true);
+  mockRequireRoomOwnership.mockReset();
+  mockRequireRoomOwnership.mockResolvedValue(null);
 });
 afterEach(() => vi.restoreAllMocks());
 

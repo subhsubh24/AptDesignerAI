@@ -7,15 +7,15 @@ import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vite
 // bundles/evaluate score cross-tenant products. The memory-store query is not
 // user-scoped, so this app-layer check is the only boundary.
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsRoom: vi.fn() }));
+vi.mock("@/lib/auth/ownership", () => ({ requireRoomOwnership: vi.fn() }));
 vi.mock("@/lib/utils/write-rate-limit", () => ({ enforceWriteRateLimit: vi.fn(() => null) }));
 
 import { createClient } from "@/lib/supabase/server";
-import { userOwnsRoom } from "@/lib/auth/ownership";
+import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { POST as bundlesPost } from "@/app/api/bundles/route";
 
 const mockCreateClient = createClient as unknown as Mock;
-const mockUserOwnsRoom = userOwnsRoom as unknown as Mock;
+const mockRequireRoomOwnership = requireRoomOwnership as unknown as Mock;
 
 /**
  * Build a Supabase stub. `ownedProductIds` is the set of candidate_products ids
@@ -64,8 +64,8 @@ function req(body: unknown) {
 
 beforeEach(() => {
   mockCreateClient.mockReset();
-  mockUserOwnsRoom.mockReset();
-  mockUserOwnsRoom.mockResolvedValue(true); // caller owns the target room in every case
+  mockRequireRoomOwnership.mockReset();
+  mockRequireRoomOwnership.mockResolvedValue(null); // caller owns the target room in every case
 });
 afterEach(() => vi.restoreAllMocks());
 

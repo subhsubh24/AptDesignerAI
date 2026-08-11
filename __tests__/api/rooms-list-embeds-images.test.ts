@@ -29,9 +29,10 @@ vi.mock("@/lib/supabase/server", () => ({
     }),
   })),
 }));
-vi.mock("@/lib/auth/ownership", () => ({ userOwnsProject: vi.fn(async () => true) }));
+vi.mock("@/lib/auth/ownership", () => ({ requireProjectOwnership: vi.fn(async () => null) }));
 
-import { userOwnsProject } from "@/lib/auth/ownership";
+import { NextResponse } from "next/server";
+import { requireProjectOwnership } from "@/lib/auth/ownership";
 import { GET } from "@/app/api/rooms/route";
 
 const ROOMS = [
@@ -46,7 +47,7 @@ const ROOMS = [
   },
 ];
 
-const mockOwns = userOwnsProject as unknown as Mock;
+const mockOwns = requireProjectOwnership as unknown as Mock;
 
 function req(projectId = "proj-1") {
   return new NextRequest(`http://localhost/api/rooms?project_id=${projectId}`);
@@ -56,7 +57,7 @@ beforeEach(() => {
   mockGetUser.mockReset();
   mockSelect.mockReset();
   mockOwns.mockReset();
-  mockOwns.mockResolvedValue(true);
+  mockOwns.mockResolvedValue(null);
   mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
 });
 afterEach(() => vi.restoreAllMocks());
@@ -83,7 +84,7 @@ describe("GET /api/rooms", () => {
   });
 
   it("still 404s a project the caller does not own, without querying rooms", async () => {
-    mockOwns.mockResolvedValue(false);
+    mockOwns.mockResolvedValue(NextResponse.json({ error: "Not found" }, { status: 404 }));
     const res = await GET(req("someone-elses-project"));
     expect(res.status).toBe(404);
     expect(mockSelect).not.toHaveBeenCalled();
