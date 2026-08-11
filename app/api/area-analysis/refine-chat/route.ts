@@ -218,10 +218,23 @@ export async function POST(request: NextRequest) {
 
     const changedFields = diffAnalysis(priorAnalysis, newAnalysis);
 
-    // Short client-facing summary of what changed.
-    const profile = buildDesignProfile(
-      (await supabase.from("projects").select("*").eq("id", room.project_id).single()).data,
-    );
+    // Short client-facing summary of what changed. The project record is only
+    // used to personalize the summary LLM call's system prompt — a read
+    // failure here degrades to an unpersonalized summary rather than failing
+    // the whole refine turn, but it must be LOGGED so a real DB problem does
+    // not go silently unnoticed.
+    const { data: projectForProfile, error: projectFetchError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", room.project_id)
+      .single();
+    if (projectFetchError) {
+      console.error(
+        "[refine-chat] Failed to fetch project for profile personalization:",
+        projectFetchError.message,
+      );
+    }
+    const profile = buildDesignProfile(projectForProfile);
     // Margin: the change-summary LLM call is its own node under this turn.
     const { summary, tokens: summaryTokens } = await runWithMarginSession(
       room_id,
