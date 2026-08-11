@@ -17,7 +17,19 @@
  * discriminated result rather than throwing makes the failure impossible to
  * swallow by accident: there is no throw to catch, so every caller must look
  * at `ok`.
+ *
+ * A `fetch` that never settles is the same bug in a different shape: without
+ * a timeout, a hung connection leaves the page spinning forever instead of
+ * reaching the retry copy below. `AbortSignal.timeout` turns that hang into
+ * the same thrown-and-caught path as a dropped connection.
  */
+
+// Same-origin route doing one paginated Supabase select — normally sub-second.
+// Deliberately shorter than this codebase's external-service timeouts (Gemini/
+// embeddings 10s, Tavily 15s): those bound genuinely slow third-party work,
+// this bounds the fastest, most-trusted call in the app, and the user has
+// already waited minutes on the search itself before reaching this hydration.
+const DEFAULT_LOAD_TIMEOUT_MS = 8_000;
 
 /** Failure is deliberately opaque: every caller shows the same copy. */
 export type RoomProductsResult<T> = { ok: true; products: T[] } | { ok: false };
@@ -29,9 +41,16 @@ export type RoomProductsResult<T> = { ok: true; products: T[] } | { ok: false };
 export const ROOM_PRODUCTS_LOAD_ERROR =
   "We found matches but couldn't load them. Please try again.";
 
-export async function loadRoomProducts<T>(roomId: string): Promise<RoomProductsResult<T>> {
+export async function loadRoomProducts<T>(
+  roomId: string,
+  // Overridable only so tests can prove the abort actually fires without
+  // waiting out the real default — production callers never pass this.
+  timeoutMs: number = DEFAULT_LOAD_TIMEOUT_MS,
+): Promise<RoomProductsResult<T>> {
   try {
-    const res = await fetch(`/api/products?room_id=${encodeURIComponent(roomId)}`);
+    const res = await fetch(`/api/products?room_id=${encodeURIComponent(roomId)}`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!res.ok) return { ok: false };
     const body = await res.json().catch(() => null);
     // The route returns a bare array. Anything else (an error envelope, an

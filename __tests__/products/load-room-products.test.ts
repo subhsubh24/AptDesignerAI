@@ -14,7 +14,7 @@ import { loadRoomProducts, ROOM_PRODUCTS_LOAD_ERROR } from "@/lib/products/load-
  * request can go wrong, not just the non-OK one that was already handled.
  */
 
-function mockFetch(impl: () => Promise<unknown>) {
+function mockFetch(impl: (url: string, init?: RequestInit) => Promise<unknown>) {
   const fn = vi.fn(impl);
   vi.stubGlobal("fetch", fn);
   return fn;
@@ -81,12 +81,33 @@ describe("loadRoomProducts", () => {
     expect(await loadRoomProducts("room-1")).toEqual({ ok: false });
   });
 
-  it("encodes the room id into the query string", async () => {
+  it("encodes the room id into the query string, with an abort signal so a hang cannot spin forever", async () => {
     const fn = mockFetch(async () => jsonResponse([]));
 
     await loadRoomProducts("a room/1&x=2");
 
-    expect(fn).toHaveBeenCalledWith("/api/products?room_id=a%20room%2F1%26x%3D2");
+    expect(fn).toHaveBeenCalledWith(
+      "/api/products?room_id=a%20room%2F1%26x%3D2",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("actually times out a hung request instead of spinning forever", async () => {
+    // Proves the timeout FIRES, not just that a thrown error is caught (that's
+    // the separate generic-throw test above). AbortSignal.timeout doesn't run
+    // through vitest's fake-timer clock (Node implements it outside the
+    // shimmable setTimeout), so this uses a real, short override instead of
+    // waiting out the production default.
+    mockFetch(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "TimeoutError"));
+          });
+        }),
+    );
+
+    await expect(loadRoomProducts("room-1", 10)).resolves.toEqual({ ok: false });
   });
 
   it("exports copy that says matches WERE found", async () => {
