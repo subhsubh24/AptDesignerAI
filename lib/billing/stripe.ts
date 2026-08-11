@@ -75,7 +75,7 @@ function getStripe(): Stripe {
   }
   if (!_stripe) {
     _stripe = new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: "2026-05-27.dahlia",
+      apiVersion: "2026-07-29.dahlia",
       // Bound the money-path network call so a stalled Stripe API fails fast and
       // CATCHABLY (StripeConnectionError) instead of hanging until the serverless
       // platform kills the function with an opaque 504. The SDK default is 80s —

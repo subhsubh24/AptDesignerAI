@@ -43,7 +43,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-dropzone": "^20.1.0",
-    "stripe": "^22.2.3",
+    "stripe": "^22.5.0",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6"
   },
