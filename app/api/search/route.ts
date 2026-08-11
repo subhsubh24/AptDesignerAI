@@ -200,20 +200,26 @@ export async function POST(request: Request) {
   // Build other-rooms context for cross-room coherence
   let otherRoomsContext: string | undefined;
   if (project) {
-    const { data: otherRooms } = await supabase
+    const { data: otherRooms, error: otherRoomsError } = await supabase
       .from("rooms")
       .select("id, name, room_type")
       .eq("project_id", room.project_id)
       .neq("id", room_id);
+    if (otherRoomsError) {
+      logServerError("search.otherRooms", otherRoomsError);
+    }
     if (otherRooms && otherRooms.length > 0) {
       // 90-day freshness window — stale sibling palettes from months ago pull
       // the current search brief toward preferences the user no longer holds.
       const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: otherDiagnoses } = await supabase
+      const { data: otherDiagnoses, error: otherDiagnosesError } = await supabase
         .from("room_diagnoses")
         .select("room_id, design_direction_json, created_at")
         .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
         .gte("created_at", staleCutoff);
+      if (otherDiagnosesError) {
+        logServerError("search.otherDiagnoses", otherDiagnosesError);
+      }
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(
@@ -233,7 +239,7 @@ export async function POST(request: Request) {
   // Load recommendation mockups for visual validation during scoring
   let recommendationMockups: Record<string, { imageUrl: string; prompt: string }> | undefined;
   {
-    const { data: recRuns } = await supabase
+    const { data: recRuns, error: recRunsError } = await supabase
       .from("agent_runs")
       .select("output_json")
       .eq("room_id", room_id)
@@ -241,6 +247,9 @@ export async function POST(request: Request) {
       .eq("status", "completed")
       .order("created_at", { ascending: false })
       .limit(20);
+    if (recRunsError) {
+      logServerError("search.recRuns", recRunsError);
+    }
     if (recRuns && recRuns.length > 0) {
       const map: Record<string, { imageUrl: string; prompt: string }> = {};
       for (const run of recRuns) {

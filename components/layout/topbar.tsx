@@ -288,7 +288,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
                     href={crumb.href}
                     onClick={() => setMobileOpen(false)}
                     className={cn(
-                      "px-1 py-0.5 rounded transition-colors",
+                      "px-1 py-0.5 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                       i === breadcrumbs.length - 1
                         ? "font-medium text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -304,7 +304,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/dashboard"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <LayoutDashboard className="h-5 w-5 text-muted-foreground" />
             Dashboard
@@ -312,7 +312,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/saved"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Bookmark className="h-5 w-5 text-muted-foreground" />
             My Designs
@@ -320,7 +320,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/picks"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Star className="h-5 w-5 text-muted-foreground" />
             My Picks
@@ -328,7 +328,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/faq"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <HelpCircle className="h-5 w-5 text-muted-foreground" />
             Help & FAQ
@@ -336,7 +336,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/pricing"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <FileText className="h-5 w-5 text-muted-foreground" />
             Pricing
@@ -344,7 +344,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
           <Link
             href="/account"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Settings className="h-5 w-5 text-muted-foreground" />
             Account settings
@@ -356,7 +356,7 @@ export function Topbar({ user, projectName, roomName, currentStep }: TopbarProps
                 setMobileOpen(false);
                 await handleSignOut();
               }}
-              className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/5 transition-colors w-full"
+              className="flex items-center gap-3 py-3 px-3 rounded-lg text-base font-medium text-destructive hover:bg-destructive/5 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <LogOut className="h-5 w-5" />
               Sign out

@@ -117,7 +117,15 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { room_id, project_id } = body as { room_id?: string; project_id?: string };
+  // project_id is intentionally NOT read from the client body. It previously
+  // was, and was passed through to runAnalysis unbound (see the SECURITY note
+  // below) — any authenticated caller who owned SOME room could supply
+  // another tenant's project_id and have it override the room's real project,
+  // leaking that tenant's full project row + every sibling room's diagnosis
+  // history into the Gemini prompt and the response (cross-tenant IDOR).
+  // runAnalysis always derives project_id server-side from the
+  // ownership-verified room instead, mirroring the refine-chat sibling route.
+  const { room_id } = body as { room_id?: string };
   if (!room_id) return NextResponse.json({ error: "room_id required" }, { status: 400 });
   const postOwnership = await requireRoomOwnership(supabase, room_id, user.id);
   if (postOwnership) return postOwnership;
@@ -137,7 +145,7 @@ export async function POST(request: Request) {
     // full multi-pass analysis under the "diagnosis" step. Sub-agents override
     // the operation via withMarginOperation while inheriting this session.
     const res = await runWithMarginSession(room_id, "area-analysis", () =>
-      runAnalysis(supabase, room_id, project_id),
+      runAnalysis(supabase, room_id, undefined),
     );
     const s = summary();
     if (s.stageCount > 0) {
