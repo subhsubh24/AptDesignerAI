@@ -7875,3 +7875,114 @@ artifacts).
   bump — needs a real changelog read first) remain open and genuinely claimable.
 - All prior DO-NOT-RE-FLAG / carry-forward entries still hold; nothing this run
   contradicted them.
+
+## Run 2026-08-11 (Run 160) — claimed + closed APT-20 (stripe bump, real changelog verification), 2 more disjoint reliability fixes from a 4-scout sweep, filed APT-22, shared-working-directory hazard recurred and was caught cleanly.
+
+### Board
+APT-20 was the only genuinely claimable Linear item (Todo/Backlog was otherwise just
+APT-9, which stayed correctly parked — its comment history already establishes the
+`update_trigger`-can't-touch-routines-it-didn't-create block across 3 prior runs; did
+NOT re-derive it, per the structural-bar rule). Claimed APT-20, moved Backlog→Todo→
+assigned self→In Progress before building, per the board contract.
+
+Did NOT run a fresh DEEP AUDIT this run — Run 158's full 8-lens pass was same-day
+(2026-08-11) and the clock note in that entry said next full pass was 3-4 runs out;
+Run 159 also skipped it for the same reason. Next full pass still due ~2-3 runs out.
+
+### What shipped
+1. **APT-20 — stripe SDK 22.2.3→22.5.0 (PR #865).** Previous attempts (Run 158) reverted
+   this cleanly after `tsc` broke on the pinned `apiVersion` literal type; this run
+   actually did the changelog read the issue's fix-direction asked for. Fetched Stripe's
+   public `/upgrades` and changelog docs: `2026-05-27.dahlia` → `2026-07-29.dahlia` are
+   both within the same "dahlia" major release family, and Stripe's own docs state
+   monthly releases within a major are additive-only (new optional params/response
+   fields, never removed/restructured) — confirmed directly against the changelog that
+   nothing in range touches Checkout Session, Subscription, or webhook Event shapes.
+   Bumped the package + the pinned `apiVersion` string together. Full billing suite +
+   full repo suite + determinism + lint all green throughout. 2 reviewers APPROVE.
+2. **`loadRoomProducts()` fetch timeout (PR #867).** A 4-scout sweep (security/RLS,
+   quality/coverage, correctness/dead-code, web reliability — one candidate each,
+   explicitly told not to re-surface anything from Runs 158-159's fixes) found this
+   client-side sourcing-page fetch had no timeout, meaning a hang left the page spinning
+   forever instead of ever reaching its own module's retry copy (the module's docstring
+   describes exactly this class of bug for a THROWN fetch; a fetch that never SETTLES is
+   the same failure mode). **2 review cycles, illustrating the review process working as
+   designed**: cycle 1, both reviewers REQUEST_CHANGES — Reviewer A caught that the new
+   tests proved a signal was passed and that throws resolve to `{ok:false}` (both already
+   covered) but never proved the TIMEOUT ITSELF fires; Reviewer B caught that the initial
+   20s default was the LONGEST timeout in the codebase guarding the FASTEST, most-trusted
+   call (same-origin single-select route) — backwards vs. every external-service timeout
+   here (Gemini/embeddings 10s, Tavily 15s). Fix: lowered default to 8s with a comment
+   justifying the comparison, added an optional test-only `timeoutMs` override, and
+   replaced the padding test with one using a short real override + a fetch mock that
+   hangs until the abort signal fires — genuinely exercises the abort path (confirmed via
+   a scratch probe that `AbortSignal.timeout` does NOT respect vitest's fake-timer clock
+   in this Node version, so fake-timers-and-advance would not have worked). Cycle 2: both
+   APPROVE — Reviewer A mutation-tested the fix (hardcoded the signal to ignore the
+   parameter) and confirmed the new test genuinely fails rather than passing spuriously.
+3. **refine-chat project-fetch error logging (PR #866).** Correctness scout found the
+   POST handler's `.single()` query for the project record (used only to personalize the
+   LLM summary prompt) discarded `.error`, using only `.data`. `buildDesignProfile()`
+   already tolerates null gracefully (verified, no crash), so this was pure observability
+   — added `console.error` matching this same file's existing `assistantMsgError`
+   convention a few lines below. Zero behavior-path change. Both reviewers APPROVE first
+   cycle.
+4. **Filed, not worked — APT-22.** Quality scout found 6 of 11 `lib/ai/semantic-extract.ts`
+   LLM-wrapper functions have zero test coverage (the test file's own docstring describes
+   the intended pattern for all 11; only 5 have it). All 6 are actively called on core
+   validation/inference paths (area-analysis-validator, diagnosis-validator,
+   category-match, infer-preferences). Filed with a concrete acceptance check rather than
+   rushed this run — 6 functions × guard/happy/failure-branch tests is a real chunk of
+   work, and the value bar favors doing it right in its own pass over padding this run.
+
+### Process note — the shared-working-directory hazard recurred (Run 158's lesson, take 2)
+Even with reviewers explicitly instructed not to run branch-mutating git commands (the
+fix applied after Run 158's incident), a background Reviewer-A agent on the timeout
+fix's cycle-2 review still mutated a TRACKED FILE directly as part of its own
+verification methodology — it hardcoded `AbortSignal.timeout(999999)` into
+`lib/products/load-room-products.ts` to mutation-test whether the new test would catch a
+broken implementation, then (per its own report) reverted the edit, but the revert
+either raced with or postdated the orchestrating session's next check: a `git status`
+scan found the stray `999999` value uncommitted in the shared working tree. Caught
+immediately (before any push), discarded cleanly with `git checkout --
+<file>`, re-verified `tsc`/`git status` clean, no bad code ever left the local
+checkout. **This is a NEW variant of the Run 158 hazard**: that incident was about
+branch-mutating commands (`checkout`/`stash`); this one is a content-mutating EDIT by an
+agent doing legitimate, valuable verification work (mutation testing is a real technique
+that caught nothing wrong here, but the mechanism it uses — actually breaking the code to
+confirm the test detects it — inherently requires writing to the shared file). Telling
+reviewers "don't mutate the working tree" would forbid a technique that's actually
+useful; the real fix is that the ORCHESTRATING session must `git status` (not just
+`git diff <specific file>` at commit time) immediately before every push, every time,
+regardless of how confident the last-known-good commit felt — which is what caught it
+here. Doing this 3 separate times across this run's 2 changes (once before pushing #867
+cycle 1, once mid-review, once right before final push) is what kept it safe. **If this
+recurs a 3rd time**, it's a real harness-improvement-proposal candidate (subagent
+verification work needs its own isolated copy, not a shared checkout with a
+promise-not-to-mutate) — but two isolated incidents, both caught before any bad output,
+don't yet meet that bar per the "clear multi-run pattern" threshold.
+
+### Bookkeeping
+Gate green throughout all 3 changes: `npx tsc --noEmit` clean on every branch, full
+`npm test` passing throughout (2967-2968 tests, 0 regressions across all 3), `npm run
+check:determinism` clean, `npx eslint` clean on every touched file. **PR #865, #866, #867
+all merged** (3 disjoint files: `lib/billing/stripe.ts`+`package.json`,
+`app/api/area-analysis/refine-chat/route.ts`, `lib/products/load-room-products.ts` — zero
+intra-run conflicts). Every change independently reviewed by 2 fresh Sonnet reviewers
+(#865 and #866 first-cycle APPROVE; #867 took the full 2-cycle cap, both cycles
+legitimate — not a rubber-stamp). APT-20 closed with the acceptance check re-run against
+the merged commit and real output pasted in. APT-22 filed with a runnable acceptance
+check for a future run. No migration, no live secret, no ROADMAP Track/DoD box ticked
+(all 3 fixes are below Track-checkbox granularity — a dependency-health close and two
+reliability/observability fixes, not phase-completing artifacts).
+
+### Carry-forward
+- Board: APT-9 stays correctly parked in Backlog (owner-action-only, `update_trigger`
+  can't touch routines it didn't create — do not re-derive). APT-13 item 5
+  (orchestrator.ts main-loop coverage — large, scope its own run) and the newly-filed
+  APT-22 (6 untested semantic-extract.ts functions) remain open and genuinely claimable.
+- All prior DO-NOT-RE-FLAG / carry-forward entries still hold; nothing this run
+  contradicted them.
+- The shared-working-directory hazard is not fully closed by "instruct agents not to
+  mutate" — a legitimate mutation-testing technique can still touch tracked files.
+  `git status` immediately before every push is the real mitigation; keep doing it.
