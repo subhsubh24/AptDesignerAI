@@ -14,7 +14,7 @@ import { loadRoomProducts, ROOM_PRODUCTS_LOAD_ERROR } from "@/lib/products/load-
  * request can go wrong, not just the non-OK one that was already handled.
  */
 
-function mockFetch(impl: () => Promise<unknown>) {
+function mockFetch(impl: (url: string, init?: RequestInit) => Promise<unknown>) {
   const fn = vi.fn(impl);
   vi.stubGlobal("fetch", fn);
   return fn;
@@ -92,16 +92,22 @@ describe("loadRoomProducts", () => {
     );
   });
 
-  it("reports failure when the request is aborted (timeout) — not an infinite spinner", async () => {
-    // A real timeout aborts the signal fetch was given, which a real fetch
-    // implementation surfaces as a rejected promise. The generic-throw test
-    // above already covers "any throw resolves to ok:false"; this confirms
-    // that abort-shaped errors specifically hit that same path.
-    mockFetch(async () => {
-      throw new DOMException("The operation was aborted.", "TimeoutError");
-    });
+  it("actually times out a hung request instead of spinning forever", async () => {
+    // Proves the timeout FIRES, not just that a thrown error is caught (that's
+    // the separate generic-throw test above). AbortSignal.timeout doesn't run
+    // through vitest's fake-timer clock (Node implements it outside the
+    // shimmable setTimeout), so this uses a real, short override instead of
+    // waiting out the production default.
+    mockFetch(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "TimeoutError"));
+          });
+        }),
+    );
 
-    await expect(loadRoomProducts("room-1")).resolves.toEqual({ ok: false });
+    await expect(loadRoomProducts("room-1", 10)).resolves.toEqual({ ok: false });
   });
 
   it("exports copy that says matches WERE found", async () => {
