@@ -2517,3 +2517,143 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   run, ~43 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code,
   both are pure Vercel environment variable sets.
+
+---
+
+## Run 23 — 2026-08-11
+
+### What we found
+- All Run 1-22 owner blockers remain unresolved: verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` all
+  still `status: open`). `PENDING_OPS.md`'s own `as_of` is still 2026-08-07, unchanged since Run 21
+  (now spanning Runs 21-23).
+- Re-probed `https://aptdesignerai.com/` a NINETEENTH time: still `connect_rejected`/gateway 502 to
+  CONNECT, identical signature to every prior probe, cross-checked against the agent-proxy's own
+  `/__agentproxy/status` `recentRelayFailures` log (2026-08-11T05:10:06Z). No new information.
+- Re-probed `trustpilot.com/review/havenly.com`: the bare hostname now issues an HTTP 301 redirect to
+  `www.trustpilot.com` (a mechanical change from every prior run's direct 403 at the bare host), but
+  following the redirect (`curl -L`) still terminates in an identical HTTP 403 with the same
+  Cloudflare/PerimeterX bot-block JSON body. Recorded honestly as a non-change in substance — the
+  access path is still structurally blocked, just via a different HTTP hop.
+- **A new independent QUALITY_SCORECARD pass landed since Run 22** (verified via the GitHub API, not
+  the shallow local clone: `mcp__github__list_commits` on the file path returns commit `46bee98`,
+  2026-08-10, "11th independent grade", #857, as the most recent touch). `overall` held C,
+  `ship_gate_met` still false, but the ship-critical picture moved the wrong direction for outreach
+  purposes: FOUR sub-A ship-critical dimensions now (up from three at Run 21/22) —
+  `functional_reality` C (unchanged, 8th consecutive cycle, still the owner-gated persistence-cutover
+  blocker), a NEW `security_rls` A+→B (a fresh 57-route sweep found a cross-tenant IDOR in
+  `POST /api/area-analysis` — an unbound client-supplied `project_id` leaking another tenant's project
+  row + sibling rooms' diagnosis history), design_taste B (unchanged), and a NEW `artifact_integrity`
+  A→B (`ROADMAP.md:739` overclaims "28 tests" for reset-link idempotency when the actual file has 11)
+  — partially offset by `business_case_strength` genuinely recovering B→A (mobile paywall now mirrors
+  the web app's $29 Apartment tier + annual-billing kill-switch, closing issue #672). Checked the
+  timing: the scorecard was graded at `2026-08-10T05:03:58-05:00`; the Product Factory shipped a
+  same-day fix for the named IDOR at `2026-08-10T19:37:16-05:00` (commit `236e5a3`, "fix: cross-tenant
+  IDOR in area-analysis (critical)") — roughly 14.5 hours AFTER the grade was taken. So the `security_rls`
+  B may already be stale-low by the time of this run, but this loop does NOT re-grade it (maker≠checker
+  — that is the independent Quality Auditor's job, next cycle). Either way the conclusion for GTM
+  purposes is unchanged: `functional_reality` alone keeps `ship_gate_met` false, so both S6 outreach
+  lanes stay hard-off regardless of how the other three dimensions move. `docs/growth/GTM_SCORECARD.md`
+  is UNCHANGED since Run 5 (2026-08-03) — also re-verified via the GitHub API this run rather than
+  local `git log`, after noticing the shallow-clone artifact in the local history (a squashed-history
+  first-appearance commit made the file look newly created on 2026-08-05, which the GitHub API
+  correctly resolved as a clone-boundary artifact, not a real edit — the same category of trap Run 19
+  documented for a different file).
+- No commit touched any GTM-owned marketing doc since Run 21/22 (the only commit in the diff range,
+  `git log --oneline e5e715b..HEAD -- <every GTM-owned doc>`, is Run 22's own `GROWTH_STATUS.md`/
+  `GROWTH_MEMORY.md` edit, `2485c8d`). Every prior GTM Auditor fix re-spot-checked and still holds
+  (BUSINESS_CASE.md's year-1 caveat, etc.) — nothing to re-fix here.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-08-11; refreshed the `internal_metrics_api`
+  reason (19th probe), the `web_research` reason (the Trustpilot redirect-then-403 finding), and the
+  `gtm_scorecard` reason (the new QUALITY_SCORECARD 11th-grade pass + the IDOR-fix-timing note, both
+  cross-checked via the GitHub API rather than the shallow local clone). Refreshed `demand_signal` (see
+  next) and `learnings`/`next_actions`/`owner_blockers` for the 23rd consecutive circuit-breaker run.
+  Ran `npm install` (materializes `js-yaml` into a fresh `node_modules` — no `package.json` change) then
+  `node scripts/validate-gtm.mjs` — parses clean.
+- **Demand-signal research (theme 1 disconfirming)**: per Run 22's own `next_action` — "redirect fresh
+  research effort toward strengthening themes 1/2/3's disconfirming coverage... theme 1 remains a
+  genuinely open angle" — targeted theme 1 (furniture-shopping choice paralysis) for a theme-specific
+  disconfirming datum, the exact gap the GTM Auditor (Run 5, `experiment_validity`) named as open for
+  themes 1, 3, and 4 (theme 3 closed it at Run 19 via Havenly's App Store page; theme 1 stayed open).
+  Two neutral-research-org searches came back honest negatives: ACSI's specialty-retailers page
+  (theacsi.com, direct WebFetch) does not break out a furniture-store category at all; J.D. Power's
+  2025/2026 retail-satisfaction studies cover home-improvement and appliance retail, not furniture.
+  A Home Furnishings Association blog post (myhfa.org) citing a HomeByMe/Dassault Systèmes 9,000-
+  consumer survey turned out, on direct WebFetch, to contain zero satisfaction/ease-of-shopping data
+  at all (only channel-behavior and AI-adoption stats) — correctly not cited. Pivoted to the same
+  App-Store-review-aggregate pattern already used for themes 2/3's disconfirming entries (RoomGPT,
+  Havenly) and found a genuine new datum: Wayfair's own App Store page
+  (`apps.apple.com/us/app/wayfair-shop-all-things-home/id836767708`) — VERBATIM-VERIFIED via direct
+  WebFetch: 4.9/5 average across ~2.5M ratings, plus a verbatim, dated (10/24/2023) reviewer quote
+  (Jami303) specifically crediting the app's filtering for making it "easy to find" products.
+  Cross-checked the rating-count magnitude against three independent app-data aggregators (bitrise.io,
+  appbrain.com, similarweb.com — 2,325,513 / 2,239,272+ / 4.87-4.9★ respectively) before treating the
+  WebFetch figure as reliable, since this doc's own standing caution (Run 22) is that a single tool's
+  output can misattribute or overstate a figure — this one reproduced within normal cross-aggregator
+  variance, so it was added. This closes the last theme-1/3/4 disconfirming gap the GTM Auditor could
+  name as generically open at Run 5; theme 4 alone remains without a theme-specific disconfirming
+  datum, and it already carries an explicit structural reason why (`research_status:
+  structurally_hard_to_corroborate`, set Run 22). Held `confidence` at "emerging" (unchanged): this
+  closes a real named gap but does not add a new CONFIRMING source to any theme, so the source-count
+  bar for "strong" is unmoved.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (19th probe, same
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD, now
+  on four sub-A ship-critical dims rather than three) — GTM_STANDARD §6/§13 Gate 1 stays hard-off.
+  Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: nothing this run clears the §3
+  bar for a steer — the only new finding is a qualitative demand-signal disconfirming datum, explicitly
+  not a quantified, statistically-significant, causally revenue-linked finding.
+- Did not spawn a maker≠checker reviewer: every edit this run is research/validation (two scorecard
+  data-reads via the GitHub API, a re-verified marketing-consistency spot-check, and a genuine
+  demand-signal disconfirming-evidence addition) — no landing/email/ASO copy, campaign,
+  pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer shipped, matching
+  this doc's own precedent (Runs 5, 16, 19) for when a routine S4/S5 update does and doesn't warrant one.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced this run — every growth blocker found is
+  already tracked there; the new QUALITY_SCORECARD findings (IDOR, ROADMAP.md overclaim) are
+  Product-Factory-owned fixes, not owner-actionable env/config steps, so they belong in that factory's
+  own ledger, not here.
+- Did not re-attempt themes 2/3's demand-signal research: comparatively well-corroborated already (6
+  and 6 sources respectively) and not flagged as needing fresh work this run.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads competition data; no new information since Run 3.
+- Did not re-grade `QUALITY_SCORECARD.md` or `GTM_SCORECARD.md`, and did not re-verify the Product
+  Factory's same-day IDOR fix (236e5a3) against the live code: both are owned by independent Auditor/
+  factory routines outside this loop's remit (maker≠checker); consumed and reported as DATA only.
+
+### Lessons learned
+- **A tool-level HTTP status changing does not mean an access path opened — check what it actually
+  resolves to.** Trustpilot moving from a direct 403 to a 301-then-403 could easily be logged as "the
+  block eased" by a less careful check; following the redirect all the way through showed the outcome
+  is byte-identical. Worth a standing habit: when re-probing a known-blocked source, always follow
+  redirects to the terminal response before updating a validation entry.
+- **A shallow local clone can misdate a file's true history, not just miss commits before the clone
+  boundary.** `git log` on `GTM_SCORECARD.md` returned a totally unrelated a11y-fix commit (#808,
+  2026-08-05) as the file's "most recent touch" because that squashed-history commit happens to be
+  where the file first appears inside this session's shallow clone window — a coincidence of the
+  clone boundary, not a real edit. The GitHub API (which sees full history) correctly resolved this
+  to the real last-touching commit (Run 5, 2026-08-03, unchanged). Run 19 already documented this
+  exact trap for a different citation; worth treating as a STANDING rule now, not a one-off catch —
+  any local `git log -- <file>` claim about "last touched by commit X" on this repo should be
+  cross-checked via the GitHub API before being asserted as verified, not just when something already
+  looks suspicious.
+- **A scorecard's finding and its fix can straddle the same day — check the clock, not just the
+  date.** The new QUALITY_SCORECARD IDOR finding and the Product Factory's fix for it are both dated
+  2026-08-10; only comparing timestamps (not just dates) revealed the fix landed ~14.5 hours after the
+  grade was taken, meaning the reported B may already be understated. Worth recording transparently
+  rather than either assuming the grade is current or silently correcting it (not this loop's job to
+  re-grade — that would violate maker≠checker).
+- **Redirecting research effort toward a genuinely open, auditor-named gap (rather than re-probing an
+  already-well-evidenced theme out of habit) produced a real result in one search cycle** — the same
+  App-Store-aggregate pattern that worked for themes 2/3 transferred cleanly to theme 1 once pointed
+  at the right competitor (the category leader, Wayfair, rather than a random search).
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-22? YES — circuit breaker remains FIRED (Run 23, 23rd consecutive
+  run, ~45 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets.
