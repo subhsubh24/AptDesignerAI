@@ -7800,3 +7800,78 @@ Gate green throughout: `npx tsc --noEmit` clean, `npx vitest run` 2961/2961 pass
 - **NEW STANDING NOTE (hazard, see above in full):** any background Agent call that might run git commands needs either `isolation:"worktree"` or an explicit instruction not to run branch-mutating git commands. This cost real time this run (an in-progress edit was silently discarded and had to be redone) — worth watching for a recurring pattern across future runs; not yet worth a `loop: harness improvement proposal` issue on a single occurrence (AGENTS.md META section caps that at one per clear multi-run pattern).
 - **DO-NOT-RE-FLAG (new):** `app/api/rooms/[roomId]/diagnosis/route.ts`'s two sequential queries (room ownership check, then diagnosis fetch) are NOT parallelized on purpose in the sense that doing so would query diagnosis data for a room the caller might not own before the ownership check completes — real but marginal (~30-40ms), correctly left unshipped this run given higher-value work was available. Worth revisiting only if a future run has nothing better to do.
 - **DO-NOT-RE-FLAG (carry forward):** all prior entries still hold; nothing this run contradicted them.
+
+## Run 159 (2026-08-11) — board follow-through: APT-19 + APT-21 closed
+
+Claimed both from Linear (`AptDesignerAI` team) before building, per STEP 0c. No new
+Todo issues existed this run (board was: several Done, `APT-13` genuinely In Progress
+with real partial history — item 5/orchestrator.ts left for its own future run per the
+issue's own scope note — and `APT-9`/`APT-19`/`APT-20`/`APT-21` sitting in Backlog).
+Picked the two Backlog items that were fully scoped and independently verifiable this
+run; left APT-9 alone (its acceptance check calls a `RemoteTrigger` tool this session
+does not have — a different orchestration surface than the Claude Code Remote MCP tools
+available here; not re-attempted, not re-derived at length, just skipped) and APT-20
+alone (still needs the real Stripe changelog read its own history says it needs; no
+new information this run to justify re-attempting it).
+
+- **APT-19**: `userOwnsRoom`/`userOwnsProject`/`userOwnsCandidateProduct` deleted from
+  `lib/auth/ownership.ts` (repo-wide grep confirmed zero real callers). Deviated from
+  the issue's literal fix direction ("delete the test file") — rewrote
+  `__tests__/auth/ownership.test.ts` against `require*Ownership` instead, since deleting
+  it outright would have silently dropped direct coverage of the shared
+  `fetch*Ownership` query-building helpers (those are otherwise only exercised
+  indirectly through ~18 route-level tests). Recorded as a "decide, don't park" call in
+  the closing Linear comment.
+- **APT-21**: new `__tests__/agents/scene-assembler-cassette.test.ts`, same cassette
+  pattern as `validation-agent-cassette.test.ts` (mock only `geminiProvider.chat` +
+  `resolveImageBlocks`, drive the real agent code). scene-assembler.ts: ~1.5% → 96.92%
+  lines / 100% functions / 96.72% statements / 76.47% branches. Covers the no-photos
+  exit, the happy path (asserting `thinkingConfig`/deterministic seed), the floor-plan
+  caption/index-offset branch, retry-on-unparseable-content, both-attempts-fail, and the
+  self-consistency escalation-to-N=3+judge path on a degenerate sole sample. One design
+  note worth carrying forward: the raw scene-graph Zod schema
+  (`RoomSceneGraphResponseSchema`) is defensive almost everywhere (`.default()`/
+  `.catch()`), so a well-formed-but-wrong-shape Gemini response does NOT throw on parse
+  — it silently coerces to a degenerate-but-valid object instead. To actually exercise
+  `generateSample`'s retry-on-throw branch, the test has to send content with **no
+  parseable JSON at all** (no braces/brackets), not just a wrong-shaped object; a
+  wrong-shaped-but-parseable body instead triggers the *quality-check escalation* path,
+  not the retry path. Worth remembering for any future cassette test against a schema
+  built this defensively.
+
+Both changes were independent, file-disjoint (`lib/auth/ownership.ts`+test vs. a new
+scene-assembler test file), landed as two commits in one PR (#863) rather than two
+separate PRs — this session's outer harness assigns exactly one designated branch
+(`claude/sleepy-goldberg-aaq4vg`) per run rather than the free-choice per-change
+branching the routine describes; two disjoint commits in one PR is the closest
+equivalent under that constraint. Two independent fresh-context Sonnet reviewers (no
+prior context, correctness/security lens + value/phase-fit lens) both APPROVE'd,
+verifying claims against the real source rather than trusting the diff's own comments.
+
+Did NOT run a fresh DEEP AUDIT this run — the last full pass (Run 158, same day per the
+commit history) is well inside the ~24h/~4-run cadence; next one is still due per the
+Run 158 carry-forward note. Did NOT attempt the DATA_BACKEND cutover (Track A4) — it is
+a genuine two-part bar: the CI-wiring prerequisite requires editing
+`.github/workflows/ci.yml` (structural bar, never attempted) and the production cutover
+itself requires applying migrations + flipping an env var on the live Vercel deployment
+(owner-only infra action, already correctly recorded in PENDING_OPS
+`cutover-to-persistent-data`). Nothing new to add there this run.
+
+### Bookkeeping
+Gate green throughout: `npx tsc --noEmit` clean, `npx vitest run` 2967/2979 passing (0
+regressions, +6 net new tests vs. 2961 baseline), `npx eslint .` clean,
+`npm run check:determinism` clean. **PR #863 merged** (2 disjoint commits, both
+reviewed). APT-19 and APT-21 closed with the acceptance check re-run against the merged
+commit (`ca765fc`) and real output pasted into each issue. No new issues filed this run
+— no fresh gap surfaced beyond what the board already tracks. No migration, no live
+secret, no ROADMAP Track/DoD box ticked (both fixes are below Track-checkbox
+granularity — dead-code removal and a coverage gap close, not phase-completing
+artifacts).
+
+### Carry-forward
+- Board: APT-9 (auditor-prompt Linear migration — needs a `RemoteTrigger` tool this
+  session doesn't have; a future run with that tool should pick it up), APT-13 item 5
+  (orchestrator.ts main-loop coverage — large, scope its own run), APT-20 (stripe SDK
+  bump — needs a real changelog read first) remain open and genuinely claimable.
+- All prior DO-NOT-RE-FLAG / carry-forward entries still hold; nothing this run
+  contradicted them.
