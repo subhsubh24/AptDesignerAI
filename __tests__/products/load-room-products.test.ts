@@ -81,12 +81,27 @@ describe("loadRoomProducts", () => {
     expect(await loadRoomProducts("room-1")).toEqual({ ok: false });
   });
 
-  it("encodes the room id into the query string", async () => {
+  it("encodes the room id into the query string, with an abort signal so a hang cannot spin forever", async () => {
     const fn = mockFetch(async () => jsonResponse([]));
 
     await loadRoomProducts("a room/1&x=2");
 
-    expect(fn).toHaveBeenCalledWith("/api/products?room_id=a%20room%2F1%26x%3D2");
+    expect(fn).toHaveBeenCalledWith(
+      "/api/products?room_id=a%20room%2F1%26x%3D2",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("reports failure when the request is aborted (timeout) — not an infinite spinner", async () => {
+    // A real timeout aborts the signal fetch was given, which a real fetch
+    // implementation surfaces as a rejected promise. The generic-throw test
+    // above already covers "any throw resolves to ok:false"; this confirms
+    // that abort-shaped errors specifically hit that same path.
+    mockFetch(async () => {
+      throw new DOMException("The operation was aborted.", "TimeoutError");
+    });
+
+    await expect(loadRoomProducts("room-1")).resolves.toEqual({ ok: false });
   });
 
   it("exports copy that says matches WERE found", async () => {

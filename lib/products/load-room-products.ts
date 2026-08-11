@@ -17,7 +17,14 @@
  * discriminated result rather than throwing makes the failure impossible to
  * swallow by accident: there is no throw to catch, so every caller must look
  * at `ok`.
+ *
+ * A `fetch` that never settles is the same bug in a different shape: without
+ * a timeout, a hung connection leaves the page spinning forever instead of
+ * reaching the retry copy below. `AbortSignal.timeout` turns that hang into
+ * the same thrown-and-caught path as a dropped connection.
  */
+
+const LOAD_TIMEOUT_MS = 20_000;
 
 /** Failure is deliberately opaque: every caller shows the same copy. */
 export type RoomProductsResult<T> = { ok: true; products: T[] } | { ok: false };
@@ -31,7 +38,9 @@ export const ROOM_PRODUCTS_LOAD_ERROR =
 
 export async function loadRoomProducts<T>(roomId: string): Promise<RoomProductsResult<T>> {
   try {
-    const res = await fetch(`/api/products?room_id=${encodeURIComponent(roomId)}`);
+    const res = await fetch(`/api/products?room_id=${encodeURIComponent(roomId)}`, {
+      signal: AbortSignal.timeout(LOAD_TIMEOUT_MS),
+    });
     if (!res.ok) return { ok: false };
     const body = await res.json().catch(() => null);
     // The route returns a bare array. Anything else (an error envelope, an
