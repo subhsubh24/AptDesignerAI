@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { userOwnsRoom, userOwnsCandidateProduct, userOwnsProject } from "@/lib/auth/ownership";
+import {
+  requireRoomOwnership,
+  requireProjectOwnership,
+  requireCandidateProductOwnership,
+} from "@/lib/auth/ownership";
+
+// Direct unit coverage of the fetch*/ownershipVerdict query-building logic
+// shared by every require*Ownership guard. `userOwnsRoom`/`userOwnsProject`/
+// `userOwnsCandidateProduct` (removed — see APT-19) were dead code left behind
+// by PR #859's migration to these require* guards; the query-shape assertions
+// they carried are preserved here against the guards that actually ship.
 
 function makeSupabase(data: unknown, error: unknown = null): SupabaseClient {
   const single = vi.fn().mockResolvedValue({ data, error });
@@ -21,28 +31,26 @@ function makeTrackedSupabase(data: unknown, error: unknown = null) {
   return { supabase: { from } as unknown as SupabaseClient, from, chain };
 }
 
-// ── userOwnsRoom ──────────────────────────────────────────────────────────────
+// ── requireRoomOwnership ─────────────────────────────────────────────────────
 
-describe("userOwnsRoom", () => {
-  it("returns true when the room exists and belongs to the user", async () => {
+describe("requireRoomOwnership", () => {
+  it("returns null (proceed) when the room exists and belongs to the user", async () => {
     const supabase = makeSupabase({ id: "room-1", projects: { user_id: "user-1" } });
-    expect(await userOwnsRoom(supabase, "room-1", "user-1")).toBe(true);
+    expect(await requireRoomOwnership(supabase, "room-1", "user-1")).toBeNull();
   });
 
-  it("returns false when the query returns no data (room not found or not owned)", async () => {
+  it("returns a 404 'Not found' response when the room is missing or not owned", async () => {
     const supabase = makeSupabase(null);
-    expect(await userOwnsRoom(supabase, "room-99", "user-1")).toBe(false);
-  });
-
-  it("returns false when data is undefined", async () => {
-    const supabase = makeSupabase(undefined);
-    expect(await userOwnsRoom(supabase, "room-1", "user-1")).toBe(false);
+    const res = await requireRoomOwnership(supabase, "room-99", "user-1");
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(404);
+    expect(await res!.json()).toEqual({ error: "Not found" });
   });
 
   it("queries the rooms table with correct filters", async () => {
     const { supabase, from, chain } = makeTrackedSupabase(null);
 
-    await userOwnsRoom(supabase, "room-abc", "user-xyz");
+    await requireRoomOwnership(supabase, "room-abc", "user-xyz");
 
     expect(from).toHaveBeenCalledWith("rooms");
     expect(vi.mocked(chain.select as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
@@ -56,28 +64,26 @@ describe("userOwnsRoom", () => {
   });
 });
 
-// ── userOwnsProject ───────────────────────────────────────────────────────────
+// ── requireProjectOwnership ──────────────────────────────────────────────────
 
-describe("userOwnsProject", () => {
-  it("returns true when the project exists and belongs to the user", async () => {
+describe("requireProjectOwnership", () => {
+  it("returns null (proceed) when the project exists and belongs to the user", async () => {
     const supabase = makeSupabase({ id: "proj-1" });
-    expect(await userOwnsProject(supabase, "proj-1", "user-1")).toBe(true);
+    expect(await requireProjectOwnership(supabase, "proj-1", "user-1")).toBeNull();
   });
 
-  it("returns false when the query returns no data (project not found or not owned)", async () => {
+  it("returns a 404 'Not found' response when the project is missing or not owned", async () => {
     const supabase = makeSupabase(null);
-    expect(await userOwnsProject(supabase, "proj-99", "user-1")).toBe(false);
-  });
-
-  it("returns false when data is undefined", async () => {
-    const supabase = makeSupabase(undefined);
-    expect(await userOwnsProject(supabase, "proj-1", "user-1")).toBe(false);
+    const res = await requireProjectOwnership(supabase, "proj-99", "user-1");
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(404);
+    expect(await res!.json()).toEqual({ error: "Not found" });
   });
 
   it("queries the projects table filtered by BOTH id and user_id", async () => {
     const { supabase, from, chain } = makeTrackedSupabase(null);
 
-    await userOwnsProject(supabase, "proj-abc", "user-xyz");
+    await requireProjectOwnership(supabase, "proj-abc", "user-xyz");
 
     expect(from).toHaveBeenCalledWith("projects");
     expect(vi.mocked(chain.select as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("id");
@@ -90,28 +96,26 @@ describe("userOwnsProject", () => {
   });
 });
 
-// ── userOwnsCandidateProduct ──────────────────────────────────────────────────
+// ── requireCandidateProductOwnership ─────────────────────────────────────────
 
-describe("userOwnsCandidateProduct", () => {
-  it("returns true when the product exists and belongs to the user", async () => {
+describe("requireCandidateProductOwnership", () => {
+  it("returns null (proceed) when the product exists and belongs to the user", async () => {
     const supabase = makeSupabase({ id: "prod-1", rooms: { projects: { user_id: "user-1" } } });
-    expect(await userOwnsCandidateProduct(supabase, "prod-1", "user-1")).toBe(true);
+    expect(await requireCandidateProductOwnership(supabase, "prod-1", "user-1")).toBeNull();
   });
 
-  it("returns false when the query returns no data", async () => {
+  it("returns a 404 'Not found' response when the product is missing or not owned", async () => {
     const supabase = makeSupabase(null);
-    expect(await userOwnsCandidateProduct(supabase, "prod-99", "user-1")).toBe(false);
-  });
-
-  it("returns false when data is undefined", async () => {
-    const supabase = makeSupabase(undefined);
-    expect(await userOwnsCandidateProduct(supabase, "prod-1", "user-1")).toBe(false);
+    const res = await requireCandidateProductOwnership(supabase, "prod-99", "user-1");
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(404);
+    expect(await res!.json()).toEqual({ error: "Not found" });
   });
 
   it("queries the candidate_products table with correct filters", async () => {
     const { supabase, from, chain } = makeTrackedSupabase(null);
 
-    await userOwnsCandidateProduct(supabase, "prod-abc", "user-xyz");
+    await requireCandidateProductOwnership(supabase, "prod-abc", "user-xyz");
 
     expect(from).toHaveBeenCalledWith("candidate_products");
     expect(vi.mocked(chain.select as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
@@ -122,5 +126,18 @@ describe("userOwnsCandidateProduct", () => {
       "rooms.projects.user_id",
       "user-xyz"
     );
+  });
+});
+
+// ── ownershipVerdict — real DB error is never reported as 404 ───────────────
+// (See APT-16 / ownership-error-classification.test.ts for coverage through
+// real route callers; this exercises the guards directly.)
+
+describe("require*Ownership — real DB error is not misreported as not-found", () => {
+  it("requireRoomOwnership surfaces a real DB error as a 500, not a 404", async () => {
+    const supabase = makeSupabase(null, { code: "53300", message: "too many connections" });
+    const res = await requireRoomOwnership(supabase, "room-1", "user-1");
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(500);
   });
 });

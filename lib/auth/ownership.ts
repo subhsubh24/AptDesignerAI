@@ -48,64 +48,6 @@ async function fetchCandidateProductOwnership(supabase: SupabaseClient, productI
 }
 
 /**
- * Verifies the authenticated user owns the given room via its project.
- * Returns true only when the room exists AND belongs to a project owned by `userId`.
- * Uses the provided (user-scoped) client so RLS still applies as defence-in-depth.
- *
- * Silently collapses a real DB error into `false` — routes that need to tell a
- * genuine "not found" apart from a DB failure should use `requireRoomOwnership`
- * instead.
- */
-export async function userOwnsRoom(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<boolean> {
-  const { data } = await fetchRoomOwnership(supabase, roomId, userId);
-  return Boolean(data);
-}
-
-/**
- * Verifies the authenticated user owns the given project directly.
- * Returns true only when the project exists AND its `user_id` is `userId`.
- * Uses the provided (user-scoped) client so RLS still applies as defence-in-depth.
- *
- * Guards the apartment-level routes (analyze-apartment, apartment-research) that
- * resolve a project by a client-supplied `project_id`: without this check any
- * authenticated caller could drive expensive LLM work on — or overwrite the
- * building research of — another user's project (IDOR / broken access control).
- *
- * Silently collapses a real DB error into `false` — routes that need to tell a
- * genuine "not found" apart from a DB failure should use `requireProjectOwnership`
- * instead.
- */
-export async function userOwnsProject(
-  supabase: SupabaseClient,
-  projectId: string,
-  userId: string,
-): Promise<boolean> {
-  const { data } = await fetchProjectOwnership(supabase, projectId, userId);
-  return Boolean(data);
-}
-
-/**
- * Verifies the authenticated user owns the candidate product
- * (via room → project → user chain).
- *
- * Silently collapses a real DB error into `false` — routes that need to tell a
- * genuine "not found" apart from a DB failure should use
- * `requireCandidateProductOwnership` instead.
- */
-export async function userOwnsCandidateProduct(
-  supabase: SupabaseClient,
-  productId: string,
-  userId: string,
-): Promise<boolean> {
-  const { data } = await fetchCandidateProductOwnership(supabase, productId, userId);
-  return Boolean(data);
-}
-
-/**
  * Ownership guard for room-scoped routes: returns a `NextResponse` the route
  * must return immediately (404 "not found", or 500 on a real DB error), or
  * `null` when ownership is confirmed and the route should proceed.
