@@ -227,7 +227,7 @@ Rules for the JSON:
 - The JSON fence MUST be the last thing in your response — no text after it.`;
 }
 
-function parseFinal(finalText: string): VerifiedProduct | undefined {
+export function parseFinal(finalText: string): VerifiedProduct | undefined {
   if (!finalText) return undefined;
   const fenceMatches = [...finalText.matchAll(/```json\s*([\s\S]*?)```/gi)];
   const lastFence = fenceMatches[fenceMatches.length - 1];
