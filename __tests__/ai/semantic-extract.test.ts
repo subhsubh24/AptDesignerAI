@@ -19,6 +19,12 @@ import {
   classifyStyleLabelLLM,
   inferColorHslLLM,
   dedupProductTitlesLLM,
+  classifyArchitecturalLLM,
+  classifyInvalidRemoveLLM,
+  isScrapeContextSufficientLLM,
+  productMatchesCategoryLLM,
+  summarizePreferencesLLM,
+  extractKeepCategoriesLLM,
 } from "@/lib/ai/semantic-extract";
 
 /** Make the mocked provider answer with a JSON string, as the real chat() does. */
@@ -212,5 +218,193 @@ describe("dedupProductTitlesLLM — keep first, drop the rest", () => {
       { id: "b", title: "y", retailer: null },
     ]);
     expect(drop).toBeNull();
+  });
+});
+
+describe("classifyArchitecturalLLM — architectural-vs-furniture split", () => {
+  it("short-circuits to an empty set on an empty list", async () => {
+    expect(await classifyArchitecturalLLM([])).toEqual(new Set());
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the architectural subset as a Set, filtering non-strings", async () => {
+    respondWith({ architectural: ["hardwood flooring", 42, "crown molding"] });
+    const result = await classifyArchitecturalLLM(["hardwood flooring", "area rug", "crown molding"]);
+    expect(result).toEqual(new Set(["hardwood flooring", "crown molding"]));
+  });
+
+  it("returns null when the model omits the architectural array", async () => {
+    respondWith({ nope: true });
+    expect(await classifyArchitecturalLLM(["flooring"])).toBeNull();
+  });
+});
+
+describe("classifyInvalidRemoveLLM — removable-item validity", () => {
+  it("short-circuits to an empty set on an empty list", async () => {
+    expect(await classifyInvalidRemoveLLM([])).toEqual(new Set());
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the invalid subset as a Set, filtering non-strings", async () => {
+    respondWith({ invalid: ["lack of art", true, "wall outlet"] });
+    const result = await classifyInvalidRemoveLLM(["old couch", "lack of art", "wall outlet"]);
+    expect(result).toEqual(new Set(["lack of art", "wall outlet"]));
+  });
+
+  it("returns null when the model omits the invalid array", async () => {
+    respondWith({});
+    expect(await classifyInvalidRemoveLLM(["old couch"])).toBeNull();
+  });
+});
+
+describe("isScrapeContextSufficientLLM — scrape-sufficiency guard", () => {
+  it("returns false (not null) without calling the model when context is too short", async () => {
+    expect(await isScrapeContextSufficientLLM("")).toBe(false);
+    expect(await isScrapeContextSufficientLLM("too short")).toBe(false);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("passes through a true verdict from the model", async () => {
+    respondWith({ sufficient: true });
+    expect(await isScrapeContextSufficientLLM("A" .repeat(50))).toBe(true);
+  });
+
+  it("passes through a false verdict from the model", async () => {
+    respondWith({ sufficient: false });
+    expect(await isScrapeContextSufficientLLM("A".repeat(50))).toBe(false);
+  });
+
+  it("returns null (distinct from false) when the model's field is missing/non-boolean", async () => {
+    respondWith({ sufficient: "yes" });
+    expect(await isScrapeContextSufficientLLM("A".repeat(50))).toBeNull();
+  });
+
+  it("returns null when the provider call fails", async () => {
+    chatMock.mockRejectedValue(new Error("boom"));
+    expect(await isScrapeContextSufficientLLM("A".repeat(50))).toBeNull();
+  });
+});
+
+describe("productMatchesCategoryLLM — category-fit guard", () => {
+  it("short-circuits to ok:true without calling the model when there's no expected category", async () => {
+    const result = await productMatchesCategoryLLM("", "some title", "sofa");
+    expect(result).toEqual({ ok: true, reason: "no expected category" });
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits to ok:false without calling the model when there's neither title nor category", async () => {
+    const result = await productMatchesCategoryLLM("sofa", null, undefined);
+    expect(result).toEqual({ ok: false, reason: "no title or category" });
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("passes through the model's ok/reason verdict", async () => {
+    respondWith({ ok: false, reason: "this is a gift card, not furniture" });
+    const result = await productMatchesCategoryLLM("sofa", "Amazon Gift Card", "gift_card");
+    expect(result).toEqual({ ok: false, reason: "this is a gift card, not furniture" });
+  });
+
+  it("defaults a missing/non-string reason to an empty string", async () => {
+    respondWith({ ok: true });
+    const result = await productMatchesCategoryLLM("sofa", "a settee", "settee");
+    expect(result).toEqual({ ok: true, reason: "" });
+  });
+
+  it("returns null when the model omits a boolean ok field", async () => {
+    respondWith({ reason: "unclear" });
+    expect(await productMatchesCategoryLLM("sofa", "something", "something")).toBeNull();
+  });
+});
+
+describe("summarizePreferencesLLM — cross-room preference synthesis", () => {
+  const baseInput = {
+    keep_items: ["walnut credenza"],
+    replace_items: ["old futon"],
+    materials: ["oak", "linen"],
+    palette: ["cream", "sage"],
+    style_notes: ["warm minimal"],
+    priorities: ["comfort"],
+    user_context_snippets: ["I host often"],
+    budget_modes: ["comfortable"],
+    per_room_item_counts: [4, 6],
+  };
+
+  it("returns null without calling the model when there is no per-room data", async () => {
+    const result = await summarizePreferencesLLM({ ...baseInput, per_room_item_counts: [] });
+    expect(result).toBeNull();
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("passes through valid density/budget labels and truncates the taste summary to 280 chars", async () => {
+    respondWith({
+      density_preference: "balanced",
+      budget_pressure: "comfortable",
+      taste_summary: "x".repeat(300),
+    });
+    const result = await summarizePreferencesLLM(baseInput);
+    expect(result!.density_preference).toBe("balanced");
+    expect(result!.budget_pressure).toBe("comfortable");
+    expect(result!.taste_summary).toHaveLength(280);
+  });
+
+  it("falls back to 'unknown' for an out-of-vocabulary density or budget label", async () => {
+    respondWith({ density_preference: "opulent", budget_pressure: "lavish", taste_summary: "notes" });
+    const result = await summarizePreferencesLLM(baseInput);
+    expect(result!.density_preference).toBe("unknown");
+    expect(result!.budget_pressure).toBe("unknown");
+  });
+
+  it("defaults a missing/non-string taste_summary to an empty string", async () => {
+    respondWith({ density_preference: "minimalist", budget_pressure: "tight" });
+    const result = await summarizePreferencesLLM(baseInput);
+    expect(result!.taste_summary).toBe("");
+  });
+
+  it("returns null when the provider call fails", async () => {
+    chatMock.mockRejectedValue(new Error("boom"));
+    expect(await summarizePreferencesLLM(baseInput)).toBeNull();
+  });
+});
+
+describe("extractKeepCategoriesLLM — keep-item category + location extraction", () => {
+  it("short-circuits to an empty array on an empty list", async () => {
+    expect(await extractKeepCategoriesLLM([])).toEqual([]);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it("normalizes category_keywords to lowercase, defaults a missing location_phrase to empty string", async () => {
+    respondWith({
+      items: [
+        {
+          item: "the black arc floor lamp behind the sofa",
+          category_keywords: ["Floor Lamp", "ARC LAMP"],
+          location_phrase: "behind the sofa",
+        },
+        { item: "walnut credenza", category_keywords: ["Credenza"] },
+      ],
+    });
+    const result = await extractKeepCategoriesLLM([
+      "the black arc floor lamp behind the sofa",
+      "walnut credenza",
+    ]);
+    expect(result).toEqual([
+      {
+        item: "the black arc floor lamp behind the sofa",
+        category_keywords: ["floor lamp", "arc lamp"],
+        location_phrase: "behind the sofa",
+      },
+      { item: "walnut credenza", category_keywords: ["credenza"], location_phrase: "" },
+    ]);
+  });
+
+  it("filters out entries missing a string item field", async () => {
+    respondWith({ items: [{ category_keywords: ["sofa"] }, { item: "rug", category_keywords: [] }] });
+    const result = await extractKeepCategoriesLLM(["rug"]);
+    expect(result).toEqual([{ item: "rug", category_keywords: [], location_phrase: "" }]);
+  });
+
+  it("returns null when the model omits the items array", async () => {
+    respondWith({});
+    expect(await extractKeepCategoriesLLM(["sofa"])).toBeNull();
   });
 });
