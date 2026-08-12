@@ -8,7 +8,7 @@ import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
 import { validateRoomHarmony, performFinalAssessment } from "@/lib/agents/validation-agent";
 import { selfConsistent, seedForSample } from "@/lib/agents/self-consistency";
-import { computeHarmonyScores, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
+import { computeHarmonyScores, computeConfidenceInterval, formatMathScoresForPrompt, type MathHarmonyResult } from "@/lib/validation/harmony-math";
 import { computeFinalHarmonyScore, type MathDimensionCaps } from "@/lib/scoring/harmony-composite";
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { buildDesignProfile } from "@/lib/design-context/build-profile";
@@ -2057,24 +2057,13 @@ Produce a REVISED what_it_needs list that addresses the feedback. Keep items tha
         const hasBuildingResearch = !!br;
 
         // (n) Confidence interval: wider when data is sparse
-        let uncertainty = 0.5; // base uncertainty
-        if (!hasFloorPlanDims) uncertainty += 0.4; // no floor plan dims → spatial scores unreliable
-        if (!hasBuildingResearch) uncertainty += 0.3; // no building research → less context
-        if (mathItem && mathItem.violations.length > 0) uncertainty += 0.2; // violations introduce uncertainty
-        if (otherRoomsForHarmony.length === 0) uncertainty += 0.2; // no cross-room data
-
-        const score = (item.harmony_score as number) || 5;
-        item.confidence_interval = {
-          low: Math.max(0, Math.round((score - uncertainty) * 10) / 10),
-          high: Math.min(10, Math.round((score + uncertainty) * 10) / 10),
-          uncertainty: Math.round(uncertainty * 10) / 10,
-          factors: [
-            ...(!hasFloorPlanDims ? ["no room dimensions"] : []),
-            ...(!hasBuildingResearch ? ["no building research"] : []),
-            ...(mathItem && mathItem.violations.length > 0 ? ["has spatial violations"] : []),
-            ...(otherRoomsForHarmony.length === 0 ? ["no cross-room data"] : []),
-          ],
-        };
+        item.confidence_interval = computeConfidenceInterval({
+          harmonyScore: item.harmony_score as number | null | undefined,
+          hasFloorPlanDims,
+          hasBuildingResearch,
+          hasSpatialViolations: !!(mathItem && mathItem.violations.length > 0),
+          hasCrossRoomData: otherRoomsForHarmony.length > 0,
+        });
       }
 
       // (o) Generate scoring_explanation summary

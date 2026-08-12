@@ -298,6 +298,60 @@ function computeLightingAdequacy(
   };
 }
 
+export interface ConfidenceIntervalInputs {
+  /** The item's harmony_score (0-10). 0 is a legitimate value (e.g. a
+   *  dropped item) — callers must NOT coerce it away with `||`. */
+  harmonyScore: number | null | undefined;
+  hasFloorPlanDims: boolean;
+  hasBuildingResearch: boolean;
+  hasSpatialViolations: boolean;
+  hasCrossRoomData: boolean;
+}
+
+export interface ConfidenceIntervalResult {
+  low: number;
+  high: number;
+  uncertainty: number;
+  factors: string[];
+}
+
+/**
+ * Confidence interval around a per-item harmony_score: wider when the
+ * underlying data is sparse (no floor plan, no building research, no
+ * cross-room context) or the math layer already flagged violations.
+ *
+ * Extracted from app/api/area-analysis/route.ts so the `harmonyScore`
+ * zero-vs-missing distinction (0 is a real, documented score for dropped
+ * items — see validation-agent.ts's harmony_score=0 contract) is covered by
+ * a direct unit test instead of only living inside a 2000+ line route
+ * handler.
+ */
+export function computeConfidenceInterval(
+  inputs: ConfidenceIntervalInputs
+): ConfidenceIntervalResult {
+  let uncertainty = 0.5; // base uncertainty
+  if (!inputs.hasFloorPlanDims) uncertainty += 0.4; // no floor plan dims → spatial scores unreliable
+  if (!inputs.hasBuildingResearch) uncertainty += 0.3; // no building research → less context
+  if (inputs.hasSpatialViolations) uncertainty += 0.2; // violations introduce uncertainty
+  if (!inputs.hasCrossRoomData) uncertainty += 0.2; // no cross-room data
+
+  // `??` (not `||`) — harmony_score=0 is a real, documented value for
+  // dropped items and must not be coerced to the 5-point fallback.
+  const score = inputs.harmonyScore ?? 5;
+
+  return {
+    low: Math.max(0, Math.round((score - uncertainty) * 10) / 10),
+    high: Math.min(10, Math.round((score + uncertainty) * 10) / 10),
+    uncertainty: Math.round(uncertainty * 10) / 10,
+    factors: [
+      ...(!inputs.hasFloorPlanDims ? ["no room dimensions"] : []),
+      ...(!inputs.hasBuildingResearch ? ["no building research"] : []),
+      ...(inputs.hasSpatialViolations ? ["has spatial violations"] : []),
+      ...(!inputs.hasCrossRoomData ? ["no cross-room data"] : []),
+    ],
+  };
+}
+
 export function computeHarmonyScores(
   analysis: Record<string, unknown>,
   context: {
