@@ -68,8 +68,12 @@ export async function POST(request: Request) {
   // not a legitimate not-found — and losing roomImageUrls degrades the vision
   // call's grounding (product-extractor.ts uses it to match visual_style_tags
   // to the actual room), not just metadata. Hard-fail rather than silently
-  // spend the daily quota on a degraded extraction (matches the room-fetch
-  // precedent in area-analysis/refine-chat/route.ts, which 404s the same way).
+  // running a poorly-grounded extraction on that degraded context (matches
+  // the room-fetch precedent in area-analysis/refine-chat/route.ts, which
+  // 404s the same way). Note: checkDailySpend() above already incremented
+  // the caller's daily quota unconditionally at request entry — this fetch
+  // failing doesn't change that either way, so the return here is about
+  // extraction quality, not spend.
   const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("project_id, room_images(*)")
