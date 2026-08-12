@@ -266,7 +266,7 @@ describe("isScrapeContextSufficientLLM — scrape-sufficiency guard", () => {
 
   it("passes through a true verdict from the model", async () => {
     respondWith({ sufficient: true });
-    expect(await isScrapeContextSufficientLLM("A" .repeat(50))).toBe(true);
+    expect(await isScrapeContextSufficientLLM("A".repeat(50))).toBe(true);
   });
 
   it("passes through a false verdict from the model", async () => {
