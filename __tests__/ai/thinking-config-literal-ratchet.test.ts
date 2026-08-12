@@ -1,38 +1,59 @@
 /**
- * Ratchet for `.chat()` call sites whose `thinkingConfig` value isn't routed
- * through the central `thinkingFor(task)` policy (lib/ai/thinking.ts).
+ * Ratchet for `thinkingConfig` values that aren't routed through the central
+ * `thinkingFor(task)` policy (lib/ai/thinking.ts).
  *
- * harness-ratchet.test.ts only checks that SOME `thinkingConfig` is present at
- * a call site — it does not check that the value came from `thinkingFor()`.
- * A literal object currently happens to match `DEFAULT_THINKING` for its task,
- * so there is no live cost-contract violation today, but if `DEFAULT_THINKING`
- * (lib/ai/models.ts) ever changes for that task, a non-policy-routed site
- * silently does NOT follow — and nothing fails (APT-24).
+ * harness-ratchet.test.ts only checks that a `.chat({...})` call has SOME
+ * `thinkingConfig` — it does not check that the value came from
+ * `thinkingFor()`. A literal object currently happens to match
+ * `DEFAULT_THINKING` for its task, so there is no live cost-contract
+ * violation today, but if `DEFAULT_THINKING` (lib/ai/models.ts) ever changes
+ * for that task, a non-policy-routed site silently does NOT follow — and
+ * nothing fails (APT-24).
  *
- * DETECTION: mirrors harness-ratchet.test.ts's `.chat({...})` brace-matching
- * (not a naive whole-file regex), then for every `thinkingConfig:` key inside
- * that call, brace/paren-matches its VALUE expression out to the next
- * top-level comma or the call's closing brace. A value counts as
- * policy-routed only if it textually starts with `thinkingFor(`. This catches
- * not just a direct literal (`{ thinkingLevel: "low" }`) but also indirection
- * that a naive "does `{` immediately follow the colon" check misses — e.g.
- * `context.thinkingConfig ?? { thinkingLevel: "low" }` (lib/agents/validation-agent.ts)
- * or a variable built from a literal via a ternary (lib/agents/mockup-agent.ts)
- * — both real, already-existing hardcoded fallbacks that a first draft of this
- * ratchet (naive `\bthinkingConfig\s*:\s*\{` matching) missed entirely, caught
- * by independent review before this landed.
+ * SCOPE — the WHOLE FILE, not just `.chat({...})` calls. An earlier draft of
+ * this ratchet scanned only inside brace-matched `.chat({...})` call text
+ * (mirroring harness-ratchet.test.ts), which silently dropped
+ * `lib/agents/computer-use/agent-loop.ts`'s `thinkingConfig: { thinkingLevel:
+ * ThinkingLevel.HIGH }` — a real, pre-existing site that bypasses
+ * `geminiProvider.chat()` entirely (calls `ai.models.generateContent()`
+ * directly) and is therefore invisible to any `.chat()`-scoped guard. Caught
+ * by independent review before this landed. Scanning the whole file instead
+ * needs no call-boundary detection at all: every non-optional
+ * `thinkingConfig:` key in this codebase (verified — grepped for
+ * `^\s*thinkingConfig\s*:` outside `?:` type-annotation fields) is a real
+ * call-site value, never an unrelated object shape, so there is nothing else
+ * for a whole-file scan to false-positive on. NOTE: `agent-loop.ts`'s site is
+ * ALSO tracked by `high-thinking-exceptions.test.ts`'s `KNOWN_BYPASSES`
+ * register, for a narrower, HIGH-specific reason (cost-tier drift). The two
+ * registers overlap on this one entry by design — that test would stop
+ * catching it if it were ever changed to a non-HIGH literal without going
+ * through `thinkingFor()`; THIS ratchet keeps catching it either way, which
+ * is why both exist.
+ *
+ * DETECTION: find every `thinkingConfig:` key, then bracket/paren-match its
+ * VALUE expression out to the next top-level comma or enclosing close. A
+ * value counts as policy-routed only if it is EXACTLY a `thinkingFor(...)`
+ * call — not merely prefixed by one. This catches indirection a naive
+ * "does `{` immediately follow the colon" check misses — e.g.
+ * `context.thinkingConfig ?? { thinkingLevel: "low" }`
+ * (lib/agents/validation-agent.ts) or a variable built from a literal via a
+ * ternary (lib/agents/mockup-agent.ts) — and also catches the inverse trap of
+ * a PREFIX-only check: `thinkingFor("task") ?? { thinkingLevel: "low" }`
+ * would pass a naive `/^thinkingFor\(/.test(value)`, masking a real hardcoded
+ * fallback behind a legitimate-looking prefix. Both gaps were found by
+ * independent review, not written in from the start.
  *
  * This is a debt register, not a blessed exception, in the same shape as
- * high-thinking-exceptions.test.ts and the off-system-palette ratchet: it pins
- * the CURRENT non-policy-routed sites in place (per file, exact count) so the
- * number can only go DOWN as sites migrate to thinkingFor(), and any NEW
- * non-policy-routed site — anywhere, including a file with zero today — fails
- * CI immediately instead of silently growing the debt.
+ * high-thinking-exceptions.test.ts and the off-system-palette ratchet: it
+ * pins the CURRENT non-policy-routed sites in place (per file, exact count)
+ * so the number can only go DOWN as sites migrate to thinkingFor(), and any
+ * NEW non-policy-routed site — anywhere, including a file with zero today —
+ * fails CI immediately instead of silently growing the debt.
  *
  * TO MIGRATE A SITE: replace the literal/indirect value with
- * `thinkingFor("task-name")`, where `defaultThinking("task-name")` resolves to
- * the same thinking level (verify behavior is unchanged), then lower or delete
- * that file's entry below. The second test FAILS if you forget, so an
+ * `thinkingFor("task-name")`, where `defaultThinking("task-name")` resolves
+ * to the same thinking level (verify behavior is unchanged), then lower or
+ * delete that file's entry below. The second test FAILS if you forget, so an
  * improvement cannot leave slack behind.
  */
 import { describe, it, expect } from "vitest";
@@ -64,6 +85,7 @@ const KNOWN_LITERAL_SITES: Record<string, number> = {
   "app/api/mobile/analyze/route.ts": 1,
   "lib/agents/bundle-optimizer.ts": 2,
   "lib/agents/category-planner.ts": 2,
+  "lib/agents/computer-use/agent-loop.ts": 1,
   "lib/agents/correction-planner.ts": 1,
   "lib/agents/design-coordinator.ts": 1,
   "lib/agents/fit-scorer.ts": 3,
@@ -114,71 +136,66 @@ function stripComments(src: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
-/** Find each `.chat({ ... })` call and return the brace-matched argument text. */
-function findChatCalls(src: string): string[] {
-  const calls: string[] = [];
-  const marker = ".chat({";
-  let idx = src.indexOf(marker);
-  while (idx !== -1) {
-    let depth = 0;
-    let i = idx + marker.length - 1; // points at '{'
-    const start = i;
-    for (; i < src.length; i++) {
-      const c = src[i];
-      if (c === "{") depth++;
-      else if (c === "}") {
-        depth--;
-        if (depth === 0) break;
-      }
-    }
-    calls.push(src.slice(start, i + 1));
-    idx = src.indexOf(marker, i + 1);
-  }
-  return calls;
-}
-
 /**
- * Within a brace-matched `.chat({...})` call, find every `thinkingConfig:`
- * key and extract its value expression — bracket/paren-matched out to the
- * next top-level comma or the enclosing object's closing brace. This is what
- * lets `context.thinkingConfig ?? { thinkingLevel: "low" }` and a plain
- * variable reference (e.g. `thinkingCfg`, itself built elsewhere from a
- * literal) both get inspected as real values, not just an immediate `{`.
+ * Find every `thinkingConfig:` key in the source and extract its VALUE
+ * expression — bracket/paren-matched out to the next top-level comma or
+ * enclosing close. `thinkingConfig?:` (an optional type-annotation field, not
+ * a value assignment) does NOT match, since `?` breaks `\s*` between the
+ * identifier and the colon.
  */
-function extractThinkingConfigValues(callText: string): string[] {
+function extractThinkingConfigValues(src: string): string[] {
   const values: string[] = [];
   const marker = /\bthinkingConfig\s*:\s*/g;
-  let _m: RegExpExecArray | null;
-  while ((_m = marker.exec(callText))) {
+  let _cursor: RegExpExecArray | null;
+  while ((_cursor = marker.exec(src))) {
     let i = marker.lastIndex;
     let depth = 0;
     const start = i;
-    for (; i < callText.length; i++) {
-      const c = callText[i];
+    for (; i < src.length; i++) {
+      const c = src[i];
       if (c === "{" || c === "(" || c === "[") depth++;
       else if (c === "}" || c === ")" || c === "]") {
-        if (depth === 0) break; // hit the enclosing call's own close
+        if (depth === 0) break; // hit the enclosing object's own close
         depth--;
       } else if (c === "," && depth === 0) {
         break;
       }
     }
-    values.push(callText.slice(start, i).trim());
+    values.push(src.slice(start, i).trim());
     marker.lastIndex = i;
   }
   return values;
 }
 
-/** A value routed through the central policy function. */
-const POLICY_ROUTED = /^thinkingFor\s*\(/;
+/**
+ * True only if `value` is EXACTLY a `thinkingFor(...)` call — not merely
+ * prefixed by one. A prefix-only check would classify
+ * `thinkingFor("task") ?? { thinkingLevel: "low" }` as policy-routed, which
+ * masks a real hardcoded fallback behind a legitimate-looking start.
+ */
+function isPolicyRouted(value: string): boolean {
+  const prefix = /^thinkingFor\s*\(/.exec(value);
+  if (!prefix) return false;
+  let depth = 0;
+  let i = prefix[0].length - 1; // index of the opening '('
+  for (; i < value.length; i++) {
+    const c = value[i];
+    if (c === "(") depth++;
+    else if (c === ")") {
+      depth--;
+      if (depth === 0) {
+        i++;
+        break;
+      }
+    }
+  }
+  return value.slice(i).trim() === "";
+}
 
 function countNonPolicySites(src: string): number {
   let n = 0;
-  for (const call of findChatCalls(src)) {
-    if (!call.includes("thinkingConfig")) continue;
-    for (const value of extractThinkingConfigValues(call)) {
-      if (!POLICY_ROUTED.test(value)) n++;
-    }
+  for (const value of extractThinkingConfigValues(src)) {
+    if (!isPolicyRouted(value)) n++;
   }
   return n;
 }
@@ -210,11 +227,13 @@ describe("thinkingConfig sites not routed through thinkingFor() are pinned debt 
     ).toEqual(KNOWN_LITERAL_SITES);
   });
 
-  it("catches indirection, not just an immediate literal (the scan is not naive)", () => {
-    // A first draft of this ratchet matched only `thinkingConfig: {` directly
-    // and missed both of these real, pre-existing shapes (lib/agents/validation-agent.ts
-    // and lib/agents/mockup-agent.ts) — caught by independent review. Pin both
-    // shapes here so a future simplification can't reintroduce the blind spot.
+  it("catches indirection and a non-.chat() bypass, not just an immediate literal", () => {
+    // A first draft matched only `thinkingConfig: {` directly and missed
+    // context.thinkingConfig ?? {...} (validation-agent.ts) and a
+    // ternary-built variable (mockup-agent.ts). A second draft scoped
+    // detection to brace-matched `.chat({...})` calls and silently dropped
+    // agent-loop.ts's generateContent()-based bypass. Both were caught by
+    // independent review. Pin all three shapes here.
     const fallback = `
       const response = await geminiProvider.chat({
         model,
@@ -232,7 +251,26 @@ describe("thinkingConfig sites not routed through thinkingFor() are pinned debt 
     `;
     expect(countNonPolicySites(variableIndirection)).toBe(1);
 
-    // ...and does not fire on the policy-routed form that replaces them.
+    const nonChatBypass = `
+      const response = await ai.models.generateContent({
+        model,
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+        },
+      });
+    `;
+    expect(countNonPolicySites(nonChatBypass)).toBe(1);
+
+    // A thinkingFor(...) PREFIX with a hardcoded fallback tacked on must NOT
+    // be classified as policy-routed just because it starts correctly.
+    const maskedFallback = `
+      const response = await geminiProvider.chat({
+        thinkingConfig: thinkingFor("validation") ?? { thinkingLevel: "low" },
+      });
+    `;
+    expect(countNonPolicySites(maskedFallback)).toBe(1);
+
+    // ...and a genuine policy-routed call is not flagged.
     const policyRouted = `
       const response = await geminiProvider.chat({
         model,
