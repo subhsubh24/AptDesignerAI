@@ -64,17 +64,23 @@ export async function POST(request: Request) {
   // Fetch room → project for design context. Pull room photos so the
   // extractor always has the target room as visual context (never forgets
   // what we're furnishing).
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("project_id, room_images(*)")
     .eq("id", room_id)
     .single();
+  if (roomError) {
+    console.error("[products.ingest] Room fetch failed after ownership check:", roomError.message);
+  }
   const roomImageUrls: string[] = (
     (room?.room_images as Array<{ image_url: string }> | undefined) || []
   ).map((img) => img.image_url);
-  const { data: project } = room?.project_id
+  const { data: project, error: projectError } = room?.project_id
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
-    : { data: null };
+    : { data: null, error: null };
+  if (projectError) {
+    console.error("[products.ingest] Project fetch failed:", projectError.message);
+  }
   const designProfile = buildDesignProfile(project);
 
   // Create agent run
