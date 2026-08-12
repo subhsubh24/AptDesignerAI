@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeHarmonyScores,
+  computeConfidenceInterval,
   formatMathScoresForPrompt,
 } from "@/lib/validation/harmony-math";
 import type { DesignDirection } from "@/lib/types/database";
@@ -179,6 +180,80 @@ describe("computeHarmonyScores — cross-room direction gating", () => {
     expect(result.cross_room_directions!.per_room[0].name).toBe("Bedroom");
     expect(result.cross_room_directions!.mean_compatibility).toBeGreaterThanOrEqual(0);
     expect(result.cross_room_directions!.mean_compatibility).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("computeConfidenceInterval", () => {
+  const richContext = {
+    hasFloorPlanDims: true,
+    hasBuildingResearch: true,
+    hasSpatialViolations: false,
+    hasCrossRoomData: true,
+  };
+
+  it("a harmony_score of 0 (a dropped item) is NOT coerced to the 5-point fallback", () => {
+    // Regression: the inline route code used `(item.harmony_score as number) || 5`,
+    // which treats the legitimate, documented harmony_score=0 (validation-agent.ts's
+    // "drop=true and harmony_score=0" contract) as falsy and substitutes 5 — giving
+    // dropped items a wildly wrong mid-range confidence band instead of one centered
+    // on their real score of 0.
+    const dropped = computeConfidenceInterval({ harmonyScore: 0, ...richContext });
+    const kept = computeConfidenceInterval({ harmonyScore: 5, ...richContext });
+    expect(dropped).not.toEqual(kept);
+    // With full context uncertainty is 0.5, so a 0 score's interval sits at the floor.
+    expect(dropped.low).toBe(0);
+    expect(dropped.high).toBe(0.5);
+  });
+
+  it("only null/undefined fall back to 5, not 0", () => {
+    expect(computeConfidenceInterval({ harmonyScore: null, ...richContext }).low).toBe(4.5);
+    expect(computeConfidenceInterval({ harmonyScore: undefined, ...richContext }).low).toBe(4.5);
+  });
+
+  it("widens uncertainty for each missing data source, additively", () => {
+    const full = computeConfidenceInterval({ harmonyScore: 6, ...richContext });
+    expect(full.uncertainty).toBe(0.5);
+
+    const sparse = computeConfidenceInterval({
+      harmonyScore: 6,
+      hasFloorPlanDims: false,
+      hasBuildingResearch: false,
+      hasSpatialViolations: true,
+      hasCrossRoomData: false,
+    });
+    // 0.5 base + 0.4 + 0.3 + 0.2 + 0.2
+    expect(sparse.uncertainty).toBe(1.6);
+    expect(sparse.factors).toEqual([
+      "no room dimensions",
+      "no building research",
+      "has spatial violations",
+      "no cross-room data",
+    ]);
+  });
+
+  it("clamps low/high to the [0, 10] score range", () => {
+    const atFloor = computeConfidenceInterval({
+      harmonyScore: 0.2,
+      hasFloorPlanDims: false,
+      hasBuildingResearch: false,
+      hasSpatialViolations: true,
+      hasCrossRoomData: false,
+    });
+    expect(atFloor.low).toBe(0);
+
+    const atCeiling = computeConfidenceInterval({
+      harmonyScore: 9.8,
+      hasFloorPlanDims: false,
+      hasBuildingResearch: false,
+      hasSpatialViolations: true,
+      hasCrossRoomData: false,
+    });
+    expect(atCeiling.high).toBe(10);
+  });
+
+  it("factors list is empty when every data source is present and there are no violations", () => {
+    const result = computeConfidenceInterval({ harmonyScore: 7, ...richContext });
+    expect(result.factors).toEqual([]);
   });
 });
 
