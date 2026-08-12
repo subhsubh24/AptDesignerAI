@@ -8029,3 +8029,111 @@ reliability/observability fixes, not phase-completing artifacts).
 - The shared-working-directory hazard is not fully closed by "instruct agents not to
   mutate" — a legitimate mutation-testing technique can still touch tracked files.
   `git status` immediately before every push is the real mitigation; keep doing it.
+
+## 2026-08-12 (session on branch `claude/sleepy-goldberg-m5vact`) — claimed APT-24, 3-cycle-reviewed ratchet test, 2 more disjoint fixes from a scout sweep, filed APT-25/APT-26
+
+This session was pre-assigned a single fixed branch (`claude/sleepy-goldberg-m5vact`)
+with instructions not to open a PR unless asked — same branch-discipline pattern as the
+concurrent APT-13 session on `claude/sleepy-goldberg-av7yub` this same day. All work is
+committed and pushed to that branch, not merged to the default branch.
+
+### What shipped
+1. **APT-24, step 1 — `__tests__/ai/thinking-config-literal-ratchet.test.ts`.** The issue
+   flagged 56 `.chat()` call sites hardcoding `thinkingConfig` instead of routing through
+   `thinkingFor(task)` — a maintainability/drift gap against the LLM cost contract (not a
+   live violation today, since the hardcoded values currently match `DEFAULT_THINKING`).
+   The issue's own fix direction judged migrating all 56 blind too risky for one pass;
+   worked step 1 only — a debt-register ratchet (same pattern as
+   `high-thinking-exceptions.test.ts` / the off-system-palette ratchet) pinning every
+   non-policy-routed site by file+count so the number can only go down and any NEW site
+   fails CI immediately.
+   **Independent review materially strengthened this across 3 cycles — worth recording in
+   detail so a future run doesn't re-derive the same gaps:**
+   - Cycle 1: the first draft matched only an *immediate* literal `thinkingConfig: {`.
+     Reviewer A found this missed real, already-live indirection: `lib/agents/validation-agent.ts`
+     (4 sites, `context.thinkingConfig ?? { thinkingLevel: "low" }`) and
+     `lib/agents/mockup-agent.ts` (a ternary-built variable spread into the call). Fixed by
+     bracket/paren-matching each `thinkingConfig:` value expression instead of requiring an
+     immediate `{`, classifying it as policy-routed only if it's exactly `thinkingFor(...)`.
+     Register grew 56 → 60 (34 files).
+   - Cycle 2 (fresh reviewer, re-reviewing the fixed file): that fix scoped detection to
+     brace-matched `.chat({...})` call text (mirroring `harness-ratchet.test.ts`), which
+     silently DROPPED `lib/agents/computer-use/agent-loop.ts`'s site — it bypasses
+     `geminiProvider.chat()` entirely (calls `ai.models.generateContent()` directly) and was
+     therefore invisible to any `.chat()`-scoped guard. This is exactly the "silently
+     banking slack under cover of a fix" anti-pattern the ratchet's own docstring warns
+     against. Fixed by dropping the call-boundary requirement and scanning the WHOLE FILE
+     for `thinkingConfig:` keys directly — verified safe by grepping every non-optional
+     `thinkingConfig:` occurrence in the repo and confirming none are type fields or
+     unrelated config, all are real call-site values. Also hardened the policy-routed check
+     to require the value be *exactly* `thinkingFor(...)`, not merely prefixed by it, closing
+     a `thinkingFor("x") ?? {...}` masking gap the same review flagged (not live in the
+     codebase, but pinned as a self-test case). Register grew 60 → 61 (35 files).
+   - Cycle 3 (fresh reviewer again): independently re-derived the full 61-site/35-file
+     register from source by hand-classifying all ~70 raw `thinkingConfig:` occurrences,
+     confirmed an exact match; verified the `agent-loop.ts` cross-reference against
+     `high-thinking-exceptions.test.ts`'s separate (HIGH-specific) register is accurate; traced
+     the hardened policy-routed check against 3 constructed cases including a nested-call
+     edge case. APPROVE — no further gap found, explicitly recommended NOT spending a cycle
+     4 on a theoretical (not live) string-literal-paren nuance.
+   Left the Linear issue **In Progress** (not closed) with a comment documenting this
+   3-cycle history — step 2 (migrating the 61 sites to `thinkingFor()`) remains open.
+2. **`app/api/products/ingest/route.ts` — room/project fetch error handling.** A
+   correctness scout found both Supabase `.single()` queries (room, then its project)
+   discarded `.error`. Cycle 1's log-only fix (matching the identical `refine-chat`
+   project-fetch precedent) was correct for the project fetch but Reviewer A caught it was
+   WRONG for the room fetch: ownership was already verified against the same row moments
+   earlier (so a failure here is essentially always transient, not a legitimate
+   not-found), and losing `roomImageUrls` degrades the vision extraction's grounding
+   (`product-extractor.ts` uses it to match `visual_style_tags` to the actual room) — not
+   just metadata. Fixed to hard-fail the room fetch with 500 (matching `refine-chat`'s
+   identical room-fetch precedent, which 404s the same way), keeping the project fetch as
+   log-and-continue. Added `__tests__/api/products-ingest-room-fetch-failure.test.ts`
+   proving both halves split correctly (room error → 500, extractor never called; project
+   error → still completes, 201). **Mutation-tested by the reviewer**: reverting the
+   hard-fail guard made the room-fetch test fail as required, AND revealed the pre-fix
+   code path would have thrown an unhandled `TypeError` (not a graceful degrade) — further
+   confirming the hard-fail was the right call. Cycle 2 review then caught the fix's own
+   code comment misstating how `checkDailySpend()` works: it increments the caller's daily
+   quota unconditionally at request entry (before the room fetch even runs), so the
+   hard-fail does NOT "save the quota" as the comment claimed — corrected the comment
+   (behavior unchanged, already green).
+3. **`__tests__/email/password-reset.test.ts`.** A test-coverage scout found
+   `lib/email/templates/password-reset.ts` (the account-recovery email template, with a
+   hand-rolled `escapeHtml()` defending the reset link against attribute-breakout/markup
+   injection) had zero coverage. Added 6 tests: fixed subject, enumeration-safe copy, raw
+   URL in the plain-text body, every escaped-character class, a concrete attribute-breakout
+   payload neutralized, and the same escaped URL used consistently in both the CTA href and
+   the fallback visible link. A reviewer mutation-tested it (neutered the `escapeHtml()`
+   call) — 3 of 6 tests correctly failed, confirming real teeth. 2/2 APPROVE, first cycle.
+4. **Filed, not worked.** APT-25 (`products/route.ts`'s `search_session_id` ownership
+   check swallows DB errors the same way the ingest route did — small, log-only fix
+   direction already scoped). APT-26 (9 of 10 `lib/email/templates/lifecycle.ts` retention
+   email functions — activation/habit/winback sequences on live cron paths — have zero
+   direct test coverage; only `buildPaidWelcomeEmail1` is tested).
+
+### Bookkeeping
+Gate green throughout, re-verified after every commit: `npx tsc --noEmit` clean, `npm
+test` 3024/3036 passing (0 regressions across all changes), `npm run check:determinism`
+clean, `npx eslint` clean (0 errors AND 0 warnings — this repo's contract forbids new
+warnings too, caught and fixed twice this run) on every touched file. 7 commits pushed to
+`claude/sleepy-goldberg-m5vact`. Every change independently reviewed by fresh Sonnet
+reviewers with a real APPROVE/REQUEST_CHANGES cycle each (not rubber-stamped — 3 of the 3
+changes had at least one REQUEST_CHANGES round that caught a real, substantive gap before
+landing). APT-24 left In Progress with a narrowing comment; APT-25/APT-26 filed with
+runnable acceptance checks. No migration, no live secret, no ROADMAP Track/DoD box ticked
+(all below that granularity).
+
+### Carry-forward
+- Board: APT-9 still correctly parked (owner-action-only trigger-edit block, re-confirmed
+  earlier the same day per its own latest comment — not re-derived here). APT-13 is
+  concurrently being worked by a different session on a different branch
+  (`claude/sleepy-goldberg-av7yub`) — not touched by this session, avoiding duplicate work.
+  APT-24 (step 2, migrate 61 sites), APT-25, APT-26 remain open and genuinely claimable.
+- All prior DO-NOT-RE-FLAG / carry-forward entries still hold; nothing this run
+  contradicted them.
+- **Review-cycle pattern worth noting**: every one of this run's 3 changes needed at least
+  one real REQUEST_CHANGES round, and two of the three needed two. None were rubber-stamps
+  and none were stuck oscillating (each round found a genuinely new, distinct gap, not the
+  same complaint restated) — this is the review process working as designed, not a sign of
+  poor first-draft quality to "fix" by skipping review depth.
