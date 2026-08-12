@@ -156,8 +156,10 @@ export interface OrchestrationResult {
 /**
  * Map budget mode to a single search tier. Searching only the user's price
  * level cuts Tavily queries by ~66% and downstream scoring proportionally.
+ *
+ * Exported for tests only.
  */
-function getSearchTiers(budgetMode: string): PriceTier[] {
+export function getSearchTiers(budgetMode: string): PriceTier[] {
   switch (budgetMode) {
     case "budget": return ["budget"];
     case "best_possible": return ["high_end"];
@@ -224,13 +226,38 @@ export class TokenBudget {
 /** Token cap reads from centralized config; env var override available. */
 const DEFAULT_TOKEN_CAP = ORCHESTRATOR.defaultTokenCap;
 
+// ─── Price-Tier Fit ────────────────────────────────────────────
+
+/**
+ * Score how well a price fits a tier's price range, for post-extraction
+ * tier reclassification. Search queries are approximate (a budget search can
+ * surface a $700 item), so after extraction we know the ACTUAL price and
+ * reclassify each product into the tier whose range best matches it — the
+ * best-fit tier wins; a product stays in its origin tier only if no other
+ * tier scores strictly higher.
+ *
+ * Exported for tests only.
+ */
+export function tierFitScore(price: number, range?: { min: number; max: number }): number {
+  if (!range) return -Infinity;
+  // Perfect: inside the range → 1.0
+  if (price >= range.min && price <= range.max) return 1.0;
+  // Partial: within ±40% of the range → inverse distance (0..1)
+  if (price >= range.min * 0.6 && price <= range.max * 1.4) {
+    if (price < range.min) return 1.0 - (range.min - price) / (range.min * 0.4);
+    return 1.0 - (price - range.max) / (range.max * 0.4);
+  }
+  return -Infinity;
+}
+
 // ─── Sentinel Domain Tracker ──────────────────────────────────
 // Tracks extraction failure rates per domain to skip domains that
 // consistently return sentinel titles (category pages, 403s, etc.)
 
 const domainSentinelStats = new Map<string, { total: number; sentinels: number }>();
 
-function trackExtraction(url: string, isSentinel: boolean) {
+/** Exported for tests only. Records against module-scope state — use a unique hostname per test. */
+export function trackExtraction(url: string, isSentinel: boolean) {
   try {
     const domain = new URL(url).hostname;
     const entry = domainSentinelStats.get(domain) ?? { total: 0, sentinels: 0 };
@@ -275,7 +302,8 @@ export function isProactivelyBlockedDomain(url: string): boolean {
   } catch { return false; }
 }
 
-function isDomainBlocked(url: string): boolean {
+/** Exported for tests only. Reads the same module-scope state `trackExtraction` writes. */
+export function isDomainBlocked(url: string): boolean {
   if (isProactivelyBlockedDomain(url)) return true;
   try {
     const domain = new URL(url).hostname;
@@ -1441,29 +1469,11 @@ export async function runAgenticSearch(
     await cuDonePromise;
 
     // ── Price-tier reclassification ─────────────────────────────
-    // Products often land in the wrong tier because search queries
-    // are approximate (budget search surfaces a $700 item; luxury search
-    // surfaces a $200 item). After extraction we know the ACTUAL price —
-    // reclassify each product into the tier whose price range best
-    // matches it. Previous logic required the price to be both inside
-    // the candidate tier's range AND outside 0.5-1.5x of the origin
-    // tier's range, which let many misclassified products slip through
-    // and produced inverted totals (budget > luxury).
-    //
-    // New logic: for each product, score every tier by how well its
-    // range contains the price. Best-fit tier wins. A product stays
-    // in its origin tier only if no other tier is a strictly better fit.
-    const tierFitScore = (price: number, range?: { min: number; max: number }): number => {
-      if (!range) return -Infinity;
-      // Perfect: inside the range → 1.0
-      if (price >= range.min && price <= range.max) return 1.0;
-      // Partial: within ±40% of the range → inverse distance (0..1)
-      if (price >= range.min * 0.6 && price <= range.max * 1.4) {
-        if (price < range.min) return 1.0 - (range.min - price) / (range.min * 0.4);
-        return 1.0 - (price - range.max) / (range.max * 0.4);
-      }
-      return -Infinity;
-    };
+    // Products often land in the wrong tier because search queries are
+    // approximate (budget search surfaces a $700 item; luxury search surfaces
+    // a $200 item). After extraction we know the ACTUAL price — reclassify
+    // each product using `tierFitScore` (hoisted to module scope, tested
+    // independently above).
 
     for (const [category, tierResults] of Object.entries(extractedByCategory)) {
       const catBriefForTier = brief.categories.find((c) => c.category === category);
