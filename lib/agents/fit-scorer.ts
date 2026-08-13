@@ -1,6 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
   getCombinedEvalPrompt,
@@ -301,7 +302,7 @@ async function scoreProductImpl(
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           mediaResolution: "ultra_high",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("scoring"),
           cacheScope:
             cachedRoomImages.length > 0
               ? { sessionKey: roomSessionKey, content: cachedRoomImages }
@@ -609,7 +610,7 @@ Return JSON ONLY matching this shape (no prose, no markdown fences):
               seed: DETERMINISTIC_SEED,
               responseMimeType: "application/json",
               mediaResolution: "ultra_high",
-              thinkingConfig: { thinkingLevel: "low" },
+              thinkingConfig: thinkingFor("scoring"),
               cacheScope:
                 cachedRoomImages.length > 0
                   ? { sessionKey: roomSessionKey, content: cachedRoomImages }
@@ -932,7 +933,7 @@ Return JSON:
               seed: DETERMINISTIC_SEED,
               responseSchema: QUICK_SCORE_GEMINI_SCHEMA,
               mediaResolution: "ultra_high",
-              thinkingConfig: { thinkingLevel: "minimal" },
+              thinkingConfig: thinkingFor("quick_score"),
             });
 
             batchTokens += response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { parsePagination } from "@/lib/utils/pagination";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
@@ -92,12 +92,15 @@ export async function POST(request: Request) {
   // than nulling: a caller sending a session from a different room has a bug,
   // and quietly dropping the field would hide it.
   if (body.search_session_id) {
-    const { data: session } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from("search_sessions")
       .select("id")
       .eq("id", body.search_session_id)
       .eq("room_id", body.room_id)
       .maybeSingle();
+    if (sessionError) {
+      logServerError("products.search_session_ownership", sessionError);
+    }
     if (!session) {
       return NextResponse.json(
         { error: "search_session_id does not belong to this room" },
