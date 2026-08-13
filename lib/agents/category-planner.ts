@@ -19,6 +19,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -229,7 +230,7 @@ You have Google Search. Use it to verify whether the categories you're proposing
             seed: DETERMINISTIC_SEED,
             responseSchema: CATEGORY_PLAN_GEMINI_SCHEMA,
             responseMimeType: "application/json",
-            thinkingConfig: { thinkingLevel: "low" },
+            thinkingConfig: thinkingFor("validation"),
             tools,
           });
         } catch (err) {
@@ -242,7 +243,7 @@ You have Google Search. Use it to verify whether the categories you're proposing
             messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
             max_tokens: 16000,
             seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel: "low" },
+            thinkingConfig: thinkingFor("validation"),
             tools,
           });
         }

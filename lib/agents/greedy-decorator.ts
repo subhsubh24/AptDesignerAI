@@ -11,6 +11,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { resolveImageBlocks } from "@/lib/ai/resolve-image";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -255,7 +256,7 @@ export async function runDiagnosisExpansion(
         messages: [{ role: "user", content }],
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED + i,
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("diagnosis", "low"),
         tools: [
           { googleSearch: {} as Record<string, never> },
           { codeExecution: {} as Record<string, never> },
@@ -323,7 +324,7 @@ export async function runDiagnosisExpansion(
           messages: [{ role: "user", content: retryContent }],
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED + i,
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("diagnosis", "low"),
           tools: [
             { googleSearch: {} as Record<string, never> },
             { codeExecution: {} as Record<string, never> },
@@ -525,7 +526,7 @@ async function runCritiquePass(args: {
       messages: [{ role: "user", content }],
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("diagnosis", "low"),
       tools: [
         { codeExecution: {} as Record<string, never> },
       ],

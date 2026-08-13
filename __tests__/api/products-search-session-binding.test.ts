@@ -41,7 +41,10 @@ const FOREIGN_SESSION = { id: "sess-foreign", room_id: "room-other" };
 type Captured = { row?: Record<string, unknown> };
 
 /** Mimics the id + room_id filter pair; matches only when BOTH agree. */
-function makeSessionsQuery(sessions: Array<Record<string, unknown>>) {
+function makeSessionsQuery(
+  sessions: Array<Record<string, unknown>>,
+  queryError: { message: string } | null = null,
+) {
   const filters: Record<string, unknown> = {};
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
@@ -49,20 +52,25 @@ function makeSessionsQuery(sessions: Array<Record<string, unknown>>) {
     filters[col] = val;
     return chain;
   });
-  const resolve = () => ({
-    data: sessions.find((s) => Object.entries(filters).every(([k, v]) => s[k] === v)) ?? null,
-    error: null,
-  });
+  const resolve = () =>
+    queryError
+      ? { data: null, error: queryError }
+      : {
+          data: sessions.find((s) => Object.entries(filters).every(([k, v]) => s[k] === v)) ?? null,
+          error: null,
+        };
   chain.maybeSingle = vi.fn(() => Promise.resolve(resolve()));
   chain.single = vi.fn(() => Promise.resolve(resolve()));
   return chain;
 }
 
-function makeClient(captured: Captured) {
+function makeClient(captured: Captured, sessionQueryError: { message: string } | null = null) {
   return {
     auth: { getUser: vi.fn(async () => ({ data: { user: { id: CALLER } } })) },
     from: vi.fn((table: string) => {
-      if (table === "search_sessions") return makeSessionsQuery([OWN_SESSION, FOREIGN_SESSION]);
+      if (table === "search_sessions") {
+        return makeSessionsQuery([OWN_SESSION, FOREIGN_SESSION], sessionQueryError);
+      }
       const chain: Record<string, unknown> = {};
       chain.insert = vi.fn((row: Record<string, unknown>) => {
         captured.row = row;
@@ -146,5 +154,27 @@ describe("products POST — search_session_id must be bound to the room", () => 
 
     expect(res.status).toBe(400);
     expect(captured.row).toBeUndefined();
+  });
+
+  it("logs a genuine DB error on the ownership check instead of silently treating it as not-found (APT-25)", async () => {
+    const captured: Captured = {};
+    const dbError = { message: "connection reset by peer" };
+    mockCreateClient.mockResolvedValue(makeClient(captured, dbError));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await productsPost(
+      jsonReq({ room_id: OWN_ROOM, title: "Sofa", search_session_id: OWN_SESSION.id }) as never,
+    );
+
+    // Still 400 (the same client-facing behavior as not-found) — but the real
+    // cause must now be logged server-side instead of discarded.
+    expect(res.status).toBe(400);
+    expect(captured.row).toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[products\.search_session_ownership\].*connection reset by peer/),
+      dbError,
+    );
+
+    errorSpy.mockRestore();
   });
 });

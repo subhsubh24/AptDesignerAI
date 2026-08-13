@@ -1,5 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPromptCore } from "@/lib/prompts/system";
 import {
   getBundleScoringPrompt,
@@ -300,7 +301,7 @@ export async function evaluateBundle(
           max_tokens: maxTokens,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("bundle"),
         });
 
         const raw = extractJsonObject(response.content);
@@ -491,7 +492,7 @@ export async function generateBundleVibe(
           max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("bundle"),
         });
         const raw = extractJsonObject(response.content);
         const data = BundleVibeResponseSchema.parse(raw);
