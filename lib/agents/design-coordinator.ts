@@ -26,6 +26,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -355,7 +356,7 @@ Begin. Call your first tool.`;
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
       ],
-      thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
+      thinkingConfig: thinkingFor("validation", undefined, { includeThoughts: true }),
     });
 
     totalTokens +=
