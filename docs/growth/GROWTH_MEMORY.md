@@ -2657,3 +2657,96 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   run, ~45 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
   are pure Vercel environment variable sets.
+
+---
+
+## Run 24 — 2026-08-13
+
+### What we found
+- All Run 1-23 owner blockers remain unresolved: re-verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` all
+  still `status: open`). `PENDING_OPS.md`'s own `as_of` is still `2026-08-07`, unchanged since Run 21
+  (now spanning Runs 21-24) — no owner action has landed in the ~6 days since Run 23.
+- Re-probed `https://aptdesignerai.com/` a TWENTIETH time: still `connect_rejected`/gateway 502 to
+  CONNECT, identical signature to every prior probe, cross-checked directly against the agent-proxy's
+  own `/__agentproxy/status` `recentRelayFailures` log (2026-08-13T05:10:02.502Z). Funnel remains
+  0/null across every metric — correct, no reachable source.
+- Neither independent scorecard moved since Run 23: `docs/growth/GTM_SCORECARD.md` is still Run 5
+  (`as_of: 2026-08-03`), and `docs/quality/QUALITY_SCORECARD.md` is still the 11th grade
+  (`as_of: 2026-08-10`, overall C, `ship_gate_met: false`, four sub-A ship-critical dims:
+  functional_reality, security_rls, design_taste, artifact_integrity) — both re-verified via the
+  GitHub API (`mcp__github__list_commits` on each file's path) rather than the shallow local clone,
+  per standing practice since Run 19. Both S6 outreach lanes stay hard-off for the 24th consecutive
+  run.
+- Between Run 23 and Run 24 the Product Factory shipped 9 more commits (through PR #873, Run
+  158-161 ledgers): a fix for `harmony_score=0` being miscoerced to 5 in area-analysis confidence
+  intervals, a fetch timeout on product-loading so a hang can't spin the sourcing page forever, a
+  silently-discarded DB error now logged in refine-chat, a Stripe SDK bump, four in-range dependency
+  bumps, and test-coverage additions — verified via `git log --oneline 02d155f..HEAD -- <every
+  GTM-owned doc + ROADMAP.md + VISION.md>` that NONE of it touched any GTM-owned marketing doc, the
+  roadmap, or the vision (the only file in that diff range is `docs/loop-memory.md`, a
+  Product-Factory-owned file, 229 insertions). Nothing to reconcile this run.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-08-13; refreshed the
+  `internal_metrics_api` reason with the 20th probe attempt; refreshed the `gtm_scorecard` validation
+  entry with this run's re-check of both independent scorecards (both unchanged) plus the
+  GTM-doc-consistency git-log check; refreshed `web_research` with the Trustpilot re-probe (still
+  HTTP 403, unchanged) and a note that Reddit's exclusion is a standing policy decision, not
+  re-probed for reachability since reachability isn't the gating question; bumped `demand_signal.as_of`
+  and added a Run 24 method-note (both structural gaps re-probed, no new citation attempted, reasoning
+  stated explicitly — see below) ahead of Run 23's verbatim history (kept intact, not overwritten);
+  refreshed `learnings`/`next_actions`/`owner_blockers` for the 24th consecutive circuit-breaker run.
+  Ran `npm install` + `node scripts/validate-gtm.mjs` — parses clean.
+- **Verification only, no further doc edits needed**: confirmed via the GitHub API that neither
+  GTM_SCORECARD.md nor QUALITY_SCORECARD.md has a new independent pass since Run 23, and via local
+  `git log` that no GTM-owned doc, ROADMAP.md, or VISION.md drifted from the shipped product in the
+  interim.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (20th probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD,
+  unchanged) — both S6 lanes stay hard-off. No genuinely new strategic target surfaced this run
+  either (a pre-launch, not-yet-ship-ready product is a weak pitch to a journalist/partner; forcing
+  one to look busy would violate OUTREACH.md's own bar). Zero outreach drafts this run, correct.
+- Did not run a new demand-signal confirming-source search: per Run 22/23's own assessment, theme 4
+  is exhausted of distinct angles (`research_status: structurally_hard_to_corroborate`, unchanged
+  since Run 22) and themes 1-3 each already carry a theme-specific disconfirming datum as of Run 23,
+  closing the last gap the GTM Auditor (Run 5) named as open. Re-running the same two structural
+  probes (Reddit policy exclusion, Trustpilot 403) is the correct S10 every-run discipline; forcing a
+  new confirming-source search with no genuinely new lead would be padding, not evidence-building —
+  correctly declined per this doc's own standing anti-padding practice (Runs 9, 10, 17).
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new data of any kind this
+  run (funnel still 0/null; demand_signal unchanged at `emerging`, re-probed not re-strengthened) —
+  nothing clears the S3 bar for a steer.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn an independent maker≠checker reviewer this run: no landing/email/ASO copy, campaign,
+  pricing/positioning claim, outreach draft, or roadmap/vision/business-case steer shipped — this was
+  a routine S4/S5 dashboard-and-verification update (re-probes + re-reads confirming prior state still
+  holds), matching Runs 5, 8, 16, 19, 23's precedent for when a reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced beyond what's already listed there.
+
+### Lessons learned
+- **A quiet, honest run is the correct output when every lever has genuinely been pulled already.**
+  24 consecutive runs with the same 3 core owner blockers, a demand-signal research program that has
+  closed every gap the independent GTM Auditor named, and zero drift in the marketing docs against
+  the shipped product — the highest-value thing this run could do was verify all of that rigorously
+  (via the GitHub API, not a stale local clone) rather than manufacture a research cycle to look busy.
+  Padding a "found nothing new" result into a fabricated finding would be a worse outcome than stating
+  it plainly.
+- **`git log --oneline <last-GTM-commit>..HEAD -- <doc list>` is now the standard, cheap way to prove
+  "no GTM-owned doc drifted"** — worth keeping as the default first check every run before assuming a
+  consistency audit is needed, since most runs (like this one) find nothing to fix.
+- **The circuit breaker's own framing bears restating at Run 24: no further loop-side code or
+  research work changes the outcome.** The engine is built, the demand-signal case is as strong as
+  independently-verifiable public sources allow, and the marketing docs are honest and current. The
+  single remaining constraint, unchanged since Run 1, is the owner applying ~20 minutes of Vercel/
+  Supabase configuration steps already fully documented in `docs/growth/CONNECT.md`.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-23? YES — circuit breaker remains FIRED (Run 24, 24th consecutive
+  run, ~47 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets.
