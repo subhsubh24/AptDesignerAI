@@ -313,6 +313,64 @@ export function isDomainBlocked(url: string): boolean {
   } catch { return false; }
 }
 
+// ─── Pipeline Conversion Metrics ───────────────────────────────
+
+/**
+ * Funnel-stage counts needed to compute conversion rates — a subset of
+ * OrchestrationResult['stats'], kept narrow so this stays testable without
+ * constructing the full pipeline stats object.
+ */
+export interface FunnelCounts {
+  totalRawUrls: number;
+  totalAfterDedup: number;
+  totalAfterScreen: number;
+  totalExtracted: number;
+  totalQuickScored: number;
+  totalDeepScored: number;
+  totalFinal: number;
+}
+
+/**
+ * Stage-to-stage conversion rates, as whole-number percentages. A 0-count
+ * denominator yields 0 rather than NaN/Infinity, since an unreached stage
+ * has no meaningful conversion rate yet.
+ */
+export function computeConversionRates(stats: FunnelCounts): Record<string, number> {
+  return {
+    searchToDedup: stats.totalRawUrls > 0 ? Math.round((stats.totalAfterDedup / stats.totalRawUrls) * 100) : 0,
+    dedupToScreen: stats.totalAfterDedup > 0 ? Math.round((stats.totalAfterScreen / stats.totalAfterDedup) * 100) : 0,
+    screenToExtract: stats.totalAfterScreen > 0 ? Math.round((stats.totalExtracted / stats.totalAfterScreen) * 100) : 0,
+    extractToQuickScore: stats.totalExtracted > 0 ? Math.round((stats.totalQuickScored / stats.totalExtracted) * 100) : 0,
+    quickToDeep: stats.totalQuickScored > 0 ? Math.round((stats.totalDeepScored / stats.totalQuickScored) * 100) : 0,
+    deepToFinal: stats.totalDeepScored > 0 ? Math.round((stats.totalFinal / stats.totalDeepScored) * 100) : 0,
+    overallYield: stats.totalRawUrls > 0 ? Math.round((stats.totalFinal / stats.totalRawUrls) * 100) : 0,
+  };
+}
+
+/**
+ * Flags pipeline stages dropping more than ~80% of candidates (thresholds
+ * picked empirically — see the two magic numbers below), plus any requirement-
+ * validation issues surfaced upstream. Pure over its inputs.
+ */
+export function identifyBottlenecks(
+  conversionRates: Record<string, number>,
+  stats: Pick<FunnelCounts, "totalAfterScreen" | "totalDeepScored" | "totalRawUrls" | "totalFinal">,
+  requirementIssues: string[],
+): string[] {
+  const bottlenecks: string[] = [];
+  if (conversionRates.screenToExtract < 20 && stats.totalAfterScreen > 10) {
+    bottlenecks.push(`Extraction success rate low (${conversionRates.screenToExtract}%) — product pages may be hard to scrape`);
+  }
+  if (conversionRates.deepToFinal < 30 && stats.totalDeepScored > 10) {
+    bottlenecks.push(`Deep score → final rate low (${conversionRates.deepToFinal}%) — scoring may be too strict or search queries are off-target`);
+  }
+  if (stats.totalFinal === 0 && stats.totalRawUrls > 20) {
+    bottlenecks.push(`Zero final products from ${stats.totalRawUrls} URLs — search queries may not match available products`);
+  }
+  bottlenecks.push(...requirementIssues);
+  return bottlenecks;
+}
+
 // ─── URL Filtering ─────────────────────────────────────────────
 
 // Non-PDP path patterns. Expanded beyond the original collections/blog
@@ -3259,31 +3317,10 @@ export async function runAgenticSearch(
     // ═══════════════════════════════════════════════════════════
     // Pipeline conversion metrics + score drift check
     // ═══════════════════════════════════════════════════════════
-    const conversionRates = {
-      searchToDedup: stats.totalRawUrls > 0 ? Math.round((stats.totalAfterDedup / stats.totalRawUrls) * 100) : 0,
-      dedupToScreen: stats.totalAfterDedup > 0 ? Math.round((stats.totalAfterScreen / stats.totalAfterDedup) * 100) : 0,
-      screenToExtract: stats.totalAfterScreen > 0 ? Math.round((stats.totalExtracted / stats.totalAfterScreen) * 100) : 0,
-      extractToQuickScore: stats.totalExtracted > 0 ? Math.round((stats.totalQuickScored / stats.totalExtracted) * 100) : 0,
-      quickToDeep: stats.totalQuickScored > 0 ? Math.round((stats.totalDeepScored / stats.totalQuickScored) * 100) : 0,
-      deepToFinal: stats.totalDeepScored > 0 ? Math.round((stats.totalFinal / stats.totalDeepScored) * 100) : 0,
-      overallYield: stats.totalRawUrls > 0 ? Math.round((stats.totalFinal / stats.totalRawUrls) * 100) : 0,
-    };
-
+    const conversionRates = computeConversionRates(stats);
     log.info("Pipeline conversion rates", { phase: "stats", conversionRates });
 
-    // Identify bottlenecks — any stage dropping more than 80% is worth investigating
-    const bottlenecks: string[] = [];
-    if (conversionRates.screenToExtract < 20 && stats.totalAfterScreen > 10) {
-      bottlenecks.push(`Extraction success rate low (${conversionRates.screenToExtract}%) — product pages may be hard to scrape`);
-    }
-    if (conversionRates.deepToFinal < 30 && stats.totalDeepScored > 10) {
-      bottlenecks.push(`Deep score → final rate low (${conversionRates.deepToFinal}%) — scoring may be too strict or search queries are off-target`);
-    }
-    if (stats.totalFinal === 0 && stats.totalRawUrls > 20) {
-      bottlenecks.push(`Zero final products from ${stats.totalRawUrls} URLs — search queries may not match available products`);
-    }
-    // Merge requirement validation issues into bottlenecks
-    bottlenecks.push(...requirementIssues);
+    const bottlenecks = identifyBottlenecks(conversionRates, stats, requirementIssues);
     if (bottlenecks.length > 0) {
       log.warn("Pipeline bottlenecks detected", { phase: "stats", bottlenecks });
     }
