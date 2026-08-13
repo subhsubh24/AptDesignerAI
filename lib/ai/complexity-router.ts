@@ -8,6 +8,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel, type TextTier, type ThinkingTier } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
 
@@ -78,7 +79,7 @@ export async function classifyComplexity(
       max_tokens: 256,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "minimal" },
+      thinkingConfig: thinkingFor("quick_screen"),
     });
 
     const parsed = JSON.parse(response.content);

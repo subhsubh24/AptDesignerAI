@@ -20,6 +20,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -154,7 +155,7 @@ Issues: brief, user-facing descriptions of gaps. Max 5.`;
           seed: DETERMINISTIC_SEED,
           responseSchema: MOCKUP_PROMPT_VALIDATION_GEMINI_SCHEMA,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("mockup_prompt"),
         }),
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );

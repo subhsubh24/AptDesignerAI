@@ -20,6 +20,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { withRetry, isRetryableError } from "@/lib/ai/retry";
@@ -201,7 +202,7 @@ Be harsh — use the full 0–1 range. 0.9+ only for clear wins (category fit AN
           seed: DETERMINISTIC_SEED,
           responseSchema: RERANK_GEMINI_SCHEMA,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "minimal" },
+          thinkingConfig: thinkingFor("quick_screen"),
         }),
       { isRetryable: isRetryableError, maxAttempts: 2 }
     );

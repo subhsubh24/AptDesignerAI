@@ -194,7 +194,7 @@ Return ONLY: {"best_index": <0..${candidates.length - 1}>, "reason": "<one sente
         messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
         max_tokens: 8000,
         seed: DETERMINISTIC_SEED,
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("diagnosis", "low"),
         cacheScope: { sessionKey, content: cacheableBlocks },
       });
       const parsed = extractJsonObject(resp.content) as { best_index?: number; reason?: string };

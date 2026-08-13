@@ -27,6 +27,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -152,7 +153,7 @@ OUTPUT JSON
       max_tokens: 8192,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("scoring"),
     });
 
     const parsed = extractJsonObject<ReconcilerOutput>(response.content);

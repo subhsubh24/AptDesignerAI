@@ -9,6 +9,7 @@
 // in a single batch call, grounded in the Pass 1 design brief.
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -159,7 +160,7 @@ Return a JSON array with exactly ${vagueItems.length} objects, indexed 0 to ${va
       max_tokens: 16384,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "minimal" },
+      thinkingConfig: thinkingFor("search"),
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },

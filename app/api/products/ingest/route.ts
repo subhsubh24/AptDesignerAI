@@ -63,18 +63,39 @@ export async function POST(request: Request) {
 
   // Fetch room → project for design context. Pull room photos so the
   // extractor always has the target room as visual context (never forgets
-  // what we're furnishing).
-  const { data: room } = await supabase
+  // what we're furnishing). Ownership was just verified against this same
+  // row, so a failure here is essentially always transient (DB/connection),
+  // not a legitimate not-found — and losing roomImageUrls degrades the vision
+  // call's grounding (product-extractor.ts uses it to match visual_style_tags
+  // to the actual room), not just metadata. Hard-fail rather than silently
+  // running a poorly-grounded extraction on that degraded context (matches
+  // the room-fetch precedent in area-analysis/refine-chat/route.ts, which
+  // 404s the same way). Note: checkDailySpend() above already incremented
+  // the caller's daily quota unconditionally at request entry — this fetch
+  // failing doesn't change that either way, so the return here is about
+  // extraction quality, not spend.
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("project_id, room_images(*)")
     .eq("id", room_id)
     .single();
+  if (roomError || !room) {
+    console.error("[products.ingest] Room fetch failed after ownership check:", roomError?.message);
+    return NextResponse.json({ error: "Failed to load room context. Please retry." }, { status: 500 });
+  }
   const roomImageUrls: string[] = (
-    (room?.room_images as Array<{ image_url: string }> | undefined) || []
+    (room.room_images as Array<{ image_url: string }> | undefined) || []
   ).map((img) => img.image_url);
-  const { data: project } = room?.project_id
+  // The project fetch only personalizes the design profile — a read failure
+  // here degrades to an unpersonalized profile rather than failing the whole
+  // extraction, but it must be LOGGED (matches refine-chat/route.ts's
+  // identical project-fetch precedent).
+  const { data: project, error: projectError } = room.project_id
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
-    : { data: null };
+    : { data: null, error: null };
+  if (projectError) {
+    console.error("[products.ingest] Project fetch failed:", projectError.message);
+  }
   const designProfile = buildDesignProfile(project);
 
   // Create agent run

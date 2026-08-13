@@ -16,6 +16,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -103,7 +104,7 @@ export async function runProductIdentifier(
       seed: DETERMINISTIC_SEED,
       responseSchema: IDENTIFIER_SCHEMA,
       mediaResolution: "ultra_high",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("scoring"),
       tools: [{ codeExecution: {} as Record<string, never> }],
     });
 

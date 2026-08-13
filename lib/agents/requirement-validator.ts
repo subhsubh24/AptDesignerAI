@@ -17,6 +17,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -248,7 +249,7 @@ Overall alignment score: how well does this set deliver on the assessment? Targe
           seed: DETERMINISTIC_SEED,
           responseSchema: REQUIREMENT_VALIDATION_GEMINI_SCHEMA,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("validation"),
           ...(input.enableGoogleSearch ? {
             tools: [
               { codeExecution: {} as Record<string, never> },
