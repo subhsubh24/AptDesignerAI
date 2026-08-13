@@ -107,14 +107,25 @@ describe('useEntitlements', () => {
   });
 
   it('a refresh that resolves after unmount does not update state (stale-refresh guard)', async () => {
+    // Every call (not just one) returns a fresh pending promise whose resolver
+    // is captured into `resolveInfo` — the hook's own mount effect fires an
+    // internal refresh() first (call #1), and `renderHook` flushes it before
+    // returning, so by the time the test calls `refresh()` explicitly below
+    // (call #2), `resolveInfo` refers to call #2's resolver, not call #1's.
+    // Using `mockImplementationOnce` here would let call #2 fall through to
+    // the mock's default (no queued behavior → resolves instantly to
+    // `undefined`), which happens to also return `false` via a DIFFERENT path
+    // (the guard fires before any timer, unrelated to `resolveInfo`) — passing
+    // for the wrong reason and never actually exercising the in-flight-then-
+    // unmount race this test is named for. (Caught in review.)
     let resolveInfo!: (v: unknown) => void;
-    mockedGetCustomerInfo.mockImplementationOnce(
+    mockedGetCustomerInfo.mockImplementation(
       () => new Promise((resolve) => { resolveInfo = resolve; }),
     );
     const { result, unmount } = await renderHook(() => useEntitlements('user-1'));
-    const pendingRefresh = result.current.refresh();
+    const pendingRefresh = result.current.refresh(); // call #2 — captures its own resolver
     unmount();
-    resolveInfo(activeInfo());
+    resolveInfo(activeInfo()); // resolves call #2 AFTER unmount — the guard must reject it
     await expect(pendingRefresh).resolves.toBe(false);
   });
 });

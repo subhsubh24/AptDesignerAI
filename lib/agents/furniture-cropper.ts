@@ -11,6 +11,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -138,7 +139,7 @@ export async function runFurnitureCropper(
         seed: DETERMINISTIC_SEED,
         responseSchema: FURNITURE_CROPS_SCHEMA,
         mediaResolution: "ultra_high",
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("extraction", "low"),
         tools: [{ codeExecution: {} as Record<string, never> }],
       });
 

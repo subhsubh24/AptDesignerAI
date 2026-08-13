@@ -23,6 +23,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { zodToGeminiSchema } from "@/lib/ai/schema";
 import { extractJsonObject } from "@/lib/ai/extract-json";
@@ -281,7 +282,7 @@ Search before writing queries. Queries grounded in real product listings perform
           seed: DETERMINISTIC_SEED,
           responseSchema: CORRECTION_PLAN_GEMINI_SCHEMA,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("validation"),
         });
       },
       { isRetryable: isRetryableError, maxAttempts: 2 }

@@ -13,6 +13,7 @@
  */
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { createLogger } from "@/lib/logging/logger";
@@ -206,7 +207,7 @@ Return a JSON array with one object per pair:
       max_tokens: 8000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "minimal" },
+      thinkingConfig: thinkingFor("quick_score"),
     });
 
     const parsed = extractJsonObject<PairResult[]>(response.content);

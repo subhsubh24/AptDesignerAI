@@ -23,6 +23,7 @@
 import type { AIContentBlock } from "@/lib/ai/provider";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -257,7 +258,7 @@ Return one verdict per shopping list item, in the same order.`;
       max_tokens: 4096,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("scoring"),
     });
 
     const parsed = extractJsonObject<LLMReplacementOutput>(response.content);

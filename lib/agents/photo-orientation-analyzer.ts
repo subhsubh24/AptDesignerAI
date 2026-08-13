@@ -16,6 +16,7 @@
 // it entirely.
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -161,7 +162,7 @@ Emit one entry per photo, in order. Index must match the photo number you were s
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("diagnosis", "low"),
     });
 
     const parsed = extractJsonObject<AnalyzerRawResponse>(response.content);
