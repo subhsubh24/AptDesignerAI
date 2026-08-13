@@ -123,7 +123,7 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
   // each other, so serializing them wasted a round-trip on this hot path.
   // inferUserPreferences is best-effort: if it fails, diagnosis runs without
   // preference signals (closes the "nothing learns" gap when it succeeds).
-  const [{ data: project }, inferredPreferences] = await Promise.all([
+  const [{ data: project, error: projectError }, inferredPreferences] = await Promise.all([
     supabase
       .from("projects")
       .select("*")
@@ -131,6 +131,12 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
       .single(),
     inferUserPreferences(supabase, room.project_id, room_id),
   ]);
+  if (projectError) {
+    log.warn("project fetch failed — continuing without design profile", {
+      room_id,
+      error: projectError.message,
+    });
+  }
 
   const profile = buildDesignProfile(project);
 

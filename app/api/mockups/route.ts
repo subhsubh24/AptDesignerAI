@@ -249,11 +249,14 @@ export async function POST(request: Request) {
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   // Load project for building research context (finishes, flooring, walls, etc.)
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from("projects")
     .select("*")
     .eq("id", room.project_id)
     .single();
+  if (projectError) {
+    logServerError("mockups project fetch — continuing without building research context", projectError);
+  }
 
   const buildingResearch = project?.building_research as Record<string, unknown> | undefined;
   const floorPlanImageUrl = buildingResearch?.floor_plan_image_url as string | undefined;
