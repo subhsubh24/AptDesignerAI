@@ -35,6 +35,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -453,7 +454,7 @@ Decide the next tool to call. Reason briefly first, then call exactly one functi
           messages,
           max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
+          thinkingConfig: thinkingFor("validation", undefined, { includeThoughts: true }),
           tools: coordinatorTools,
         });
       } catch (err) {

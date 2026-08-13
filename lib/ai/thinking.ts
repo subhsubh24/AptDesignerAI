@@ -3,6 +3,10 @@ import { type TaskType, type ThinkingTier, defaultThinking } from "./models";
 export function thinkingFor(
   task: TaskType,
   override?: ThinkingTier,
-): { thinkingLevel: ThinkingTier } {
-  return { thinkingLevel: override ?? defaultThinking(task) };
+  opts?: { includeThoughts?: boolean },
+): { thinkingLevel: ThinkingTier; includeThoughts?: boolean } {
+  return {
+    thinkingLevel: override ?? defaultThinking(task),
+    ...(opts?.includeThoughts ? { includeThoughts: true } : {}),
+  };
 }
