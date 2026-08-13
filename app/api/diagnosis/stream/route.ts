@@ -128,7 +128,7 @@ export async function POST(request: Request) {
         // Project (keyed on room.project_id) and inferred user preferences
         // (keyed on room_id) are independent of each other -- fetch them
         // concurrently, matching the non-stream /api/diagnosis route.
-        const [{ data: project }, inferredPreferences] = await Promise.all([
+        const [{ data: project, error: projectError }, inferredPreferences] = await Promise.all([
           supabase
             .from("projects")
             .select("*")
@@ -136,6 +136,9 @@ export async function POST(request: Request) {
             .single(),
           inferUserPreferences(supabase, room.project_id, room_id).catch(() => null),
         ]);
+        if (projectError) {
+          logServerError("diagnosis/stream project fetch — continuing without design profile", projectError);
+        }
 
         const profile = buildDesignProfile(project);
         if (profile && inferredPreferences) {
