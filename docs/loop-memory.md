@@ -8059,3 +8059,81 @@ reliability/observability fixes, not phase-completing artifacts).
 - The shared-working-directory hazard is not fully closed by "instruct agents not to
   mutate" — a legitimate mutation-testing technique can still touch tracked files.
   `git status` immediately before every push is the real mitigation; keep doing it.
+
+## Run 2026-08-13 (Run 164) — designated-branch session; continued APT-24, ran a partial 4-lens scout sweep, fixed a real correctness gap it surfaced, filed 1 follow-up.
+
+This session was pinned to a single designated branch (`claude/sleepy-goldberg-d6nafl`)
+by the CCR harness wrapper, same conflict APT-27 documents. Followed APT-27's own
+established precedent (PR #874's rescue) rather than re-deriving it: branched off the
+latest factory default branch for each change, opened PRs, merged via the GitHub MCP
+tools into `claude/ai-apartment-design-app-iHAdb` — not the designated branch. The
+designated branch itself was never used for actual work.
+
+**Board work — APT-24 continuation (In Progress, deferred 3x before this run).**
+`lib/agents/design-coordinator.ts` and `lib/agents/post-search-coordinator.ts` needed
+`{ thinkingLevel, includeThoughts: true }`, and the shared `thinkingFor(task, override?)`
+helper had no way to express the `includeThoughts` key — three prior batches skipped
+both sites for exactly this reason. Extended `thinkingFor()` with a third, optional
+`opts?: { includeThoughts?: boolean }` param (confirmed backward-compatible against all
+38 pre-existing call sites: omitting `opts` or passing `{includeThoughts:false}` yields
+the identical `{ thinkingLevel }` shape). Migrated both sites to
+`thinkingFor("validation", undefined, { includeThoughts: true })` — both already resolved
+"validation" via their existing `selectModel`/`getProvider` calls, and
+`DEFAULT_THINKING["validation"] === "low"`, so the emitted `thinkingLevel` is unchanged.
+PR #879, 2 fresh reviewers APPROVE first-cycle. Register: 13 files / ~35 sites remaining
+(down from 15/37).
+
+**Partial DEEP AUDIT (4 of 8 lenses — does NOT reset the clock).** Last full 8-lens pass
+was Run 158 (2026-08-11), now ~2 days / 6 runs stale — still owed a full pass. Given this
+run's time budget, ran 4 Haiku scouts instead: correctness/dead-code, security/RLS,
+test/eval coverage, artifact freshness.
+- **Security/RLS: clean.** No findings across 23 tables, RLS coverage confirmed, rate
+  limiting/CAPTCHA/spend-caps/CORS all already in place. A genuinely quiet result, not
+  under-scouted — matches the pattern of many prior clean security passes.
+- **Test coverage: scout's findings were unreliable — verify Haiku coverage claims before
+  trusting them.** All 5 candidates it named (`lib/validation/bundle-math.ts`,
+  `lib/agents/escalation-ladder.ts`, `lib/scoring/product-scorer.ts`,
+  `lib/validation/color-math.ts`, `lib/agents/orchestrator.ts`) as "no test file" already
+  HAVE a matching test file — one `find __tests__ -iname` check per file falsified every
+  claim in under a minute. Recording this as a standing caution: a Haiku scout's grep-based
+  "no test file" claim is not reliable on its own; always confirm with a direct file-listing
+  check before spending a batch slot implementing a fix for it.
+- **Artifact freshness: 2 minor items surfaced, neither actioned.** (1)
+  `docs/email-welcome-sequence.md` still carries literal `[PLACEHOLDER: ...]` text in its
+  discount-code section — not a bug, since it's an explicitly staged/unsent draft and
+  PENDING_OPS already tracks the underlying decision as `status: open`. (2)
+  `docs/BUSINESS_CASE.md`'s `as_of: 2026-07-29` is now ~15 days stale — not re-computed
+  this run since ROADMAP's own rule is "recompute when pricing/a lever/COGS changes," not
+  on elapsed time alone, and nothing here changed either.
+- **Correctness/dead-code: 1 real, verified gap → fixed.** Three core-path routes
+  (`app/api/diagnosis/route.ts`, `app/api/diagnosis/stream/route.ts`,
+  `app/api/mockups/route.ts`) fetched the owning project via `.single()` and never checked
+  the error — a real DB failure silently degraded the response (missing building-research /
+  design-profile context) with zero server-side trace. Fixed via each file's own existing
+  logging convention (`logServerError` where already imported; `log.warn` via the file's own
+  `createLogger`), log-only, no response-shape change — mirrors the already-merged #877
+  pattern. PR #880, 2 fresh reviewers APPROVE first-cycle. Reviewer A independently spotted
+  a 4th site with the identical shape (`app/api/bundles/evaluate/route.ts:99-101`),
+  deliberately left out of this PR's scope and filed as **APT-28** instead of scope-creeping.
+  Two of the scout's other 4 correctness candidates (cached-mockup-job insert failure,
+  unvalidated `recommendation_mockup` input) were checked and found to be non-issues — the
+  cached-job "id: undefined" case is an explicitly intentional, already-commented tradeoff
+  (cache-hit path returns the image synchronously; no polling loop depends on the job id),
+  and the input-validation one was not independently re-verified this run — worth a fresh
+  look if picked up later rather than assumed real.
+
+**Bookkeeping.** Gate green throughout both changes: `npx tsc --noEmit` clean, `npm test`
+3061/3073 passing (0 regressions), `npm run check:determinism` clean, `npx eslint` clean on
+every touched file. PR #879 and #880 both merged (4 files total, zero overlap, zero
+intra-run conflicts). APT-24 left In Progress with exact remaining scope enumerated on the
+issue (13 files / ~35 sites: `product-extractor.ts` 3, `product-verifier.ts` 2,
+`self-correction.ts` 3, `shopping-researcher.ts` 2, `validation-agent.ts` 6,
+`mockup-agent.ts` 2, `computer-use/agent-loop.ts` 1, plus the `app/api/**` route-level
+sites). APT-28 filed with a runnable acceptance check. No migration, no live secret, no
+ROADMAP Track/DoD box ticked (both fixes below that granularity).
+
+- **DEEP AUDIT still owed** (last full 8-lens pass Run 158, 2026-08-11 — now stale; this
+  run's 4-lens partial scout does NOT reset the clock, matching the established
+  partial-scout convention). A future run should either complete the remaining 4 lenses
+  (performance, a11y/design-bar, functional-reality actual-run, quality-grade-reconcile,
+  dependency/config health — that's 5, pick up where useful) or run a fresh full 8-lens pass.
