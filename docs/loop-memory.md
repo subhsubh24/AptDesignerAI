@@ -8029,3 +8029,91 @@ reliability/observability fixes, not phase-completing artifacts).
 - The shared-working-directory hazard is not fully closed by "instruct agents not to
   mutate" — a legitimate mutation-testing technique can still touch tracked files.
   `git status` immediately before every push is the real mitigation; keep doing it.
+
+## Run 2026-08-13 — recovered 2 orphaned runs' work (APT-13 closed, APT-24 continued), caught a real test bug in review, filed the orphan pattern as APT-27
+
+This session's designated-branch restriction (same pattern Run 150 first noted: "session's
+git policy this run restricted pushes to a single designated branch") turned out to be worth
+investigating properly rather than just working around quietly. `git branch -r | grep
+sleepy-goldberg` showed **10** designated branches on the remote. `git rev-list --count
+origin/<default>..origin/<branch>` per branch: 7 were 1000+ commits stale (almost certainly
+superseded by equivalent work landing through other sessions — not worth archaeology), but
+**`sleepy-goldberg-av7yub`** (3 commits ahead) and **`sleepy-goldberg-m5vact`** (8 commits
+ahead) were genuinely close to the then-current tip — i.e. real, recent, unmerged work from
+Run 162/163 that their own Linear comments described as gate-green and reviewed, but which
+never actually landed because those sessions had nowhere to push except their own
+designated branch and (per their comments) chose not to open a PR from it.
+
+**Recovery method**: fresh branch off the default tip, `git cherry-pick` the substantive
+commits (skipping each source branch's own housekeeping/ledger-only commit — those touch
+shared files and shouldn't be replayed), full gate re-run, then fresh independent 2-reviewer
+review per logical diff group (same as any other change) before treating it as safe to ship.
+Both branches' code was file-disjoint from each other (only their ledger-file diffs
+overlapped, which were dropped by design). This is a legitimate move: cherry-picking a prior
+session's own already-completed, reviewed commits — as opposed to reading a stale Linear
+comment and re-doing the work from scratch (duplicate spend) or leaving it lost.
+
+**Real finding from review, not just recovery**: a reviewer flagged that the recovered
+mobile `use-entitlements.test.ts` "resolves after unmount" test used `mockImplementationOnce`
+for the mocked `getCustomerInfo()` call, but `useEntitlements`'s own mount `useEffect` fires
+an internal `refresh()` FIRST (consuming the queued mock behavior) before the test's explicit
+`refresh()` call runs — so the explicit call fell through to the mock's unconfigured default
+(resolves instantly to `undefined`) and the test passed via an entirely different, unintended
+code path than the one its own name and comment describe. Fixed by switching to
+`mockImplementation` (every call gets its own pending-promise resolver, so `resolveInfo`
+correctly targets the explicit call), then verified the fix is real by temporarily reverting
+the `mountedRef` guard in the hook and confirming the test now fails as expected — this is
+the kind of check that catches a review finding that's correct-in-theory but never actually
+gets applied. **Lesson for future recovery/cherry-pick work**: a prior session's own
+"reviewed, gate-green" claim in its commit message or Linear comment is not a substitute for
+a fresh review pass — the original review happened in a DIFFERENT session's context and its
+own multi-cycle review process (described in the m5vact-branch commit messages) evidently
+still missed this race. Re-review recovered work exactly as rigorously as new work.
+
+**Then continued both underlying issues** rather than stopping at recovery: APT-13's last
+remaining named scope (`computeConversionRates`/`identifyBottlenecks` extracted from
+`orchestrator.ts`'s dispatch entry, 28 new tests) — closed the issue entirely, every
+previously-identified sub-item now covered. APT-24 step 2 (the deferred migration): read 18
+of the 61 registered `thinkingConfig` literal sites' individual call context (per the issue's
+own explicit caution against a mechanical find-replace) and migrated them to `thinkingFor(task)`
+— 14 were direct matches to the task's registered default; 4 needed an explicit
+`thinkingFor(task, "low")` override because the literal intentionally ran BELOW that task's
+default (verified via each site's own `model`/`selectModel()` call before touching it — a
+naive migration would have silently changed effective cost/thinking-level on 4 real call
+sites). Register now 17 files / 43 sites; issue stays open, next batch scoped in the Linear
+comment (the `includeThoughts`-indirection sites, then route-level + high-count files).
+
+**Filed APT-27** (Backlog — needs an owner decision, not more building): the designated-branch
+orphaning pattern is real, recurring (10 branches, first hinted at back in Run 150), and
+silently discards completed work + risks duplicate re-fixing. This run's fix was a one-off
+rescue via PR #874 (opened + merged successfully — CI green in ~6 minutes, all 8 required
+checks passed) proving a designated-branch session CAN still open and land a PR even under the
+"don't push elsewhere" restriction; whether that should become the STANDARD move for every
+designated-branch session (vs. the harness/trigger config being adjusted at the source) is the
+open question left for the owner.
+
+### Bookkeeping
+PR #874 merged (`1e9cfc1`), 11 commits, CI green throughout (mobile/build/security-invariants/
+lint/validate-gtm/validate-capabilities/verify/journeys). Re-verified from a fresh checkout of
+the actual merged tree: `npx tsc --noEmit` clean, `npm test` 3052/3064 passing (0 regressions),
+`npm run check:determinism` clean, `npx eslint .` 0/0, `cd mobile && npx tsc --noEmit` clean.
+APT-13 closed with re-run evidence pasted in. APT-24 stays In Progress with the exact next-batch
+scope recorded. APT-27 filed. No migration, no live secret, no ROADMAP Track/DoD box ticked (all
+below that granularity).
+
+### Carry-forward
+- **New**: APT-27 (designated-branch orphan pattern) is a genuine structural finding, not a
+  re-derivable blocker — read its acceptance check before re-investigating; it needs an owner
+  decision on trigger config, not another branch audit unless a NEW branch has appeared close
+  to tip since this run.
+- **New**: when recovering/cherry-picking any prior session's "already reviewed" work, always
+  re-review it fresh in THIS session — a described review process in another session's commit
+  history is not verifiable and, per this run's mobile-test finding, can genuinely have missed
+  something.
+- APT-24 remaining scope: `design-coordinator.ts`/`post-search-coordinator.ts` (the
+  `includeThoughts`-indirection case — needs the ratchet's own indirection handling touched,
+  not just the call site), then `app/api/**` route-level sites, then `validation-agent.ts` (6),
+  `apartment-research/route.ts` (5), and the rest of the 17-file register.
+- All prior DO-NOT-RE-FLAG / carry-forward entries still hold; nothing this run contradicted
+  them, except: APT-13 is now CLOSED (was previously carried forward as open/claimable — do
+  not reclaim it).
