@@ -5,13 +5,18 @@
  *
  * `lib/agents/mockup-verifier.ts` only answers "does this mockup depict the
  * user's actual room?" (fidelity). Nothing in the product answers "is this a
- * good design?" — the `design/taste` ship-critical dimension in the Quality
- * Auditor's rubric had no mechanical signal underneath it. This eval is that
- * signal: it judges a rendered mockup on four axes from I-Design's protocol
- * (0-10 integer scale each) — functionality/activity alignment, layout and
- * furniture arrangement, color scheme and materials, and overall aesthetic —
- * and reports the mean AND standard deviation per axis across 3 independent
- * judge calls.
+ * good design?" — VISION.md names "Taste and a coherent point of view... not
+ * a mood-board average of the internet" as one of the things that make a top
+ * designer worth their fee, and nothing mechanically measures it for a
+ * generated mockup. (Note: this is NOT the same thing as the QUALITY_SCORECARD's
+ * ship-critical `design_taste` dimension, which per docs/quality/QUALITY_RUBRIC.md
+ * grades the web app's OWN UI against the VISION design bar + a11y — a
+ * different axis entirely from the content of a generated interior design.)
+ * This eval is that missing signal: it judges a rendered mockup on four axes
+ * from I-Design's protocol (0-10 integer scale each) — functionality/activity
+ * alignment, layout and furniture arrangement, color scheme and materials, and
+ * overall aesthetic — and reports the mean AND standard deviation per axis
+ * across 3 independent judge calls.
  *
  * SEED DECISION (required by APT-30's acceptance check — read before editing):
  * `.claude/rules/determinism.md` requires every LLM call to pass
@@ -83,12 +88,75 @@ function stddev(xs: number[]): number {
 }
 
 /**
- * Score one image on the four I-Design axes with one judge call at the given
- * seed. Loads gemini.ts/determinism.ts fresh with DETERMINISTIC_MODE stubbed
- * off so `seed` is sent as-is instead of being overridden to
- * DETERMINISTIC_SEED — see the file-level SEED DECISION comment.
+ * One judge call at the given seed, using an already-imported (env-stubbed)
+ * module set. Kept separate from the module-loading/env-stubbing so that
+ * `scoreScene` can run all 3 judge calls against ONE fresh import instead of
+ * resetting modules per call — see `scoreScene`'s own comment for why.
  */
-async function judgeOnce(imageUrl: string, seed: number): Promise<DesignQualityScore> {
+async function judgeOnce(
+  mods: {
+    geminiProvider: typeof import("@/lib/ai/gemini").geminiProvider;
+    selectModel: typeof import("@/lib/ai/models").selectModel;
+    thinkingFor: typeof import("@/lib/ai/thinking").thinkingFor;
+    extractJsonObject: typeof import("@/lib/ai/extract-json").extractJsonObject;
+  },
+  imageBlock: Awaited<ReturnType<typeof import("@/lib/ai/resolve-image").resolveImageBlocks>>[number],
+  seed: number,
+): Promise<DesignQualityScore> {
+  const response = await mods.geminiProvider.chat({
+    model: mods.selectModel("diagnosis"),
+    system:
+      "You are a rigorous interior design critic scoring a rendered room on design QUALITY, not photographic fidelity. Be honest and discriminating: a bare, empty, or poorly composed room must score low. A well-composed, tasteful room should score well. Do not default to the middle of the scale.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          imageBlock,
+          {
+            type: "text",
+            text: `Score this room on four axes, each an INTEGER from 0 to 10 (0 = fails completely, 10 = excellent):
+1. functionality: does the space support real activity, with furniture/layout suited to the room's apparent use?
+2. layout: is furniture arranged sensibly, with good flow and no awkward gaps or overcrowding?
+3. color_scheme: do the colors and materials read as a coherent, intentional palette?
+4. aesthetic: overall visual appeal and atmosphere.
+
+A room with no furniture at all must score very low on functionality and layout — there is nothing to arrange.
+
+Return ONLY JSON: {"functionality": <int 0-10>, "layout": <int 0-10>, "color_scheme": <int 0-10>, "aesthetic": <int 0-10>}`,
+          },
+        ],
+      },
+    ],
+    // Matches the max_tokens budget every other selectModel("diagnosis")
+    // HIGH-thinking vision-judge call in this repo uses (room-diagnostician.ts,
+    // photo-orientation-analyzer.ts, room-architecture-extractor.ts,
+    // floor-plan-extractor.ts) — a HIGH-thinking trace can run long before
+    // emitting the JSON answer, and a smaller budget risks silently truncating
+    // response.content before extractJsonObject ever sees the closing brace.
+    max_tokens: 64000,
+    seed,
+    responseMimeType: "application/json",
+    thinkingConfig: mods.thinkingFor("diagnosis"),
+  });
+
+  return mods.extractJsonObject<DesignQualityScore>(response.content);
+}
+
+/**
+ * Scores one image on all four axes across 3 independently-seeded judge
+ * calls. DETERMINISTIC_MODE is stubbed off ONCE for the whole scene (not
+ * per judge call) and the 3 calls run SEQUENTIALLY against that one fresh
+ * module import — not vi.resetModules()/vi.stubEnv() per call inside a
+ * Promise.all. vi.resetModules/vi.stubEnv/vi.unstubAllEnvs mutate GLOBAL,
+ * unscoped vitest state; racing them across concurrently in-flight calls
+ * means one call's cleanup (`finally { vi.unstubAllEnvs() }`) could fire
+ * while another call's dynamic import is still mid-evaluation, silently
+ * handing that call DETERMINISTIC=true (seed forced back to 42,
+ * collapsing the very variance this eval exists to measure) while every
+ * assertion still passes. Running sequentially against one import removes
+ * the race entirely.
+ */
+async function scoreScene(imageUrl: string): Promise<{ mean: DesignQualityScore; stddev: DesignQualityScore; runs: DesignQualityScore[] }> {
   vi.resetModules();
   vi.stubEnv("DETERMINISTIC_MODE", "false");
   try {
@@ -100,53 +168,25 @@ async function judgeOnce(imageUrl: string, seed: number): Promise<DesignQualityS
 
     const [imageBlock] = await resolveImageBlocks([imageUrl], { preferFilesApi: true });
 
-    const response = await geminiProvider.chat({
-      model: selectModel("diagnosis"),
-      system:
-        "You are a rigorous interior design critic scoring a rendered room on design QUALITY, not photographic fidelity. Be honest and discriminating: a bare, empty, or poorly composed room must score low. A well-composed, tasteful room should score well. Do not default to the middle of the scale.",
-      messages: [
-        {
-          role: "user",
-          content: [
-            imageBlock,
-            {
-              type: "text",
-              text: `Score this room on four axes, each an INTEGER from 0 to 10 (0 = fails completely, 10 = excellent):
-1. functionality: does the space support real activity, with furniture/layout suited to the room's apparent use?
-2. layout: is furniture arranged sensibly, with good flow and no awkward gaps or overcrowding?
-3. color_scheme: do the colors and materials read as a coherent, intentional palette?
-4. aesthetic: overall visual appeal and atmosphere.
+    const runs: DesignQualityScore[] = [];
+    for (const seed of JUDGE_SEEDS) {
+      runs.push(
+        await judgeOnce({ geminiProvider, selectModel, thinkingFor, extractJsonObject }, imageBlock, seed),
+      );
+    }
 
-A room with no furniture at all must score very low on functionality and layout — there is nothing to arrange.
-
-Return ONLY JSON: {"functionality": <int 0-10>, "layout": <int 0-10>, "color_scheme": <int 0-10>, "aesthetic": <int 0-10>}`,
-            },
-          ],
-        },
-      ],
-      max_tokens: 16000,
-      seed,
-      responseMimeType: "application/json",
-      thinkingConfig: thinkingFor("diagnosis"),
-    });
-
-    return extractJsonObject<DesignQualityScore>(response.content);
+    const meanScore = {} as DesignQualityScore;
+    const stddevScore = {} as DesignQualityScore;
+    for (const axis of AXES) {
+      const values = runs.map((r) => r[axis]);
+      meanScore[axis] = mean(values);
+      stddevScore[axis] = stddev(values);
+    }
+    return { mean: meanScore, stddev: stddevScore, runs };
   } finally {
     vi.unstubAllEnvs();
     vi.resetModules();
   }
-}
-
-async function scoreScene(imageUrl: string): Promise<{ mean: DesignQualityScore; stddev: DesignQualityScore; runs: DesignQualityScore[] }> {
-  const runs = await Promise.all(JUDGE_SEEDS.map((seed) => judgeOnce(imageUrl, seed)));
-  const meanScore = {} as DesignQualityScore;
-  const stddevScore = {} as DesignQualityScore;
-  for (const axis of AXES) {
-    const values = runs.map((r) => r[axis]);
-    meanScore[axis] = mean(values);
-    stddevScore[axis] = stddev(values);
-  }
-  return { mean: meanScore, stddev: stddevScore, runs };
 }
 
 const evalsOff = !evalsEnabled();
