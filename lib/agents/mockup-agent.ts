@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getMockupPrompt } from "@/lib/prompts/mockup";
 import { resolveImageBlock, resolveImageBlocks, resolveImageBlocksSettled } from "@/lib/ai/resolve-image";
@@ -323,7 +324,7 @@ export async function generateMockupPrompt(
       max_tokens: 64000,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("mockup_prompt"),
       tools: [
         { googleSearch: {} as Record<string, never> },
         { codeExecution: {} as Record<string, never> },
@@ -518,9 +519,6 @@ ${groundingSystemNote}`;
     const isProModel = imageModel.includes("pro");
 
     const requestedLevel = options.thinkingLevel || "high";
-    const thinkingCfg = isProModel
-      ? undefined
-      : { thinkingLevel: requestedLevel as "minimal" | "low" | "medium" | "high" };
 
     const response = await geminiProvider.chat({
       model: imageModel,
@@ -530,7 +528,7 @@ ${groundingSystemNote}`;
       seed: DETERMINISTIC_SEED,
       responseModalities: ["Text", "Image"],
       imageConfig: { imageSize, aspectRatio },
-      ...(thinkingCfg ? { thinkingConfig: thinkingCfg } : {}),
+      ...(isProModel ? {} : { thinkingConfig: thinkingFor("mockup_image", requestedLevel) }),
       ...(useGrounding ? { tools: [{ googleSearch: {} as Record<string, never> }] } : {}),
     });
 
