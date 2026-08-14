@@ -1,6 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getExtractionPrompt } from "@/lib/prompts/extraction";
 import { ExtractedProductSchema } from "@/lib/types/schemas";
@@ -584,7 +585,7 @@ Return ONLY valid JSON:
         max_tokens: 16000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "minimal" },
+        thinkingConfig: thinkingFor("extraction"),
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -645,7 +646,7 @@ Return ONLY valid JSON:
         max_tokens: 16000,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "minimal" },
+        thinkingConfig: thinkingFor("extraction"),
       });
 
       const tokens = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
@@ -730,7 +731,7 @@ export async function extractFromImage(
       max_tokens: 16000,
       responseMimeType: "application/json",
       mediaResolution: "high",
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("extraction", "low"),
       seed: DETERMINISTIC_SEED,
     });
 

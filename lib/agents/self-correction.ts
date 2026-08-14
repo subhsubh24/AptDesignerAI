@@ -10,6 +10,7 @@
 
 import { getProvider } from "@/lib/ai/provider-factory";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { createLogger } from "@/lib/logging/logger";
@@ -486,7 +487,7 @@ CORRECTION RULES:
     max_tokens: 16384,
     seed: DETERMINISTIC_SEED,
     responseMimeType: "application/json",
-    thinkingConfig: { thinkingLevel: "low" },
+    thinkingConfig: thinkingFor("scoring"),
   });
 
   return extractJsonObject<AreaAnalysisReviewOutput>(response.content);
@@ -597,7 +598,7 @@ Only fix actual inconsistencies. Don't change subjective style choices.`;
     max_tokens: 16384,
     seed: DETERMINISTIC_SEED,
     responseMimeType: "application/json",
-    thinkingConfig: { thinkingLevel: "low" },
+    thinkingConfig: thinkingFor("scoring"),
   });
 
   return extractJsonObject<DiagnosisReviewOutput>(response.content);
@@ -638,7 +639,7 @@ Return: {"valid": true/false, "issues": ["..."], "corrected": null or corrected 
       max_tokens: 8192,
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "minimal" },
+      thinkingConfig: thinkingFor("quick_score"),
     });
 
     const result = extractJsonObject<{ valid: boolean; issues: string[]; corrected: Record<string, unknown> | null }>(response.content);
