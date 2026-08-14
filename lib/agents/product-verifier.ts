@@ -11,6 +11,7 @@
 
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { extractJsonObject } from "@/lib/ai/extract-json";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -130,7 +131,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} as Record<string, never> }],
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("validation"),
       });
     } catch (schemaErr) {
       log.warn("verifier structured+grounding call failed, falling back to text", {
@@ -151,7 +152,7 @@ export async function runProductVerifier(input: VerifyInput): Promise<VerifyResu
         max_tokens: 64000,
         seed: DETERMINISTIC_SEED,
         tools: [{ googleSearch: {} as Record<string, never> }],
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("validation"),
       });
     }
     content = response.content;
