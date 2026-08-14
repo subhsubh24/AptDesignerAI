@@ -30,6 +30,13 @@
  * Determinism: no Date.now(), no Math.random(); every sort carries an explicit
  * final tiebreaker, and cycle-breaking always removes the same edge for the same
  * input regardless of arrival order.
+ *
+ * NOT TO BE CONFUSED WITH lib/validation/spatial-graph.ts. That one reasons about
+ * the room TOPOLOGY of a PROPOSED design — it parses placement strings for
+ * recommended products and scores traffic flow, dead zones, and sight-lines. This
+ * module validates the relation edges the VLM extracted from PHOTOS of the room
+ * as it already is. Different input, different pipeline stage; they never see the
+ * same data.
  */
 
 import type { SpatialRelation } from "@/lib/types/database";
