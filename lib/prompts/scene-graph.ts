@@ -43,7 +43,7 @@ CRITICAL RULES:
 1. **One object, not one-per-angle.** If the same sofa appears in photos 0, 2, and 4, output it ONCE as a single object whose "observed_in" lists image_index 0, 2, and 4. Never emit the same physical object multiple times.
 2. **Reconcile across views.** Use the clearest angle for each attribute: read color/material from the close, well-lit shot; read placement and scale from the wide shot. If lighting makes a color look different across angles, pick the most neutral one.
 3. **Localize when you can.** For each observation, give a normalized bounding box {x,y,w,h} in 0..1 for where the object sits in THAT photo. Omit (null) if you can't.
-4. **Spatial layout.** In "relations", capture how objects sit relative to each other and the walls ("left_of", "facing", "adjacent_to", "in_corner", "on"). Use object categories or wall directions (north/south/east/west) as endpoints.
+4. **Spatial layout.** In "relations", capture how objects sit relative to each other and the walls. Use ONLY these terms — anything else is discarded: "left_of", "right_of", "in_front_of", "behind", "above", "below", "on", "under", "adjacent_to", "facing", "in_corner". Use object categories or wall directions (north/south/east/west) as endpoints. State each fact ONCE and from whichever side is most natural — "table right_of sofa" and "sofa left_of table" are the same claim and get merged. Never assert both directions of the same pair ("A left_of B" AND "B left_of A"); that is impossible and both will be thrown away.
 5. **Coverage honesty.** In "coverage", list which walls/areas the photos actually show ("walls_observed") and which are never visible ("gaps"). If a wall or corner is never shown, say so — do not invent what's there.
 6. **Holistic summary.** Write a one-paragraph "summary" describing the whole space as a person standing in it would experience it, integrating all angles.${keepNote}${replaceNote}${ctxNote}
 
@@ -64,7 +64,7 @@ Return ONLY a JSON object with this exact shape:
       "confidence": <0..1>
     }
   ],
-  "relations": [{ "subject": "<category or wall>", "relation": "<left_of|facing|...>", "object": "<category or wall>" }],
+  "relations": [{ "subject": "<category or wall>", "relation": "<left_of|right_of|in_front_of|behind|above|below|on|under|adjacent_to|facing|in_corner>", "object": "<category or wall>" }],
   "coverage": {
     "walls_observed": ["north", "east"],
     "gaps": ["south wall", "ceiling"],

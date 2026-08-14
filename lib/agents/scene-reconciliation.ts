@@ -29,6 +29,7 @@ import type {
   IdentifiedProductDimensions,
 } from "@/lib/types/database";
 import type { RoomSceneGraphResponse, SceneObjectRaw } from "@/lib/types/schemas";
+import { buildRelationGraph, formatRelationsForPrompt } from "./relation-graph";
 
 export const SCENE_GRAPH_VERSION = 1;
 
@@ -269,26 +270,23 @@ function resolveEndpoint(token: string, objects: SceneObject[]): string {
   return partial ? partial.id : token;
 }
 
+/**
+ * Build the spatial relation graph, then hand it to the deterministic validator
+ * (relation-graph.ts) which canonicalises inverses and removes any claim that is
+ * geometrically impossible.
+ *
+ * This used to dedupe by key, drop self-loops, and sort — which let two real
+ * problems through: an invented relation term was stored verbatim, and a pair
+ * like "A left_of B" + "B left_of A" survived intact because those are distinct
+ * keys and neither is a self-loop. Now that these edges are rendered into
+ * downstream prompts, an unchecked graph would be actively misleading rather
+ * than merely unused.
+ */
 function buildRelations(
   raw: RoomSceneGraphResponse["relations"],
   objects: SceneObject[],
 ): SpatialRelation[] {
-  const byKey = new Map<string, SpatialRelation>();
-  for (const r of raw) {
-    if (!r.subject || !r.relation || !r.object) continue;
-    const rel: SpatialRelation = {
-      subject_id: resolveEndpoint(r.subject, objects),
-      relation: norm(r.relation),
-      object_id: resolveEndpoint(r.object, objects),
-    };
-    if (rel.subject_id === rel.object_id) continue;
-    byKey.set(`${rel.subject_id}|${rel.relation}|${rel.object_id}`, rel);
-  }
-  return Array.from(byKey.values()).sort((a, b) => {
-    const ka = `${a.subject_id}|${a.relation}|${a.object_id}`;
-    const kb = `${b.subject_id}|${b.relation}|${b.object_id}`;
-    return ka < kb ? -1 : ka > kb ? 1 : 0;
-  });
+  return buildRelationGraph(raw, (token) => resolveEndpoint(token, objects)).relations;
 }
 
 /** Compute coverage, grounding observed walls against the floor plan (or the
@@ -416,5 +414,18 @@ export function formatSceneGraphForPrompt(graph: RoomSceneGraph | null | undefin
   const gaps = graph.coverage.gaps.length
     ? `\nUnseen areas (no photo): ${graph.coverage.gaps.join(", ")}.`
     : "";
-  return `ROOM INVENTORY (deduped across all ${graph.source_image_urls.length} photos):\n${lines.join("\n")}${gaps}`;
+
+  // The spatial layout was previously extracted, persisted, and then dropped on
+  // the floor — every downstream stage knew WHAT was in the room and nothing
+  // about where anything sat. Emit it now that the graph is validated. Endpoints
+  // that are wall/direction tokens rather than object ids pass through as-is.
+  const labelById = new Map(
+    graph.objects.map((o) => [o.id, o.label || o.category.replace(/_/g, " ")]),
+  );
+  const layout = formatRelationsForPrompt(graph.relations, (id) =>
+    labelById.get(id) ?? id.replace(/_/g, " "),
+  );
+  const layoutBlock = layout ? `\n\n${layout}` : "";
+
+  return `ROOM INVENTORY (deduped across all ${graph.source_image_urls.length} photos):\n${lines.join("\n")}${gaps}${layoutBlock}`;
 }
