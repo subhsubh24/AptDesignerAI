@@ -8137,3 +8137,53 @@ ROADMAP Track/DoD box ticked (both fixes below that granularity).
   partial-scout convention). A future run should either complete the remaining 4 lenses
   (performance, a11y/design-bar, functional-reality actual-run, quality-grade-reconcile,
   dependency/config health — that's 5, pick up where useful) or run a fresh full 8-lens pass.
+
+## Run 165 (2026-08-14) — APT-28 fix + APT-24 continuation batch (product-verifier.ts)
+
+Scoped run: claimed and closed 1 Linear issue, continued another already In Progress,
+both file-disjoint. Did not run a fresh deep-audit sweep this run (last full 8-lens pass
+still Run 158, 2026-08-11 — now further stale; a future run should pick this up, per
+Run 164's note).
+
+**APT-28 (closed).** `app/api/bundles/evaluate/route.ts`'s project fetch discarded its
+`.single()` error — the 4th site of the bug class PR #880 fixed in 3 sibling routes,
+spotted by a reviewer during that PR and filed as its own issue rather than scope-creeping.
+Fixed identically: destructure `error: projectError`, log via `logServerError` (already
+imported for other uses in this file's siblings — this file didn't have the import yet,
+added it). Reviewer A independently re-verified `buildDesignProfile()` already tolerated
+`undefined`/`null` before this change (so behavior on error is unchanged, just now
+observable), and flagged a same-shape unchecked `diagnosis` fetch a few lines above in the
+same file — not filed as a new ticket since it's the identical bug class already covered by
+this issue's evidence trail, noted in the Linear close-out comment instead. PR #882, 2 fresh
+reviewers APPROVE first-cycle, merged clean.
+
+**APT-24 continuation.** Migrated both `lib/agents/product-verifier.ts` sites to
+`thinkingFor("validation")`. Low-risk pick: the file already calls `selectModel("validation")`
+for the same request, so the task label was already established in-file, and
+`DEFAULT_THINKING.validation === "low"` matches the literal being replaced exactly — verified
+by both reviewers independently rather than assumed. Explicitly did NOT attempt
+`lib/agents/computer-use/agent-loop.ts`'s 1 remaining site — its code comment documents a
+deliberate, already-reasoned exception (bypasses `geminiProvider.chat()` entirely, needs a
+real escalation-ladder architecture change per the cost contract, not a mechanical
+`thinkingFor()` swap) — recording this so a future run doesn't waste a cycle re-deriving the
+same conclusion. Register now 10 files / 27 sites (was 11/29). PR #883, 2 fresh reviewers
+APPROVE first-cycle, merged clean.
+
+**Gate.** Both PRs individually green before merge: `npx tsc --noEmit` clean, `npm test`
+3061/3073 passing (0 regressions from Run 164's count), `npm run check:determinism` clean,
+`npx eslint` clean on every touched file, plus the two AI-cost-contract ratchet tests
+(`thinking-config-literal-ratchet.test.ts`, `harness-ratchet.test.ts`) green with the updated
+debt register. `npm install` was required at session start (fresh container, no
+`node_modules`) before any gate command would run — worth remembering as the first step on a
+cold container, not a failure signal.
+
+**Lesson for future runs — Linear-issue close-out via PR-merge webhook is fast.** Both PRs in
+this run auto-merged within ~5 minutes of `enable_pr_auto_merge`, delivered as
+`pull_request.closed` webhook events via `subscribe_pr_activity` rather than needing to poll.
+Subscribing immediately after opening each auto-merge PR (instead of sleep-polling
+`get_status`) is the reliable pattern — do this by default rather than guessing a CI runtime.
+
+No migration, no live secret, no ROADMAP Track/DoD box ticked (both fixes below that
+granularity — mechanical/maintainability fixes, not phase-advancing features). APT-28 closed
+with the acceptance check pasted as run; APT-24 left In Progress with the narrowed register
+recorded on the issue for the next batch.
