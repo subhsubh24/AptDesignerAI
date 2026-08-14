@@ -79,10 +79,12 @@ const EXEMPT_FILES = new Set([
  * never add a new one, never quietly raise a count.
  */
 const KNOWN_LITERAL_SITES: Record<string, number> = {
-  "app/api/apartment-research/route.ts": 5,
-  "app/api/area-analysis/refine/route.ts": 2,
-  "app/api/area-analysis/route.ts": 2,
-  "app/api/mobile/analyze/route.ts": 1,
+  // lib/agents/computer-use/agent-loop.ts's 1 site is a DELIBERATE, documented
+  // exception (APT-24 route-level batch): it bypasses geminiProvider.chat()
+  // entirely (calls ai.models.generateContent() directly, see the file-level
+  // comment above), is an escalation-ladder-pending case, and is ALSO tracked
+  // separately by high-thinking-exceptions.test.ts's KNOWN_BYPASSES register.
+  // It is intentionally left out of migration, not missed.
   "lib/agents/computer-use/agent-loop.ts": 1,
 };
 

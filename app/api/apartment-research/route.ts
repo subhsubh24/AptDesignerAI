@@ -5,6 +5,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { z } from "zod";
 
@@ -271,7 +272,7 @@ async function disambiguateWithVision(
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       seed: DETERMINISTIC_SEED,
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("apartment_research"),
     });
 
     const raw = res.content.trim();
@@ -625,7 +626,7 @@ ${floorPlanSchema}`;
       max_tokens: 64000,
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       seed: DETERMINISTIC_SEED,
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: thinkingFor("apartment_research"),
       tools: [{ googleSearch: {} }, { urlContext: {} }],
     });
 
@@ -652,7 +653,7 @@ ${floorPlanSchema}`;
         max_tokens: 64000,
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         seed: DETERMINISTIC_SEED,
-        thinkingConfig: { thinkingLevel: "low" },
+        thinkingConfig: thinkingFor("apartment_research"),
         tools: [{ googleSearch: {} }, { urlContext: {} }],
       });
 
@@ -749,7 +750,7 @@ ${floorPlanSchema}`;
             max_tokens: 64000,
             // No temperature override — Gemini 3 is optimized for its default (1.0).
             seed: DETERMINISTIC_SEED,
-            thinkingConfig: { thinkingLevel: "low" },
+            thinkingConfig: thinkingFor("apartment_research"),
           });
 
           const visionRaw = visionResponse.content.trim();
@@ -960,7 +961,7 @@ CONFIDENCE RULES:
           }],
           max_tokens: 64000,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("apartment_research"),
           // googleMaps must run alone — combining with urlContext or googleSearch
           // produces INVALID_ARGUMENT from the Gemini API.
           // latLng is routed into toolConfig.retrievalConfig by
