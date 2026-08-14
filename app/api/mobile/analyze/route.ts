@@ -102,7 +102,6 @@ export async function POST(request: NextRequest) {
   try {
     return await withCostLedger(async (summary) => {
       const model = selectModel("area_analysis");
-      const { thinkingLevel } = thinkingFor("area_analysis");
 
       const contentBlocks: AIContentBlock[] = [
         { type: "image", source: { type: "url", url: image_url } },
@@ -126,10 +125,10 @@ export async function POST(request: NextRequest) {
         max_tokens: 8192,
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel },
+        thinkingConfig: thinkingFor("area_analysis"),
       });
 
-      recordUsage("mobile-pass-a", model, response.usage, { thinkingLevel });
+      recordUsage("mobile-pass-a", model, response.usage, { thinkingLevel: thinkingFor("area_analysis").thinkingLevel });
 
       const s = summary();
       console.log(`[mobile/analyze] user=${user.id} room=${roomTypeName} tokens=${s.totalTokens}`);

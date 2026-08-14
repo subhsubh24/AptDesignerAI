@@ -5,6 +5,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -285,7 +286,10 @@ ${JSON.stringify({
         // No temperature override — Gemini 3 is optimized for its default (1.0).
         seed: DETERMINISTIC_SEED,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "low" },
+        // Feedback-interpretation pass — deliberately pinned below
+        // area_analysis's registered "high" default; this reads a short
+        // client note, not room understanding.
+        thinkingConfig: thinkingFor("area_analysis", "low"),
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- LLM response shape
       interpretation = extractJsonObject<Record<string, any>>(interpretResponse.content);
@@ -366,7 +370,10 @@ CRITICAL RULES:
       // No temperature override — Gemini 3 is optimized for its default (1.0).
       seed: DETERMINISTIC_SEED,
       responseMimeType: "application/json",
-      thinkingConfig: { thinkingLevel: "low" },
+      // Regeneration pass applies Pass A's interpretation rather than
+      // re-deriving room understanding — deliberately pinned below
+      // area_analysis's registered "high" default, same as Pass A above.
+      thinkingConfig: thinkingFor("area_analysis", "low"),
     });
 
     if (response.truncated) {

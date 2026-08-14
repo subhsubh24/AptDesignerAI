@@ -656,7 +656,10 @@ Return ONLY a JSON object: {"best_index": <integer 0 to ${candidates.length - 1}
           messages: [{ role: "user", content: [{ type: "text", text: judgePrompt }] }],
           max_tokens: 4096,
           seed: DETERMINISTIC_SEED,
-          thinkingConfig: { thinkingLevel: "low" },
+          // Judge picking among Pass A candidates — deliberately pinned below
+          // area_analysis's registered "high" default; this is a comparison
+          // task, not room understanding.
+          thinkingConfig: thinkingFor("area_analysis", "low"),
           cacheScope:
             contentBlocks.length > 0
               ? { sessionKey: areaSessionKey, content: contentBlocks }
@@ -1954,7 +1957,7 @@ Use Google Search to verify current pricing and material availability when neede
                   }],
                   max_tokens: 8192,
                   seed: DETERMINISTIC_SEED,
-                  thinkingConfig: { thinkingLevel: "low" },
+                  thinkingConfig: thinkingFor("validation"),
                   tools: [{ googleSearch: {} as Record<string, never> }],
                 });
                 coordState.designTrendSearches = [
