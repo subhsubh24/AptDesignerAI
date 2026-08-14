@@ -86,7 +86,6 @@ const KNOWN_LITERAL_SITES: Record<string, number> = {
   "lib/agents/computer-use/agent-loop.ts": 1,
   "lib/agents/mockup-agent.ts": 2,
   "lib/agents/product-extractor.ts": 3,
-  "lib/agents/product-verifier.ts": 2,
   "lib/agents/self-correction.ts": 3,
   "lib/agents/shopping-researcher.ts": 2,
   "lib/agents/validation-agent.ts": 6,
