@@ -402,3 +402,120 @@ roadmap-steer sweep used the GitHub API to reconstruct full history rather than 
   (roadmap_steer_justification) — both have now survived multiple runs despite being cheap fixes.
 - Do not let the gate-being-closer status anchor the next grade upward. Re-run every script and
   re-fetch every citation cold, exactly as this run did.
+
+---
+
+## Run 6 — 2026-08-10
+
+**Overall: B · ship_gate_met: FALSE** (was B / false at Run 5 — same letter, but a real second
+consecutive improvement run underneath it, not a plateau)
+
+Graded GROWTH_STATUS (as_of 2026-08-09, Growth Agent Run 22) + BUSINESS_CASE (as_of 2026-07-29,
+last substantive touch 2026-08-03 commit 2d079e67) with eight fresh, independent, adversarial
+per-dimension graders — one per rubric dimension this time, up from six at Run 5 — each explicitly
+tasked to re-verify Run 5's specific claimed fixes against real code/scripts/citations, not trust
+the Factory's self-report. Read GTM_AUDIT_MEMORY first and diffed against Run 5.
+
+### Grades
+| Dimension | R1 | R2 | R3 | R4 | R5 | R6 | Ship-critical | Δ vs R5 |
+|---|---|---|---|---|---|---|---|---|
+| Metric integrity | A | A+ | A+ | A | A | **A** | ★ | = |
+| Business-case honesty | F | B | A | B | B | **B** | ★ | = (different reason, again) |
+| Experiment validity | A | A | A | C | B | **A** | | ↑ |
+| Roadmap-steer justification | A+ | A+ | A+ | A | A | **A+** | ★ | ↑ |
+| Self-validation honesty | A | A | A+ | C | A | **A** | ★ | = (resolved a real dispute) |
+| PMF read accuracy | A+ | A+ | A+ | B | B | **A** | | ↑ |
+| Compliance | A | A | A+ | B | A | **A** | | = |
+| Artifact freshness | B | A | A+ | C | C | **B** | | ↑ |
+
+### What genuinely fixed (verified against code/scripts/citations, not self-report)
+1. **Experiment validity B → A.** The Havenly App Store disconfirming datum (theme 3) is genuinely
+   theme-specific — independently WebFetched and matched 4.4/5 across 4,900 ratings plus the three
+   quoted reviews exactly. Theme 4's `structurally_hard_to_corroborate` flag reflects genuinely
+   diverse research (Runs 14/17/20/21/22), including a real methodological catch (correctly refusing
+   to cite a WebSearch-synthesized AR stat misattributed to Wayfair). Two minor nits keep it at A,
+   not A+: theme 1 still has zero theme-specific disconfirming datum, and the "sixth consecutive dead
+   end" tally justifying the theme-4 flag is inflated by one (Run 19's own narrative shows no
+   theme-4 attempt that run).
+2. **PMF read accuracy B → A.** The `unbuilt_disclosure` added to the pmf block is not just present
+   but independently confirmed TRUE — re-ran the grep (zero hits) and read the whole
+   `lib/growth/metrics.ts`, plus swept the whole repo for the broader "anywhere in the codebase"
+   claim. The one place the disclosure could have overstated (the referral-capture-vs-query
+   distinction) was checked carefully and found precise, not sloppy.
+3. **Roadmap-steer justification A → A+.** The 4-run-persistent Havenly $511-vs-$265 provenance
+   contradiction is verified fixed at the character level in the current live file (not just
+   reworded). Full GitHub-API history reconstruction (local clone re-confirmed shallow) found zero
+   GTM-authored steers reached ROADMAP/VISION/BUSINESS_CASE since Run 5 — VISION.md had zero commits
+   at all; ROADMAP.md's two commits are Product-Factory housekeeping; BUSINESS_CASE.md's one commit
+   is a disclosure fix with no ARR change. All signals green — genuinely exemplary.
+4. **Artifact freshness C → B.** Both Run-5-named findings (docs/analytics.md's 11th event,
+   docs/email-welcome-sequence.md's stale webhook language) independently confirmed fixed against
+   current code. Held at B, not raised to A: the identical narrow-fix-leaves-a-duplicate-stale
+   PATTERN (already named at Run 4 and Run 5) recurred a THIRD time — docs/email-lifecycle.md's own
+   top banner still contradicts its own corrected delivery-notes section further down — and no
+   structural guard (a preflight check tying FunnelEvent's count to docs/analytics.md) was ever
+   built, so the class of gap remains genuinely unprotected against recurring a fourth time.
+
+### The one dimension that held its letter for a genuinely different, notable reason
+5. **Self-validation honesty held A, but by RESOLVING a real dispute, not by default.** Run 5 itself
+   claimed a citation ("commit 0e0f901") in the gtm_scorecard validation entry "does not reproduce."
+   The Factory's Run 19 commit pushed back, claiming Run 5 was wrong. This run independently
+   adjudicated the dispute from primary GitHub evidence rather than trusting either party:
+   `mcp__github__get_commit` on 0e0f9017ec7e888f9c1a9a7e752fc3732e1293e0 confirms it genuinely
+   exists, is dated 2026-07-27, and its file-stats list DOES include
+   docs/quality/QUALITY_SCORECARD.md; 38a79b5's own file list does NOT include that path at all.
+   **Run 5's finding was itself wrong; the Factory's rebuttal was correct.** This is exactly the
+   self-validation behavior the rubric rewards (catching a false claim via primary-source
+   re-checking) — recorded plainly here so a future run does not re-litigate it, and so the record
+   is honest about the prior audit's own error, not just the Factory's.
+
+### The gap that held business-case honesty at B (same letter, different substance, second time running)
+6. **Business-case honesty: Run 5's SPECIFIC named finding is genuinely fixed, but a new instance of
+   the identical disclosure-asymmetry pattern replaced it — the same story as Run 4 → Run 5.** All 10
+   registered `analysis/business_case_*.mjs` scripts re-ran and reproduced exactly; both the
+   Scenario-B and shippable-today figures now carry equivalent "steady-state, not year-1" caveats.
+   But the "What would have to change to NOT reach $100K" sensitivity section still cites two downside
+   figures (monthly-churn-12% $113,604, annual-churn-40% $125,331) as "clearing the floor" via the
+   identical steady-state formula, with NO year-1 caveat — independently computed year-1 reads are
+   $60,593 and $69,934, both below the floor. A secondary finding: the machine-readable `arr_year1`
+   YAML key holds steady-state values, a misnomer against `floor_met_year1:false`.
+
+### Ship gate
+NOT MET, but the narrowest margin yet: only ONE dimension misses the bar now
+(business_case_honesty B, ship-critical), down from two at Run 5 and four at Run 4. Every other
+ship-critical dimension is A/A+, and artifact_freshness's B already clears the non-critical >=B bar.
+
+### Issue tracking this run
+- Updated #785 (business_case_honesty) with the new sensitivity-figures gap, replacing the fixed
+  shippable-today finding — kept open (dimension still B).
+- Updated #720 (artifact_freshness) with the docs/email-lifecycle.md banner finding and the missing
+  structural guard, noting both Run-5 findings are fixed — kept open (dimension still B, recurring
+  pattern).
+- Closed #786 (pmf_read_accuracy) as genuinely fixed and independently re-verified.
+- Closed #721 (experiment_validity) as genuinely fixed and independently re-verified, noting the two
+  minor residual nits in the scorecard text rather than as a blocking issue (dimension is now A).
+
+### Methodological note carried forward
+This repo's local clone is SHALLOW (`.git/shallow` present) — reconfirmed again this run. The
+roadmap-steer sweep used the GitHub API to reconstruct full history rather than local `git log`, per
+the standing note since Run 4. Also newly established this run: when a prior audit's own finding is
+disputed by the Factory's rebuttal, resolve it from primary evidence (direct commit/file-list lookups)
+rather than defaulting to either party's word — this run's self_validation_honesty grade rests on
+having done exactly that.
+
+### Notes for next run
+- Re-check whether the two sensitivity-figure caveats (monthly-churn-12%, annual-churn-40%) were
+  added with the ~$60.6K/$69.9K year-1 reads, matching the treatment already given to Scenario B and
+  the shippable-today figures. Also check whether `arr_year1`'s naming or the stale `as_of` was
+  addressed.
+- Re-check artifact_freshness: is docs/email-lifecycle.md's top banner fixed to match its own
+  delivery-notes section? Was a preflight/validate-gtm check added tying FunnelEvent's count to
+  docs/analytics.md? This is the THIRD occurrence of this pattern — if a fourth occurs, name the
+  pattern itself (not just the instance) as the top_gap.
+- Re-check experiment_validity: has theme 1 gained a theme-specific disconfirming datum? Was the
+  theme-4 "consecutive dead end" tally corrected from six to five?
+- Two trivial nits worth a one-line fix each: the vercel_analytics package.json line-number citation
+  (self_validation_honesty) and the demand_signal `confidence`-vs-`overall_strength` field-naming
+  drift against GTM_STANDARD S10 (cross-dimension, currently unfiled).
+- Do not let the two-consecutive-improvement-run trend anchor the next grade upward. Re-run every
+  script and re-fetch every citation cold, exactly as this run did.
