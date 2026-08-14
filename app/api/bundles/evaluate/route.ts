@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { evaluateBundle } from "@/lib/agents/bundle-optimizer";
@@ -96,9 +96,12 @@ export async function POST(request: Request) {
   const roomImageUrls = (room?.room_images || []).map((img: { image_url: string }) => img.image_url);
 
   // Fetch project for full building/apartment context (depends on room.project_id).
-  const { data: project } = room?.project_id
+  const { data: project, error: projectError } = room?.project_id
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
-    : { data: null };
+    : { data: null, error: null };
+  if (projectError) {
+    logServerError("bundles/evaluate project fetch — continuing without design profile", projectError);
+  }
 
   const designProfile = buildDesignProfile(project);
 
