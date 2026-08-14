@@ -84,11 +84,9 @@ const KNOWN_LITERAL_SITES: Record<string, number> = {
   "app/api/area-analysis/route.ts": 2,
   "app/api/mobile/analyze/route.ts": 1,
   "lib/agents/computer-use/agent-loop.ts": 1,
-  "lib/agents/mockup-agent.ts": 2,
   "lib/agents/product-extractor.ts": 3,
   "lib/agents/self-correction.ts": 3,
   "lib/agents/shopping-researcher.ts": 2,
-  "lib/agents/validation-agent.ts": 6,
 };
 
 function walk(dir: string): string[] {

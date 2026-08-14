@@ -1,5 +1,6 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import {
   HarmonyItemScoresResponseSchema,
@@ -457,7 +458,7 @@ Note: since ALL sub_scores ≥ 9.5, revised_* and root_cause are OMITTED entirel
           responseSchema: HARMONY_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
           cacheScope: context.cacheScope,
-          thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("validation", context.thinkingConfig?.thinkingLevel),
         });
 
         if (response.truncated) {
@@ -633,7 +634,7 @@ Use this to calibrate: one real pairwise conflict (scale), one material issue, b
             responseSchema: HARMONY_GLOBAL_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
             cacheScope: context.cacheScope,
-            thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
+            thinkingConfig: thinkingFor("validation", context.thinkingConfig?.thinkingLevel),
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -954,7 +955,7 @@ If the concrete target is undeterminable from photos + spatial layout, say so in
           responseSchema: FINAL_ITEM_SCORES_GEMINI_SCHEMA,
           mediaResolution: "ultra_high",
           cacheScope: context.cacheScope,
-          thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("validation", context.thinkingConfig?.thinkingLevel),
         });
 
         if (response.truncated) {
@@ -1104,7 +1105,7 @@ Based on the room context and per-item final scores above, your task is: holisti
             responseSchema: FINAL_HOLISTIC_GEMINI_SCHEMA,
             mediaResolution: "ultra_high",
             cacheScope: context.cacheScope,
-            thinkingConfig: context.thinkingConfig ?? { thinkingLevel: "low" },
+            thinkingConfig: thinkingFor("validation", context.thinkingConfig?.thinkingLevel),
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1187,7 +1188,7 @@ Based on the scoring and holistic assessment above, decide: keep iterating, or s
             seed: DETERMINISTIC_SEED,
             responseMimeType: "application/json",
             responseSchema: FINAL_CONVERGENCE_GEMINI_SCHEMA,
-            thinkingConfig: { thinkingLevel: "minimal" },
+            thinkingConfig: thinkingFor("validation", "minimal"),
           });
           const raw = extractJsonObject(response.content);
           const unwrapped = Array.isArray(raw) ? raw[0] : raw;
@@ -1446,7 +1447,7 @@ Return JSON:
           seed: DETERMINISTIC_SEED,
           responseMimeType: "application/json",
           responseSchema: PRODUCT_SET_VALIDATION_GEMINI_SCHEMA,
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("validation"),
         });
 
         const raw = extractJsonObject(response.content);
