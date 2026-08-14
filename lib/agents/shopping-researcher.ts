@@ -1,6 +1,7 @@
 import { geminiProvider } from "@/lib/ai/gemini";
 import { withMarginOperation } from "@/lib/observability/margin-context";
 import { selectModel } from "@/lib/ai/models";
+import { thinkingFor } from "@/lib/ai/thinking";
 import { getSystemPrompt } from "@/lib/prompts/system";
 import { getSearchBriefPrompt } from "@/lib/prompts/search-brief";
 import { SearchBriefResponseSchema, QuickScreenResponseSchema } from "@/lib/types/schemas";
@@ -395,7 +396,7 @@ async function generateSearchBriefImpl(
           max_tokens: 16000,
           seed: DETERMINISTIC_SEED,
           responseSchema: SEARCH_BRIEF_GEMINI_SCHEMA,
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: thinkingFor("search_brief"),
         });
 
         if (response.truncated) {
@@ -754,7 +755,7 @@ Return JSON:
           max_tokens: 8000,
           seed: DETERMINISTIC_SEED,
           responseSchema: QUICK_SCREEN_GEMINI_SCHEMA,
-          thinkingConfig: { thinkingLevel: "minimal" },
+          thinkingConfig: thinkingFor("quick_screen"),
         });
 
         const tokensUsed = response.usage.input_tokens + response.usage.output_tokens + response.usage.thinking_tokens;
