@@ -49,7 +49,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { evalsEnabled } from "../runner";
 
-const EVAL_TIMEOUT_MS = 6 * 60 * 1000;
+// 3 sequential selectModel("diagnosis") HIGH-thinking judge calls per scene.
+// Matches this repo's other single-call diagnosis-tier eval precedent (3 min/
+// call — see diagnosis.eval.test.ts / area-analysis.eval.test.ts /
+// refine.eval.test.ts) times 3 calls, rather than the 6 min inherited from
+// this file's original (buggy, concurrent) version (APT-32).
+const EVAL_TIMEOUT_MS = 9 * 60 * 1000;
 
 // Reused from the mockup-generation eval (evals/__tests__/mockup.eval.test.ts)
 // — a warm, furnished, well-composed living room. A real design-quality judge
