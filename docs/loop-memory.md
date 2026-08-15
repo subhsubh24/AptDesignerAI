@@ -8214,3 +8214,109 @@ No migration, no live secret, no ROADMAP Track/DoD box ticked (both fixes below 
 granularity — mechanical/maintainability fixes, not phase-advancing features). APT-28 closed
 with the acceptance check pasted as run; APT-24 left In Progress with the narrowed register
 recorded on the issue for the next batch.
+
+## Run 2026-08-15 (Run 167) — closed APT-24, re-confirmed APT-9's structural bar (no re-derivation), ran the overdue full 8-lens DEEP AUDIT, shipped 1 verified fix, filed 2 follow-ups.
+
+**Board.** APT-24 closed: the register was already empty going into this run (the prior run's
+last batch, PR #894, closed the remaining route-level sites) — re-ran the full acceptance
+check fresh against `HEAD` (`grep -rn 'thinkingConfig: *{' app/ lib/` → only the documented
+`agent-loop.ts` intentional exception) plus the whole gate (`npx tsc --noEmit` clean, `npm
+test` 3091/3105 passing, `check:determinism` clean, `check-security-invariants.mjs` 26/26 RLS
+tables) and closed with that output pasted in. **APT-9 re-confirmed, not re-derived**: claimed
+it, called `update_trigger` on both auditor routines, hit the identical
+`created_via: "http_api"` permission error four prior runs already documented in detail
+(2026-08-08 through 2026-08-12). Read the latest comment BEFORE claiming next time — didn't
+this run, wasted one round-trip re-deriving what was already proven. Released back to `Todo`,
+added a single one-line timestamped confirmation instead of a fifth full re-analysis, per the
+"comment once" rule. `PENDING_OPS.md` already carries the ready-to-paste replacement prompt
+text for both routines — still accurate, still owner-only.
+
+**Cold container note (repeat of Run 152's lesson):** `npx tsc --noEmit` initially reported
+dozens of `Cannot find module`/`Cannot find name 'process'` errors — no `node_modules` at all,
+not a regression. `npm install` (~26s) fixed it. Checking `node_modules` existence before
+treating a huge fresh error count as a real break is still the right first move on a new
+container.
+
+### Full 8-lens DEEP AUDIT (overdue — last full pass Run 158, 2026-08-11, now 6+ runs stale)
+
+Ran all 8 lenses as parallel Haiku scouts (correctness/dead-code, security/RLS, performance,
+accessibility/design-bar, quality-grade-reconcile, test/eval coverage, dependency/config
+health, artifact freshness).
+
+- **Security: clean.** `check-security-invariants.mjs` passing (26/26 RLS tables); spot-checked
+  8 critical routes' IDOR guards, migration RLS coverage, admin-client usage, and
+  NEXT_PUBLIC_*/EXPO_PUBLIC_* exposure — no findings.
+- **Correctness: 1 real, verified bug → fixed.** `lib/agents/product-extractor.ts`'s
+  `validateImageUrl`/`scrapeProductImages`/`scrapePageContext` each leaked a `setTimeout`-driven
+  abort timer on any fetch error (the scout only named the first two; a third identical instance
+  in `scrapePageContext` was found during implementation by re-grepping the file for every
+  `setTimeout`/`clearTimeout` pair). PR #895 — see below.
+- **Design-bar scout's top finding was a FALSE POSITIVE — caught before spending a change on
+  it.** The scout flagged `components/ui/toast.tsx` and `components/ui/badge.tsx` for hardcoded
+  Tailwind colors bypassing the design-token system. Before implementing, read
+  `__tests__/design/off-system-palette-ratchet.test.ts` — both files are DELIBERATELY EXEMPT by
+  name, with their off-system-color counts PINNED (`toast.tsx: 32`, `badge.tsx: 12`) specifically
+  so a future run can't "fix" them: they're categorical status feedback (success/error/warning/
+  info), not an ordinal ladder, and a prior run reasoned explicitly that monochroming a success
+  toast costs a real affordance. The test's own docstring says so. **Record for future runs: do
+  NOT touch toast.tsx/badge.tsx's status colors — this is a settled decision, not an open gap.**
+  The scout's other 3 findings (`motion.tsx` rgba box-shadow, `dialog.tsx` `bg-black/60`,
+  `floor-plan-upload-zone.tsx` `bg-white`) were checked and are very likely intentional
+  (Framer Motion can't interpolate `var()` refs in an animated `boxShadow`; black/white scrim and
+  photo-preview backgrounds aren't hue-competitors the ratchet targets) — none actioned, none
+  filed, all sub-bar/speculative.
+- **Performance: real gap, filed rather than fixed.** Raw `<img>` tags on hot pages (picks,
+  dashboard, products, mockups, focus) skip `next/image` — ~100-300ms/page estimated impact.
+  Not attempted this run (visual-regression risk with no way to visually verify headlessly);
+  filed as **APT-33** with the smallest-scope file (`app/picks/page.tsx`, 1 occurrence) named as
+  the right first cut.
+- **Quality-grade reconcile: scorecard partially stale, in the GOOD direction.** Independently
+  verified 2 of the 4 ship_critical-below-A gaps the 2026-08-10 scorecard cites were already
+  fixed by commits that landed hours after that grade (security_rls's IDOR — PR #860; artifact_
+  integrity's ROADMAP test-count inflation — same-day fix). The other 2 (functional_reality's
+  DATA_BACKEND cutover, design_taste's F7 authed screenshots) were re-verified STILL open and
+  are the same owner-gated/`.github/`-adjacent bars prior audits already established — not
+  re-attempted, not re-filed. This is the independent Quality Auditor's job to re-grade, not
+  ours to act on directly.
+- **Test/eval coverage: 2 items checked, both deprioritized correctly.** `cassette-provider.ts`
+  has no DIRECT test file, but is exercised extensively by 5 integration test suites
+  (cassette-guard, scene-assembler-cassette, render-pipeline-cassette, validation-agent-cassette,
+  diagnosis-pipeline-cassette) — real indirect coverage, not a from-scratch gap, so not
+  prioritized this run. `e2e/public-pages.spec.ts`/`a11y.spec.ts` not wired into any CI job —
+  already tracked in `PENDING_OPS.md` (`wire-orphaned-e2e-specs-into-ci`, requires `.github/`
+  edit, owner-only). Eval gold set is sparse (3 fixtures, 2 room types) — this is F3's own
+  standing ongoing work, not a new finding; not actioned this run (growing it well takes real
+  curation time this run's budget didn't have left).
+- **Dependency health: 1 real gap, filed rather than fixed.** `mobile/`'s Expo SDK pin (`~56.0.x`)
+  carries 30 unpatched vulnerabilities (22 high) via a `xcode`→`@expo/config-plugins` transitive
+  chain, build-time-only but real. An SDK major bump is a real compatibility-risk migration that
+  needs its own isolated verification pass — filed as **APT-34** rather than attempted as a
+  drive-by. Root repo dependency health is clean.
+- **Artifact freshness: nothing but a trivial date-heading typo** (`docs/BUSINESS_CASE.md`
+  section heading says "June 2026" while its YAML `as_of` correctly says July 29) — sub-bar,
+  not actioned.
+
+### Shipped: PR #895 — product-extractor timeout-leak fix
+
+Three functions' `AbortController`/`setTimeout` pairs moved outside their `try` blocks, cleared
+in `finally` on every exit path instead of only the success path. Reviewer A's first-round
+`REQUEST_CHANGES` correctly called out that the PR body's "disproportionate mocking" excuse for
+skipping a test was false — the repo already has a `vi.stubGlobal("fetch", ...)` convention
+(`__tests__/ai/tavily.test.ts`) that reaches this without new infrastructure. Added a regression
+test driven through the exported `extractFromUrl` → `extractFromUrlBatch` path (a
+STRUCTURED_SCRAPE_FIRST domain, no pre-extracted content, failed Tavily lookup, so
+`scrapePageContext` runs twice against a fetch mocked to always reject), asserting every timer
+created was cleared. **Verified the test is a real regression guard, not vacuous**: temporarily
+swapped in the pre-fix source via `git show HEAD~1:...`, reran — 1 failure (the new test), 7
+still passing; restored the fix, reran — 8/8 passing, `git diff --stat` empty. Both reviewers
+APPROVE round 2. Auto-merged, PR #895.
+
+**Lesson for future runs — verify a scout's design-bar finding against the ratchet test's own
+exemption list before implementing.** `__tests__/design/off-system-palette-ratchet.test.ts`
+pins exactly which files are deliberately exempt and why; a scout re-flagging one of those
+files is a false positive by construction, not a fresh finding. Read that test before spending
+a change-slot on any `toast.tsx`/`badge.tsx`/`app/page.tsx` "off-system color" finding.
+
+No migration, no live secret, no ROADMAP Track/DoD box ticked (the fix is below Track-checkbox
+granularity). APT-33 and APT-34 filed with runnable acceptance checks, both correctly landed in
+`Backlog` (not yet prioritized) rather than forced into `Todo`.
