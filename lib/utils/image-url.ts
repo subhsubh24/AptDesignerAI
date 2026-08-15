@@ -60,10 +60,22 @@ const OPTIMIZABLE_IMAGE_HOSTS = [
 ];
 
 export function canOptimizeImageHost(url: string): boolean {
-  if (url.startsWith("/")) return true; // internal storage path, same-origin
+  if (url.startsWith("/")) {
+    // Same-origin check, not a hand-rolled prefix match: resolve against a
+    // fixed base with the platform URL parser and require the resolved origin
+    // to stay on that base. Closes the `//host`, `/\host`, and tab/newline
+    // bypasses a bare `startsWith("/")` misses — mirrors
+    // isAcceptableStoredImageUrl above, which this helper must match in
+    // strictness since both gate what reaches next/image's server-side fetch.
+    try {
+      return new URL(url, INTERNAL_BASE).origin === INTERNAL_BASE;
+    } catch {
+      return false;
+    }
+  }
   try {
-    const { hostname } = new URL(url);
-    return OPTIMIZABLE_IMAGE_HOSTS.some((re) => re.test(hostname));
+    const { hostname, protocol } = new URL(url);
+    return protocol === "https:" && OPTIMIZABLE_IMAGE_HOSTS.some((re) => re.test(hostname));
   } catch {
     return false;
   }
