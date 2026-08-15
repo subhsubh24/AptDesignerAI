@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // product-extractor's image path calls geminiProvider.chat directly; mock it so
 // we exercise the parse/validate/error branches without a real model call.
@@ -12,7 +12,7 @@ vi.mock("@/lib/ai/tavily", () => ({
   tavilyExtract: vi.fn(),
 }));
 
-import { extractFromImage, extractFromUrlBatch } from "@/lib/agents/product-extractor";
+import { extractFromImage, extractFromUrlBatch, extractFromUrl } from "@/lib/agents/product-extractor";
 import { geminiProvider } from "@/lib/ai/gemini";
 import { tavilyExtract } from "@/lib/ai/tavily";
 import { DETERMINISTIC_SEED } from "@/lib/ai/determinism";
@@ -157,5 +157,58 @@ describe("extractFromUrlBatch", () => {
     // assert against the collaborator the function actually calls.
     expect(results.size).toBe(0);
     expect(mockTavily).not.toHaveBeenCalled();
+  });
+});
+
+describe("extractFromUrl — scrape-fallback abort timer cleanup", () => {
+  // Regression coverage for the leak this fix closes: scrapePageContext (a
+  // private helper reached only through this exported path) creates a
+  // setTimeout-driven AbortController per fetch attempt. Before the fix,
+  // clearTimeout ran only on the success branch inside the try block, so a
+  // rejected fetch (network error, not the abort itself) left the timer
+  // running for up to 10s. This URL is a STRUCTURED_SCRAPE_FIRST domain with
+  // no pre-extracted content and a failed Tavily lookup, so it is scraped
+  // TWICE (the parallel "supplement" pass, then the no-content fallback pass)
+  // — both real fetch attempts must clean up their own timer.
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    mockTavily.mockReset();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("clears every abort timer even when every scrape fetch attempt rejects", async () => {
+    const url = "https://www.westelm.com/product/test-item";
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    mockTavily.mockResolvedValue({ results: [], failed_results: [{ url }] });
+
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+
+    const result = await extractFromUrl(url);
+
+    // scrapePageContext gave up both times (fetch always rejects), so this
+    // URL never gets extractable content and the batch reports failure —
+    // never the LLM fallback path, since that only runs on non-empty scraped
+    // content.
+    expect(result.success).toBe(false);
+    expect(fetchMock).toHaveBeenCalled();
+
+    // The actual regression guard: every AbortController timer this code path
+    // created was cleared. Before the fix, a rejected fetch skipped
+    // clearTimeout entirely, so this assertion would fail against the old code.
+    const createdTimerIds = setTimeoutSpy.mock.results.map((r) => r.value);
+    expect(createdTimerIds.length).toBeGreaterThan(0);
+    const clearedTimerIds = new Set(clearTimeoutSpy.mock.calls.map((c) => c[0]));
+    for (const id of createdTimerIds) {
+      expect(clearedTimerIds.has(id)).toBe(true);
+    }
+
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
   });
 });

@@ -84,9 +84,9 @@ async function validateImageUrl(url: string | null | undefined): Promise<string 
   } catch {
     return null;
   }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       method: "HEAD",
       signal: controller.signal,
@@ -97,13 +97,14 @@ async function validateImageUrl(url: string | null | undefined): Promise<string 
       },
       redirect: "follow",
     });
-    clearTimeout(timeout);
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") || "";
     if (!ct.startsWith("image/")) return null;
     return url;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -115,9 +116,9 @@ async function validateImageUrl(url: string | null | undefined): Promise<string 
 async function scrapeProductImages(
   pageUrl: string
 ): Promise<{ ogImage: string | null; productImages: string[] }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(pageUrl, {
       signal: controller.signal,
       headers: {
@@ -127,7 +128,6 @@ async function scrapeProductImages(
       },
       redirect: "follow",
     });
-    clearTimeout(timeout);
     if (!res.ok) return { ogImage: null, productImages: [] };
 
     const html = await res.text();
@@ -200,6 +200,8 @@ async function scrapeProductImages(
   } catch (err) {
     log.warn("Failed to scrape images from page", { url: pageUrl, error: err instanceof Error ? err.message : String(err) });
     return { ogImage: null, productImages: [] };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -210,9 +212,9 @@ async function scrapeProductImages(
  * Returns null if the page can't be fetched.
  */
 async function scrapePageContext(pageUrl: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(pageUrl, {
       signal: controller.signal,
       headers: {
@@ -221,7 +223,6 @@ async function scrapePageContext(pageUrl: string): Promise<string | null> {
       },
       redirect: "follow",
     });
-    clearTimeout(timeout);
     if (!res.ok) return null;
 
     const html = await res.text();
@@ -280,6 +281,8 @@ async function scrapePageContext(pageUrl: string): Promise<string | null> {
     return lines.length > 0 ? lines.join("\n") : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
