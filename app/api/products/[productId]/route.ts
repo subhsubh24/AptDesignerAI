@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/utils/api-error";
 import { requireCandidateProductOwnership } from "@/lib/auth/ownership";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
+import { validateExternalUrl } from "@/lib/utils/url-validator";
 
 export async function PATCH(
   request: Request,
@@ -37,6 +38,17 @@ export async function PATCH(
     const v = body[f];
     if (v !== undefined && v !== null && (typeof v !== "string" || v.length > 2000)) {
       return NextResponse.json({ error: `${f} must be a string of at most 2000 characters` }, { status: 400 });
+    }
+  }
+  // Mirrors POST /api/products/ingest: reject non-http(s)/malformed schemes on
+  // the write path itself, not just at the image-optimizer's render-time check.
+  for (const f of ["product_url", "image_url"] as const) {
+    const v = body[f];
+    if (typeof v === "string") {
+      const validation = validateExternalUrl(v);
+      if (!validation.valid) {
+        return NextResponse.json({ error: `${f}: ${validation.error}` }, { status: 400 });
+      }
     }
   }
   for (const f of ["price", "user_rating"] as const) {
