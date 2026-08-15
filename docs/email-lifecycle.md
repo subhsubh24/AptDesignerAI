@@ -3,8 +3,16 @@
 Complete email sequences for signed-up users across their lifecycle:
 activation → habit formation → conversion → win-back.
 
-**Do not send until the owner connects the email platform (e.g. Resend, Loops,
-Mailchimp) and approves each sequence.** These are staged templates.
+**Sending engine: code-complete, dry-run until the owner sets credentials.** These
+templates send through Resend (`lib/email`, already wired — no Loops/Mailchimp
+integration exists or is needed); they stay in dry-run (nothing transmitted) until the
+owner sets `RESEND_API_KEY` + `RESEND_FROM_EMAIL` (`PENDING_OPS.md connect-email-resend`).
+See "Delivery notes for owner" below for per-sequence trigger status — most sequences
+are built and just owner-env-gated; one (Referral/Share) is not yet built at all.
+CORRECTED 2026-08-15 (GTM Auditor Run 6, `artifact_freshness`): this banner previously
+still said "connect the email platform" and named Loops/Mailchimp as open options,
+contradicting the "Delivery notes for owner" section's own correction (Run 15) that
+Resend has been wired since before that run.
 
 The waitlist welcome sequence (pre-signup) lives in `docs/email-welcome-sequence.md`.
 This file covers everything after account creation.

@@ -33,14 +33,28 @@
       "script": "analysis/business_case_sensitivity_monthly_churn12_arr.mjs",
       "value": 113604,
       "tolerance": 1,
-      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%' -- RE-PRICED 2026-07-28 from $93,556 by the take-rate correction. This downside now clears the floor; before the correction it did not."
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%' -- RE-PRICED 2026-07-28 from $93,556 by the take-rate correction. STEADY-STATE, not year 1 -- see business_case_sensitivity_monthly_churn12_year1_arr for the year-1 exit run-rate."
+    },
+    {
+      "id": "business_case_sensitivity_monthly_churn12_year1_arr",
+      "script": "analysis/business_case_sensitivity_monthly_churn12_year1_arr.mjs",
+      "value": 60593,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Monthly Pro churn rises from 7% to 12%' -- the YEAR-1 EXIT run-rate (not steady-state) for this sensitivity. Added 2026-08-15 per the GTM Auditor Run 6 business_case_honesty finding that the $113,604 steady-state figure was claimed to 'clear the floor' with no year-1 caveat, unlike every other steady-state figure in this document. $60,593 is BELOW the $100K floor."
     },
     {
       "id": "business_case_sensitivity_annual_churn40_arr",
       "script": "analysis/business_case_sensitivity_annual_churn40_arr.mjs",
       "value": 125331,
       "tolerance": 1,
-      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%' -- RE-PRICED 2026-07-28 from $103,214 by the take-rate correction."
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%' -- RE-PRICED 2026-07-28 from $103,214 by the take-rate correction. STEADY-STATE, not year 1 -- see business_case_sensitivity_annual_churn40_year1_arr for the year-1 exit run-rate."
+    },
+    {
+      "id": "business_case_sensitivity_annual_churn40_year1_arr",
+      "script": "analysis/business_case_sensitivity_annual_churn40_year1_arr.mjs",
+      "value": 69934,
+      "tolerance": 1,
+      "cites": "docs/BUSINESS_CASE.md 'What would have to change to NOT reach $100K' -> 'Annual renewal churn rises to 40%' -- the YEAR-1 EXIT run-rate (not steady-state) for this sensitivity. Added 2026-08-15 per the GTM Auditor Run 6 business_case_honesty finding that the $125,331 steady-state figure was claimed to 'clear the floor' with no year-1 caveat, unlike every other steady-state figure in this document. $69,934 is BELOW the $100K floor."
     },
     {
       "id": "business_case_web_channel_arr",
