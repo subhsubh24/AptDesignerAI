@@ -41,3 +41,42 @@ export function isAcceptableStoredImageUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * Hosts next.config.ts's `images.remotePatterns` allows next/image to fetch
+ * and optimize. Kept in sync BY HAND — next.config.ts is not importable from
+ * client components, so this list must be updated alongside it. Anything not
+ * matched here (e.g. an arbitrary retailer product-image host) must render as
+ * a plain `<img>` instead: next/image throws a hard runtime error for an
+ * unconfigured hostname unless `unoptimized` is set, and `unoptimized` would
+ * silently defeat the point of using next/image at all.
+ */
+const OPTIMIZABLE_IMAGE_HOSTS = [
+  /\.supabase\.co$/,
+  /\.supabase\.in$/,
+  /\.googleusercontent\.com$/,
+  /^places\.googleapis\.com$/,
+  /^generativelanguage\.googleapis\.com$/,
+];
+
+export function canOptimizeImageHost(url: string): boolean {
+  if (url.startsWith("/")) {
+    // Same-origin check, not a hand-rolled prefix match: resolve against a
+    // fixed base with the platform URL parser and require the resolved origin
+    // to stay on that base. Closes the `//host`, `/\host`, and tab/newline
+    // bypasses a bare `startsWith("/")` misses — mirrors
+    // isAcceptableStoredImageUrl above, which this helper must match in
+    // strictness since both gate what reaches next/image's server-side fetch.
+    try {
+      return new URL(url, INTERNAL_BASE).origin === INTERNAL_BASE;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const { hostname, protocol } = new URL(url);
+    return protocol === "https:" && OPTIMIZABLE_IMAGE_HOSTS.some((re) => re.test(hostname));
+  } catch {
+    return false;
+  }
+}

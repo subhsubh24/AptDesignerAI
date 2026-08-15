@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { getScoreColor } from "@/lib/scoring/verdicts";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 interface PickProduct {
   id: string;
@@ -194,13 +196,23 @@ export default function PicksPage() {
               <StaggerItem key={p.id}>
               <Card className="overflow-hidden group hover:shadow-md transition-shadow">
                 {p.image_url && (
-                  <div className="h-40 overflow-hidden bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={p.image_url}
-                      alt={p.title || "Product"}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                  <div className="relative h-40 overflow-hidden bg-muted">
+                    {canOptimizeImageHost(p.image_url) ? (
+                      <Image
+                        src={p.image_url}
+                        alt={p.title || "Product"}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.image_url}
+                        alt={p.title || "Product"}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    )}
                   </div>
                 )}
                 <CardContent className={p.image_url ? "pt-3" : "pt-5"}>
