@@ -2,34 +2,10 @@
 
 import Image from "next/image";
 import type { RoomImage } from "@/lib/types/database";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 interface RoomImageGalleryProps {
   images: RoomImage[];
-}
-
-/**
- * `isAcceptableStoredImageUrl` (lib/utils/image-url.ts) only requires
- * `https:` or an internal relative path — it has no host allowlist. Mirrors
- * next.config.ts's `images.remotePatterns` so a room_images row with a host
- * next/image doesn't recognize falls back to a plain `<img>` instead of
- * throwing a hard runtime error.
- */
-const OPTIMIZABLE_HOSTS = [
-  /\.supabase\.co$/,
-  /\.supabase\.in$/,
-  /\.googleusercontent\.com$/,
-  /^places\.googleapis\.com$/,
-  /^generativelanguage\.googleapis\.com$/,
-];
-
-function canOptimize(url: string): boolean {
-  if (url.startsWith("/")) return true; // internal storage path, same-origin
-  try {
-    const { hostname } = new URL(url);
-    return OPTIMIZABLE_HOSTS.some((re) => re.test(hostname));
-  } catch {
-    return false;
-  }
 }
 
 export function RoomImageGallery({ images }: RoomImageGalleryProps) {
@@ -42,7 +18,7 @@ export function RoomImageGallery({ images }: RoomImageGalleryProps) {
           key={image.id}
           className="relative aspect-video rounded-lg overflow-hidden bg-muted"
         >
-          {canOptimize(image.image_url) ? (
+          {canOptimizeImageHost(image.image_url) ? (
             <Image
               src={image.image_url}
               alt={image.caption || "Room photo"}
