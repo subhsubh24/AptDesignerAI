@@ -2750,3 +2750,140 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   run, ~47 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
   SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
   are pure Vercel environment variable sets.
+
+---
+
+## Run 25 — 2026-08-15
+
+### What we found
+- All Run 1-24 owner blockers remain unresolved: re-verified directly against `PENDING_OPS.md`
+  (`set-site-gate-password` / `connect-email-resend` / `set-metrics-token` / `set-cron-secret` /
+  `apply-migration-031` / `set-email-physical-address` all still `status: open`). `PENDING_OPS.md`'s
+  own `as_of` is still `2026-08-07`, unchanged since Run 21 (now spanning Runs 21-25).
+- Re-probed `https://aptdesignerai.com/` a TWENTY-FIRST time: still `connect_rejected`/gateway 502 to
+  CONNECT, identical signature to every prior probe, cross-checked directly against the agent-proxy's
+  own `/__agentproxy/status` `recentRelayFailures` log (2026-08-15T05:12:47.512Z). Funnel remains
+  0/null across every metric — correct, no reachable source.
+- **CORRECTION: Run 24's claim that `docs/growth/GTM_SCORECARD.md` was "still Run 5, unchanged since
+  Run 19-23" was WRONG.** Independently re-checked via the GitHub API this run (`mcp__github__list_commits`
+  on the file path): the file's most recent touching commit is `6cf9583` ("gtm-auditor: Run 6 -- ship
+  gate narrower, one blocker left", PR #854) — and `git log --oneline` on this session's own checkout
+  shows that commit sitting 5 commits BEHIND HEAD, i.e. it had already landed in the repo's history
+  before Run 24's own commit (`0a563e8`, PR #875) was merged. Run 24 should have found this via the
+  same GitHub-API check it claimed to run, and did not — recorded transparently here rather than
+  silently patched, per this doc's own standing correction practice (Run 7's Pro-Annual correction,
+  Run 19's citation correction). Read the REAL GTM Auditor Run 6 scorecard this run instead: `as_of:
+  2026-08-10`, `overall: B`, `ship_gate_met: false` — a genuine improvement over Run 5 (four dimensions
+  moved up: `experiment_validity` B→A, `pmf_read_accuracy` B→A, `roadmap_steer_justification` A→A+,
+  `artifact_freshness` C→B), with exactly ONE remaining ship-critical gap: `business_case_honesty` B.
+- The named gap: the "What would have to change to NOT reach $100K" section's two downside
+  sensitivity figures — monthly-Pro-churn-12% ARR ($113,604) and annual-renewal-churn-40% ARR
+  ($125,331) — are computed via the identical multi-year Pro-subscriber-pool-fill formula as every
+  OTHER steady-state figure in `docs/BUSINESS_CASE.md` (Scenario B's $149,300, the shippable-today
+  $121,339/$136,762 pair), all of which already carry a "steady-state, not year-1" caveat with a
+  registered, computed year-1 figure. These two did not, and the churn-12% figure was affirmatively
+  described as "this downside now CLEARS the floor" with no such caveat — the auditor independently
+  computed the year-1 exit run-rates as $60,593 and $69,934, both below the $100K floor and both worse
+  than the base case's own $71,207 year-1 figure.
+- A second, non-ship-critical gap: `artifact_freshness` B named `docs/email-lifecycle.md`'s top banner
+  (lines 6-7) as stale — it still read "Do not send until the owner connects the email platform (e.g.
+  Resend, Loops, Mailchimp)", directly contradicting that same file's own "Delivery notes for owner"
+  section (corrected at Run 15), which correctly states Resend is already wired and no Loops/Mailchimp
+  integration exists or is needed.
+- `docs/quality/QUALITY_SCORECARD.md` is genuinely unchanged since Run 23/24 (re-verified via the
+  GitHub API): still the 11th grade (`as_of: 2026-08-10`, commit `46bee98`, #857), overall C,
+  `ship_gate_met: false`, four sub-A ship-critical dims (`functional_reality` C, `security_rls` B,
+  `design_taste` B, `artifact_integrity` B). This is the harder, still-closed gate — fixing the GTM
+  scorecard's business-case gap does not unlock outreach by itself, since `functional_reality` alone
+  keeps `ship_gate_met` false on the product side. Both S6 outreach lanes stay hard-off regardless.
+
+### What we built this run
+- **Fixed the GTM Auditor Run 6 ship-critical `business_case_honesty` gap.** Read
+  `analysis/business-case-model.mjs` and confirmed `computeYear1ExitRunRate()` already existed (used
+  by the base-case/shippable-today year-1 figures). Independently hand-ran it for both sensitivities
+  and got exactly $60,593 (churn-12%) and $69,934 (churn-40%) — matching the GTM Auditor's own
+  independently-derived figures exactly. Wrote two new registered scripts,
+  `analysis/business_case_sensitivity_monthly_churn12_year1_arr.mjs` and
+  `..._annual_churn40_year1_arr.mjs`, following the exact pattern of the existing
+  `business_case_scenario_b_year1_arr.mjs`; registered both in `analysis/figures.json` with
+  `tolerance: 1` (exact-dollar, matching the tight tolerance already used for every other
+  business-case-critical figure). Added a "Steady-state, not year-1" caveat to both bullets in
+  `docs/BUSINESS_CASE.md`'s "What would have to change to NOT reach $100K" section, citing the new
+  figures. Annotated (did NOT rename) the machine-readable `arr_year1` YAML key with a comment
+  clarifying it holds steady-state values despite the name — the auditor's secondary finding — because
+  the key name is a fixed cross-project dashboard schema (`ROADMAP.md` "DASHBOARD FEEDS"; identical
+  across AptDesignerAI/HighlightMagic/GroceryManager) that this loop should not unilaterally break.
+  Bumped the doc's stale `as_of` (2026-07-29 → 2026-08-15) and added a new dated changelog blockquote
+  documenting the fix, in the doc's existing reverse-chronological pattern. `node
+  scripts/validate-computation.mjs` now verifies 12 figures (up from 10), all PASS.
+- **Fixed the `artifact_freshness` gap.** Rewrote `docs/email-lifecycle.md`'s top banner (lines 6-7)
+  to state the accurate, current status (Resend wired, dry-run until credentials are set, no
+  Loops/Mailchimp needed) and pointed to the "Delivery notes for owner" section for per-sequence
+  trigger detail, matching what that section has said since Run 15.
+- **Independent review (maker ≠ checker).** Both fixes are substantive GTM changes under GTM_STANDARD
+  §3/§5 (an edit to `docs/BUSINESS_CASE.md`, not a routine dashboard update) — spawned a fresh reviewer
+  subagent with no shared context, told to adversarially verify from scratch: it independently
+  hand-re-derived `computeYear1ExitRunRate`, re-ran both new scripts and `validate-computation.mjs`,
+  parsed the annotated YAML block with `yaml.safe_load` (the same method `scripts/preflight.sh` GATE 5
+  uses), read the full diff for scope creep, and checked the email-lifecycle.md fix against the actual
+  `.env`/`lib/email/resend.ts` state. Verdict: **APPROVE**, zero defects found. This matches
+  GTM_STANDARD §3's own distinction — a disclosure/honesty fix responding to a named independent
+  auditor finding with a corrected figure is NOT a roadmap/vision steer, so a single reviewer sufficed
+  (no ≥2-reviewer VISION panel required).
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-08-15; rewrote the `gtm_scorecard`
+  validation entry to correct Run 24's error and record the Run 6 grade + this run's two fixes;
+  refreshed `internal_metrics_api` (21st probe) and `web_research` (Trustpilot re-probe, unchanged)
+  entries; bumped `demand_signal.as_of` with a short Run 25 method-note (no new demand-signal search —
+  see below) ahead of Run 24's verbatim history (kept intact); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 25th consecutive circuit-breaker run. Ran `npm
+  install` (materializes `js-yaml`, no `package.json` change) then `node scripts/validate-gtm.mjs` —
+  `validate-gtm: OK`.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (21st probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD,
+  unchanged) — both S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not run a new demand-signal confirming-source search: theme 4 remains exhausted
+  (`research_status: structurally_hard_to_corroborate`, unchanged since Run 22) and themes 1-3 each
+  already carry a theme-specific disconfirming datum — no genuinely new lead surfaced. This run's
+  research/analysis effort went entirely into the ship-critical business-case fix instead, which is
+  the higher-leverage use of a run where every owner-connect blocker remains stuck.
+- Did not touch `ROADMAP.md` / `VISION.md`: this run's BUSINESS_CASE.md edit is a disclosure/honesty
+  fix responding to a named independent auditor finding with a corrected, computed figure — explicitly
+  NOT a roadmap/vision steer (no new lever, no revenue-model change, no S3-bar evidence offered or
+  needed for one).
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not silently patch Run 24's GTM_SCORECARD.md error: per this doc's append-only, transparent-
+  correction practice, the wrong prior claim is left as written and a dated correction is recorded
+  here and in GROWTH_STATUS.md instead.
+
+### Lessons learned
+- **A "re-checked via the GitHub API" claim is only as good as actually reading the result.** Run 24
+  stated it checked GTM_SCORECARD.md via the GitHub API and found it unchanged — but the file HAD
+  changed (Run 6, PR #854, which had already merged before Run 24's own PR). Either the check wasn't
+  actually run, or its result was misread. The fix is the same discipline this doc has stated before
+  (Run 7, Run 19): when a learning states a check was done, the claim should be falsifiable against a
+  fresh, independent re-check — which is exactly what caught this.
+- **A stuck circuit breaker on owner-connect blockers does not mean there is no ship-critical GTM work
+  left.** 24 runs of "same blockers, nothing to do" had created a pattern where routine verification
+  crowded out actually reading the auditor's own scorecard file closely enough to notice it had moved.
+  The single highest-leverage thing this run could do — fixing a named ship-critical disclosure gap —
+  required zero owner action and was sitting unaddressed for a full run cycle because of that miss.
+  Going forward: always diff the CURRENT scorecard content against what a run intends to claim about it
+  before writing "unchanged", not just trust the prior run's own conclusion.
+- **The existing `computeYear1ExitRunRate()` helper made this a same-day fix, not a research project.**
+  Because Run 19 (2026-08-03) had already built the general year-1-vs-steady-state machinery for the
+  base case and the shippable-today figures, closing this gap for the two sensitivity figures was a
+  ~30-line mechanical extension (two new scripts following an established pattern), not new modeling
+  work — a concrete payoff of the FACTORY_STANDARD §22 discipline of registering reusable, reproducible
+  computation rather than one-off arithmetic.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-24? YES — circuit breaker remains FIRED (Run 25, 25th consecutive
+  run, ~49 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run shipped
+  real, owner-action-free ship-critical GTM work: the GTM Auditor's `business_case_honesty` gap is now
+  fixed, narrowing `docs/growth/GTM_SCORECARD.md`'s ship gate to whatever the auditor's next pass finds.

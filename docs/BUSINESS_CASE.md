@@ -3,6 +3,12 @@
 ```yaml
 # BUSINESS_CASE_SUMMARY (machine-readable; keep in sync with the analysis below)
 currency: USD
+# NOTE (added 2026-08-15, GTM Auditor Run 6 business_case_honesty finding): despite the key name
+# (fixed cross-project dashboard schema, kept as-is -- see ROADMAP.md DASHBOARD FEEDS), these three
+# values are STEADY-STATE ARR, not year-1. The real year-1 exit run-rate for the base/planning case
+# is $71,207 (analysis/business_case_scenario_b_year1_arr.mjs) -- see floor_met_year1/time_to_floor
+# below, which state this correctly in prose. Read this block as the steady-state ceiling each
+# scenario's inputs support, not a 12-month projection.
 arr_year1:
   conservative: 56000
   base: 149300
@@ -12,9 +18,25 @@ floor_usd: 100000
 floor_met_year1: false
 time_to_floor: "$149.3K is the STEADY-STATE base ARR; the year-1 exit run-rate is $71,207 (registered, analysis/business_case_scenario_b_year1_arr.mjs) because the Pro subscriber pools compound over time, so the floor is still NOT met in year 1; the prior ~year-3 crossing now arrives earlier at the corrected take rate, but the exact crossing has not been re-derived and is deliberately not restated here"
 channel_priced: store
-as_of: 2026-07-29
+as_of: 2026-08-15
 ```
 
+> **Sensitivity-figure year-1 disclosure fix 2026-08-15 (GTM Factory Run 25).** The independent
+> GTM Auditor (`docs/growth/GTM_SCORECARD.md`, `auditor_run: 6`, `business_case_honesty`) found a
+> new instance of a disclosure-asymmetry pattern this document has already fixed twice for other
+> figures: the "What would have to change to NOT reach $100K" section's two downside sensitivity
+> figures — monthly-churn-12% ($113,604) and annual-churn-40% ($125,331) — are computed via the
+> SAME multi-year Pro-subscriber-pool-fill formula as every other steady-state figure in this
+> document, all of which carry a "steady-state, not year-1" caveat. These two did not, and the
+> monthly-churn-12% figure was affirmatively described as "CLEARS the floor" with no such caveat.
+> Registered two new reproducible scripts (`analysis/business_case_sensitivity_monthly_churn12_year1_arr.mjs`
+> → $60,593, `..._annual_churn40_year1_arr.mjs` → $69,934, both via `computeYear1ExitRunRate()`),
+> added the matching caveat to both bullets below, and annotated the machine-readable `arr_year1`
+> summary block above (the auditor's secondary finding: that key holds steady-state values despite
+> its name — the cross-project dashboard schema keeps the key name fixed, so this adds an
+> explanatory comment rather than renaming it) plus bumped the stale `as_of`. No ARR figure or
+> lever changed; this closes the last named ship-critical gap on `docs/growth/GTM_SCORECARD.md`.
+>
 > **Take-rate correction 2026-07-28 (factory loop).** Every ARR figure in this document moved
 > UP, by a single consistent factor, because the model was applying a commission this business
 > does not pay. The independent Quality Auditor named half of it (`QUALITY_SCORECARD.md`,
@@ -549,8 +571,13 @@ If Scenario B inputs slip:
 - Monthly Pro churn rises from 7% → 12%: Monthly steady-state shrinks; ARR **$113,604**
   (`analysis/business_case_sensitivity_monthly_churn12_arr.mjs`, registered in
   `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
-  2026-07-28 from $93,556; at the corrected take rate this downside now CLEARS the floor,
-  where before it did not.
+  2026-07-28 from $93,556; at the corrected take rate this downside now CLEARS the floor **at
+  steady state** — where before it did not. **Steady-state, not year-1** (ADDED 2026-08-15 per
+  the independent GTM Auditor, `GTM_SCORECARD.md` `business_case_honesty`, Run 6): this figure
+  uses the identical multi-year pool-fill formula as every other steady-state figure in this
+  document, all of which carry this caveat — this one had not. The **year-1 exit run-rate is
+  $60,593** (`analysis/business_case_sensitivity_monthly_churn12_year1_arr.mjs`, registered,
+  verified), BELOW the $100K floor and worse than the base case's own $71,207 year-1 figure.
 - Annual mix stays at 0% (the current live state — annual billing is gated off, see above): STEADY-STATE
   ARR is **$121,339** on the store channel and **$136,762** on web/Stripe — over the floor on
   either, and ~$28K below the annual-tier model. This is the honest steady-state number for
@@ -563,7 +590,10 @@ If Scenario B inputs slip:
 - Annual renewal churn rises to 40% (→ 1 − 0.6^(1/12) ≈ 4.17%/month effective): Annual pool shrinks
   ~43%. ARR **$125,331** (`analysis/business_case_sensitivity_annual_churn40_arr.mjs`, registered in
   `analysis/figures.json`, verified by `node scripts/validate-computation.mjs`). Re-priced
-  2026-07-28 from $103,214.
+  2026-07-28 from $103,214 — **at steady state**. **Steady-state, not year-1** (ADDED 2026-08-15,
+  same GTM Auditor Run 6 finding as the churn-12% figure above): the **year-1 exit run-rate is
+  $69,934** (`analysis/business_case_sensitivity_annual_churn40_year1_arr.mjs`, registered,
+  verified), also BELOW the $100K floor.
 - Installs stall at 2,000/month: ARR ~$56K (conservative scenario). Need growth channel.
 - Organic share stays at 35% (not the planned 40%): marketing rises to ~$134K/year; net margin
   stays positive (+$15.1K) but thin — see the sensitivity table. This is why the built referral loop (which adds non-paid, better-retaining installs) is the priority growth lever.
