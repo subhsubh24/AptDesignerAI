@@ -4,6 +4,67 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-16 (Run 171) — closed a stale merged-but-unclosed Linear issue (APT-35), built the PMF instrumentation gap (APT-38) end to end, filed 2 follow-ups
+
+### State on entry
+Cold container; `npm install` needed. `Todo` had only APT-9 (structural bar, re-confirmed 2026-08-15 —
+correctly NOT re-derived this run). `In Progress` had **APT-35**, but `git log` showed its fix already
+merged (commit `0d98318`, PR #900, Run 168) — the prior run closed the code but never closed the Linear
+issue. Re-verified the fix present on the default branch and the acceptance-check test passing fresh, then
+closed it with that output pasted in, rather than leaving it to be re-discovered a second time. **Lesson
+reinforced (same shape as Run 168's own "housekeeping the board is real work" note): an `In Progress` issue
+is not necessarily unclosed work — check git history for a matching merged commit before assuming it needs
+building.**
+
+### APT-38: PMF instrumentation (activation_rate + retention_d1/d7/d30) — the properly-scoped build
+This was explicitly deferred by Run 169 as "needs a real design decision on cohort-query shape before
+implementation, not just a query addition." Made that decision this run: reused `room_diagnoses` as the
+"first value"/"came back" event (already how `habit-emails`/`activation-emails` crons define the "aha"
+in their own code comments — not a new invention), reused the exact `rooms!inner(projects!inner(user_id))`
+embed pattern `habit-emails/route.ts` already established for the identical join, and reused the
+activation-email sequence's own 7-day final-nudge cutoff as `ACTIVATION_WINDOW_DAYS` rather than picking an
+arbitrary number. Retention is a "rolling" definition (any return on/after day N, not exactly day N) —
+documented as a deliberate choice for low-volume pre-launch data, with the `retention_d1 >= retention_d7 >=
+retention_d30` monotonicity this implies called out explicitly rather than left implicit. All four rates
+return `null` (not a computed 0/0) when their cohort is empty. Mutation-verified the regression test:
+temporarily broke `computeActivationRate`'s comparison, confirmed the test failed with the wrong rate
+(0.667 instead of 0.333), restored the fix, re-ran green. Both reviewers APPROVE first-cycle, one round each
+independently re-deriving the constructed 4-profile cohort's expected rates by hand before approving.
+
+**Filed 2 follow-ups rather than scope-creeping:**
+- **APT-39** — a re-sweep found 11 more files with raw `<img>` tags beyond APT-33's single-file scope,
+  several on hot paths (`app/dashboard/page.tsx` x3, products/mockups/focus pages). Deliberately NOT
+  attempted as a drive-by this run: each site needs its own image-source classification (same-origin/
+  Supabase-storage vs. arbitrary external retailer host) before converting, since `next/image` hard-crashes
+  on an unconfigured host — exactly the class of bug APT-33's own review round caught when a private helper
+  was promoted to a shared export. This is why APT-33 scoped itself to one file originally; APT-39 keeps
+  that discipline for the rest.
+- **APT-40** — Reviewer A's minor, non-blocking observation: `computeActivationRate`/`computeRollingRetention`
+  don't explicitly guard against a diagnosis timestamp predating its own user's signup (believed unreachable
+  today given the FK chain, but not guaranteed by any constraint). Low severity/likelihood, filed rather than
+  lost once the PR discussion scrolls away.
+
+### Bookkeeping
+**1 PR merged**: #912 (APT-38, 2 review cycles total across both reviewers but both APPROVE first-cycle —
+"cycles" here just means both reviewers ran once each, not a REQUEST_CHANGES round). Merged-tree gate
+re-verified fresh: `npx tsc --noEmit` clean, targeted test 12/12 passing, CI's `verify`/`build`/`mobile`/
+`security-invariants`/`lint`/`journeys` all green on the merge commit. APT-35 and APT-38 both closed on
+Linear with their acceptance checks re-run against the merged tree and real output pasted in. APT-39 and
+APT-40 filed with runnable acceptance checks. No migration, no live secret, no ROADMAP Track/DoD box ticked
+(growth-data infrastructure is below Track-checkbox granularity, same convention as the `churn_rate_30d`
+fix two runs ago).
+
+### Carry-forward
+- **DEEP AUDIT**: last full 8-lens pass was Run 167 (2026-08-15), ~1 day / 4 runs ago — not yet due under
+  the ~daily/~4-run cadence; this run did a small 1-item targeted scout (the APT-39 img-tag re-sweep) rather
+  than a full sweep, which does NOT reset the clock. A near-future run should run the full 8-lens pass.
+- **Board**: `Todo` is empty except the permanently-structural APT-9 (do not re-derive; re-check its latest
+  comment before ever re-claiming). `Backlog` has APT-27 (same permission-bar class as APT-9), APT-34
+  (mobile Expo SDK bump — isolated verification pass), APT-23 (harness meta-proposal), APT-39, APT-40 — all
+  genuinely claimable by a future run.
+
+---
+
 ## Run 2026-08-16 (Run 170) — 2 disjoint fixes shipped (1 root-cause LLM image-drop bug + eval fixture re-grounding, 1 mobile error-boundary), APT-9 structural bar correctly not re-derived
 
 ### State on entry
