@@ -6,6 +6,7 @@ import Purchases from 'react-native-purchases';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { AuthLoadingScreen } from '@/components/auth-loading-screen';
 import { LoginScreen } from '@/components/auth/login-screen';
 import { SignupScreen } from '@/components/auth/signup-screen';
 import { ThemedText } from '@/components/themed-text';
@@ -92,7 +93,7 @@ export default function RootLayout() {
   }, [session?.user.id, loading]);
 
   const content = loading
-    ? null
+    ? <AuthLoadingScreen />
     : session
       ? <AppTabs />
       : showSignup
