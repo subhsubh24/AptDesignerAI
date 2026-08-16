@@ -1,0 +1,16 @@
+{
+  "id": "great-room-keep-leather-sectional",
+  "description": "Bright, high-ceilinged open-plan great room (living area of a living/dining/kitchen space) with floor-to-ceiling glass on two walls, a rattan swag pendant, and an existing tan leather sectional + gray patterned area rug + wood coffee table + rattan accent chair. Client wants to keep the sectional and warm the space up without replacing it. RE-GROUNDED 2026-08-16 (APT-36): the previous version of this fixture (id studio-living-keep-brass-lamp) described a 'small studio' with a 'brass floor lamp' that does not match this photo at all (no brass lamp is visible; the room is a large open-plan great room, not a studio) and required a 'sofa'/'area_rug' category that the room already has in abundance — that mismatch, not a pipeline regression, is what made the fixture fail intermittently once lib/ai/gemini.ts's cacheScope+tools image-drop bug (APT-36 root cause, fixed in the same change) stopped letting the model guess blind and started grounding it on the actual photo. Expectations below were set by visually inspecting the downloaded image, not by capturing pipeline output. requiredCategories intentionally holds only 'floor_lamp' (no task/ambient lamp exists besides the overhead pendant, confirmed present across 2 live runs) — 'wall_art' was tried and dropped: the room already has a framed print + round mirror, so the model legitimately treats existing wall decor as adequate some of the time rather than always recommending more, which is a real design judgment call, not a bug.",
+  "input": {
+    "roomType": "living_room",
+    "imageUrls": ["https://images.unsplash.com/photo-1600210492493-0946911123ea?w=1280&q=80"],
+    "userContext": "Keep the tan leather sectional — we love it, do not suggest replacing it. Warm palette — terracotta, camel, warm whites. No cool grays.",
+    "keepItems": ["leather sectional", "sectional sofa"],
+    "budgetMode": "balanced"
+  },
+  "expectations": {
+    "mustNotDrop": ["leather sectional", "sectional sofa"],
+    "paletteIncludes": ["terracotta", "camel", "warm"],
+    "requiredCategories": ["floor_lamp"]
+  }
+}

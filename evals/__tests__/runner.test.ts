@@ -24,68 +24,67 @@ describe("eval runner — gold cases", () => {
 
   it("passes a matching output against its gold expectations", () => {
     const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    expect(brassLamp).toBeTruthy();
-    if (!brassLamp) return;
+    const sectional = cases.find((c) => c.id === "great-room-keep-leather-sectional");
+    expect(sectional).toBeTruthy();
+    if (!sectional) return;
 
     const fakeOutput = {
-      what_works: ["brass floor lamp adds warmth", "oak flooring"],
+      what_works: ["leather sectional anchors the room", "oak flooring"],
       what_should_go: ["cracked plastic side table"],
       recommended_palette: ["terracotta", "warm white", "camel", "walnut"],
       what_it_needs: [
-        { category: "sofa", search_title: "warm neutral sofa" },
-        { category: "area_rug", search_title: "cream wool rug" },
+        { category: "floor_lamp", search_title: "warm brass floor lamp" },
       ],
     };
-    const verdict = scoreAgainstExpectations(brassLamp, fakeOutput, 0.85);
+    const verdict = scoreAgainstExpectations(sectional, fakeOutput, 0.85);
     expect(verdict.passed).toBe(true);
     expect(verdict.failures).toEqual([]);
   });
 
-  it("fails when the brass lamp is wrongly dropped", () => {
+  it("fails when the leather sectional is wrongly dropped", () => {
     const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+    const sectional = cases.find((c) => c.id === "great-room-keep-leather-sectional");
+    if (!sectional) throw new Error("fixture missing");
 
     const badOutput = {
       what_works: ["oak flooring"],
-      what_should_go: ["brass floor lamp", "cracked plastic side table"],
+      what_should_go: ["leather sectional", "cracked plastic side table"],
       recommended_palette: ["terracotta", "warm white", "camel"],
-      what_it_needs: [{ category: "sofa" }, { category: "area_rug" }],
+      what_it_needs: [{ category: "floor_lamp" }],
     };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
+    const verdict = scoreAgainstExpectations(sectional, badOutput, 0.85);
     expect(verdict.passed).toBe(false);
-    expect(verdict.failures.some((f) => f.includes("brass"))).toBe(true);
+    expect(verdict.failures.some((f) => f.includes("sectional"))).toBe(true);
   });
 
   it("fails when the palette misses all required warm tones", () => {
     const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+    const sectional = cases.find((c) => c.id === "great-room-keep-leather-sectional");
+    if (!sectional) throw new Error("fixture missing");
 
     const badOutput = {
-      what_works: ["brass floor lamp"],
+      what_works: ["leather sectional"],
       what_should_go: [],
       recommended_palette: ["cool gray", "navy", "charcoal"],
-      what_it_needs: [{ category: "sofa" }, { category: "area_rug" }],
+      what_it_needs: [{ category: "floor_lamp" }],
     };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
+    const verdict = scoreAgainstExpectations(sectional, badOutput, 0.85);
     expect(verdict.passed).toBe(false);
     expect(verdict.failures.some((f) => f.includes("palette"))).toBe(true);
   });
 
   it("fails when a required category is missing", () => {
     const cases = loadGoldCases();
-    const brassLamp = cases.find((c) => c.id === "studio-living-keep-brass-lamp");
-    if (!brassLamp) throw new Error("fixture missing");
+    const sectional = cases.find((c) => c.id === "great-room-keep-leather-sectional");
+    if (!sectional) throw new Error("fixture missing");
 
     const badOutput = {
-      what_works: ["brass floor lamp"],
+      what_works: ["leather sectional"],
       what_should_go: [],
       recommended_palette: ["terracotta"],
       what_it_needs: [{ category: "accent_chair" }],
     };
-    const verdict = scoreAgainstExpectations(brassLamp, badOutput, 0.85);
+    const verdict = scoreAgainstExpectations(sectional, badOutput, 0.85);
     expect(verdict.passed).toBe(false);
     expect(verdict.failures.some((f) => f.includes("missing categories"))).toBe(true);
   });

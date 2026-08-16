@@ -91,14 +91,14 @@ describe("room-diagnosis live evals — run with RUN_EVALS=1", () => {
   );
 
   it.skipIf(!evalsEnabled())(
-    "studio-living-keep-brass-lamp: model does not suggest removing a keepItem",
+    "great-room-keep-leather-sectional: model does not suggest removing a keepItem",
     async () => {
       const gold = cases.find(
-        (c) => c.id === "studio-living-keep-brass-lamp",
+        (c) => c.id === "great-room-keep-leather-sectional",
       );
       expect(
         gold,
-        "studio-living-keep-brass-lamp fixture missing",
+        "great-room-keep-leather-sectional fixture missing",
       ).toBeTruthy();
       if (!gold) return;
 
