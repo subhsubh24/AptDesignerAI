@@ -358,6 +358,27 @@ export default function FocusPage() {
     const controller = new AbortController();
     visionAbortRef.current = controller;
     setGeneratingVision(true);
+    // The controller previously existed only for cleanup-on-unmount /
+    // superseded-call cancellation — nothing ever aborted it on a stall, so a
+    // hung image-generation call left `generatingVision` (and its spinner)
+    // stuck true indefinitely. /api/mockups caps itself at maxDuration=300s
+    // server-side; 6min gives that budget room to finish and respond before
+    // the client gives up, so a legitimately-slow-but-succeeding generation
+    // isn't cut off early.
+    //
+    // `timedOut` (NOT a `visionAbortRef.current === controller` check) is
+    // what distinguishes OUR timeout from every other reason this same
+    // controller can abort: a fresh call superseding this one (reassigns the
+    // ref), OR the unmount/step-change cleanup effect below, which calls
+    // `controller.abort()` WITHOUT ever nulling the ref — so the ref would
+    // still equal `controller` on a plain unmount too, and a ref check alone
+    // would wrongly fire the toast on ordinary navigation, not just a real
+    // stall.
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 6 * 60 * 1000);
     const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
     try {
       const res = await fetch("/api/mockups", {
@@ -376,10 +397,18 @@ export default function FocusPage() {
         setVisionUrl(data.image_url);
       }
     } catch (err) {
-      if ((err as { name?: string })?.name !== "AbortError") {
+      if ((err as { name?: string })?.name === "AbortError") {
+        if (timedOut) {
+          toast.error("Vision mockup timed out", "Please try again in a moment.");
+        }
+        // Any other abort reason (superseded by a fresh call, or the
+        // component unmounted / navigated away) is an expected, silent
+        // cancellation — not a failure worth surfacing.
+      } else {
         console.error("Background vision generation error:", err);
       }
     }
+    window.clearTimeout(timeoutId);
     if (visionAbortRef.current === controller) {
       visionAbortRef.current = null;
       setGeneratingVision(false);
@@ -614,11 +643,19 @@ export default function FocusPage() {
       specs: n.specs,
     }));
 
+    // Agentic sourcing can legitimately run for a while, but with no cap at
+    // all a stalled backend left the user on the sourcing spinner forever
+    // with no error and no retry. Both /api/search/stream and its /api/search
+    // fallback cap themselves at maxDuration=300s server-side; 6min gives
+    // that budget room to finish and respond before the client gives up.
+    const searchAbort = new AbortController();
+    const searchTimeoutId = window.setTimeout(() => searchAbort.abort(), 6 * 60 * 1000);
     try {
       const res = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
+        signal: searchAbort.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -627,6 +664,7 @@ export default function FocusPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
+          signal: searchAbort.signal,
         });
         if (batchRes.ok) {
           const data = await batchRes.json().catch(() => ({}));
@@ -645,6 +683,7 @@ export default function FocusPage() {
         } else {
           setSearchError("Product search failed. Please try again.");
         }
+        window.clearTimeout(searchTimeoutId);
         setSearching(false);
         setStep("results");
         return;
@@ -719,8 +758,13 @@ export default function FocusPage() {
       }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(e instanceof Error ? e.message : "Search failed — please try again");
+      setSearchError(
+        (e as { name?: string })?.name === "AbortError"
+          ? "Search timed out. Please try again."
+          : e instanceof Error ? e.message : "Search failed — please try again",
+      );
     }
+    window.clearTimeout(searchTimeoutId);
     setSearching(false);
     setSearchStartTime(null);
     setStep("results");
