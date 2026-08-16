@@ -365,7 +365,20 @@ export default function FocusPage() {
     // server-side; 6min gives that budget room to finish and respond before
     // the client gives up, so a legitimately-slow-but-succeeding generation
     // isn't cut off early.
-    const timeoutId = window.setTimeout(() => controller.abort(), 6 * 60 * 1000);
+    //
+    // `timedOut` (NOT a `visionAbortRef.current === controller` check) is
+    // what distinguishes OUR timeout from every other reason this same
+    // controller can abort: a fresh call superseding this one (reassigns the
+    // ref), OR the unmount/step-change cleanup effect below, which calls
+    // `controller.abort()` WITHOUT ever nulling the ref — so the ref would
+    // still equal `controller` on a plain unmount too, and a ref check alone
+    // would wrongly fire the toast on ordinary navigation, not just a real
+    // stall.
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 6 * 60 * 1000);
     const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
     try {
       const res = await fetch("/api/mockups", {
@@ -385,13 +398,12 @@ export default function FocusPage() {
       }
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") {
-        // Distinguish OUR timeout from a superseded-call abort (a fresh call
-        // replaced this one via visionAbortRef, or the component unmounted) —
-        // only the timeout case is a real failure worth surfacing; the other
-        // two are expected, silent cancellations.
-        if (visionAbortRef.current === controller) {
+        if (timedOut) {
           toast.error("Vision mockup timed out", "Please try again in a moment.");
         }
+        // Any other abort reason (superseded by a fresh call, or the
+        // component unmounted / navigated away) is an expected, silent
+        // cancellation — not a failure worth surfacing.
       } else {
         console.error("Background vision generation error:", err);
       }
