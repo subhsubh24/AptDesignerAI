@@ -1,5 +1,7 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
+import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -12,14 +14,29 @@ import { useTheme } from '@/hooks/use-theme';
  */
 export function AuthLoadingScreen() {
   const theme = useTheme();
+
+  // iOS/VoiceOver: `accessibilityLiveRegion` (below) is Android/TalkBack-only
+  // — results.tsx hit the same gap (#397) and its fix is the precedent this
+  // mirrors: announce explicitly on iOS so VoiceOver users aren't left with
+  // total silence during the wait, matching the visible "Loading…" text.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AccessibilityInfo.announceForAccessibility('Loading.');
+  }, []);
+
   return (
     <View
       testID="auth-loading-screen"
       style={[styles.container, { backgroundColor: theme.background }]}
+      accessible
       accessibilityRole="progressbar"
       accessibilityLiveRegion="polite"
+      accessibilityLabel="Loading"
     >
       <ActivityIndicator color={theme.accent} />
+      <ThemedText type="default" themeColor="textSecondary" style={styles.label}>
+        Loading…
+      </ThemedText>
     </View>
   );
 }
@@ -29,5 +46,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+  },
+  label: {
+    textAlign: 'center',
   },
 });
