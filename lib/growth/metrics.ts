@@ -40,6 +40,17 @@ export interface GrowthMetrics {
      * `cancelled_at` column (future work).
      */
     cancelled_30d: number;
+    /**
+     * `cancelled_30d` expressed as a RATE over subscribers who were active as
+     * of 30 days ago, not a raw count — `null` when that denominator is 0
+     * (nothing to churn from). APPROXIMATE for the same reason `cancelled_30d`
+     * is: the denominator (`active_30d_ago`) is itself a proxy — subscribers
+     * who existed before the 30-day window and either are still active now,
+     * or cancelled sometime within the window (so they were still active at
+     * its start) — because there is no historical subscriber-count snapshot
+     * to read the true count from.
+     */
+    churn_rate_30d: number | null;
   };
   notes: string;
 }
@@ -74,6 +85,7 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
     annualSubscribers,
     cancelledSubscribers,
     cancelled30d,
+    active30dAgo,
   ] = await Promise.all([
     toCount(admin.from("waitlist_emails").select("id", { count: "exact", head: true })),
     toCount(
@@ -111,7 +123,21 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
         .in("tier", tiers)
         .gte("updated_at", thirtyDaysAgo),
     ),
+    // Denominator for churn_rate_30d: subscribers who were active as of 30
+    // days ago — existed before the window (created_at <= cutoff) and either
+    // are still active now, or cancelled sometime WITHIN the window (so they
+    // were necessarily still active at its start).
+    toCount(
+      admin
+        .from("stripe_customers")
+        .select("id", { count: "exact", head: true })
+        .lte("created_at", thirtyDaysAgo)
+        .in("tier", tiers)
+        .or(`status.eq.active,and(status.eq.cancelled,updated_at.gte.${thirtyDaysAgo})`),
+    ),
   ]);
+
+  const churnRate30d = active30dAgo > 0 ? cancelled30d / active30dAgo : null;
 
   return {
     as_of: new Date().toISOString(),
@@ -123,11 +149,14 @@ export async function gatherGrowthMetrics(admin: SupabaseClient): Promise<Growth
       annual_subscribers: annualSubscribers,
       cancelled_subscribers: cancelledSubscribers,
       cancelled_30d: cancelled30d,
+      churn_rate_30d: churnRate30d,
     },
     notes:
       "Cancelled counts are sourced from stripe_customers (status = cancelled); " +
       "cancelled_30d is approximate (keyed on updated_at, set by the cancellation " +
-      "webhook). Visitor, trial-start and conversion-rate metrics require the " +
+      "webhook). churn_rate_30d = cancelled_30d / (subscribers active as of 30 days " +
+      "ago, itself an approximation with no historical snapshot to read from) — null " +
+      "when that denominator is 0. Visitor, trial-start and conversion-rate metrics require the " +
       "Vercel Analytics and Stripe reporting APIs — see docs/growth/CONNECT.md.",
   };
 }
