@@ -1,0 +1,13 @@
+{
+  "id": "kitchen-white-modern-budget",
+  "description": "Bright all-white modern galley kitchen: flat-panel white cabinets floor-to-ceiling, white subway-tile backsplash, light quartz-look counters, stainless-steel fridge/range/microwave, medium warm-toned wood-look floor. Adds kitchen room-type coverage (prior fixtures were bedroom/living_room only) AND budget budget-mode coverage (prior fixtures were balanced/high_end only — budget-conscious sourcing was entirely unvalidated). userContext deliberately names no specific object or color, so a pass depends on the pipeline actually perceiving the photo. Palette terms below were verified by eye against the actual downloaded image, not inferred from a caption — deliberately excludes wood-SPECIES terms like 'oak'/'walnut', since species cannot be determined from a photo alone (a prior fixture's own note flags exactly this class of overclaim: 'an earlier source wrongly described this same photo as green and purple').",
+  "input": {
+    "roomType": "kitchen",
+    "imageUrls": ["https://images.unsplash.com/photo-1646592491577-051086451022?w=1280&q=80"],
+    "userContext": "This kitchen feels a bit plain and could use more personality and warmth, but I'm working with a tight budget.",
+    "budgetMode": "budget"
+  },
+  "expectations": {
+    "paletteIncludes": ["white", "off-white", "gray", "grey", "silver", "stainless", "wood", "brown", "honey", "natural", "warm", "light"]
+  }
+}
