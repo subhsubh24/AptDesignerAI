@@ -16,6 +16,7 @@ interface Counts {
   annualSubs: number;
   cancelledSubs: number;
   cancelled30d: number;
+  active30dAgo: number;
 }
 
 // Minimal Supabase-shaped fake: each query is a thenable that resolves to a
@@ -26,6 +27,8 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
       const state = {
         table,
         gteCol: null as string | null,
+        lteCol: null as string | null,
+        orFilter: null as string | null,
         annualTier: false,
         status: null as string | null,
       };
@@ -33,6 +36,14 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
         select: () => builder,
         gte: (col: string) => {
           state.gteCol = col;
+          return builder;
+        },
+        lte: (col: string) => {
+          state.lteCol = col;
+          return builder;
+        },
+        or: (filter: string) => {
+          state.orFilter = filter;
           return builder;
         },
         in: () => builder, // .in("tier", ["pro","pro_annual"]) — the multi-tier path
@@ -46,7 +57,11 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
           if (state.table === "waitlist_emails") {
             count = state.gteCol === "created_at" ? counts.waitlist7d : counts.waitlistTotal;
           } else if (state.table === "stripe_customers") {
-            if (state.status === "active") {
+            if (state.orFilter) {
+              // The active_30d_ago denominator query — created_at.lte + the
+              // active-or-recently-cancelled .or() filter, no .eq("status", ...).
+              count = counts.active30dAgo;
+            } else if (state.status === "active") {
               count = state.annualTier ? counts.annualSubs : counts.activeSubs;
             } else if (state.status === "cancelled") {
               // The 30d query adds a gte on updated_at; the lifetime one doesn't.
@@ -74,6 +89,7 @@ describe("gatherGrowthMetrics", () => {
       annualSubs: 2,
       cancelledSubs: 9,
       cancelled30d: 3,
+      active30dAgo: 30,
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const m = await gatherGrowthMetrics(admin as any);
@@ -85,13 +101,29 @@ describe("gatherGrowthMetrics", () => {
       annual_subscribers: 2,
       cancelled_subscribers: 9,
       cancelled_30d: 3,
+      churn_rate_30d: 0.1, // 3 / 30
     });
     expect(typeof m.as_of).toBe("string");
   });
 
+  it("returns churn_rate_30d as null when nobody was active 30 days ago (no denominator)", async () => {
+    const admin = fakeAdmin({
+      waitlistTotal: 0,
+      waitlist7d: 0,
+      activeSubs: 0,
+      annualSubs: 0,
+      cancelledSubs: 0,
+      cancelled30d: 0,
+      active30dAgo: 0,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = await gatherGrowthMetrics(admin as any);
+    expect(m.funnel.churn_rate_30d).toBeNull();
+  });
+
   it("throws when an underlying query errors", async () => {
     const admin = fakeAdmin(
-      { waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, annualSubs: 0, cancelledSubs: 0, cancelled30d: 0 },
+      { waitlistTotal: 0, waitlist7d: 0, activeSubs: 0, annualSubs: 0, cancelledSubs: 0, cancelled30d: 0, active30dAgo: 0 },
       { message: "db down" },
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -150,6 +182,7 @@ describe("GET /api/internal/growth-metrics", () => {
         annualSubs: 1,
         cancelledSubs: 6,
         cancelled30d: 2,
+        active30dAgo: 20,
       }),
     );
     const res = await GET(req({ authorization: "Bearer correct-secret-value" }, "10.0.0.5"));
@@ -160,6 +193,7 @@ describe("GET /api/internal/growth-metrics", () => {
     expect(body.funnel.annual_subscribers).toBe(1);
     expect(body.funnel.cancelled_subscribers).toBe(6);
     expect(body.funnel.cancelled_30d).toBe(2);
+    expect(body.funnel.churn_rate_30d).toBe(0.1); // 2 / 20
   });
 
   it("rate-limits after the per-IP window is exceeded (429)", async () => {
@@ -172,6 +206,7 @@ describe("GET /api/internal/growth-metrics", () => {
         annualSubs: 0,
         cancelledSubs: 0,
         cancelled30d: 0,
+        active30dAgo: 0,
       }),
     );
     const ip = "10.9.9.9";
