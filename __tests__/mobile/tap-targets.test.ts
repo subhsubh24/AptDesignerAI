@@ -294,8 +294,11 @@ describe("tap-target call sites", () => {
     // then "the scan processes 29" — and both were wrong, the second because it
     // was not recounted after the detection holes above were closed. Pinning it
     // exactly means the next miscount fails here instead of shipping in prose.
-    // 34 measured + 1 layout-sized = 35 = every `<Pressable` in mobile/src.
-    expect(measured).toBe(34);
+    // 36 measured + 1 layout-sized = 37 = every `<Pressable` in mobile/src.
+    // (was 34 — APT-37 added results.tsx's ErrorBoundary "Try again"/"Go back"
+    // Pressables, both correctly sized via TapSlop.defaultLabelPadded, so both
+    // count here rather than landing in `violations`/`unresolved` above.)
+    expect(measured).toBe(36);
   });
 
   it("scans a non-trivial number of files, and actually finds Pressables", () => {
