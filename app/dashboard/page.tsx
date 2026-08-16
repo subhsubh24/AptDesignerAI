@@ -333,9 +333,18 @@ export default function DashboardPage() {
     try {
       const projId = projectId || await ensureProject();
 
+      // Both LLM pipeline routes below cap themselves at maxDuration=300s
+      // server-side; without a client-side cap too, a stalled connection (the
+      // response never lands, as opposed to the server erroring) left the
+      // user on the "Analyzing…" step with no feedback and no recovery. 6min
+      // gives the server's own 300s budget room to finish and respond first.
+      const ANALYZE_TIMEOUT_MS = 6 * 60 * 1000;
+
       // Phase 1: Research building (if we have a building name and haven't already)
       if (buildingName && !buildingResearch) {
         setAnalyzePhase("building");
+        const researchAbort = new AbortController();
+        const researchTimeoutId = window.setTimeout(() => researchAbort.abort(), ANALYZE_TIMEOUT_MS);
         try {
           const res = await fetch("/api/apartment-research", {
             method: "POST",
@@ -351,6 +360,7 @@ export default function DashboardPage() {
               latitude: locationCoords?.lat,
               longitude: locationCoords?.lng,
             }),
+            signal: researchAbort.signal,
           });
           if (res.ok) {
             const data = await res.json();
@@ -359,17 +369,27 @@ export default function DashboardPage() {
         } catch {
           // Building research is optional — continue to photo analysis
           console.warn("[dashboard] Building research failed, continuing without it");
+        } finally {
+          window.clearTimeout(researchTimeoutId);
         }
       }
 
       // Phase 2: Analyze apartment photos (uses building research as context)
       setAnalyzePhase("photos");
       trackEvent("analysis_started");
-      const res = await fetch("/api/analyze-apartment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projId }),
-      });
+      const analyzeAbort = new AbortController();
+      const analyzeTimeoutId = window.setTimeout(() => analyzeAbort.abort(), ANALYZE_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch("/api/analyze-apartment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_id: projId }),
+          signal: analyzeAbort.signal,
+        });
+      } finally {
+        window.clearTimeout(analyzeTimeoutId);
+      }
 
       if (res.ok) {
         const data = await res.json();
