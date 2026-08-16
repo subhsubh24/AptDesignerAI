@@ -4,6 +4,82 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-16 (Run 170) — 2 disjoint fixes shipped (1 root-cause LLM image-drop bug + eval fixture re-grounding, 1 mobile error-boundary), APT-9 structural bar correctly not re-derived
+
+### State on entry
+Cold container. Baseline GREEN on default tip (376de12): tsc clean, 3103/14 skipped, determinism clean,
+eslint clean. `Todo` had only APT-9 (structural bar, re-confirmed 2026-08-15 by the prior run — correctly
+NOT re-attempted this run, per the "read latest comment before re-deriving" rule). `Backlog` had APT-38,
+APT-37, APT-36, APT-27 (same permission-bar class as APT-9, already recorded), APT-34, APT-23. Claimed and
+built the two well-scoped, high-confidence Backlog items: APT-36 (eval regression) and APT-37 (mobile error
+boundary), moved Backlog->Todo->In Progress per the "prioritise it yourself" rule.
+
+### APT-36: the eval "regression" was actually a real production bug, not a stale fixture
+Investigating the reported diagnosis-eval flakiness (`studio-living-keep-brass-lamp` intermittently failing
+its sofa/area_rug/keepItems checks) surfaced a genuine, severe root cause: `lib/ai/gemini.ts`'s `chat()`
+gated its ENTIRE cacheScope-inline-fallback block behind `!tools?.length` — so any call combining `tools`
+(googleSearch/codeExecution) with `cacheScope` (images) silently DROPPED the cacheScope content instead of
+falling back to inlining it, contradicting the function's own documented contract ("transparently falls
+back to inlining"). `room-diagnostician.ts`'s Pass A generate/judge and Pass B plan calls ALL combine tools
++ cacheScope for the room photos — so live diagnosis was analyzing rooms with ZERO image content reaching
+the model. Confirmed via the model's own `room_type_confirmation.note`: "No photos were provided for visual
+confirmation" despite a real Files-API upload. Fixed the root cause in the provider (one place, benefits
+every caller — room-diagnostician's 3 sites + mockup-agent.ts's 1 site). Added a mutation-proven regression
+test. Separately, the gold fixture itself WAS also stale (its "small studio"/"brass floor lamp" description
+didn't match its actual referenced photo at all — verified by downloading and viewing the image directly);
+re-grounded it (renamed `studio-living-keep-brass-lamp` -> `great-room-keep-leather-sectional`). **Round-1
+review caught a real methodology bug in the re-grounding itself**: the first description justified dropping
+a `wall_art` requirement by citing 2 live pipeline runs ("tried and dropped"), which is exactly the
+"capture pipeline output as the eval expectation" circularity the repo's anti-circularity rule prohibits —
+even though the underlying visual reasoning (existing framed print + mirror already present, making "needs
+more art" ambiguous) was independently sound. Fixed by rewriting the description to lead with pure
+pre-pipeline visual reasoning and reframe the live-run result as post-hoc verification only; round-2
+reviewer confirmed the fix genuinely resolved the circularity. **Lesson: when a live run informs which of
+several visually-plausible candidate categories to keep as a requirement, the description must say so
+BEFORE any mention of pipeline behavior — citing "it passed/failed N live runs" as the reason for keeping
+or dropping a candidate reads as circular regardless of whether the underlying visual judgment was sound.**
+
+### APT-37: mobile screen-level error boundary via expo-router's existing per-route convention
+`mobile/src/app/results.tsx` (the core paid photo->analysis journey) had no screen-level error boundary,
+only the app-wide one in `_layout.tsx` (generic "Something went wrong", no context on which photo/room was
+involved) — a real Apple 2.5.1 (crashes on normal paths) concern. Added an `ErrorBoundary` named-export to
+results.tsx using the SAME expo-router per-route convention `_layout.tsx` already established. Since a
+render crash unmounts component state, recovery context (which photo/room) comes from the same
+non-consuming `photo-session` module store the screen already reads on mount — retry() remounts the screen,
+which re-reads the same store and restarts analysis on the same photo. New test mutation-proven (fails with
+"Element type is invalid" when the export is reverted). **CI's root `verify` job (which scans the whole
+mobile/src tree, not just the PR's files) caught a ratchet-count regression this PR's own `cd mobile && npx
+jest`/`tsc` gate did NOT run: `__tests__/mobile/tap-targets.test.ts` pins an exact app-wide count of
+resolvable tap-target Pressables (34) as a silent-addition guard — the 2 new correctly-sized Pressables
+pushed it to 36. Fixed by updating the pinned count (verified both new Pressables measured cleanly, no
+violations/unresolved).** Lesson reinforced from a prior run's harness note: a mobile change's own local
+gate (`cd mobile && ...`) does not cover repo-root ratchet tests that scan mobile/src from outside the
+mobile/ package — CI's root `verify` job is the one that actually catches these; budget a CI round-trip for
+mobile UI changes even when the local mobile gate is fully green.
+
+### Harness hazard discovered this run: concurrent review subagents sharing the git working directory can race branch checkouts
+Round-2 PR review agents (spawned via the Agent tool, no `isolation: "worktree"`) run `git` commands against
+the SAME on-disk repo checkout as the orchestrating session. One reviewer agent's own `git checkout <branch
+under review>` silently swapped the orchestrator's currently-checked-out branch mid-flight, causing
+uncommitted APT-37 work-in-progress to land on the APT-36 branch instead. Recovered cleanly (stash + rescue
+onto the correct branch, verified via `git log`/`git status` before proceeding) with no data loss, but this
+cost real time and could have caused a worse corruption (e.g. an accidental commit landing on the wrong
+branch) in a less careful sequence. **Fix applied for this run's later reviewer agents: explicit
+instruction to use only read-only git commands (`git diff origin/A...origin/B`, `git show <ref>:<path>`)
+and never `git checkout`/`git switch`.** Worth considering `isolation: "worktree"` for future review
+subagents when the orchestrator has concurrent local branch work in flight — the worktree setup cost is
+worth it exactly in this scenario.
+
+Also confirmed (again) that CI check-run polling has no cheap wait primitive available to this session
+(direct GitHub API calls are proxy-blocked; only the MCP tool works, and Monitor/sleep can't wait on it) —
+used `send_later` to schedule a resume rather than burning turns on tight polling loops. Worth a harness
+note if this recurs.
+
+No migration, no live secret. Neither fix ticks a ROADMAP Track/DoD box (both below Track-checkbox
+granularity — a provider-layer correctness bug + eval-fixture re-grounding, and a mobile reliability fix).
+
+---
+
 ## Run 2026-08-16 (Run 169) — 5 disjoint fixes shipped (2 entitlement-integrity bugs, 3 reliability/UX fixes, 1 growth-data build, 1 eval-coverage fixture), 2 issues filed on structural findings, one self-caught fatal defect in the eval-fixture PR before merge
 
 ### State on entry
