@@ -361,9 +361,11 @@ export default function FocusPage() {
     // The controller previously existed only for cleanup-on-unmount /
     // superseded-call cancellation — nothing ever aborted it on a stall, so a
     // hung image-generation call left `generatingVision` (and its spinner)
-    // stuck true indefinitely. Image generation is normally well under a
-    // minute; 3min gives real headroom without hanging forever.
-    const timeoutId = window.setTimeout(() => controller.abort(), 3 * 60 * 1000);
+    // stuck true indefinitely. /api/mockups caps itself at maxDuration=300s
+    // server-side; 6min gives that budget room to finish and respond before
+    // the client gives up, so a legitimately-slow-but-succeeding generation
+    // isn't cut off early.
+    const timeoutId = window.setTimeout(() => controller.abort(), 6 * 60 * 1000);
     const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
     try {
       const res = await fetch("/api/mockups", {
@@ -382,7 +384,15 @@ export default function FocusPage() {
         setVisionUrl(data.image_url);
       }
     } catch (err) {
-      if ((err as { name?: string })?.name !== "AbortError") {
+      if ((err as { name?: string })?.name === "AbortError") {
+        // Distinguish OUR timeout from a superseded-call abort (a fresh call
+        // replaced this one via visionAbortRef, or the component unmounted) —
+        // only the timeout case is a real failure worth surfacing; the other
+        // two are expected, silent cancellations.
+        if (visionAbortRef.current === controller) {
+          toast.error("Vision mockup timed out", "Please try again in a moment.");
+        }
+      } else {
         console.error("Background vision generation error:", err);
       }
     }
@@ -621,12 +631,13 @@ export default function FocusPage() {
       specs: n.specs,
     }));
 
-    // Agentic sourcing can legitimately run for many minutes, but with no cap
-    // at all a stalled backend left the user on the sourcing spinner forever
-    // with no error and no retry. 30min matches the search step's own
-    // real-world ceiling (product search is the slowest stage in the pipeline).
+    // Agentic sourcing can legitimately run for a while, but with no cap at
+    // all a stalled backend left the user on the sourcing spinner forever
+    // with no error and no retry. Both /api/search/stream and its /api/search
+    // fallback cap themselves at maxDuration=300s server-side; 6min gives
+    // that budget room to finish and respond before the client gives up.
     const searchAbort = new AbortController();
-    const searchTimeoutId = window.setTimeout(() => searchAbort.abort(), 30 * 60 * 1000);
+    const searchTimeoutId = window.setTimeout(() => searchAbort.abort(), 6 * 60 * 1000);
     try {
       const res = await fetch("/api/search/stream", {
         method: "POST",
