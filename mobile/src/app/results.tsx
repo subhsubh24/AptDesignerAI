@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { ErrorBoundaryProps } from 'expo-router';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { AccessibilityInfo, ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -187,6 +188,92 @@ async function analyzeRoom(
     throw new Error('We couldn’t read the analysis result. Please try again.');
   }
   return json.analysis;
+}
+
+/**
+ * Screen-level error boundary for the core paid photo→analysis journey.
+ * Exporting a component named `ErrorBoundary` from a route file makes
+ * expo-router wrap JUST this route (`<Try catch={ErrorBoundary}>`), so an
+ * uncaught render error here (e.g. a malformed analysis payload blowing up
+ * mid-render) recovers to a screen SCOPED to what the user was doing —
+ * instead of falling through to `_layout.tsx`'s app-wide boundary, which has
+ * no idea a photo/room-type was even involved (APT-37).
+ *
+ * All of `ResultsScreen`'s local `useState` is gone by the time this renders
+ * (React unmounts the failed tree), so "preserve which image/stage the user
+ * was on" can't come from component state — it comes from the same
+ * module-level `photo-session` store the screen itself reads on mount
+ * (`peekPendingImageUri`/`peekPendingRoomType`, non-consuming, already relied
+ * on for back→room-type→results remounts). `retry()` re-renders this route,
+ * which re-mounts `ResultsScreen`, which re-reads that same store and starts
+ * a fresh analysis run of the SAME photo — a scoped retry, not a full app
+ * restart and not a silent context loss.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const imageUri = peekPendingImageUri();
+  const roomType = peekPendingRoomType();
+  const roomLabel = (roomType ?? 'living_room').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  useEffect(() => {
+    console.error('[results] uncaught render error:', error);
+  }, [error]);
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.errorBoundaryContainer}>
+          <ThemedText type="title" style={styles.errorBoundaryTitle}>
+            Couldn&apos;t show your results
+          </ThemedText>
+          <ThemedText type="default" themeColor="textSecondary" style={styles.errorBoundaryBody}>
+            {imageUri
+              ? `Something went wrong displaying the analysis for your ${roomLabel.toLowerCase()} photo. Your photo is still there — try again.`
+              : 'Something went wrong displaying your results. Please go back and select a photo.'}
+          </ThemedText>
+          {__DEV__ ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.errorBoundaryDetail}>
+              {error.message}
+            </ThemedText>
+          ) : null}
+          {imageUri ? (
+            <Pressable
+              onPress={() => {
+                void retry();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+              hitSlop={TapSlop.defaultLabelPadded}
+              style={({ pressed }) => [
+                styles.saveButton,
+                { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <ThemedText type="defaultSemiBold" style={[styles.buttonText, { color: colors.accentForeground }]}>
+                Try again
+              </ThemedText>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={TapSlop.defaultLabelPadded}
+            style={({ pressed }) => [
+              styles.backButton,
+              { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <ThemedText type="defaultSemiBold" style={styles.buttonText}>
+              Go back
+            </ThemedText>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </ThemedView>
+  );
 }
 
 export default function ResultsScreen() {
@@ -722,5 +809,22 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  errorBoundaryContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.five,
+    gap: Spacing.three,
+  },
+  errorBoundaryTitle: {
+    textAlign: 'center',
+  },
+  errorBoundaryBody: {
+    textAlign: 'center',
+  },
+  errorBoundaryDetail: {
+    textAlign: 'center',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
   },
 });
