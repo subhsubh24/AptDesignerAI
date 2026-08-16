@@ -369,11 +369,13 @@ Never let that ship or count as done. This applies to EVERY aspect of the projec
 A green build with a broken user journey is wasted work. See Track F (F4 — functional E2E) and
 the READINESS AUDIT GATE (Functional reality must be an actual RUN).
 
-> **P0 — fix the known defect this run:** signup currently reports a confirmation email was sent
-> while none is delivered (dry-run/unconfigured). Make the success message contingent on a real
-> send, and build the email round-trip into the journey suite (F4.1) so it can never silently
-> regress. Until the round-trip passes, signup-with-email-confirmation is UNVALIDATED and may not
-> be ticked.
+> **P0 RESOLVED (verified 2026-08-16, Run 169):** the defect this banner originally named — signup
+> reporting a confirmation email was sent while none was delivered — no longer exists.
+> `app/api/auth/signup/route.ts` creates the user already CONFIRMED via the service-role admin
+> client and makes no "check your email" promise, by design (see the route's own doc comment).
+> F4.1 (the general SIDE-EFFECT INTEGRITY round-trip requirement for whichever flows DO send
+> real email — waitlist double-opt-in, password-reset) remains open standing work; see F4.1
+> below. This banner is left here as a record rather than deleted, per the living-artifacts rule.
 
 - [ ] **§29 deployed-app validator (computer-use, autonomous, non-blocking).** Build the Browserbase-driven end-to-end sweep of the DEPLOYED web app (FACTORY_STANDARD §29). Keys `BROWSERBASE_API_KEY`/`BROWSERBASE_PROJECT_ID` are SET + connectivity PROVEN (2026-07-04, HTTP 200 to the live app). Connect via the SDK's signed `s.connectUrl`; enumerate EVERY core flow, drive each, assert real user-visible outcomes with dedicated TEST accounts + Stripe TEST mode (no real charges); publish `docs/autonomous-loop/VALIDATOR_STATUS.md` (REAL flow counts — NEVER a fabricated green). Exploratory FINDER, not a merge gate. A green full-flow sweep is a §13 marketing-arming signal. Build epic: #416.
 
