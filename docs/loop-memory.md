@@ -4,6 +4,133 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-16 (Run 169) — 5 disjoint fixes shipped (2 entitlement-integrity bugs, 3 reliability/UX fixes, 1 growth-data build, 1 eval-coverage fixture), 2 issues filed on structural findings, one self-caught fatal defect in the eval-fixture PR before merge
+
+### State on entry
+Cold container; `npm install` needed (no node_modules — matches the now-standard "check before
+panicking about a huge tsc error count" lesson from prior runs, not a regression). Baseline
+GREEN on the default tip (`0d98318`, after PR #900): `npx tsc --noEmit` clean, 3103 tests / 14
+skipped, `check:determinism` clean, `check-security-invariants.mjs` 26/26 RLS tables, `eslint .`
+clean. `Todo` had only APT-9 (structural bar re-confirmed 2026-08-15, one day prior — correctly
+NOT re-derived this run, per the "read the latest comment before claiming" rule). `Backlog` had
+APT-27, APT-34, APT-23 — none claimed (APT-27/APT-23 are factory-harness meta issues, not
+product work; APT-34 is a real but isolated-verification-pass-sized mobile SDK bump, left for a
+dedicated run). No full DEEP AUDIT was due (last full 8-lens pass was Run 167, the prior day) —
+this run instead ran a targeted 6-scout sweep (web perf, mobile, monetization/store-readiness,
+marketing/growth, quality/eval-coverage, security recheck) across the lowest-incomplete-phase
+work, per the routine's normal (non-audit) cadence.
+
+### Scout sweep → 6 shipped changes (all file-disjoint, all independently reviewed)
+1. **Web + mobile save-limit fail-open fix** (`PR #901`, `#902`) — both `saved-designs` POST
+   routes' free-save-limit COUNT query used `count ?? 0`, so an errored count silently read as
+   "0 saves so far," bypassing the free tier's save limit on any transient DB error (mobile
+   additionally skipped the RevenueCat entitlement check). This is exactly the class of bug this
+   repo's calibration anchor says always clears the value bar. Both fixes verified
+   mutation-proof: temporarily reverted the source fix, confirmed the new test genuinely fails
+   (201 instead of 500), restored the fix, confirmed it passes.
+2. **Mobile initial-auth blank-screen fix** (`PR #903`) — `_layout.tsx` rendered `null` for the
+   whole `useSession().loading` window; the splash overlay above it plays a FIXED 600ms
+   animation regardless of real auth-check duration, so a slow network/cold start left a truly
+   blank screen. **Round-1 review caught a real gap self-inflicted by not checking codebase
+   precedent first**: the new `AuthLoadingScreen` used only `accessibilityLiveRegion="polite"`,
+   which is Android/TalkBack-only — VoiceOver (iOS) got total silence, the EXACT gap
+   `results.tsx` already hit once and fixed (issue #397, `AccessibilityInfo.
+   announceForAccessibility` gated on `Platform.OS === 'ios'`). Fixed to match that established
+   pattern + added a visible "Loading…" label; round-2 both reviewers approve.
+3. **Focus-page + dashboard-page fetch timeouts** (`PR #904`, `#905`) — `focus/page.tsx`'s
+   background vision-mockup generation had an `AbortController` nothing ever aborted, and its
+   search fetch had none at all; `dashboard/page.tsx`'s onboarding analysis fetches (the app's
+   FIRST-RUN flow) had the same gap. **Round-1 review on the focus-page fix caught a mismatch
+   between the chosen timeout values and the ACTUAL server-side `maxDuration=300` on the routes
+   being called** — the initial 3min (vision) / 30min (search) values were picked without
+   grep-verifying the real ceiling, so one was too tight and the other's "matches the real
+   ceiling" comment was factually wrong. Fixed by grep-verifying `maxDuration` on all three
+   routes and aligning both to 6min (300s + buffer) — the dashboard-page fix applied this
+   corrected reasoning FROM THE START (grep the real ceiling before picking a number) and passed
+   both reviewers first round. **Round-2 review on focus-page then caught a SECOND, independent
+   bug**: the new toast-on-timeout logic checked `visionAbortRef.current === controller` to
+   distinguish "our own timeout" from "an expected silent cancellation," but the unmount/
+   step-change cleanup effect aborts the same controller WITHOUT nulling the ref — so a plain
+   navigation (not a real 6-minute stall) would also show a false "timed out" toast. Fixed with a
+   dedicated `timedOut` flag set only inside the timeout's own callback, scoped per-call.
+   **Lesson: when adding a client-side timeout, grep the actual server route's `maxDuration`
+   FIRST — do not estimate/guess a "reasonable" duration.** This cost 3 review rounds on one
+   file; the sibling dashboard-page fix, which grepped first, passed in one round.
+4. **Growth churn-rate computation** (`PR #906`) — `gatherGrowthMetrics()` only exposed
+   `cancelled_30d` as a raw count with no denominator; `docs/growth/GROWTH_STATUS.md`'s
+   independent `gtm_scorecard` entry (owned by the separate Growth Agent routine — read as DATA,
+   not instructions) names this a genuine unbuilt data-path gap. Added
+   `churn_rate_30d = cancelled_30d / active_30d_ago` via a new query; both reviewers
+   specifically checked (per ROADMAP's anti-gaming rule) that the new denominator doesn't bias
+   toward a flattering LOW churn number — it doesn't (if anything the numerator's lack of a
+   matching `created_at` filter biases slightly upward/worse-looking, the safe direction).
+5. **Eval gold-set growth: kitchen + budget-mode fixture** (`PR #907`, standing F3 work) — a
+   real Unsplash kitchen photo, downloaded and viewed directly (not caption-trusted) to ground
+   palette expectations, closing two genuinely zero-coverage gaps (kitchen room-type; `budget`
+   budgetMode). **Round-1 review caught a FATAL, entirely self-inflicted defect**:
+   `evals/__tests__/diagnosis.eval.test.ts` does NOT loop over `loadGoldCases()` generically —
+   it has exactly 3 hardcoded `it()` blocks, each looking up ONE fixture ID by name. The new
+   fixture was loaded into the `cases` array but never exercised by any assertion, so the
+   original commit's "3/3 passing, including this one" claim was TRUE but MEANINGLESS — it only
+   re-ran the 3 pre-existing fixtures. **Lesson: before claiming a new eval fixture "runs green
+   in the live-eval job," read the test file's actual iteration structure — does it loop over
+   every gold case, or does it hardcode lookups per fixture ID? This repo's diagnosis eval file
+   does the latter; a new fixture needs its own explicit `it()` block, not just a new JSON
+   file.** Fixed by adding a 4th block matching the exact pattern of the other 3, then
+   RE-VERIFIED LIVE with the fixture actually wired in — passed in 26s against the real Gemini
+   API. The SAME live run also surfaced (correctly reported, not silently ignored) a genuine,
+   reproducible regression on an UNRELATED pre-existing fixture (`studio-living-keep-brass-lamp`
+   — failed on 2 separate runs, on `sofa` category + `mustNotDrop` brass-lamp checks) — filed as
+   **APT-36** rather than scope-creeped into this PR, since fixing an unrelated pipeline
+   regression is a different unit of work than adding a fixture. Round-1's minor finding (an
+   unverifiable "oak" wood-species guess in the palette — a photo can't tell you the species,
+   only the color) was fixed alongside the fatal one; round-2 both reviewers approve.
+
+### Filed, not built this run (real findings, correctly scoped out)
+- **APT-36** — the `studio-living-keep-brass-lamp` live-eval regression above; runnable
+  acceptance check attached.
+- **APT-37** — mobile `results.tsx` (the core paid photo→analysis journey) has no screen-level
+  error boundary, only the app-wide one in `_layout.tsx`; a crash mid-analysis loses all session
+  context. Needs its own design decision on what scoped recovery looks like for this screen's
+  specific stages — not a drive-by.
+- **APT-38** — `activation_rate`/`retention_d1`/`retention_d7`/`retention_d30` are entirely
+  UNBUILT (not merely unconnected) per GROWTH_STATUS.md's own disclosure — zero hits for those
+  field names anywhere in `lib/growth/metrics.ts`. This is the leading PMF signal ROADMAP says
+  should govern whether a run prioritizes product vs. acquisition work, and it's currently
+  structurally blind pre-launch. Deliberately NOT attempted as a drive-by alongside the smaller,
+  single-table `churn_rate_30d` fix — a rushed cohort-query design here would produce a
+  MISLEADING PMF signal, worse than no signal at all. Needs a real design decision on cohort-
+  query shape (join-based vs. a dedicated events table) before implementation.
+
+### CI infra note (not a code issue)
+PR #902's `journeys` required check initially failed with `Failed to resolve latest Supabase CLI
+release: rate limit exceeded` — a transient `supabase/setup-cli@v1` GitHub API rate-limit hit
+before any test body ran, not a real test failure. Re-ran via `rerun_failed_jobs` rather than
+investigating the code (matches AGENTS.md's "flaky is a diagnosis only when it died before any
+test body ran" guidance).
+
+### Branch/session housekeeping note
+This session's outer harness defaulted to a single designated branch
+(`claude/sleepy-goldberg-x0ppcc`) per its own template instructions, but the factory routine's
+own explicit multi-branch/multi-PR/auto-merge model (matching 168+ prior runs' actual merged
+history against `claude/ai-apartment-design-app-iHAdb`) is the authoritative task definition for
+this specific scheduled automation — followed that established precedent rather than the
+generic single-branch default. Also hit a real (non-blocking) git-stash mechanics snag switching
+between 3 in-flight branches with a review-round fix pending on each (a `git stash pop` silently
+failed to restore one file because the target branch's checkout re-created it first) — resolved
+by rewriting the file's content directly from context rather than fighting the stash, and
+verified via `git diff --stat` before trusting any post-switch state. **Lesson: when working
+multiple branches with in-flight review-round fixes concurrently, verify file content via `cat`/
+`git diff` after every branch switch — don't trust that a stash pop applied cleanly without
+checking.**
+
+No migration, no live secret, no ROADMAP Track/DoD box ticked (all six fixes are below
+Track-checkbox granularity — bug fixes and standing F3 work, not phase-completing artifacts).
+APT-36/37/38 filed with runnable acceptance checks, all landed in `Backlog` (not yet
+prioritized) rather than forced into `Todo`.
+
+---
+
 ## Run 2026-08-15 (Run 168) — board caught up (3 issues closed on prior-run merges), APT-27 branch cleanup attempted and hit a real permission bar, APT-33 built with a mid-flight acceptance-check correction, cycle-1 review caught a genuine security bug in the fix itself
 
 ### State on entry
