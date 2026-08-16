@@ -482,27 +482,35 @@ const realGeminiProvider: AIProvider = {
     // Combined cache: when caller opts in, convert the cacheable content
     // parts and try to create/reuse a cache that covers system + these parts.
     // On success, we set config.cachedContent and send only the net-new
-    // messages. On failure, we prepend the cacheable parts to the first
-    // user message so behavior matches the pre-caching baseline.
-    // Skip combined cache when tools are present — some Gemini tool types
-    // (googleSearch, urlContext) may be incompatible with cachedContent.
+    // messages. On failure — OR when tools are present, since Gemini rejects
+    // `cachedContent` alongside tools (some tool types like googleSearch/
+    // urlContext are incompatible with it) — we prepend the cacheable parts
+    // to the first user message so the model still sees them inline. This
+    // fallback must run unconditionally whenever cacheScope carries content:
+    // previously it lived inside the same `!tools?.length` guard that skips
+    // the cache-creation attempt, so a tools call silently dropped the
+    // cacheScope content (e.g. room photos) instead of inlining it — the
+    // model saw no images at all. See APT-36.
     let combinedCacheName: string | null = null;
-    if (cacheScope && cacheScope.content.length > 0 && !tools?.length) {
+    if (cacheScope && cacheScope.content.length > 0) {
       const cacheableConverted = await convertMessages(
         [{ role: "user", content: cacheScope.content }],
         partMediaResolutionLevel,
       );
       const cacheableParts = cacheableConverted[0]?.parts ?? [];
       if (cacheableParts.length > 0) {
-        combinedCacheName = await getOrCreateCombinedCache({
-          model,
-          system,
-          cacheableParts,
-          sessionKey: cacheScope.sessionKey,
-        });
+        if (!tools?.length) {
+          combinedCacheName = await getOrCreateCombinedCache({
+            model,
+            system,
+            cacheableParts,
+            sessionKey: cacheScope.sessionKey,
+          });
+        }
         if (!combinedCacheName) {
           // Fallback: prepend cached parts to the first user message so the
-          // model still sees the full context inline.
+          // model still sees the full context inline. This is the ONLY path
+          // when tools are present.
           if (contents.length > 0) {
             contents[0].parts = [...cacheableParts, ...contents[0].parts];
           } else {

@@ -1,0 +1,16 @@
+{
+  "id": "great-room-keep-leather-sectional",
+  "description": "Bright, high-ceilinged open-plan great room (living area of a living/dining/kitchen space) with floor-to-ceiling glass on two walls, a rattan swag pendant, and an existing tan leather sectional + gray patterned area rug + wood coffee table + rattan accent chair. Client wants to keep the sectional and warm the space up without replacing it. RE-GROUNDED 2026-08-16 (APT-36): the previous version of this fixture (id studio-living-keep-brass-lamp) described a 'small studio' with a 'brass floor lamp' that does not match this photo at all (no brass lamp is visible; the room is a large open-plan great room, not a studio) and required a 'sofa'/'area_rug' category that the room already has in abundance — that mismatch, not a pipeline regression, is what made the fixture fail intermittently once lib/ai/gemini.ts's cacheScope+tools image-drop bug (APT-36 root cause, fixed in the same change) stopped letting the model guess blind and started grounding it on the actual photo. METHODOLOGY (to keep this anti-circular, per a review-round correction — the first draft justified dropping a requirement by citing live-run pass/fail, which is the exact circularity this note now avoids): expectations were fixed by visual inspection of the downloaded photo ALONE, before deciding what to require. Two candidate 'missing' categories were visible: (1) floor_lamp — UNAMBIGUOUS: no ambient/task lamp exists anywhere in the room besides the single overhead pendant, which is a genuine gap in a room this large. (2) wall_art — AMBIGUOUS on the photo alone, independent of any pipeline behavior: the room already has a framed print by the door and a round wall mirror, so 'needs more wall art' is a stylistic judgment call a reasonable designer could make either way, not a clear-cut gap the way floor_lamp is. requiredCategories below holds only the unambiguous one (floor_lamp); wall_art was excluded for the ambiguity reason above, decided before any live run. A live run afterward (RUN_EVALS=1, 3 of 4 attempts) confirmed floor_lamp is a stable, reliably-triggered signal — that run was verification of an already-fixed expectation, not the basis for choosing it.",
+  "input": {
+    "roomType": "living_room",
+    "imageUrls": ["https://images.unsplash.com/photo-1600210492493-0946911123ea?w=1280&q=80"],
+    "userContext": "Keep the tan leather sectional — we love it, do not suggest replacing it. Warm palette — terracotta, camel, warm whites. No cool grays.",
+    "keepItems": ["leather sectional", "sectional sofa"],
+    "budgetMode": "balanced"
+  },
+  "expectations": {
+    "mustNotDrop": ["leather sectional", "sectional sofa"],
+    "paletteIncludes": ["terracotta", "camel", "warm"],
+    "requiredCategories": ["floor_lamp"]
+  }
+}
