@@ -82,10 +82,19 @@ export async function POST(request: NextRequest) {
 
   // Server-side entitlement gate: enforce FREE_SAVE_LIMIT for non-Pro users.
   // Checked before body parsing so rejected requests skip validation work.
-  const { count: existingSaveCount } = await authedClient
+  const { count: existingSaveCount, error: countError } = await authedClient
     .from("saved_designs")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
+
+  // Fail loud on a count-query error rather than treating it as "0 saves so
+  // far" — `?? 0` on an errored (null) count would silently bypass the free
+  // tier's save limit (and skip the RevenueCat entitlement check below) on
+  // every transient DB error.
+  if (countError) {
+    console.error("[mobile/saved-designs] free-limit count query failed:", countError.message);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
 
   if ((existingSaveCount ?? 0) >= FREE_SAVE_LIMIT) {
     const isPro = await hasProEntitlement(user.id);
