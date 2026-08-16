@@ -19,9 +19,29 @@ interface Counts {
   active30dAgo: number;
 }
 
+interface FakeProfile {
+  id: string;
+  created_at: string;
+}
+
+interface FakeDiagnosis {
+  created_at: string;
+  user_id: string;
+}
+
 // Minimal Supabase-shaped fake: each query is a thenable that resolves to a
-// { count, error } based on the table and which filters were applied.
-function fakeAdmin(counts: Counts, error: unknown = null) {
+// { count, error } (waitlist_emails / stripe_customers) or a { data, error }
+// (profiles / room_diagnoses — row-returning, no count option) based on the
+// table and which filters were applied. `cohort` defaults to empty so
+// pre-existing tests (which only assert on `m.funnel`) get an empty, all-null
+// `m.pmf` without needing to know about it.
+function fakeAdmin(
+  counts: Counts,
+  error: unknown = null,
+  cohort: { profiles?: FakeProfile[]; diagnoses?: FakeDiagnosis[] } = {},
+) {
+  const profiles = cohort.profiles ?? [];
+  const diagnoses = cohort.diagnoses ?? [];
   return {
     from(table: string) {
       const state = {
@@ -52,7 +72,28 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
           if (col === "status") state.status = val;
           return builder;
         },
-        then(resolve: (v: { count: number | null; error: unknown }) => unknown) {
+        then(
+          resolve: (
+            v:
+              | { count: number | null; error: unknown }
+              | { data: unknown[] | null; error: unknown },
+          ) => unknown,
+        ) {
+          if (state.table === "profiles") {
+            return Promise.resolve(
+              error ? { data: null, error } : { data: profiles, error: null },
+            ).then(resolve);
+          }
+          if (state.table === "room_diagnoses") {
+            const rows = diagnoses.map((d) => ({
+              created_at: d.created_at,
+              rooms: { projects: { user_id: d.user_id } },
+            }));
+            return Promise.resolve(
+              error ? { data: null, error } : { data: rows, error: null },
+            ).then(resolve);
+          }
+
           let count = 0;
           if (state.table === "waitlist_emails") {
             count = state.gteCol === "created_at" ? counts.waitlist7d : counts.waitlistTotal;
@@ -79,6 +120,9 @@ function fakeAdmin(counts: Counts, error: unknown = null) {
     },
   };
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS).toISOString();
 
 describe("gatherGrowthMetrics", () => {
   it("returns real counts keyed by table and filter", async () => {
@@ -128,6 +172,81 @@ describe("gatherGrowthMetrics", () => {
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(gatherGrowthMetrics(admin as any)).rejects.toBeTruthy();
+  });
+
+  const ZERO_COUNTS: Counts = {
+    waitlistTotal: 0,
+    waitlist7d: 0,
+    activeSubs: 0,
+    annualSubs: 0,
+    cancelledSubs: 0,
+    cancelled30d: 0,
+    active30dAgo: 0,
+  };
+
+  it("computes activation_rate and rolling retention_d1/d7/d30 from a constructed signup cohort", async () => {
+    // P1: signed up 20d ago, first (only) diagnosis 3 days after signup —
+    //   activates within the 7-day window; NOT retained at d7/d30 (its one
+    //   event is before day 7); not old enough (20d) to be in the d30 cohort.
+    // P2: signed up 40d ago, first (only) diagnosis 10 days after signup —
+    //   misses the 7-day activation window; retained at d1 and d7 (10 >= both),
+    //   but NOT at d30 (10 < 30).
+    // P3: signed up 5d ago, no diagnosis — too young for the 7d activation
+    //   window and the d7/d30 retention cohorts; only counts toward d1's
+    //   denominator (not retained, no event at all).
+    // P4: signed up 60d ago, no diagnosis ever — eligible everywhere, never
+    //   activates or retains.
+    const p1Signup = daysAgo(20);
+    const p2Signup = daysAgo(40);
+    const admin = fakeAdmin(ZERO_COUNTS, null, {
+      profiles: [
+        { id: "p1", created_at: p1Signup },
+        { id: "p2", created_at: p2Signup },
+        { id: "p3", created_at: daysAgo(5) },
+        { id: "p4", created_at: daysAgo(60) },
+      ],
+      diagnoses: [
+        { user_id: "p1", created_at: new Date(new Date(p1Signup).getTime() + 3 * DAY_MS).toISOString() },
+        { user_id: "p2", created_at: new Date(new Date(p2Signup).getTime() + 10 * DAY_MS).toISOString() },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = await gatherGrowthMetrics(admin as any);
+    // Activation: eligible = {p1, p2, p4} (p3 too young). Activated = {p1} only.
+    expect(m.pmf.activation_rate).toBeCloseTo(1 / 3, 10);
+    // d1: eligible = {p1, p2, p3, p4}. Retained = {p1, p2} (both events land on/after day 1).
+    expect(m.pmf.retention_d1).toBeCloseTo(2 / 4, 10);
+    // d7: eligible = {p1, p2, p4} (p3 too young). Retained = {p2} only (p1's event is day 3, before day 7).
+    expect(m.pmf.retention_d7).toBeCloseTo(1 / 3, 10);
+    // d30: eligible = {p2, p4} (p1 only 20d old). Retained = {} (p2's event is day 10, before day 30).
+    expect(m.pmf.retention_d30).toBe(0);
+  });
+
+  it("returns pmf rates as null when the whole signup cohort is too young to be measurable", async () => {
+    const admin = fakeAdmin(ZERO_COUNTS, null, {
+      profiles: [{ id: "brand-new", created_at: new Date().toISOString() }],
+      diagnoses: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = await gatherGrowthMetrics(admin as any);
+    expect(m.pmf).toEqual({
+      activation_rate: null,
+      retention_d1: null,
+      retention_d7: null,
+      retention_d30: null,
+    });
+  });
+
+  it("returns pmf rates as null when there are no profiles at all", async () => {
+    const admin = fakeAdmin(ZERO_COUNTS);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = await gatherGrowthMetrics(admin as any);
+    expect(m.pmf).toEqual({
+      activation_rate: null,
+      retention_d1: null,
+      retention_d7: null,
+      retention_d30: null,
+    });
   });
 });
 
