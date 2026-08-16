@@ -358,6 +358,12 @@ export default function FocusPage() {
     const controller = new AbortController();
     visionAbortRef.current = controller;
     setGeneratingVision(true);
+    // The controller previously existed only for cleanup-on-unmount /
+    // superseded-call cancellation — nothing ever aborted it on a stall, so a
+    // hung image-generation call left `generatingVision` (and its spinner)
+    // stuck true indefinitely. Image generation is normally well under a
+    // minute; 3min gives real headroom without hanging forever.
+    const timeoutId = window.setTimeout(() => controller.abort(), 3 * 60 * 1000);
     const items = analysis.what_it_needs.map((n) => n.search_title || n.description).join("; ") || "";
     try {
       const res = await fetch("/api/mockups", {
@@ -380,6 +386,7 @@ export default function FocusPage() {
         console.error("Background vision generation error:", err);
       }
     }
+    window.clearTimeout(timeoutId);
     if (visionAbortRef.current === controller) {
       visionAbortRef.current = null;
       setGeneratingVision(false);
@@ -614,11 +621,18 @@ export default function FocusPage() {
       specs: n.specs,
     }));
 
+    // Agentic sourcing can legitimately run for many minutes, but with no cap
+    // at all a stalled backend left the user on the sourcing spinner forever
+    // with no error and no retry. 30min matches the search step's own
+    // real-world ceiling (product search is the slowest stage in the pipeline).
+    const searchAbort = new AbortController();
+    const searchTimeoutId = window.setTimeout(() => searchAbort.abort(), 30 * 60 * 1000);
     try {
       const res = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
+        signal: searchAbort.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -627,6 +641,7 @@ export default function FocusPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ room_id: roomId, categories, fillAllTiers }),
+          signal: searchAbort.signal,
         });
         if (batchRes.ok) {
           const data = await batchRes.json().catch(() => ({}));
@@ -645,6 +660,7 @@ export default function FocusPage() {
         } else {
           setSearchError("Product search failed. Please try again.");
         }
+        window.clearTimeout(searchTimeoutId);
         setSearching(false);
         setStep("results");
         return;
@@ -719,8 +735,13 @@ export default function FocusPage() {
       }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(e instanceof Error ? e.message : "Search failed — please try again");
+      setSearchError(
+        (e as { name?: string })?.name === "AbortError"
+          ? "Search timed out. Please try again."
+          : e instanceof Error ? e.message : "Search failed — please try again",
+      );
     }
+    window.clearTimeout(searchTimeoutId);
     setSearching(false);
     setSearchStartTime(null);
     setStep("results");
