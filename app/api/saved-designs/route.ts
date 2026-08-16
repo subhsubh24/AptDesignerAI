@@ -223,10 +223,16 @@ export async function POST(request: NextRequest) {
   // Soft/best-effort limit: a count+insert race at the boundary could allow one extra save (same
   // semantics as the mobile gate — no DB-level constraint enforces the cap).
   if (!existing) {
-    const { count: saveCount } = await supabase
+    const { count: saveCount, error: saveCountError } = await supabase
       .from("saved_designs")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId);
+
+    // Fail loud on a count-query error rather than treating it as "0 saves so
+    // far" — `?? 0` on an errored (null) count would silently bypass the free
+    // tier's save limit on every transient DB error, the same class of bug
+    // the read-error check above this block already guards against.
+    if (saveCountError) return apiError("saved-designs", saveCountError);
 
     if ((saveCount ?? 0) >= FREE_SAVE_LIMIT_WEB) {
       const hasPro = await hasProEntitlementWeb(userId);
