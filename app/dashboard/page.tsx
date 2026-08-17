@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion
 import { trackEvent } from "@/lib/analytics";
 import { orderRoomImages } from "@/lib/rooms/embedded-images";
 import { toast } from "@/components/ui/toast";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 // ─── Room Sections Config ────────────────────────────────────────────
 function getRoomSections(bedrooms: number, bathrooms: number) {
@@ -728,12 +730,24 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo!.url}
-              alt={buildingName || "Building exterior"}
-              className="w-full h-[180px] object-cover"
-            />
+            <div className="relative w-full h-[180px]">
+              {canOptimizeImageHost(photo!.url) ? (
+                <Image
+                  src={photo!.url}
+                  alt={buildingName || "Building exterior"}
+                  fill
+                  sizes="(min-width: 768px) 672px, 100vw"
+                  className="object-cover"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photo!.url}
+                  alt={buildingName || "Building exterior"}
+                  className="w-full h-full object-cover"
+                />
+              )}
+            </div>
             {photo!.attributions.length > 0 && (
               <p className="text-[10px] text-muted-foreground px-2 py-1 bg-muted/50">
                 Photo: {photo!.attributions.join(", ")}
@@ -1029,16 +1043,33 @@ export default function DashboardPage() {
               >
                 {/* Room thumbnail */}
                 {firstImage && (
-                  <div className="aspect-[16/10] overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={firstImage.url}
-                      alt={section.label}
-                      className={cn(
-                        "w-full h-full object-cover transition-transform duration-500",
-                        isSelected ? "scale-105" : "group-hover:scale-105"
-                      )}
-                    />
+                  <div className="relative aspect-[16/10] overflow-hidden">
+                    {canOptimizeImageHost(firstImage.url) ? (
+                      <Image
+                        src={firstImage.url}
+                        alt={section.label}
+                        fill
+                        // The grid lives inside a max-w-3xl (768px) container with
+                        // px-4, so at md+ each of the 2 columns is a fixed ~360px
+                        // ((768 - 32 padding - 16 gap) / 2), never 50vw of the
+                        // actual (often much wider) viewport.
+                        sizes="(min-width: 768px) 360px, 100vw"
+                        className={cn(
+                          "object-cover transition-transform duration-500",
+                          isSelected ? "scale-105" : "group-hover:scale-105"
+                        )}
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={firstImage.url}
+                        alt={section.label}
+                        className={cn(
+                          "w-full h-full object-cover transition-transform duration-500",
+                          isSelected ? "scale-105" : "group-hover:scale-105"
+                        )}
+                      />
+                    )}
                     {/* Gradient overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                   </div>
@@ -1229,13 +1260,23 @@ function RoomUploadSection({
       <CardContent>
         <div className="flex gap-3 flex-wrap">
           {images.map((img, i) => (
-            <div key={img.id} className="relative group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.url}
-                alt={`Uploaded room photo ${i + 1}`}
-                className="h-24 w-24 rounded-xl object-cover border shadow-sm transition-transform duration-200 group-hover:scale-105"
-              />
+            <div key={img.id} className="relative group h-24 w-24">
+              {canOptimizeImageHost(img.url) ? (
+                <Image
+                  src={img.url}
+                  alt={`Uploaded room photo ${i + 1}`}
+                  fill
+                  sizes="96px"
+                  className="rounded-xl object-cover border shadow-sm transition-transform duration-200 group-hover:scale-105"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={img.url}
+                  alt={`Uploaded room photo ${i + 1}`}
+                  className="h-24 w-24 rounded-xl object-cover border shadow-sm transition-transform duration-200 group-hover:scale-105"
+                />
+              )}
               <button
                 onClick={() => onRemove(img.id)}
                 aria-label="Remove image"
