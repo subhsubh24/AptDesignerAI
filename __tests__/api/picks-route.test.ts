@@ -13,6 +13,7 @@ import { NextRequest } from "next/server";
 
 const mockGetUser = vi.fn();
 const mockRoomsEq = vi.fn();
+const mockRoomsOrder = vi.fn();
 const mockRoomsLimit = vi.fn();
 const mockProductsIn = vi.fn();
 const mockRange = vi.fn();
@@ -29,6 +30,10 @@ vi.mock("@/lib/supabase/server", () => ({
         builder.select = () => builder;
         builder.eq = (...args: unknown[]) => {
           mockRoomsEq(...args);
+          return builder;
+        };
+        builder.order = (...args: unknown[]) => {
+          mockRoomsOrder(...args);
           return builder;
         };
         builder.limit = (...args: unknown[]) => {
@@ -77,6 +82,7 @@ const PRODUCTS = [
 beforeEach(() => {
   mockGetUser.mockReset();
   mockRoomsEq.mockReset();
+  mockRoomsOrder.mockReset();
   mockRoomsLimit.mockReset();
   mockProductsIn.mockReset();
   mockRange.mockReset();
@@ -134,6 +140,11 @@ describe("GET /api/picks", () => {
   it("bounds the owned-rooms fetch with a .limit() (APT-41 — was unbounded)", async () => {
     await GET(req());
     expect(mockRoomsLimit).toHaveBeenCalledWith(100);
+  });
+
+  it("orders the owned-rooms fetch before limiting it, so the cap drops a deterministic (not arbitrary) subset", async () => {
+    await GET(req());
+    expect(mockRoomsOrder).toHaveBeenCalledWith("created_at", { ascending: false });
   });
 
   it("honors explicit limit/offset query params", async () => {

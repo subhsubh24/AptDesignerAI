@@ -41,7 +41,7 @@ function jsonReq(body: unknown): Request {
   });
 }
 
-function makeClient(capturedLimits: unknown[]) {
+function makeClient(capturedLimits: unknown[], capturedOrders: unknown[][] = []) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: "caller-1" } } }) },
     from: vi.fn((table: string) => {
@@ -54,6 +54,10 @@ function makeClient(capturedLimits: unknown[]) {
         });
         chain.eq = vi.fn(() => chain);
         chain.neq = vi.fn(() => chain);
+        chain.order = vi.fn((...args: unknown[]) => {
+          if (isOtherRoomsQuery) capturedOrders.push(args);
+          return chain;
+        });
         chain.limit = vi.fn((n: unknown) => {
           if (isOtherRoomsQuery) capturedLimits.push(n);
           return chain;
@@ -103,5 +107,15 @@ describe("POST /api/area-analysis/refine — sibling-rooms query bound", () => {
     await refinePost(jsonReq({ room_id: OWNED_ROOM_ID, user_feedback: "make it cozier" }));
 
     expect(limits).toEqual([30]);
+  });
+
+  it("orders the otherRooms fetch before limiting it, so the cap drops a deterministic (not arbitrary) subset", async () => {
+    const limits: unknown[] = [];
+    const orders: unknown[][] = [];
+    mockCreateClient.mockResolvedValue(makeClient(limits, orders));
+
+    await refinePost(jsonReq({ room_id: OWNED_ROOM_ID, user_feedback: "make it cozier" }));
+
+    expect(orders).toContainEqual(["created_at", { ascending: false }]);
   });
 });

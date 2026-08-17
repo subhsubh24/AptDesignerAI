@@ -81,6 +81,12 @@ export async function POST(request: Request) {
     .select("name, room_type, room_diagnoses(diagnosis_json, design_direction_json)")
     .eq("project_id", project?.id || room.project_id)
     .neq("id", room_id)
+    // .order() is required alongside .limit(): without one, Postgres/PostgREST
+    // give no ordering guarantee and an unordered .limit() would silently
+    // (and non-deterministically) drop an arbitrary subset of sibling rooms
+    // once a project exceeds the cap — newest-first, matching the sibling
+    // /api/area-analysis route's identical fetch.
+    .order("created_at", { ascending: false })
     .limit(30);
 
   // Build content blocks
