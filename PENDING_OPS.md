@@ -8,7 +8,7 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-08-07
+  as_of: 2026-08-17
   items:
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
@@ -280,9 +280,17 @@ Two new Linear labels the fixed prompts reference already exist on the team: `so
 
 ### Wire `scripts/check-security-invariants.mjs` into a required CI job before `migrate` (added 2026-08-08, PR #836, Track F/security — APT-1)
 
+> **CI JOB CONFIRMED WIRED (verified read-only, Run 172, 2026-08-17):** a 2026-08-17 deep-audit scout flagged
+> this section as possibly stale; independently verified by reading (not editing) `.github/workflows/ci.yml` —
+> the `security-invariants` job (running `node scripts/check-security-invariants.mjs`) exists, and `migrate`'s
+> `needs:` list includes it. Item 1 below is DONE. **Item 2 (adding `security-invariants` to the GitHub branch
+> protection required-status-checks list) could not be verified from this session — that's a repo Settings
+> page, not a file — so it remains an owner step to confirm/complete** if not already done. Left the rest of
+> this section as the historical record per the living-artifacts convention.
+
 `.github/workflows/ci.yml`'s `migrate` job auto-applies `supabase/migrations/*` to **prod** on every push to the default branch, and its own comment cites "the 2-reviewer + RLS gate pre-merge" as the mitigation. That RLS gate (GATE 6 in `scripts/preflight.sh`) only ever ran when someone manually executed the full multi-minute `preflight.sh` — no CI job ran it, so a migration that `CREATE TABLE`s without `ENABLE ROW LEVEL SECURITY` could merge and auto-apply to prod with nothing catching it pre-merge. Supabase exposes the whole public schema to the anon key via PostgREST, so an unguarded public table is a live tenant-data leak; the same risk applies to a `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` client-secret leak.
 
-PR #836 extracted that check into a standalone, independently-runnable script — `node scripts/check-security-invariants.mjs` — that `scripts/preflight.sh` GATE 6 now calls (so the two can never drift). What remains is wiring it into `.github/workflows/ci.yml` as a required job ahead of `migrate`; the loop cannot make this change itself (editing anything under `.github/` trips a sensitive-file permission prompt that hangs an unattended run).
+PR #836 extracted that check into a standalone, independently-runnable script — `node scripts/check-security-invariants.mjs` — that `scripts/preflight.sh` GATE 6 now calls (so the two can never drift). ~~What remains is wiring it into `.github/workflows/ci.yml` as a required job ahead of `migrate`~~ (DONE — see note above); the loop cannot make this change itself (editing anything under `.github/` trips a sensitive-file permission prompt that hangs an unattended run).
 
 **Owner step:**
 1. Add a job to `.github/workflows/ci.yml` (or a step inside an existing early job) that runs:

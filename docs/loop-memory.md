@@ -4,6 +4,111 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-17 (Run 172) — closed APT-40, made partial (2/11-file) progress on APT-39, ran a full DEEP AUDIT, discovered and recovered from a stale designated-branch ref
+
+### State on entry
+Cold container; `npm install` needed. Baseline GREEN on entry (`66ab19e`): `npx tsc --noEmit` clean, 3113
+tests / 15 skipped, `check:determinism` clean, `eslint .` clean. `Todo` had only APT-9 (structural bar,
+correctly not re-derived). `Backlog` had APT-39, APT-40, APT-27, APT-34, APT-23 — claimed APT-39 and
+APT-40 (both real, well-scoped, non-structural-bar items with runnable acceptance checks).
+
+### Harness hazard discovered and recovered: this session's designated branch (`claude/sleepy-goldberg-cybn6k`)
+### had already been merged into the true default branch and deleted upstream — the local clone's cached
+### ref was stale
+Branched off what the local clone believed was `origin/claude/ai-apartment-design-app-iHAdb` (the "default
+branch" the routine's LOOP CONTRACT names) and got a tree ~180 commits behind reality (`lib/growth/metrics.ts`
+at 134 lines instead of 312 — missing APT-38's whole PMF block). Root cause: this session's designated
+branch, `claude/sleepy-goldberg-cybn6k`, had ALREADY been opened as a PR into the real default branch and
+merged+auto-deleted by a prior run in this same session lineage sometime before this run started — so
+`origin/claude/ai-apartment-design-app-iHAdb` was actually fully up to date (matching `sleepy-goldberg-cybn6k`'s
+last known HEAD exactly), but the local clone's cached remote-tracking ref for `sleepy-goldberg-cybn6k` was
+stale from container setup and pointed at an ancestor. `git branch -a` still listed a (stale, locally-cached)
+`remotes/origin/claude/sleepy-goldberg-cybn6k`, which masked the problem until a plain `git checkout -b <new
+branch> origin/claude/ai-apartment-design-app-iHAdb` produced a suspiciously short file. **Recovery** (matches
+the CCR task template's own documented fallback for "designated branch's PR already merged"): `git fetch
+origin --prune` to clear the stale ref, confirmed via `git ls-remote --heads origin` that `sleepy-goldberg-cybn6k`
+no longer existed upstream, recreated it locally via `git branch -f claude/sleepy-goldberg-cybn6k
+origin/claude/ai-apartment-design-app-iHAdb` and pushed it fresh. **Lesson for future runs: before branching off
+either ref, run `git fetch origin --prune` (not a bare `git fetch <specific-ref>`, which silently no-ops with
+"couldn't find remote ref" if the ref was deleted) and verify the designated branch's HEAD SHA still exists on
+`git ls-remote --heads origin` before trusting a locally-cached branch listing.** This ties into APT-27's
+already-filed finding (orphaned `sleepy-goldberg-*` branches) from the other direction — this run's branch was
+the opposite failure mode: not orphaned-and-unmerged, but merged-and-then-trusted-stale-locally.
+
+### APT-40: growth-metrics signup-guard fix
+`computeActivationRate` had no lower bound on the diagnosis timestamp vs. signup — fixed with the missing
+`ts >= signupMs` guard. `computeRollingRetention` was already immune by construction (`ts >= signupMs +
+windowMs` implies `ts >= signupMs` for any positive window, and all 3 call sites pass positive `days`) —
+verified this by exhaustive call-site search rather than assuming the ticket's framing was complete, and
+documented the reasoning with a comment instead of adding a no-op redundant check (matches the repo's "don't
+add validation for scenarios that can't happen" style rule). Mutation-proven regression test. Both reviewers
+APPROVE first-cycle. PR #914, merged, Linear closed with acceptance-check output pasted.
+
+### APT-39: 2 of 11 raw-`<img>` files converted (dashboard, saved)
+Picked `app/dashboard/page.tsx` (3 sites) and `app/saved/page.tsx` (1 site) as the next two file-disjoint
+conversions, following APT-33's established `canOptimizeImageHost()` fallback pattern. Traced each image's
+real source before converting (not a blanket find/replace) — notably the dashboard's `BuildingPhoto` site
+pulls from a Google Places media redirect (`app/api/places/photo/route.ts` follows the redirect and returns
+`mediaRes.url`), so its final host isn't something this code controls and genuinely needs the runtime
+fallback, not just a defensive habit. **Round-1 review on the dashboard PR caught a real defect a "looks
+right" pass would have missed**: the room-thumbnail grid's `sizes="(min-width: 768px) 50vw, 100vw"` assumed
+the grid spans the full viewport, but it actually lives inside a `max-w-3xl` (768px) container with `px-4` —
+each column renders at a FIXED ~360px at desktop widths, never 50vw of a wide monitor. The stale `sizes`
+value would have made next/image request ~2x the pixels actually needed, undercutting the PR's own stated
+bandwidth-optimization goal at the site that benefits from it most. Fixed to `360px` (computed:
+`(768 - 32 padding - 16 gap) / 2`), re-reviewed by both reviewers (round 2), re-approved. **Lesson: a `sizes`
+prop copy-pasted from a sibling conversion (`app/picks/page.tsx`'s `50vw`) without checking the ACTUAL
+container's max-width is a real, easy-to-miss defect class for `next/image fill` conversions — always trace
+the page's outer container className, not just the grid's own column count, before picking `sizes`.** Left
+Linear APT-39 `In Progress` (not closed) rather than force-closing on partial completion — it's genuinely
+multi-run work by the issue's own file-by-file design; posted the remaining 9-file list + acceptance-check
+output as a comment so the next run picks up cleanly without re-deriving the sweep.
+
+### DEEP AUDIT (full pass, last one Run 167 2026-08-15 — overdue by ~2 days)
+Ran 4 lenses via Haiku scouts (security/RLS, correctness/dead-code, performance, artifact-freshness) —
+narrower than the full ~8-lens sweep (skipped a live functional-reality run and a11y/design-bar this round
+given the run's build+review load; a near-future run should cover those). Results:
+- **Security/RLS: CLEAN.** All 26 public tables RLS-enabled and correctly scoped; `SECURITY DEFINER`
+  functions pin `search_path`; no `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` secret leaks; spot-checked admin-client
+  call sites all auth-gate before privileged reads.
+- **Correctness/dead-code: CLEAN.** No TODO/FIXME debt in lib/ or app/api/; consistent `{error: string}`
+  response shape across all 57 routes; every route has try/catch or `.error` handling.
+- **Performance: 1 real, low-severity finding.** `/api/picks`, `/api/area-analysis`, and
+  `/api/area-analysis/refine` each query `rooms` (the latter two with nested `room_images`/`room_diagnoses`)
+  with no `.limit(...)` — not an active incident at today's realistic apartment-room-count scale, but
+  genuinely unbounded. Filed as **APT-41** rather than fixed this run (would have made a 4th disjoint change
+  and the run was already at a healthy stopping point after 3 merges + review cycles).
+- **Artifact freshness: 1 real finding, verified before filing.** The scout flagged `PENDING_OPS.md`'s
+  `check-security-invariants.mjs`-into-CI item as stale (claims "owner step, the loop cannot make this
+  change" but the scout believed PR #840 already wired it). **Verified independently by reading
+  `.github/workflows/ci.yml` directly** (read-only, not an edit — reading `.github/` is fine, only EDITING
+  it trips the permission-prompt hazard) — confirmed the `security-invariants` job and its `migrate`
+  `needs:` dependency both already exist in CI. The scout was right; queued the `PENDING_OPS.md` refresh for
+  this run's housekeeping PR (shared-ledger file, so it belongs there, not a standalone code branch) rather
+  than trusting the claim blind or dismissing it blind — **lesson: an audit-scout claim about "already
+  fixed" is exactly the kind of claim worth a 30-second read-only verification before acting on it either
+  way, since scouts occasionally invert wrong or right by ambiguous framing.**
+
+### Bookkeeping
+**3 PRs merged**: #914 (APT-40), #915 + #916 (APT-39 partial). All re-verified fresh on the merged tree:
+`npx tsc --noEmit` clean, `npx eslint .` clean, targeted tests green, `grep -c '<img'` counts confirmed.
+APT-40 closed on Linear with acceptance-check output pasted; APT-39 left In Progress with a detailed
+progress comment (files done, files remaining, acceptance-check output). APT-41 filed with a runnable
+acceptance check. No migration, no live secret. `PENDING_OPS.md`'s `check-security-invariants` item
+corrected from "owner step, blocked" to reflect it's already wired in CI (verified read-only against
+`.github/workflows/ci.yml`); `as_of` refreshed. No ROADMAP Track/DoD box ticked (both fixes are below
+Track-checkbox granularity — a data-correctness edge case and a partial multi-run image-optimization sweep).
+
+### Carry-forward
+- **DEEP AUDIT**: this run's 4-lens pass resets part of the clock, but a near-future run should cover the
+  remaining lenses (functional-reality live run, a11y/design-bar, dependency/config health, quality-grade
+  reconcile) for a genuinely complete ~8-lens sweep.
+- **Board**: `Todo` still has only the permanently-structural APT-9. `Backlog` has APT-27, APT-34, APT-23
+  (unchanged), plus the newly-filed APT-41. APT-39 is `In Progress` with 9 files remaining — a future run
+  should continue it directly rather than re-deriving the sweep from scratch.
+
+---
+
 ## Run 2026-08-16 (Run 171) — closed a stale merged-but-unclosed Linear issue (APT-35), built the PMF instrumentation gap (APT-38) end to end, filed 2 follow-ups
 
 ### State on entry
