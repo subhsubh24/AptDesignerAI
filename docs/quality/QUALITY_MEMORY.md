@@ -7,6 +7,115 @@ history behind it.
 
 ---
 
+## 2026-08-17 — TWELFTH INDEPENDENT GRADE (overall HELD at C, capped by functional_reality for a NINTH cycle — but the per-dimension picture is the BEST since 08-03: TWO ship-critical dims RECOVERED FULLY to A, security_rls B→A and artifact_integrity B→A, leaving only TWO ship-critical dims below A, down from four)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C for a NINTH consecutive cycle (still capped
+by functional_reality, byte-identical to 08-10). But the per-dimension picture improved sharply — the best
+cycle since 08-03: **security_rls recovered B→A** (the tracked area-analysis project_id cross-tenant IDOR,
+#858, is genuinely fixed with a real regression test) and **artifact_integrity recovered B→A** (the
+ROADMAP.md reset-link-idempotency test-count overclaim, #727, is fixed — now correctly says "11 tests",
+verified by running the actual test file). Net: **TWO ship-critical dims now sit below A** (functional_reality
+C, design_taste B) — **down from four last cycle**, the fewest in this scorecard's visible history.
+
+**Per-dimension diff vs 2026-08-10:** functional_reality **C→C** (byte-identical, still purely owner-gated)
+· correctness **A→A** (held; 1 of 4 A→A+ ceiling items closed — ownership.ts's fail-open error-swallowing
+fixed via requireRoomOwnership/etc., PR #859) · security_rls **B→A** ⬆⬆ (area-analysis project_id IDOR
+fixed + tested; held at A not A+ — see below) · design_taste **B→B** (unchanged; F7 gap identical) ·
+store_readiness **A→A** (held, re-verified, zero drift) · artifact_integrity **B→A** ⬆ (ROADMAP test-count
+overclaim fixed) · business_case_strength **A→A** (held; validate-computation now covers 12 figures, up
+from 10) · tests_evals **B→B** (scene-assembler.ts closed 1.5%→96.9%; orchestrator.ts's real loop still
+~86% dark, now a 4th straight cycle) · performance **B→B** (APT-41 genuinely bound 3 unbounded rooms
+queries feeding LLM prompts; no perf budget/Lighthouse CI gate yet).
+
+**Mechanical signals actually run this cycle (cold start, npm install first; run ONCE by the orchestrator
+and shared across all 9 dimension graders):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → **0 errors, 0 warnings** · `npm run check:determinism` →
+  green (all 4 checks).
+- `npm test` → **3120 passed / 15 skipped** (up from 2944/12), 294 files (up from 275).
+- `npx vitest run --coverage` → **72.79% stmts / 62.05% branch / 76.82% funcs / 74.2% lines** (up from
+  70.35/59.57/73.86/71.84), above all floors.
+- `bash scripts/preflight.sh` → 51 pass / 3 fail: functional-journeys (cold env, expected), DoD
+  9-unchecked (expected pre-launch), and QUALITY_SCORECARD below ship bar (naming 2 gaps pre-update, was 4).
+- Business case: `node analysis/business_case_without_annual_arr.mjs` → **$121,339** (bit-identical to
+  last cycle); `node scripts/validate-computation.mjs` → PASS, **12** figures verified (up from 10).
+- 50 commits landed since 2026-08-10; every dimension grader independently reviewed the commit window for
+  regressions in its own area, not just re-checked named gaps.
+- Housekeeping note: running the local test/build cycle caused two harmless local-only side effects —
+  Next.js's `next dev` auto-appended an agent-rules block to AGENTS.md, and 6 screenshot PNGs under
+  e2e/__screenshots__ were locally re-encoded (byte diffs only, same images). Both were reverted
+  (`git checkout --`) before committing; the auditor is strictly read-only on code and never commits
+  incidental local build artifacts.
+
+**Why security_rls recovered B→A (independently re-verified as genuine):** `app/api/area-analysis/route.ts`
+no longer reads `project_id` from the client body at all (lines 120-131, with a SECURITY comment explaining
+the prior vulnerability in detail); the POST handler calls `runAnalysis(supabase, room_id, undefined)`, so
+`effectiveProjectId` always resolves to the ownership-verified room's own project. A real regression test,
+`__tests__/api/area-analysis-project-idor.test.ts`, pins this. The grading pass additionally spot-swept ~10
+other multi-client-id routes (mockups, bundles, saved-designs, products, floor-plan, mobile share) and found
+correct binding on every one. **Held at A rather than A+** in the final synthesis, overriding the grading
+pass's own A+ recommendation: the sweep covered roughly 10 of the repo's 57 total API routes, not an
+exhaustive route-by-route audit, and this exact "fresh sweep found zero → A+" claim has now been reversed by
+the NEXT cycle's sweep **six times** across this project's history (07-09, 07-13, 07-20, 07-27 [via
+store_readiness's analogous pattern], 08-03→08-10, and the class recurring at a new site each time). Per the
+scheduled task's own anti-inflation mandate ("when in doubt, grade LOWER — under a shared-model regime, an
+inflated grade is the failure mode most likely to slip through"), A+ is deferred until a full 57/57-route
+audit sustains zero findings across at least one further cycle.
+
+**Why artifact_integrity recovered B→A:** ROADMAP.md's reset-link-idempotency claim now reads "11 tests"
+(was "28"); running `__tests__/auth/reset-link-idempotency.test.ts` independently confirms exactly 11 pass.
+Fresh spot-checks across route-inventory counts, pricing consistency, and several ROADMAP ticks found no new
+overclaim. The one remaining item, the stale `.github/workflows/ci.yml:1` header, is unchanged and structural
+(owner-gated, cannot be fixed by the loop) — correctly not re-derived as a fresh drop, consistent with
+AGENTS.md's "a structural bar is not a decision — record it once and move on" rule.
+
+**Why functional_reality held C (byte-identical for a 9th cycle):** zero commits since 08-10 touched
+`lib/supabase/server.ts` or `.github/workflows/ci.yml`'s DATA_BACKEND env line; the persistence proof test
+still doesn't exist. PENDING_OPS.md's reasoning for why this is genuinely owner-gated, not loop-avoided, is
+unchanged and was independently re-confirmed this cycle.
+
+**Why design_taste held B (unchanged):** F7 authed/design-dense screenshot baselines remain uncommitted —
+still exactly 30 PNGs, all `public-*`. The palette-ratchet axis held steady at MAX_OFF_SYSTEM 36 with no
+regression. A fresh slop hunt across the 5 UI files touched since 08-10 found nothing new.
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, unchanged, now the sole dominant
+ship-critical blocker for 9 cycles). UPDATE #204 (design_taste — unchanged, F7 remains the sole gap).
+CLOSE #858 (security_rls — the area-analysis project_id IDOR fix is real, tested, and independently
+re-verified; no new issue filed for the A→A+ path since it's the routine's own standing per-cycle sweep
+discipline, not a new named code gap). CLOSE #727 (artifact_integrity — the reset-link test-count overclaim
+that reopened it is fixed and verified; the remaining `.github/` header nit is the same permanently-recorded
+structural bar as #525, not a fresh finding warranting reopening). UPDATE #200 (tests_evals — scene-
+assembler.ts closed, orchestrator.ts now the sole named coverage gap). UPDATE #385 (performance — held B,
+APT-41's unbounded-query fix verified genuine). No action on #672 (business_case_strength, already closed,
+re-confirmed still genuinely resolved) or store_readiness (#726, already closed, re-confirmed).
+
+**Lessons for next run:**
+1. **Two ship-critical dimensions can recover to A in the SAME cycle without either being fake**, mirroring
+   the 08-03 cycle's pattern (store_readiness + artifact_integrity both recovered that cycle). Both
+   recoveries here were independently re-verified against real, tested code fixes (a regression test for
+   security_rls, an exact-count doc correction for artifact_integrity) — not narrative claims.
+2. **Overriding a grading subagent's own recommendation is sometimes the correct final synthesis call.**
+   The security_rls grading pass argued for A+ on "zero findings from a fresh sweep" — but given this exact
+   claim's six-time reversal history in this specific project, and that the sweep this cycle was a ~10-route
+   spot-check rather than an exhaustive 57-route audit, the orchestrator held it at A instead. This is
+   consistent with the SONNET-MAX shared-model-family mandate to grade lower when in doubt, and should be
+   treated as a template: a per-dimension grader's letter is evidence, not a binding verdict, when the
+   dimension has a documented pattern of being fooled by partial coverage.
+3. **A named-but-unfixed nit does NOT need to be re-litigated as a fresh drop every cycle once it's
+   correctly classified as a structural (`.github/`-gated) bar**, per AGENTS.md's "record it once and move
+   on" rule — applied here to both functional_reality's persistence blocker and artifact_integrity's stale
+   CI header, neither of which was re-derived from scratch this cycle.
+4. **Running the mechanical signals locally can produce harmless incidental file changes** (Next.js's
+   `next dev` agent-rules auto-append to AGENTS.md; local screenshot re-encoding) that a stop-hook or
+   `git status` check will flag — these are build/tooling side effects, not real work, and must be reverted
+   (`git checkout --`) before committing, never mistaken for legitimate changes to commit.
+5. Cold-start recipe re-confirmed: `npm install` first; run the 9 dimension graders with SHARED, pre-run
+   mechanical signals (tsc/eslint/test/coverage/determinism/preflight run ONCE by the orchestrator); each
+   grader independently re-ran its own cited test files and grepped fresh evidence rather than trusting the
+   orchestrator's aggregate numbers alone — this is what let two dimensions genuinely earn their recovery
+   while the orchestrator still caught and tempered one over-eager A+ claim.
+
+---
+
 ## 2026-08-10 — ELEVENTH INDEPENDENT GRADE (overall HELD at C — business_case_strength genuinely RECOVERED B→A, but TWO other ship-critical dims DROPPED on fresh adversarial findings — security_rls A+→B on a NEW cross-tenant IDOR, artifact_integrity A→B on a fresh doc overclaim — netting FOUR ship-critical dims below A, up from three)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C for an EIGHTH consecutive cycle (still capped
