@@ -1049,7 +1049,11 @@ export default function DashboardPage() {
                         src={firstImage.url}
                         alt={section.label}
                         fill
-                        sizes="(min-width: 768px) 50vw, 100vw"
+                        // The grid lives inside a max-w-3xl (768px) container with
+                        // px-4, so at md+ each of the 2 columns is a fixed ~360px
+                        // ((768 - 32 padding - 16 gap) / 2), never 50vw of the
+                        // actual (often much wider) viewport.
+                        sizes="(min-width: 768px) 360px, 100vw"
                         className={cn(
                           "object-cover transition-transform duration-500",
                           isSelected ? "scale-105" : "group-hover:scale-105"
