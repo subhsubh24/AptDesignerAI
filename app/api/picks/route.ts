@@ -27,6 +27,10 @@ export async function GET(request: Request) {
     roomsQuery = roomsQuery.eq("project_id", projectId);
   }
 
+  // Bound the owned-rooms fetch — unbounded today at realistic project sizes,
+  // but this scans every project the user owns with no ceiling (APT-41).
+  roomsQuery = roomsQuery.limit(100);
+
   const { data: rooms, error: roomsError } = await roomsQuery;
   if (roomsError) return apiError("picks", roomsError);
   if (!rooms?.length) return NextResponse.json([]);

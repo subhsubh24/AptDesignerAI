@@ -60,7 +60,7 @@ function jsonReq(body: unknown): Request {
  * select/filter methods are called, and captures every `project_id` used to
  * query the `projects` table.
  */
-function makeClient(capturedProjectIds: string[]) {
+function makeClient(capturedProjectIds: string[], capturedLimits: unknown[] = []) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: CALLER } } }) },
     from: vi.fn((table: string) => {
@@ -73,6 +73,11 @@ function makeClient(capturedProjectIds: string[]) {
         });
         chain.eq = vi.fn(() => chain);
         chain.neq = vi.fn(() => chain);
+        chain.limit = vi.fn((n: unknown) => {
+          void isOtherRoomsQuery;
+          capturedLimits.push(n);
+          return chain;
+        });
         chain.single = vi.fn(() =>
           Promise.resolve({
             data: {
@@ -141,5 +146,15 @@ describe("POST /api/area-analysis — project_id cross-tenant IDOR", () => {
     await areaAnalysisPost(jsonReq({ room_id: OWNED_ROOM_ID }));
 
     expect(captured).toEqual([CALLER_PROJECT_ID]);
+  });
+
+  it("bounds the sibling-rooms fetch with a .limit() (APT-41 — was unbounded)", async () => {
+    const captured: string[] = [];
+    const limits: unknown[] = [];
+    mockCreateClient.mockResolvedValue(makeClient(captured, limits));
+
+    await areaAnalysisPost(jsonReq({ room_id: OWNED_ROOM_ID }));
+
+    expect(limits).toContain(30);
   });
 });

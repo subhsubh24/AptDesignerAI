@@ -212,7 +212,7 @@ export async function runAnalysis(
   const effectiveProjectId = project_id || room.project_id;
   const [{ data: project }, { data: otherRooms }] = await Promise.all([
     supabase.from("projects").select("*").eq("id", effectiveProjectId).single(),
-    supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id),
+    supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id).limit(30),
   ]);
 
   // Extract floor plan data from building_research (new structured extraction)

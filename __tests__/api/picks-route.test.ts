@@ -13,6 +13,7 @@ import { NextRequest } from "next/server";
 
 const mockGetUser = vi.fn();
 const mockRoomsEq = vi.fn();
+const mockRoomsLimit = vi.fn();
 const mockProductsIn = vi.fn();
 const mockRange = vi.fn();
 
@@ -28,6 +29,10 @@ vi.mock("@/lib/supabase/server", () => ({
         builder.select = () => builder;
         builder.eq = (...args: unknown[]) => {
           mockRoomsEq(...args);
+          return builder;
+        };
+        builder.limit = (...args: unknown[]) => {
+          mockRoomsLimit(...args);
           return builder;
         };
         // rooms query resolves directly (no .range() on it) — make the
@@ -72,6 +77,7 @@ const PRODUCTS = [
 beforeEach(() => {
   mockGetUser.mockReset();
   mockRoomsEq.mockReset();
+  mockRoomsLimit.mockReset();
   mockProductsIn.mockReset();
   mockRange.mockReset();
   mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
@@ -123,6 +129,11 @@ describe("GET /api/picks", () => {
   it("paginates with the route's own default (limit 200, offset 0)", async () => {
     await GET(req());
     expect(mockRange).toHaveBeenCalledWith(0, 199);
+  });
+
+  it("bounds the owned-rooms fetch with a .limit() (APT-41 — was unbounded)", async () => {
+    await GET(req());
+    expect(mockRoomsLimit).toHaveBeenCalledWith(100);
   });
 
   it("honors explicit limit/offset query params", async () => {

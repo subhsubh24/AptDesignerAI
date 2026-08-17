@@ -80,7 +80,8 @@ export async function POST(request: Request) {
     .from("rooms")
     .select("name, room_type, room_diagnoses(diagnosis_json, design_direction_json)")
     .eq("project_id", project?.id || room.project_id)
-    .neq("id", room_id);
+    .neq("id", room_id)
+    .limit(30);
 
   // Build content blocks
   const contentBlocks: AIContentBlock[] = [];
