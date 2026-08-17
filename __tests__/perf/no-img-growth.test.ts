@@ -13,7 +13,7 @@ import path from "node:path";
  * width/height/lazy-loading/responsive-srcset, hurting LCP/CLS). Adopting
  * next/image wholesale is blocked here — most images come from arbitrary
  * retailer CDNs that would each need a `remotePatterns` host entry — so this
- * ratchet is the pragmatic guard: it freezes the current count (29 real
+ * ratchet is the pragmatic guard: it freezes the current count (30 real
  * `<img>` elements — comment prose is stripped before counting) as a ceiling.
  *
  * To LOWER the cap: convert an `<img>` to `next/image` (for a first-party or
@@ -31,17 +31,62 @@ const RAW_IMG = /<img\b/g;
  * (30 == the number of inline `eslint-disable @next/next/no-img-element`
  * comments, i.e. every real usage is individually silenced.)
  */
-const MAX_RAW_IMG = 29;
+const MAX_RAW_IMG = 30;
 
 /**
  * Strip block + line comments so a `<img>` mentioned in prose (a code comment
- * that discusses img tags) is not miscounted as a real element. Mirrors the
- * stripComments helper in __tests__/ai/harness-ratchet.test.ts.
+ * that discusses img tags) is not miscounted as a real element.
+ *
+ * Tracks string-literal state (single/double/backtick) so a literal `/*`
+ * inside a string is never mistaken for a comment opener. A naive
+ * `/\*[\s\S]*?\*\//` replace is fooled by exactly this: this codebase has an
+ * `accept: { "image/*": [...] }` MIME-type string, and the lazy regex paired
+ * that stray `/*` with the next INCIDENTAL `*\/` later in the file (an
+ * unrelated JSX comment), silently deleting every real line in between —
+ * including a genuine `<img>` element — and undercounting the true total by
+ * 1. A ratchet whose own counter can be defeated by an ordinary string
+ * literal is worse than no ratchet: a new raw `<img>` could land inside a
+ * similarly-swallowed range and never trip the ceiling.
  */
 function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments (incl. JSDoc)
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1"); // line comments, preserving URLs (://)
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  let inString: string | null = null;
+  while (i < n) {
+    const c = src[i];
+    const c2 = src[i + 1];
+    if (inString) {
+      out += c;
+      if (c === "\\" && i + 1 < n) {
+        out += src[i + 1];
+        i += 2;
+        continue;
+      }
+      if (c === inString) inString = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      inString = c;
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === "/" && c2 === "*") {
+      const end = src.indexOf("*/", i + 2);
+      i = end === -1 ? n : end + 2;
+      continue;
+    }
+    if (c === "/" && c2 === "/") {
+      const end = src.indexOf("\n", i + 2);
+      i = end === -1 ? n : end; // keep the newline so line numbers stay meaningful
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }
 
 function walk(dir: string): string[] {
@@ -97,5 +142,22 @@ describe("raw <img> usage ratchet (perf: next/image adoption)", () => {
       `Raw <img> count is ${total} but the ratchet still allows ${MAX_RAW_IMG}. ` +
         `Lower MAX_RAW_IMG to ${total} to lock in the improvement.`,
     ).toBe(MAX_RAW_IMG);
+  });
+
+  it("stripComments does not treat a `/*` inside a string literal as a comment opener", () => {
+    // Regression guard for the exact bug this fix closes: a literal `/*`
+    // inside a string (e.g. a MIME-type wildcard) must not pair with a LATER,
+    // unrelated `*/` and swallow real code in between.
+    const src = 'const accept = "image/*"; const real = "<img data-marker=\\"keep-me\\" />";';
+    const stripped = stripComments(src);
+    expect(stripped).toContain("keep-me");
+  });
+
+  it("stripComments still strips real block and line comments", () => {
+    const src = "/* a comment with <img> in prose */\nconst x = 1; // <img> trailing note\nconst real = \"<img data-marker='keep' />\";";
+    const stripped = stripComments(src);
+    expect(stripped).not.toContain("comment with");
+    expect(stripped).not.toContain("trailing note");
+    expect(stripped).toContain("keep");
   });
 });
