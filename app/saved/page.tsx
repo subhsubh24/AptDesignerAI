@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { SkeletonCard } from "@/components/ui/skeleton";
 import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { toast } from "@/components/ui/toast";
 import { Loader2, Bookmark, Trash2, ArrowRight, ArrowLeft, Download, AlertCircle } from "lucide-react";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 interface SavedDesignItem {
   id: string;
@@ -176,13 +178,23 @@ export default function SavedDesignsPage() {
             <StaggerItem key={design.id}>
             <Card className="group hover:shadow-md transition-shadow overflow-hidden">
               {design.thumbnail_url && (
-                <div className="h-36 overflow-hidden bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={design.thumbnail_url}
-                    alt={design.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                <div className="relative h-36 overflow-hidden bg-muted">
+                  {canOptimizeImageHost(design.thumbnail_url) ? (
+                    <Image
+                      src={design.thumbnail_url}
+                      alt={design.title}
+                      fill
+                      sizes="(min-width: 640px) 50vw, 100vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={design.thumbnail_url}
+                      alt={design.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  )}
                 </div>
               )}
               <CardContent className={design.thumbnail_url ? "pt-3" : "pt-5"}>
