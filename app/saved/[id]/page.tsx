@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import {
   priorityBadge,
   ASSESSMENT_PANEL,
 } from "@/lib/utils/assessment-colors";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 interface SavedDesignFull {
   id: string;
@@ -274,9 +276,19 @@ export default function SavedDesignDetailPage() {
 
       {/* Mockup image */}
       {assessment.mockup_url && (
-        <div className="overflow-hidden rounded-2xl border shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={assessment.mockup_url} alt="Room vision mockup" className="w-full max-h-[400px] object-cover" />
+        <div className="relative w-full h-[400px] overflow-hidden rounded-2xl border shadow-sm">
+          {canOptimizeImageHost(assessment.mockup_url) ? (
+            <Image
+              src={assessment.mockup_url}
+              alt="Room vision mockup"
+              fill
+              sizes="(min-width: 896px) 864px, 100vw"
+              className="object-cover"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={assessment.mockup_url} alt="Room vision mockup" className="w-full h-full object-cover" />
+          )}
         </div>
       )}
 
@@ -379,9 +391,13 @@ export default function SavedDesignDetailPage() {
                     {tierProducts.map((p, i) => (
                       <div key={i} className="flex gap-3 p-2 rounded-lg border bg-background">
                         {p.image_url && (
-                          <div className="h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
+                          <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
+                            {canOptimizeImageHost(p.image_url) ? (
+                              <Image src={p.image_url} alt={p.title} fill sizes="64px" className="object-cover" />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
+                            )}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
