@@ -222,6 +222,32 @@ describe("gatherGrowthMetrics", () => {
     expect(m.pmf.retention_d30).toBe(0);
   });
 
+  it("excludes a diagnosis timestamp that predates its own user's signup from activation and every retention_dN numerator", async () => {
+    // A data anomaly (e.g. a future backfill touching profiles.created_at)
+    // could produce a diagnosis event timestamped BEFORE its own user's
+    // signup. Construct exactly that: p1 is old enough to be eligible
+    // everywhere (60d), but its ONLY diagnosis predates its signup by 2 days.
+    // It must count toward every denominator (eligible) but NEVER a numerator
+    // (activated / retained) — if it did, activation_rate/retention_dN would
+    // exceed what a real user history could produce.
+    const p1Signup = daysAgo(60);
+    const admin = fakeAdmin(ZERO_COUNTS, null, {
+      profiles: [{ id: "p1", created_at: p1Signup }],
+      diagnoses: [
+        {
+          user_id: "p1",
+          created_at: new Date(new Date(p1Signup).getTime() - 2 * DAY_MS).toISOString(),
+        },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = await gatherGrowthMetrics(admin as any);
+    expect(m.pmf.activation_rate).toBe(0);
+    expect(m.pmf.retention_d1).toBe(0);
+    expect(m.pmf.retention_d7).toBe(0);
+    expect(m.pmf.retention_d30).toBe(0);
+  });
+
   it("returns pmf rates as null when the whole signup cohort is too young to be measurable", async () => {
     const admin = fakeAdmin(ZERO_COUNTS, null, {
       profiles: [{ id: "brand-new", created_at: new Date().toISOString() }],
