@@ -165,7 +165,7 @@ function computeActivationRate(
     if (Number.isNaN(signupMs) || nowMs - signupMs < windowMs) continue;
     eligible++;
     const events = diagnosesByUser.get(profile.id);
-    if (events?.some((ts) => ts <= signupMs + windowMs)) activated++;
+    if (events?.some((ts) => ts >= signupMs && ts <= signupMs + windowMs)) activated++;
   }
   return eligible > 0 ? activated / eligible : null;
 }
@@ -184,6 +184,10 @@ function computeRollingRetention(
     if (Number.isNaN(signupMs) || nowMs - signupMs < windowMs) continue;
     eligible++;
     const events = diagnosesByUser.get(profile.id);
+    // No separate `ts >= signupMs` guard needed here (unlike activation, below):
+    // callers only ever pass a positive `days`, so `ts >= signupMs + windowMs`
+    // already implies `ts >= signupMs` — a diagnosis predating its own user's
+    // signup can never satisfy this condition.
     if (events?.some((ts) => ts >= signupMs + windowMs)) retained++;
   }
   return eligible > 0 ? retained / eligible : null;
