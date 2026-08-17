@@ -27,6 +27,15 @@ export async function GET(request: Request) {
     roomsQuery = roomsQuery.eq("project_id", projectId);
   }
 
+  // Bound the owned-rooms fetch — unbounded today at realistic project sizes,
+  // but this scans every project the user owns with no ceiling (APT-41).
+  // Explicit .order() is required alongside .limit(): Postgres/PostgREST give
+  // no ordering guarantee without one, so an unordered .limit() would silently
+  // (and non-deterministically) drop an arbitrary subset of rooms once a user
+  // exceeds the cap. Newest-first so a recently added room is never the one
+  // dropped in favor of an older one.
+  roomsQuery = roomsQuery.order("created_at", { ascending: false }).limit(100);
+
   const { data: rooms, error: roomsError } = await roomsQuery;
   if (roomsError) return apiError("picks", roomsError);
   if (!rooms?.length) return NextResponse.json([]);

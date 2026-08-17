@@ -212,7 +212,12 @@ export async function runAnalysis(
   const effectiveProjectId = project_id || room.project_id;
   const [{ data: project }, { data: otherRooms }] = await Promise.all([
     supabase.from("projects").select("*").eq("id", effectiveProjectId).single(),
-    supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id),
+    // .order() is required alongside .limit(): without one, Postgres/PostgREST
+    // give no ordering guarantee and an unordered .limit() would silently
+    // (and non-deterministically) drop an arbitrary subset of sibling rooms
+    // once a project exceeds the cap — newest-first so a recently added
+    // room is never the one dropped in favor of an older one.
+    supabase.from("rooms").select("*, room_images(*), room_diagnoses(*)").eq("project_id", effectiveProjectId).neq("id", room_id).order("created_at", { ascending: false }).limit(30),
   ]);
 
   // Extract floor plan data from building_research (new structured extraction)
