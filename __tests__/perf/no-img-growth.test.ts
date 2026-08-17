@@ -147,8 +147,16 @@ describe("raw <img> usage ratchet (perf: next/image adoption)", () => {
   it("stripComments does not treat a `/*` inside a string literal as a comment opener", () => {
     // Regression guard for the exact bug this fix closes: a literal `/*`
     // inside a string (e.g. a MIME-type wildcard) must not pair with a LATER,
-    // unrelated `*/` and swallow real code in between.
-    const src = 'const accept = "image/*"; const real = "<img data-marker=\\"keep-me\\" />";';
+    // unrelated `*/` and swallow real code in between. The trailing unrelated
+    // `/* comment */` is required to reproduce the bug — the old regex only
+    // misfires once it finds SOME later `*/` to lazily pair the stray `/*`
+    // with; without one, the old code (wrongly) leaves the string alone too,
+    // so a single-line case would pass under both the buggy and fixed
+    // implementations and prove nothing.
+    const src =
+      'const accept = "image/*";\n' +
+      'const keep = "<img data-marker=\\"keep-me\\" />";\n' +
+      "/* trailing unrelated comment */\n";
     const stripped = stripComments(src);
     expect(stripped).toContain("keep-me");
   });
