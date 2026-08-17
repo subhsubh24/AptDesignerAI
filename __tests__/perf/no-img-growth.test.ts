@@ -13,7 +13,7 @@ import path from "node:path";
  * width/height/lazy-loading/responsive-srcset, hurting LCP/CLS). Adopting
  * next/image wholesale is blocked here — most images come from arbitrary
  * retailer CDNs that would each need a `remotePatterns` host entry — so this
- * ratchet is the pragmatic guard: it freezes the current count (30 real
+ * ratchet is the pragmatic guard: it freezes the current count (29 real
  * `<img>` elements — comment prose is stripped before counting) as a ceiling.
  *
  * To LOWER the cap: convert an `<img>` to `next/image` (for a first-party or
