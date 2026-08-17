@@ -2887,3 +2887,113 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run shipped
   real, owner-action-free ship-critical GTM work: the GTM Auditor's `business_case_honesty` gap is now
   fixed, narrowing `docs/growth/GTM_SCORECARD.md`'s ship gate to whatever the auditor's next pass finds.
+
+---
+
+## Run 26 — 2026-08-17
+
+### What we found
+- All Run 1-25 owner blockers remain unresolved: re-verified directly against `PENDING_OPS.md` —
+  `set-site-gate-password`, `connect-email-resend`, `set-metrics-token`, `set-cron-secret`,
+  `set-email-physical-address` all still `status: open`. `PENDING_OPS.md`'s own `as_of` is still
+  2026-08-07, unchanged since Run 21 (now spanning Runs 21-26).
+- Re-probed `https://aptdesignerai.com/` a twenty-second time: still `connect_rejected` / gateway 502
+  to CONNECT, identical signature to every prior probe, cross-checked against
+  `/__agentproxy/status` `recentRelayFailures` (2026-08-17T05:16:59.519Z). No new information.
+- Neither independent scorecard has a new pass since Run 25: `docs/growth/GTM_SCORECARD.md` is still
+  Run 6 (commit 6cf9583, as_of 2026-08-10, overall B, `business_case_honesty` the sole remaining
+  ship-critical gap — already fixed by Run 25); `docs/quality/QUALITY_SCORECARD.md` is still the 11th
+  grade (as_of 2026-08-10, overall C, `ship_gate_met: false`, four sub-A ship-critical dims:
+  functional_reality C, security_rls B, design_taste B, artifact_integrity B). Verified via
+  `git log --oneline -- <path>` on both files directly rather than assuming unchanged. Both S6 outreach
+  lanes stay hard-off, 26th consecutive run.
+- **The real finding this run:** the Product Factory shipped two commits since GTM Run 25 that change
+  what this doc's own `unbuilt_disclosure` claims are true. Commit `b759101` (PR #912, APT-38,
+  2026-08-16) built `activation_rate` and rolling `retention_d1`/`retention_d7`/`retention_d30` into
+  `lib/growth/metrics.ts`'s `gatherGrowthMetrics()` — the same PMF fields `GROWTH_STATUS.md`'s
+  `pmf.unbuilt_disclosure` had said (accurately, at the time — Run 19) had "ZERO code path... anywhere
+  in the codebase." Commit `9bed74e` (PR #906, 2026-08-15) made `churn_rate_30d` a real computed rate
+  (`cancelled_30d / active_30d_ago`) instead of just an approximate cancellation count — closing half
+  of the `stripe_reporting` validation entry's Run-15 finding. Verified both by reading
+  `lib/growth/metrics.ts` directly (not trusting the commit messages): the `computeActivationRate`/
+  `computeRollingRetention` functions genuinely exist and are wired into the returned `pmf` object; the
+  churn-rate math matches the commit description exactly. Re-grepped to confirm `organic_share_rate`
+  and `mrr_usd` remain genuinely unbuilt (one hit each — a comment in `metrics.ts` self-disclosing
+  `organic_share_rate` is unbuilt, and zero hits for any `mrr` field anywhere).
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md`**: bumped `as_of` to 2026-08-17. Rewrote `pmf.unbuilt_disclosure`
+  to state precisely which fields are now built (`activation_rate`, `retention_d1/d7/d30`) vs. still
+  unbuilt (`organic_share_rate` only, down from 5 of 5) — `signal` stays `none` because the source is
+  still unreachable (`INTERNAL_METRICS_TOKEN` unset), not because the data path doesn't exist anymore.
+  Rewrote the `stripe_reporting` validation entry to credit the `churn_rate_30d` fix and narrow the
+  `mrr_usd` gap to the one field genuinely still missing. Updated the `internal_metrics_api` probe
+  count (21st → 22nd) and added a forward-pointer to the pmf/stripe_reporting updates. Updated the
+  `gtm_scorecard` validation entry with a Run 26 re-verification note (both scorecards unchanged,
+  cited directly rather than carried over). Updated `web_research`/`demand_signal.method_note` with a
+  Run 26 entry (append-only, prior entries kept verbatim) — no new demand-signal search attempted
+  (theme 4 exhausted, themes 1-3 each carry a disconfirming datum; did NOT re-hit
+  trustpilot.com/review/havenly.com a fourth consecutive time on the same known-403 URL with no new
+  angle, naming that explicitly as the point where re-probing becomes padding rather than diligence).
+  Refreshed `learnings`/`next_actions`/`owner_blockers` for the 26th consecutive circuit-breaker run.
+  Fixed an invalid YAML escape sequence introduced mid-edit (a double-quoted string containing a raw
+  regex with backslash-pipe, `\|`, which YAML double-quoted scalars try to interpret as an escape) —
+  caught by running `node scripts/validate-gtm.mjs` before considering the edit done, exactly the kind
+  of self-validation this doc's own contract requires. Also ran `node scripts/validate-computation.mjs`
+  (12 figures, PASS — untouched by this run's edits, confirms no regression) and `npm install` to
+  materialize `js-yaml` for the local validator.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (22nd probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD) — both
+  S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new data of the kind that
+  clears the S3 steer bar landed this run (funnel still 0/null; demand_signal unchanged at `emerging`).
+  The PMF-instrumentation finding is a Product-Factory BUILD fact (the code path now exists), not new
+  DATA about users (the fields still read null/none until a token is set and real users exist) — it
+  does not itself justify any steer.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn a maker != checker reviewer: the pmf/stripe_reporting disclosure updates reflect REAL
+  shipped code, verified by direct file read this run — a routine artifact-freshness correction, not a
+  landing/email/ASO copy change, campaign, pricing/positioning claim, outreach draft, or
+  roadmap/vision/business-case steer. Matches the established precedent (Runs 5/6/8) for when a
+  reviewer is/isn't warranted.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced this run; the `set-metrics-token` item
+  already covers the token gap, now with a stronger reason (it unlocks four real rates, not just
+  counts) reflected in `GROWTH_STATUS.next_actions` instead.
+- Did not re-probe `trustpilot.com/review/havenly.com`: 403'd on the identical URL in Runs 23, 24, and
+  25 with no new angle each time; a fourth identical probe would not add evidence. Reddit's exclusion
+  is a policy decision (re-confirmed unchanged), not a reachability question, so it doesn't need
+  re-probing either — only re-affirming, which this run did.
+
+### Lessons learned
+- **Product Factory commits can silently invalidate a GTM disclosure the Factory itself wrote to be
+  accurate at the time.** `pmf.unbuilt_disclosure` was correct when Run 19 wrote it (verified by grep,
+  zero hits). It became WRONG the moment APT-38 shipped, a full day before this run — not because
+  anyone lied, but because a disclosure about code state has a shelf life exactly as long as the code
+  stays unchanged. The APT-38 commit message even said so explicitly ("Note for the Growth Agent
+  routine... pmf.unbuilt_disclosure can now be updated") — worth checking recent Product Factory
+  commit messages for notes addressed to this routine, not just scanning file diffs.
+  This is exactly why re-reading `lib/growth/metrics.ts` directly every run (not just trusting the
+  last run's disclosure text) is worth the ~2 minutes it costs, even during a stuck circuit-breaker
+  stretch — the code underneath a disclosure can move even when nothing GTM-owned does.
+- **Catching an artifact-freshness gap BEFORE an auditor names it is higher-leverage than fixing one
+  after.** The GTM_SCORECARD has now flagged this exact class of gap (a disclosure/banner that fell
+  behind a real fix elsewhere) three times running (Runs 4, 5, 6 per the scorecard's own
+  `artifact_freshness` history). This run closing a real instance proactively, without being told,
+  is the corrective habit that class of finding is asking for.
+- **A YAML escape-sequence bug in a double-quoted string is easy to introduce when pasting a regex
+  pattern into prose, and `validate-gtm.mjs` catches it immediately if run before considering an edit
+  done.** Worth treating "run the validator" as a non-negotiable last step on every GROWTH_STATUS.md
+  edit, not just before commit — it caught a real syntax error this run that would otherwise have
+  broken the dashboard's parse of the whole block.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-25? YES — circuit breaker remains FIRED (Run 26, 26th consecutive
+  run, ~51 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min). Independent of the stuck
+  owner blockers, this run caught and fixed a real artifact-freshness gap the Product Factory's own
+  PMF-instrumentation and churn-rate work had opened since Run 25 — owner-action-free GTM work that
+  moves the dashboard's honesty forward regardless of the credential stalemate.
