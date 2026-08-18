@@ -292,42 +292,28 @@ class QueryBuilder {
     let match;
     while ((match = relationPattern.exec(selectStr)) !== null) {
       const relTable = match[1];
-      if (tables[relTable]) {
-        // Derive FK from the PARENT table name first — e.g. when querying
-        // candidate_products and joining product_evaluations, the correct FK
-        // is product_id (not room_id which also exists on product_evaluations).
-        const parentDerived = `${this.table.replace(/s$/, "").replace(/^candidate_/, "")}_id`;
-        const fkCandidates = [
-          { fk: parentDerived, pk: "id" },
-          { fk: "room_id", pk: "id" },
-          { fk: "project_id", pk: "id" },
-          { fk: "bundle_id", pk: "id" },
-          { fk: "product_id", pk: "id" },
-        ];
-        for (const { fk, pk } of fkCandidates) {
-          if (tables[relTable].some((r) => r[fk] !== undefined)) {
-            result[relTable] = tables[relTable].filter((r) => r[fk] === row[pk]);
-            break;
-          }
-        }
-        if (!result[relTable]) {
-          result[relTable] = [];
-        }
+      if (tables[relTable] && result[relTable] === undefined) {
+        result[relTable] = this.resolveTopLevelRelation(relTable, row);
       }
     }
 
     // Handle nested relations like "product_bundle_items(*, candidate_products(*))"
     // — also matches a narrowed inner column list, e.g.
     // "product_bundle_items(*, candidate_products(id, title, price))" (APT-48).
-    // Note: this pattern can only ever fire when `relationPattern` above has
-    // already populated `result[relTable]` as an array, which it does not for
-    // an outer relation whose own content contains nested parens (like
-    // "product_bundle_items(*, ...)") — a pre-existing limitation, tracked
-    // separately, not introduced or fixed by this generalization.
     const nestedPattern = /(\w+)\(\*,\s*(\w+)\(([^()]*)\)\)/g;
     while ((match = nestedPattern.exec(selectStr)) !== null) {
       const relTable = match[1];
       const nestedTable = match[2];
+      // The outer relation's own content contains a nested `table(...)` call,
+      // so `relationPattern` above — whose content class excludes parens —
+      // can never match it as a whole, and `result[relTable]` would
+      // otherwise stay unset forever (APT-51: GET /api/bundles' `*,
+      // product_bundle_items(*, candidate_products(...))` never populated
+      // `product_bundle_items`). Resolve it here with the same FK-derivation
+      // logic before attaching the nested rows.
+      if (result[relTable] === undefined && tables[relTable]) {
+        result[relTable] = this.resolveTopLevelRelation(relTable, row);
+      }
       if (result[relTable] && Array.isArray(result[relTable])) {
         result[relTable] = (result[relTable] as Row[]).map((item) => {
           const nested = (tables[nestedTable] || []).find(
@@ -339,6 +325,28 @@ class QueryBuilder {
     }
 
     return result;
+  }
+
+  // Derive the FK from the PARENT table name first — e.g. when querying
+  // candidate_products and joining product_evaluations, the correct FK is
+  // product_id (not room_id which also exists on product_evaluations) — then
+  // filter relTable's rows down to the ones belonging to `row`. Shared by
+  // both the flat and the nested-relation resolution passes above.
+  private resolveTopLevelRelation(relTable: string, row: Row): Row[] {
+    const parentDerived = `${this.table.replace(/s$/, "").replace(/^candidate_/, "")}_id`;
+    const fkCandidates = [
+      { fk: parentDerived, pk: "id" },
+      { fk: "room_id", pk: "id" },
+      { fk: "project_id", pk: "id" },
+      { fk: "bundle_id", pk: "id" },
+      { fk: "product_id", pk: "id" },
+    ];
+    for (const { fk, pk } of fkCandidates) {
+      if (tables[relTable].some((r) => r[fk] !== undefined)) {
+        return tables[relTable].filter((r) => r[fk] === row[pk]);
+      }
+    }
+    return [];
   }
 
   // Allow .then() for promise-like behavior
