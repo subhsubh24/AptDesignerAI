@@ -280,8 +280,15 @@ class QueryBuilder {
     const result = { ...row };
     const selectStr = this.selectColumns || "";
 
-    // Parse relation patterns like "room_images(*)" or "room_diagnoses(*)"
-    const relationPattern = /(\w+)\(\*\)/g;
+    // Parse relation patterns like "room_images(*)" or "room_diagnoses(*)" —
+    // also matches an explicit column list, e.g. "product_evaluations(id,
+    // final_item_score, verdict)", so narrowing a `.select()` from `(*)` to
+    // named columns (APT-48) doesn't silently stop the embed from resolving
+    // on this in-memory backend. Deliberately does NOT attempt to match
+    // balanced/nested parens here (that's a separate, pre-existing limitation
+    // — see the nested-relations comment below) — this only widens the
+    // single-level content from a literal "*" to "*" or any column list.
+    const relationPattern = /(\w+)\(([^()]*)\)/g;
     let match;
     while ((match = relationPattern.exec(selectStr)) !== null) {
       const relTable = match[1];
@@ -310,7 +317,14 @@ class QueryBuilder {
     }
 
     // Handle nested relations like "product_bundle_items(*, candidate_products(*))"
-    const nestedPattern = /(\w+)\(\*,\s*(\w+)\(\*\)\)/g;
+    // — also matches a narrowed inner column list, e.g.
+    // "product_bundle_items(*, candidate_products(id, title, price))" (APT-48).
+    // Note: this pattern can only ever fire when `relationPattern` above has
+    // already populated `result[relTable]` as an array, which it does not for
+    // an outer relation whose own content contains nested parens (like
+    // "product_bundle_items(*, ...)") — a pre-existing limitation, tracked
+    // separately, not introduced or fixed by this generalization.
+    const nestedPattern = /(\w+)\(\*,\s*(\w+)\(([^()]*)\)\)/g;
     while ((match = nestedPattern.exec(selectStr)) !== null) {
       const relTable = match[1];
       const nestedTable = match[2];
