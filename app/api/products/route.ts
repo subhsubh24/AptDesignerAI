@@ -23,9 +23,17 @@ export async function GET(request: Request) {
 
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 200, maxLimit: 500 });
 
+  // Nested product_evaluations(*) narrowed to only the columns the client
+  // actually reads (products/page.tsx, compare/page.tsx, focus/page.tsx) —
+  // id/product_id/room_id/model_used/created_at are never used client-side.
+  // See APT-48.
   const { data, error } = await supabase
     .from("candidate_products")
-    .select("*, product_evaluations(*)")
+    .select(
+      "*, product_evaluations(final_item_score, verdict, confidence_score, style_fit_score, " +
+        "palette_fit_score, material_fit_score, scale_fit_score, function_fit_score, " +
+        "cohesion_fit_score, value_fit_score, reasoning)",
+    )
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);
