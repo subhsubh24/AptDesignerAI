@@ -4,6 +4,27 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-18 (Run 175) — claimed 2 previously-deferred Backlog items (APT-48 perf narrowing, APT-49 live eval), both shipped in one PR; APT-9/APT-42/APT-50 correctly left untouched
+
+### State on entry
+Cold container. `Todo` held only APT-9 (structural owner-only bar, last confirmed 2026-08-15 — read the standing comment, did NOT re-derive, left untouched). No full DEEP AUDIT due (last full 8-lens pass Run 173, 2026-08-17 — only 1 day / 2 runs prior, well under the ~24h/~4-run threshold), so this run scouted directly from the Backlog instead of running a fresh audit sweep.
+
+### Backlog triage — 2 claimed, 3 correctly left alone
+Reviewed every open Backlog/Todo item before selecting. **APT-42** (High priority, gtm-quality self_validation_honesty/pmf_read_accuracy) is explicitly scoped to the separate GTM Factory routine per Run 174's own note and `docs/growth/GROWTH_STATUS.md`'s own contract ("owned by the Growth Agent") — not this routine's lane (maker≠checker across the two factories), left untouched despite its high priority. **APT-50** (harness-ratchet.test.ts stripComments bug) is hard-guarded — `__tests__/ai/harness-ratchet.test.ts` is in the brakes' explicit never-touch list (a hook blocks edits) — correctly still unclaimable by any factory session. **APT-34** (mobile Expo SDK major bump, 30 vulnerabilities) was considered but skipped this run: a real compatibility-risk migration needing an isolated EAS-build verification pass this run's scope didn't budget for; left in Backlog for a dedicated future run.
+
+Claimed the two Run 174 had explicitly deferred for lack of budget: **APT-48** (bundles/products oversized nested-select payload) and **APT-49** (product-discovery live eval gap) — both Low priority but genuinely value-bar-clearing (payload-shape perf on a hot path; closing a real eval-coverage gap), and both file-disjoint from each other.
+
+### Shipped: PR #931 — APT-48 + APT-49 (one PR; this session's designated-branch harness constrains it to a single branch, so both disjoint changes landed as two separate commits in one PR rather than two parallel branches)
+Delegated each to its own implementer subagent working in the same tree (disjoint files, no conflict), then independently reviewed each with 2 fresh reviewer subagents (correctness/security + value/phase-fit) before committing either.
+
+- **APT-48**: narrowed `candidate_products(*)`/`bundle_evaluations(*)`/`product_evaluations(*)` nested embeds on `GET /api/bundles`/`GET /api/products` to explicit column lists, traced field-by-field against all 4 real consuming pages (bundles/products/compare/focus) — confirmed independently by both reviewers, no field any page reads was dropped. Required a companion fix: `lib/store/memory-store.ts`'s `resolveRelations()` only matched a literal `(*)` embed pattern, so narrowing to named columns would have silently stopped the embed resolving on this repo's default in-memory backend — generalized the regex (`\*` → `[^()]*`), verified equivalent for every other existing `(*)` caller in the codebase. **Found and filed APT-51** (a separate, pre-existing, unrelated bug: `product_bundle_items` never resolves on the memory backend at all, unchanged before/after this fix) rather than folding it in — correct maker≠checker/scope discipline per both reviewers.
+- **APT-49**: added `evals/__tests__/product-discovery.eval.test.ts`, the first live (`RUN_EVALS=1`-gated) eval chaining `searchProducts()` → `quickScreenCandidates()` → `extractFromUrlBatch()` against the `living-room-warm-sofa` gold fixture, asserting plausibility bounds (non-empty, category match, price band, valid URL) rather than exact-match. Closes a real gap: the only prior live eval (`sourcing.eval.test.ts`) exercised `scoreProduct()` alone, never the upstream search/extraction stages a prompt or model change could silently degrade. Reviewers verified all 4 called functions against their real exported signatures (no hallucinated API) and confirmed the file correctly skips (no network calls) without `RUN_EVALS=1`.
+
+Both closed on Linear with the acceptance check re-run against the merged commit (`d0bdcc9`) and its output pasted in, not the word "done." APT-48's literal acceptance-check grep string also matches the fix's own explanatory code comments (which quote the old `(*)` shape for context) — noted this false-positive explicitly in the closing comment along with the real `.select()` lines confirming the actual narrowing, rather than silently reinterpreting the check.
+
+### Lesson for future runs
+The Agent tool's `model` parameter only exposes `sonnet`/`opus`/`haiku`/`fable` aliases (resolving to the latest tier of each), with no way to pin the reviewer tier to `claude-sonnet-4-6` specifically as the routine's model-diversity design calls for — this is the same gap **APT-23** already tracks (filed by a prior run); not re-filed, reviewers ran on the default `sonnet` alias (same tier as the orchestrator) as the best currently-available option.
+
 ## Run 2026-08-18 (Run 174) — APT-39 continued, a scoped 3-lens audit found + fixed a real `.single()`-error bug in the core diagnosis pipeline, APT-9 correctly not re-derived
 
 ### State on entry
