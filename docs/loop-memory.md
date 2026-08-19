@@ -4,6 +4,34 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-19 (Run 177) — APT-39 continued across 4 files in one run (bundles/room/mockups/products), stuck-PR triage, no DEEP AUDIT (not due)
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only APT-9 (structural owner-only bar — `created_via: "http_api"`, no agent session can update the trigger; read the latest comment, did NOT re-derive). `In Progress` held APT-39 (raw-`<img>`→`next/image`, multi-run by design, Run 176's comment naming 6 remaining files). `Backlog` held APT-50 (hard-guarded, `__tests__/ai/harness-ratchet.test.ts` — a hook blocks edits, self-documented as unbuildable by any session) and APT-52 (CI `journeys` install-step intermittent hang, `.github/`-adjacent, not independently actionable this run beyond what APT-52 already recorded). No full DEEP AUDIT due (last full pass Run 173, 2026-08-17, well under the ~24h/~4-run threshold).
+
+### Stuck-PR triage before claiming new work
+Four PRs were sitting open from prior runs:
+- **#934** (Run 176's own housekeeping PR): `journeys` job had been cancelled (not failed) — re-queued via `rerun_failed_jobs`, went green, auto-merged. This is the exact hang class APT-52 already tracks; no new finding, no re-filing.
+- **#917** (an orphaned duplicate of Run 172's housekeeping PR — the REAL Run 172 ledger had already landed via #922 four runs ago): closed as stale/superseded with an explanatory comment. Zero content lost.
+- **#918** (gtm-auditor Run 7) and **#919** (Growth Agent Run 26): both based on a default-branch commit ~15 merges stale, both with a genuinely failing (not just stale) `verify` check. These belong to separate, independent routines (maker≠checker) — rebasing/merging their scorecard/status content myself would be overstepping into judgment calls (grades, growth narrative) that aren't this loop's to make. Filed **APT-53** instead of touching them, with the specific fix direction (their own next run should rebase-and-verify or close-as-superseded).
+
+### APT-39 continuation: 4 files, one run (bundles → room → mockups → products)
+Each its own file-disjoint branch/PR/review cycle, all merged:
+- **`bundles/page.tsx`** (PR #935) — product-carousel thumbnail, `sizes="112px"` matching the exact fixed `w-28` (112px) column width.
+- **`page.tsx`** (room detail, PR #936) — the room hero banner, the page's largest above-the-fold image. Marked `priority`: reviewers confirmed this is a required part of a correct conversion (an un-prioritized hero image would actively regress LCP vs. the eager `<img>` it replaced), not scope creep.
+- **`mockups/page.tsx`** (PR #937) — converted the grid-card thumbnail; deliberately left the `LightboxImage` zoom-viewer's raw `<img>` with an inline comment. Its click-to-zoom origin math reads the rendered element's own `getBoundingClientRect()` at click time, and it has no fixed box (`w-full h-auto max-h-[90vh] object-contain`) — incompatible with `fill` mode's sized-ancestor requirement. Matches the issue's own acceptance-check carve-out ("stay >0 with an inline comment explaining why").
+- **`products/page.tsx`** (PR #938) — converted BOTH occurrences (grid thumbnail + detail-dialog image) in one PR. Reviewer B's explicit reasoning, worth recording: the file-disjoint convention is about not colliding ACROSS runs on the same file, not about artificially fragmenting occurrences WITHIN one file across separate PRs — splitting this into two PRs would have been padding, not discipline.
+
+All 8 reviewer passes (2 per PR × 4 PRs) independently APPROVE. One PR (products) carried a non-blocking nitpick: the `sizes` breakpoint copied verbatim from the `picks/page.tsx` precedent (640px) doesn't perfectly match this page's own `md:` (768px) grid breakpoint — a harmless minor over-fetch in a narrow viewport range, not a rendering bug, not worth a fix cycle.
+
+**Lesson for future runs — a 4-in-one-run pace is sustainable for this specific sweep because every file's conversion is genuinely independent and low-risk** (same established pattern, same helper, disjoint files, full gate re-run each time). Reviewer B was asked explicitly whether the 4th file was still value-clearing or had become padding, and judged it on its own merits each time rather than rubber-stamping — worth continuing to ask that question explicitly as batch size grows, rather than assuming N+1 is fine because N was.
+
+### APT-39: 1 file left
+`app/projects/[projectId]/rooms/[roomId]/setup/page.tsx` — 2 occurrences (`img.url`, uploaded-photo/reference-image previews). Not started this run; flagged in the Linear comment that these may be local blob-preview URLs (pre-upload file previews), which `next/image` cannot optimize regardless of host — the next run should check the actual data source before assuming the same `canOptimizeImageHost()` pattern applies.
+
+### Board hygiene
+Updated APT-39's comment (twice, incrementally as PRs merged) with the run's progress + remaining file list. Filed APT-53 (stale cross-routine PRs, see above). APT-9/APT-50/APT-52 not re-derived — all previously established as structural/hard-guarded bars, their latest comments read, not re-attempted.
+
 ## Run 2026-08-18 (Run 176) — claimed APT-51 (real memory-store data bug), continued APT-39, hit and recovered from a genuine CI infra hang
 
 ### State on entry
