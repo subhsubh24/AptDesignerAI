@@ -4,6 +4,22 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-19 (Run 178) — APT-39's final file shipped and reviewed, but CI infra (APT-52) blocked the merge — first time a retry itself hung too
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only APT-9 (structural bar, not re-derived). `In Progress` held APT-39 with exactly 1 file remaining per Run 177's own comment (`app/projects/[projectId]/rooms/[roomId]/setup/page.tsx`). Only 2 open PRs existed: #918 (gtm-auditor) and #919 (Growth Agent), both already tracked by APT-53 as belonging to other routines (maker≠checker) — correctly left untouched again.
+
+### APT-39's final file — implemented, reviewed, but not merged this run
+Converted the room-setup page's 2 remaining raw `<img>` occurrences (uploaded room-photo grid, reference-photo grid) to the established `canOptimizeImageHost()`-gated `next/image` pattern. Traced both image sources end-to-end before converting: `ImageUploadZone`'s `onUploadComplete` callback fires with the `/api/upload` response's real persisted storage `url`, never the component's internal `URL.createObjectURL()` preview (a separate, revoked-before-completion local variable) — confirmed independently by Reviewer A. `sizes="(min-width: 640px) 33vw, 50vw"` derived from the page's actual `grid-cols-2 sm:grid-cols-3` breakpoint, not copy-pasted from an unrelated grid shape. Full local gate green (`tsc`, `eslint`, the raw-`<img>` ratchet test, full `npm test` 3130 passing, `check:determinism`), both independent reviewers (correctness/security; value/phase-fit/design) APPROVE first cycle. PR #941, auto-merge enabled.
+
+### The `journeys` CI hang (APT-52) escalated — a retry hung too, for the first time
+PR #941's `journeys` job hit the exact hang this issue already tracks (step 7 "Install deps + browser", zero progress). Followed the established protocol precisely: three status checks spanning ~30 minutes confirmed byte-identical state before treating it as a hang (not jumping to conclusions on a single snapshot); cancelled the run, confirmed it reached a genuine terminal `cancelled` state before calling `rerun_failed_jobs` (an immediate retry attempt would 403 otherwise — documented in Run 176's own lesson, held true again). **New wrinkle: the retry hung on the identical step too** — 17+ minutes with zero progress, whereas every prior occurrence of this bug (Run 176 x2, this issue's own filing) resolved cleanly on the single allowed retry. Per the CI-red one-retry rule ("a second failure is real" — treat it as confirmed, not a flake to keep re-rolling), did not attempt a 3rd retry. Cancelled the second hang and left PR #941 open with auto-merge still armed for a future run's own fresh retry budget. Recorded this escalated evidence as a comment on APT-52 (not a priority bump — the fix direction is unchanged, still gated on the `.github/` bar this loop cannot cross) so the next run doesn't mistake "retry once" for a completed mitigation.
+
+**Lesson: `mcp__github__get_job_logs` returns HTTP 404 for a job that hasn't reached a completed state** — there is no way to inspect partial/live log output for an in-progress job through this tool, which is exactly the blind spot APT-52's proposed `timeout-minutes` fix would also close (a job that fails fast produces a downloadable log; a job that hangs indefinitely never does, so root-causing this bug from inside the loop is structurally blocked until that `.github/` edit lands).
+
+### Board hygiene
+Did not close APT-39 — code is complete and reviewed, but "DONE means VERIFIED ARTIFACTS," and the merge itself is what's blocked, not the diff. Left `In Progress` with a comment explaining exactly why, and the acceptance check to run once #941 lands. Updated APT-52 with this run's evidence (see above). APT-9/APT-53 not re-derived (structural bar / other-routine's-lane, respectively, both previously established and unchanged).
+
 ## Run 2026-08-19 (Run 177) — APT-39 continued across 4 files in one run (bundles/room/mockups/products), stuck-PR triage, no DEEP AUDIT (not due)
 
 ### State on entry
