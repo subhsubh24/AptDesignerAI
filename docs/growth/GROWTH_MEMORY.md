@@ -2887,3 +2887,132 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run shipped
   real, owner-action-free ship-critical GTM work: the GTM Auditor's `business_case_honesty` gap is now
   fixed, narrowing `docs/growth/GTM_SCORECARD.md`'s ship gate to whatever the auditor's next pass finds.
+
+---
+
+## Run 26 — 2026-08-19
+
+### What we found
+- All Run 1-25 owner blockers remain unresolved: verified directly against `PENDING_OPS.md` — its
+  top-level `as_of` moved to 2026-08-19 (a Product-Factory housekeeping commit, #908), but every
+  growth-relevant item's own `status` field (`set-site-gate-password`, `connect-email-resend`,
+  `set-metrics-token`, `set-cron-secret`, `apply-migration-031`, and every other PRIORITY 1-10 item) is
+  still `open`, unchanged. This is the 26th consecutive run with the same core blockers, ~53 days since
+  Run 1.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a 26th time: both still
+  `connect_rejected`/gateway 502 to CONNECT, identical signature, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (2026-08-19T05:09:17.913Z / 05:09:18.269Z). No new
+  information; conclusion unchanged across all 26 probes to date.
+- `docs/growth/GTM_SCORECARD.md` is UNCHANGED since Run 25 — still Run 6 (as_of 2026-08-10, overall B,
+  ship_gate_met false), re-verified via `git log --oneline` on the file path. Both of Run 6's named
+  top_gaps (business_case_honesty, artifact_freshness) — fixed by Run 25 — were independently
+  re-spot-checked this run and confirmed still intact: `docs/BUSINESS_CASE.md`'s steady-state/year-1
+  caveat + both $60,593/$69,934 year-1 figures are present, `node scripts/validate-computation.mjs`
+  still verifies 12 figures (all PASS), and `docs/email-lifecycle.md`'s top banner still matches its
+  corrected "Delivery notes for owner" section.
+- `docs/quality/QUALITY_SCORECARD.md` (the harder, product-readiness gate that actually unlocks
+  outreach per GTM_STANDARD §6) MOVED since Run 25 — now the 12th independent grade (as_of 2026-08-17,
+  commit 37d0142, PR #923). `overall` still held at C (`functional_reality` unmoved for a 9th
+  consecutive cycle, purely owner/`.github/`-gated), but TWO ship-critical dimensions genuinely
+  recovered to A this cycle: `security_rls` B→A (the tracked area-analysis cross-tenant IDOR is
+  genuinely fixed, with a real regression test) and `artifact_integrity` B→A (the ROADMAP.md
+  test-count overclaim is fixed). Only TWO sub-A ship-critical dims remain (`functional_reality` C,
+  `design_taste` B), down from four two cycles ago — the fewest in this scorecard's visible history.
+  `ship_gate_met` still false; both S6 outreach lanes stay hard-off for the 26th consecutive run
+  regardless — but this is real, measurable progress worth surfacing prominently even though it is
+  100% Product-Factory-owned territory, not something this loop builds.
+
+### What we built this run
+- **`docs/growth/GROWTH_STATUS.md` — PR #940 (shipped first, standalone):** fixed GTM Auditor Run 6's
+  two trivial `self_validation_honesty` nits (not ship-critical): the `vercel_analytics` validation
+  entry's stale `package.json:31` citation (the file has grown to line 35 since Run 15 wrote that
+  citation — corrected), and the `demand_signal` block's `confidence` field, renamed to
+  `overall_strength` to match GTM_STANDARD §10's literal field name (verified via `grep` across
+  `app/`, `lib/`, `scripts/` that no code reads the old key before renaming — safe, no schema break).
+  `node scripts/validate-gtm.mjs` still parses clean. Shipped as its own PR since it was a complete,
+  coherent, self-contained fix, ahead of finishing this run's fuller update.
+- **Demand-signal research (theme 1 disconfirming gap):** dispatched a background research subagent
+  for a SECOND dedicated attempt (after Run 19's honest negative) at the one remaining
+  `experiment_validity` nit GTM Auditor Run 6 named — theme 1 ("furniture-shopping choice paralysis")
+  still carrying zero theme-specific disconfirming datum. Six angles tried: (1) a named retailer's own
+  disclosed decision-time/curation data — Wayfair and IKEA Kreativ pages checked directly, neither
+  discloses a primary decision-speed or satisfaction metric, only feature-announcement press releases;
+  (2) a neutral consumer-research org beyond ACSI/J.D. Power (already ruled out in prior runs) —
+  Consumer Reports fetched directly, on-topic only for delivery/returns/warranty comparisons, not
+  decision-time or choice-ease; (3) App Store reviews for a curated furniture-design app — Havenly:
+  the research agent caught and correctly REJECTED a misattributed quote here — a WebSearch snippet
+  attributed "makes decision making so much easier!" to Havenly's App Store page, but a direct
+  WebFetch of the real page (apps.apple.com id1149153371) found no such quote anywhere, only an
+  unrelated shopping-efficiency complaint — exactly the misattribution-to-a-company-that-never-said-it
+  trap this project's research method has been burned by before (Run 22, a different theme) and now
+  caught cleanly on a fresh attempt; (4) a market-research survey — Statista paywalled with no visible
+  decision-ease metric, a Provoke Insights PDF could not be parsed with this sandbox's available
+  tooling (genuinely inconclusive, not a negative — flagged for a future run with proper PDF
+  extraction rather than silently dropped), and 3D Cloud's "Furniture Shopping Trends Study 2026" was
+  correctly excluded on sight as commercial 3D/AR-vendor self-promotion (the same
+  undisclosed-competitor-promotion trap already flagged repeatedly for other vendor blogs in this
+  research). **Result: HONEST NEGATIVE** — no usable disconfirming datum found, and no incidental new
+  confirming evidence either. Theme 1's `cited_count`/`verbatim_count` stay at 5/4, unchanged; no
+  doc-content change beyond recording the attempt and its method in the `demand_signal` `method_note`.
+- **`docs/growth/GROWTH_STATUS.md` — second commit (this run's fuller update):** bumped `as_of` to
+  2026-08-19; refreshed `internal_metrics_api`/`web_research`/`gtm_scorecard` validation entries with
+  the 26th probe results and the QUALITY_SCORECARD 12th-grade finding; refreshed the `demand_signal`
+  `method_note` with the full Run 26 research record (kept Run 25's entry intact below it, per this
+  doc's append-only-history practice); refreshed `learnings`/`next_actions`/`owner_blockers` for the
+  26th consecutive circuit-breaker run. Ran `node scripts/validate-gtm.mjs` and
+  `node scripts/validate-computation.mjs` — both parse/PASS clean.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (26th probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD) — both
+  S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new data this run of any kind
+  clears the S3 bar for a steer (funnel still 0/null; demand-signal research this run was a negative
+  result, not new evidence); re-verified zero commits touched any GTM-owned marketing doc, ROADMAP, or
+  VISION since Run 25 beyond this run's own two PRs (`git log --oneline fc8a5a1..HEAD -- <every
+  GTM-owned doc + ROADMAP.md + VISION.md>`), and re-grepped the ~40 intervening Product-Factory commits
+  for any pricing/billing/checkout touch — none found, so no marketing-doc reconciliation was needed.
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search Ads
+  data; no new information since Run 3.
+- Did not spawn a maker != checker reviewer for either of this run's own edits: the self_validation
+  nit fixes were mechanical corrections (a citation, a field rename) with no interpretive judgment, and
+  the demand-signal update is a research no-op (an honest negative — no new claim was added to the
+  doc), so neither meets GTM_STANDARD S3/S5's bar for a substantive change, consistent with Runs 5/6/8's
+  established precedent for routine dashboard-and-research updates.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced beyond what's already listed there.
+
+### Lessons learned
+- **A background research subagent is a good fit for a bounded, well-scoped honest-negative attempt.**
+  Dispatching the theme-1 disconfirming search as a background agent (rather than doing the WebSearch/
+  WebFetch calls inline) kept this run's own context focused on the dashboard/scorecard verification
+  work while the research ran in parallel — worth repeating for similarly bounded research tasks in
+  future runs, especially now that 26 runs of unmoved owner blockers means most run time is
+  verification, not net-new work.
+- **The Havenly misattribution catch is exactly why "fetch it yourself, don't trust the search
+  snippet" stays a standing rule.** A confident-sounding WebSearch-synthesized quote turned out not to
+  exist on the actual page when independently fetched — the second time this exact failure mode has
+  been caught in this project's research (Run 22, a different theme/company). Worth treating as a
+  durable pattern, not a one-off: any WebSearch-synthesized quote attributed to a specific named
+  company must be verified against that company's own primary page before it can be cited, full stop.
+- **A stop-hook / turn-boundary constraint can force a mid-run commit — split cleanly, not messily.**
+  This run had to commit and push a small, complete fix (the two self_validation_honesty nits) before
+  the fuller research-dependent update was ready, because a background agent was still running when a
+  turn boundary arrived. The fix worked because those two edits were already a coherent, standalone,
+  correct unit on their own — worth defaulting to "make each individual fix complete and mergeable on
+  its own," not just at the end of a run, since a background dependency can force an early stopping
+  point at any time.
+- **Genuine progress on a scorecard the GTM loop doesn't own (QUALITY_SCORECARD's two ship-critical
+  recoveries) is still worth reporting prominently.** It changes nothing about this run's own actions
+  (outreach stays hard-off either way), but it is real signal the owner should see on the dashboard —
+  the gate is narrowing, even though neither of GTM's own two watched gates (GTM_SCORECARD,
+  QUALITY_SCORECARD) is fully green yet.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-25? YES — circuit breaker remains FIRED (Run 26, 26th consecutive
+  run, ~53 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run verified
+  Run 25's ship-critical GTM fixes are still intact, closed out two trivial auditor nits, and completed
+  a genuine (negative-result) research attempt on the last open demand-signal gap — a quiet, honest run
+  with no fabricated progress and no new owner action required.
