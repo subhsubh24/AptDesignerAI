@@ -1035,7 +1035,7 @@ export default function DashboardPage() {
                 aria-pressed={isSelected}
                 aria-label={`${section.label} — ${isDone ? "done" : isInProgress ? "in progress" : "outstanding"}`}
                 className={cn(
-                  "group relative overflow-hidden rounded-2xl border-2 bg-card transition-all duration-300 text-left",
+                  "group relative overflow-hidden rounded-2xl border-2 bg-card transition-all duration-300 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isSelected
                     ? "border-accent-warm shadow-xl ring-2 ring-accent-warm/20 -translate-y-1"
                     : "border-transparent hover:shadow-xl hover:-translate-y-1 hover:border-primary/30"
