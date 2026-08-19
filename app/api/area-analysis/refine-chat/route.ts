@@ -90,11 +90,12 @@ export async function GET(request: NextRequest) {
   const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
   if (getOwnership) return getOwnership;
 
-  const { data: messages } = await supabase
+  const { data: messages, error: messagesError } = await supabase
     .from("refine_messages")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: true });
+  if (messagesError) logServerError("refine-chat.messages", messagesError);
 
   return NextResponse.json({ messages: messages || [] });
 }
