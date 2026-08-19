@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion
 import { Skeleton } from "@/components/ui/skeleton";
 import { UpgradeCtaCard } from "@/components/billing/upgrade-cta-card";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 interface Mockup {
   id: string;
@@ -285,12 +287,22 @@ export default function MockupsPage() {
                     }
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={mockup.result_image_url}
-                    alt="Room mockup"
-                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                  {canOptimizeImageHost(mockup.result_image_url) ? (
+                    <Image
+                      src={mockup.result_image_url}
+                      alt="Room mockup"
+                      fill
+                      sizes="(min-width: 768px) 50vw, 100vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mockup.result_image_url}
+                      alt="Room mockup"
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  )}
                   {/* Hover overlay */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -394,6 +406,11 @@ function LightboxImage({ url, onClose }: { url: string; onClose: () => void }) {
       >
         <X className="h-5 w-5" />
       </Button>
+      {/* Intentionally a raw <img>, not next/image: this lightbox renders at
+          the image's own natural aspect ratio (w-full h-auto, no fixed box)
+          and the click-to-zoom origin math reads the rendered element's own
+          getBoundingClientRect() — there is no known width/height or fixed
+          aspect ratio to give next/image's `fill` mode here. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
