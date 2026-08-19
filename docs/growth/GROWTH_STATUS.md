@@ -41,7 +41,7 @@ GROWTH_STATUS:
       reason: "SITE_GATE_PASSWORD not set on the deployment (PENDING_OPS.md set-site-gate-password still status:open); site_gate_up stays false, hard-blocking pre-launch execute-mode outreach. NOTE: this agent's own sandbox env has a SITE_GATE_PASSWORD-named value present (since Run 5) -- per S4 fail-closed and Run 5/6's established reasoning, this is validator-credential scaffolding for a DIFFERENT routine's sandbox, not evidence the production Vercel deployment has it configured; not used, not inferred as connected."
     - source: vercel_analytics
       status: unavailable
-      reason: "NEW declaration (Run 15, per GTM Auditor Run 4 self_validation_honesty finding -- this was a live undeclared dependency, not a fabricated metric: no visitor/session number was ever reported, but the source itself was missing from this block, which claims to cover EVERY external source depended on). @vercel/analytics is a live package.json dependency (:31) and <Analytics /> is mounted in app/layout.tsx:63, and docs/growth/CONNECT.md:87 names Vercel Analytics as the intended source for visitor/session metrics. This agent has no Vercel Analytics API/dashboard read access from this runtime, so visitors_7d, visitor_to_waitlist_rate, and organic_sessions_7d stay 0/null (correct, fail-closed) until the owner either grants this agent a read path (a Vercel API token) or reports the numbers directly. Distinct from internal_metrics_api: this is a THIRD-PARTY analytics product, not the app's own DB."
+      reason: "NEW declaration (Run 15, per GTM Auditor Run 4 self_validation_honesty finding -- this was a live undeclared dependency, not a fabricated metric: no visitor/session number was ever reported, but the source itself was missing from this block, which claims to cover EVERY external source depended on). @vercel/analytics is a live package.json dependency (:35, corrected Run 26 -- was cited as :31 at Run 15, a stale line-number pointer the GTM Auditor Run 6 self_validation_honesty nit flagged; substance was always accurate, only the citation had drifted as the file grew) and <Analytics /> is mounted in app/layout.tsx:63, and docs/growth/CONNECT.md:87 names Vercel Analytics as the intended source for visitor/session metrics. This agent has no Vercel Analytics API/dashboard read access from this runtime, so visitors_7d, visitor_to_waitlist_rate, and organic_sessions_7d stay 0/null (correct, fail-closed) until the owner either grants this agent a read path (a Vercel API token) or reports the numbers directly. Distinct from internal_metrics_api: this is a THIRD-PARTY analytics product, not the app's own DB."
     - source: social_channels
       status: unavailable
       reason: "No social platform credentials connected (X / Instagram / TikTok / Reddit); the publishing queue stays dry-run."
@@ -582,7 +582,11 @@ GROWTH_STATUS:
       unapplied -- a plan visitors could not actually purchase. Removed it from both public-facing
       docs this run (see learnings) rather than treating this as a demand-signal task; noted here
       only because it was surfaced while re-reading these same docs for the positioning check.
-    confidence: emerging          # held at "emerging" since Run 6, NOT raised to "strong": the honest
+    overall_strength: emerging    # RENAMED from `confidence` (Run 26, per GTM Auditor Run 6
+                                   # self_validation_honesty nit: GTM_STANDARD S10 names this field
+                                   # `overall_strength`, not `confidence` -- a spec-conformance drift
+                                   # with no PMF/demand-signal conflation, now fixed). Held at "emerging"
+                                   # since Run 6, NOT raised to "strong": the honest
                                    # gate for "strong" is source COUNT + independence per theme, not
                                    # just verbatim-ness, and that count is still thin for theme 4
                                    # (2/theme); Reddit stays excluded on policy grounds, not
