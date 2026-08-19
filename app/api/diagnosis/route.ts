@@ -22,6 +22,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
+import { logServerError } from "@/lib/utils/api-error";
 import { withTrace } from "@/lib/observability/tracing";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
 import type { AgentContext } from "@/lib/agents/types";
@@ -98,12 +99,13 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
   if (postOwnership) return postOwnership;
 
   // Fetch room + images
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
 
+  if (roomError) logServerError("diagnosis.room", roomError);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   const imageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
