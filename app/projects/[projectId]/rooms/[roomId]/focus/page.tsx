@@ -1679,9 +1679,13 @@ function ImageOverlay({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
       <div className="max-w-4xl w-full bg-background rounded-2xl overflow-hidden shadow-2xl">
-        <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
+        <div className="relative aspect-video">
+          {canOptimizeImageHost(imageUrl) ? (
+            <Image src={imageUrl} alt={title} fill sizes="(min-width: 896px) 896px, 100vw" className="object-cover" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
+          )}
           <button
             type="button"
             aria-label="Close"
@@ -1837,8 +1841,14 @@ function RecommendationTable({
                 return (
                   <div key={tier} className="flex items-center gap-3 p-2 rounded-xl bg-muted/30">
                     {product.image_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.image_url} alt={product.title || "Product image"} className="h-12 w-12 rounded object-cover shrink-0" />
+                      <div className="relative h-12 w-12 rounded overflow-hidden shrink-0">
+                        {canOptimizeImageHost(product.image_url) ? (
+                          <Image src={product.image_url} alt={product.title || "Product image"} fill sizes="48px" className="object-cover" />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={product.image_url} alt={product.title || "Product image"} className="h-full w-full object-cover" loading="lazy" />
+                        )}
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -1917,8 +1927,14 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
     <td className="px-4 py-3">
       <div className="flex flex-col items-center gap-1 text-center">
         {product.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image_url} alt={product.title || "Product image"} className="h-10 w-10 rounded object-cover" />
+          <div className="relative h-10 w-10 rounded overflow-hidden">
+            {canOptimizeImageHost(product.image_url) ? (
+              <Image src={product.image_url} alt={product.title || "Product image"} fill sizes="40px" className="object-cover" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.image_url} alt={product.title || "Product image"} className="h-full w-full object-cover" loading="lazy" />
+            )}
+          </div>
         )}
         <span className={cn("text-xs font-semibold", tierColorClass)}>
           {product.price ? `$${product.price}` : "—"}
