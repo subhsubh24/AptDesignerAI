@@ -8739,3 +8739,102 @@ a change-slot on any `toast.tsx`/`badge.tsx`/`app/page.tsx` "off-system color" f
 No migration, no live secret, no ROADMAP Track/DoD box ticked (the fix is below Track-checkbox
 granularity). APT-33 and APT-34 filed with runnable acceptance checks, both correctly landed in
 `Backlog` (not yet prioritized) rather than forced into `Todo`.
+
+## Run 2026-08-20 (Run 178) — Linear unreachable (LOUD FALLBACK), 4-lens scout sweep, 3 disjoint fixes shipped as one consolidated PR, a real CI-gate assumption corrected mid-run
+
+**Note on numbering**: this file's last entry is Run 167 (2026-08-15); git history shows commit
+messages up through "Run 177" (PR #939, merged) and an attempted, still-open "Run 178" ledger PR
+(#942, stuck — see below). This entry picks up the "178" label from #942 rather than re-deriving
+a number, but does not attempt to backfill the 168–176 gap in this file — those runs' work is in
+`IMPROVEMENT_LOG.md` even where this file never got an entry.
+
+**Board.** Linear MCP required OAuth re-authorization; this session is non-interactive
+(scheduled) and cannot complete that flow, so no `list_issues` call was attempted. Logged as a
+LOUD FALLBACK in `TODO.md` per `CLAUDE.md` → "## The board", in the same shape a Linear issue
+would carry (title, why, acceptance check), rather than silently skipping STEP 0c.
+
+**Git policy this run**: the outer harness restricted this session to a single designated branch
+(`claude/sleepy-goldberg-bq531j`), not the usual per-change branch pattern — matching the
+precedent Run 150 already established for this scenario. All 3 code changes below were committed
+separately (own commit each, own pair of reviewers each) but pushed as ONE consolidated PR
+(#951) rather than 3 separate PRs, since the session could not open multiple branches.
+
+**Scout sweep (4 lenses, Haiku tier, scoped rather than the full 8 given the session's single-
+branch constraint)**: correctness/dead-code (recurring discarded-Supabase-error bug class),
+security/RLS re-audit, Track F quality gaps (F3 eval coverage / F4 functional validation), and
+performance/design-bar/a11y. Security and perf/a11y both came back **clean** — no findings, not
+padded to look busy. Correctness surfaced 5 real unfixed instances of the established
+"discarded `.error`" bug class (APT-15/16/17/25/28's pattern, ~10 prior fixes: PRs #944-949).
+Track F surfaced a small, concrete, previously-tracked gap: `/billing/checkout-success` and
+`/billing/checkout-cancel` had zero e2e coverage (`e2e/ROUTE_INVENTORY.md` "Tracked gaps").
+
+**Shipped, PR #951 (3 commits, each independently reviewed by 2 fresh subagents, all APPROVE):**
+
+1. **Discarded-error fixes** — the scout's 5 candidates plus 4 more found during review (Reviewer
+   A caught one same-file sibling the scout missed in `products/evaluate-set/route.ts`; Reviewer
+   B caught 3 more in `search/stream/route.ts` on a deeper read) — 13 sites total across 4 files.
+   Same established pattern throughout: log the error via `logServerError`, exempt `PGRST116`
+   only where 0 rows is a legitimate state (a room with no diagnosis yet), matching
+   `app/api/products/evaluate/route.ts`'s precedent exactly. `lib/supabase/public-share.ts` needed
+   extra care — its own file header documents a strict "real error and 'not found' must render
+   identically" anti-enumeration invariant; the fix logs server-side only, never changes the
+   return value. **Lesson: a reviewer doing a full-file read (not just the diff hunk) keeps
+   finding one more sibling instance of this bug class every time — worth a scout prompt next
+   time that explicitly asks "read the WHOLE file, not just grep hits" for this class.**
+
+2. **e2e coverage for the two billing-outcome routes** — and this is the run's most useful
+   finding: **actually running the new tests against a live local server caught a real bug that
+   static review (both reviewers, reading the real page source) did not.** This sandbox has
+   Chromium pre-installed at the same path CI uses
+   (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, matched by `playwright.config.ts`'s own
+   `existsSync` check), and `scripts/run-journeys.sh --public-only` is specifically designed to
+   run with zero real credentials (a placeholder Supabase identity, dev-mode `next dev` so
+   `assertProductionEnv()` never enforces) — so there was no reason not to actually execute the
+   suite instead of stopping at tsc/eslint. First run: both new tests failed — the page snapshot
+   showed the LOGIN page instead of checkout content, meaning middleware was redirecting a
+   logged-out visitor away before either page component ever ran.
+
+3. **The middleware fix** the live run surfaced — `/billing/checkout-success` and
+   `/billing/checkout-cancel` (the actual Stripe `success_url`/`cancel_url` targets, confirmed in
+   `app/api/billing/checkout/route.ts`) were missing from `PUBLIC_PATHS`, even though both page
+   components are explicitly written to degrade gracefully with no session. A paying customer
+   whose session cookie didn't round-trip the cross-site Stripe redirect got a login wall instead
+   of their own payment confirmation — a real, money-path-adjacent UX bug, not hypothetical.
+   Fixed by adding both routes to `PUBLIC_PATHS`; both reviewers independently verified the
+   pre-launch site-gate curtain (`lib/security/site-gate.ts`) is a SEPARATE allowlist unaffected
+   by this change, so nothing pre-launch became prematurely public. Re-ran the suite after the
+   fix — both tests passed live, real screenshots (verified via the PNG/pixel-content checks in
+   `__tests__/design/screenshot-manifest.test.ts`, not placeholders) committed at both widths.
+
+**A stray side effect worth flagging for future runs**: running `npm run dev` locally to serve
+the app for the journeys suite caused Next.js's own dev server to auto-write a
+`<!-- BEGIN:nextjs-agent-rules -->` boilerplate block into `AGENTS.md` (documented in
+`node_modules/next/dist/server/lib/generate-agent-files.js` — this is stock Next.js dev-mode
+behavior, not anything specific to this repo or an injection). Reverted before committing; also
+reverted ~26 pre-existing `e2e/__screenshots__/*.png` that the full local suite run silently
+re-captured (this sandbox's rendering isn't guaranteed pixel-identical to CI's, and re-committing
+them was out of scope for this run's actual changes) — only the 4 new checkout screenshots were
+kept. **Lesson: after running the journeys suite locally for verification, always diff
+`git status` before staging — the suite has real side effects beyond the specific test you meant
+to check.**
+
+**A real CI-gate assumption was corrected mid-run.** `TODO.md`'s first version (written before
+any code was shipped) re-confirmed APT-52's `journeys`-job "Install deps + browser" hang was
+still active (workflow-run history: every push-triggered run since 2026-08-19T16:26Z cancelled
+after ~6h) and, following PR #942's own body, assumed `journeys` was a required check blocking
+every merge. It is not: PR #951 (this run's own PR) merged in ~4 minutes — far too fast for that
+job to have completed — confirming the actually-required checks are `verify`/`build`/`mobile`
+(matching what `ROADMAP.md`'s "Merge decision" section says, which this run had read but not
+cross-checked against the live PR body's claim before writing it down). Corrected in `TODO.md`
+before this entry. **Lesson: a prior run's claim about WHAT blocks merge is not automatically
+trustworthy just because it's specific and detailed — cross-check it against `ROADMAP.md`'s own
+stated required-checks list, or against a fresh PR's actual merge behavior, before propagating
+it further.** PRs #941/#942 are still stuck, but very likely NOT for the APT-52 reason their own
+bodies claim — #941's base commit (`3e59415`) is now several commits behind the current tip,
+which is a much more mundane explanation (stale base, needs an "Update branch" or a fresh push)
+worth checking before assuming CI infra again. Left untouched this run — they belong to a
+different session's work, not this run's disjoint scope.
+
+No migration, no live secret. No ROADMAP Track/DoD checkbox ticked — all 3 fixes are below
+Track-checkbox granularity (mechanical correctness + a small F4 coverage gap + the auth bug it
+surfaced), consistent with this run's actual value, not inflated.

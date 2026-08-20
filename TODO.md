@@ -58,13 +58,24 @@ run — see `CLAUDE.md` → the `.github/` bar). Recorded once here per the
 a future run — just check whether the workflow-run history above still
 shows the same signature before reinvestigating.
 
-**Practical consequence this run:** `journeys` is a required check, so
-**no PR can currently merge** — including PRs with zero relation to the
-journeys suite. Open PRs #941, #942, #949 are already blocked on exactly
-this (see #942's own body). New work this run is still pushed with
-`auto-merge` armed (same pattern #941/#942 used) so it merges automatically
-the moment the runner infra recovers, rather than waiting idle.
+**Correction (found later this same run): `journeys` does NOT actually
+gate merge.** The paragraph above, and PR #942's body, assumed it was a
+required check. It is not: this run's own PR (#951) opened with the
+same 3-commit diff and merged in ~4 minutes — far too fast for the
+journeys job to have completed, and its `run_attempt` history confirms
+it never did. The actually-required checks are `verify`, `build`, and
+`mobile` (all fast, all green), matching what `ROADMAP.md`'s own "Merge
+decision" section says. So the hang is real and still worth fixing (a
+required-in-spirit quality gate silently not running is its own gap —
+worth a Linear issue once the board is back: "make `journeys` block
+merge, or stop treating a >6h hang as blocking"), but it is NOT currently
+blocking any PR from merging. **PRs #941/#942 are stuck for a different
+reason** — most likely their base commit is now several commits stale
+(`3e59415`, well behind the current tip) rather than the CI infra issue;
+worth a fresh look, not a re-run, next time someone owns them (not this
+run — they belong to a different session's work, out of scope here).
 
-**Acceptance check:** a `push`-triggered `ci.yml` run on the default
-branch completes the `journeys` job with `conclusion: success` (or any
-non-`cancelled` terminal state reached in well under the ~6h timeout).
+**Acceptance check for the underlying hang (still open):** a
+`push`-triggered `ci.yml` run on the default branch completes the
+`journeys` job with `conclusion: success` (or any non-`cancelled`
+terminal state reached in well under the ~6h timeout).
