@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { parsePagination } from "@/lib/utils/pagination";
 import { checkRateLimit } from "@/lib/utils/rate-limiter";
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
   // good one. Surface it so the client can retry (F4.1 SIDE-EFFECT INTEGRITY).
   const [
     { data: room, error: roomError },
-    { data: diagnosis },
+    { data: diagnosis, error: diagnosisError },
   ] = await Promise.all([
     supabase
       .from("rooms")
@@ -99,6 +99,11 @@ export async function POST(request: NextRequest) {
   ]);
 
   if (roomError) return apiError("saved-designs", roomError);
+  // Fail loud on a real diagnosis read error rather than letting it fall through
+  // to the `!diagnosis?.diagnosis_json` 404 below — maybeSingle() returns
+  // error:null on a legitimate 0-row miss, so a non-null error here is a genuine
+  // DB failure the client should retry on, not a "no analysis yet" 404.
+  if (diagnosisError) return apiError("saved-designs", diagnosisError);
 
   if (!diagnosis?.diagnosis_json) {
     return NextResponse.json({ error: "No analysis found for this room" }, { status: 404 });
@@ -136,13 +141,22 @@ export async function POST(request: NextRequest) {
       { data: bundles, error: bundlesError },
     ] = await Promise.all([
       supabase
+        // Only the fields the snapshot persists + reads back (see the
+        // per_tier_products shape in app/saved/[id]/page.tsx / SharedDesignView):
+        // id/title/category/retailer/product_url/image_url/price, plus metadata
+        // for groupByTier's price_tier. product_evaluations(*) was embedded but
+        // never read from the snapshot — dropped to cut save payload (APT-54).
         .from("candidate_products")
-        .select("*, product_evaluations(*)")
+        .select("id, title, category, retailer, product_url, image_url, price, metadata")
         .eq("room_id", room_id)
         .eq("status", "selected"),
       supabase
+        // snapshot.products.bundles is stored but never rendered (typed
+        // unknown[], zero field access in either consumer), so the heavy
+        // product_bundle_items(*)/bundle_evaluations(*) embeds were pure payload
+        // waste — dropped, keeping only the bundle scalar rows (APT-54).
         .from("product_bundles")
-        .select("*, product_bundle_items(*), bundle_evaluations(*)")
+        .select("*")
         .eq("room_id", room_id),
     ]);
 
@@ -187,7 +201,7 @@ export async function POST(request: NextRequest) {
   // so run them concurrently — same pattern as the products/bundles fetch
   // above. When project_id is absent, skip the query and resolve to the same
   // shape a Supabase maybeSingle() miss would ({ data: null, error: null }).
-  const [{ data: project }, { data: existing, error: existingError }] = await Promise.all([
+  const [{ data: project, error: projectError }, { data: existing, error: existingError }] = await Promise.all([
     project_id
       ? supabase
           .from("projects")
@@ -218,6 +232,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (existingError) return apiError("saved-designs", existingError);
+  // The project fetch is best-effort display metadata (project_name /
+  // building_name) — a failure must NOT block the save, but it was previously
+  // discarded with zero trace. Log it so a silent DB blip on the metadata bind
+  // is observable server-side while the save still proceeds.
+  if (projectError) logServerError("saved-designs", projectError);
 
   // Gate new saves for free-tier users. Re-saving an already-saved room (UPDATE path) is always allowed.
   // Soft/best-effort limit: a count+insert race at the boundary could allow one extra save (same
