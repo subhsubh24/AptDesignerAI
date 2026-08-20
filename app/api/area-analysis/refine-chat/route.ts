@@ -184,12 +184,13 @@ export async function POST(request: NextRequest) {
   try {
     // Gather every refinement request (the just-inserted message included) so
     // the re-analysis reflects the full conversation, not just the last line.
-    const { data: allUserMsgs } = await supabase
+    const { data: allUserMsgs, error: allUserMsgsError } = await supabase
       .from("refine_messages")
       .select("content")
       .eq("room_id", room_id)
       .eq("role", "user")
       .order("created_at", { ascending: true });
+    if (allUserMsgsError) logServerError("area-analysis.refine-chat.allUserMsgs", allUserMsgsError);
 
     const directions: string[] = (allUserMsgs || [])
       .map((m: { content: string }) => (m.content || "").trim())

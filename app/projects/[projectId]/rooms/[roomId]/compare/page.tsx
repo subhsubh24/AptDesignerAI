@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, GitCompare, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, RotateCcw } from "lucide-react";
@@ -11,6 +12,7 @@ import { VERDICT_LABELS, VERDICT_COLORS, getScoreColor, getScoreBgColor } from "
 import { PageTransition } from "@/components/ui/motion";
 import { SkeletonCompareRow } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 import type { Verdict } from "@/lib/types/scoring";
 
 interface ProductWithEval {
@@ -218,13 +220,24 @@ export default function ComparePage() {
                       <th key={product.id} className="p-4 border-b text-center min-w-[180px] bg-muted/30">
                         <div className="space-y-2.5">
                           {product.image_url && (
-                            <div className="mx-auto w-20 h-20 rounded-xl overflow-hidden bg-background shadow-sm">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={product.image_url}
-                                alt={product.title || ""}
-                                className="h-full w-full object-contain"
-                              />
+                            <div className="relative mx-auto w-20 h-20 rounded-xl overflow-hidden bg-background shadow-sm">
+                              {canOptimizeImageHost(product.image_url) ? (
+                                <Image
+                                  src={product.image_url}
+                                  alt={product.title || ""}
+                                  fill
+                                  sizes="80px"
+                                  className="object-contain"
+                                />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={product.image_url}
+                                  alt={product.title || ""}
+                                  className="h-full w-full object-contain"
+                                  loading="lazy"
+                                />
+                              )}
                             </div>
                           )}
                           <p className="text-sm font-medium line-clamp-2">
@@ -381,13 +394,24 @@ export default function ComparePage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
                       {product.image_url && (
-                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={product.image_url}
-                            alt={product.title || ""}
-                            className="h-full w-full object-cover"
-                          />
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-muted shrink-0">
+                          {canOptimizeImageHost(product.image_url) ? (
+                            <Image
+                              src={product.image_url}
+                              alt={product.title || ""}
+                              fill
+                              sizes="64px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={product.image_url}
+                              alt={product.title || ""}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          )}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
