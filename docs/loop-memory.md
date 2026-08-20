@@ -8838,3 +8838,112 @@ different session's work, not this run's disjoint scope.
 No migration, no live secret. No ROADMAP Track/DoD checkbox ticked — all 3 fixes are below
 Track-checkbox granularity (mechanical correctness + a small F4 coverage gap + the auth bug it
 surfaced), consistent with this run's actual value, not inflated.
+
+## Run 2026-08-20 (Run 179) — housekeeping first, then the overdue full 8-lens DEEP AUDIT, 2 disjoint fixes shipped, a review-caught false start reverted before it ever reached a PR
+
+**Board.** Linear reachable this run (contrast with the immediately-prior Run 178, which hit an
+OAuth wall). `list_issues` on `Todo` returned exactly one item, APT-9 — the auditor-routines
+Linear-migration prompt fix, already re-confirmed structurally blocked (owner-only trigger-prompt
+edit) by Run 178 and multiple runs before it. Read its latest comment, did not re-derive, moved
+straight to Backlog triage per the "Backlog = not-yet-prioritized, not blocked" rule.
+
+**Housekeeping first — 3 stale PRs from before this run.** Before any new work: closed **#941**
+(the last APT-39 `next/image` file) as superseded — `merge-tree` against the current default
+branch showed the only conflict was a duplicate `import Image from "next/image"`, because PR
+**#943** (merged earlier, between when #941 was opened and this run started) already converted
+the exact same two image grids in the exact same file. Closed **#942** (an earlier attempt at the
+Run 178 housekeeping ledger) as superseded by the actually-merged **#952**, confirmed via
+`git merge-base --is-ancestor` returning false (none of #942's content is otherwise on the
+default branch). Then took **#949** (a real, still-needed one-line discarded-error fix,
+`app/api/identified-products/search/route.ts`, matching the APT-15/16/17/25/28 pattern) through a
+fresh 2-reviewer APPROVE cycle — it had zero recorded GitHub reviews despite its own PR body
+claiming verification — and merged it. **Lesson: a PR sitting open with all required CI checks
+green but `mergeable_state: blocked` is often just missing the review-approval branch-protection
+requirement, not a real CI problem — check `get_reviews` before assuming it's stuck on
+infrastructure.**
+
+### Full 8-lens DEEP AUDIT (overdue — last full pass Run 167, 2026-08-15, ~5 days/many runs stale)
+
+Ran all 8 lenses as parallel Haiku scouts per the standard rotation.
+
+- **Security/RLS: clean.** `check-security-invariants.mjs` 26/26 tables, 6 critical routes
+  spot-checked for IDOR (all correctly scoped), no SECURITY DEFINER/mutable-search_path issues,
+  `getAdminClient()` server-side only, no new unguarded public tables since Run 167.
+- **a11y/design-bar: clean.** Focus-visible rings complete (including the Run-178-adjacent
+  dashboard fix), form labels/alt text complete, off-system-palette ratchet passing with pinned
+  exemptions intact.
+- **Quality-scorecard-reconcile: clean, no regressions.** Independently re-verified the
+  2026-08-17 scorecard's two remaining ship-critical-below-A gaps (`functional_reality` C — the
+  DATA_BACKEND cutover; `design_taste` B — F7 authed screenshots) are both still genuinely open
+  and still correctly `.github/`-blocked, not stale-in-the-bad-direction. The two recovered-to-A
+  dimensions (`security_rls`, `artifact_integrity`) still hold. 50 commits shipped since the
+  scorecard's date with zero impact on any graded dimension.
+- **Dependency health: clean, improving.** Root 0 vulnerabilities. Mobile's already-tracked
+  APT-34 Expo-SDK-chain vulnerability count dropped from 30 to 21 since Run 167 (transitive dep
+  movement, not our doing) — noted, not re-filed as new.
+- **Correctness: 2 more real instances of the discarded-`.error` bug class**, found by re-reading
+  full files (not just recent diffs) rather than trusting the scout's exact line numbers: 3 sites
+  in `app/api/diagnosis/stream/route.ts` (room fetch, otherRooms, otherDiagnoses — mirroring
+  `app/api/search/stream/route.ts`'s exact precedent down to the PGRST116-exemption comment
+  wording) and 1 in `app/api/saved-designs/[id]/route.ts`'s PATCH ownership check. Fixed,
+  reviewed, shipped.
+- **Performance: 1 real fix shipped (APT-54), 3 real false positives caught before implementing.**
+  The scout initially flagged `app/api/projects/route.ts`'s and
+  `app/api/bundles/evaluate/route.ts`'s `select("*")` calls as oversized-payload bloat. Tracing
+  actual consumers (`app/dashboard/page.tsx`'s onboarding-restore flow reads `building_research`
+  directly; `buildDesignProfile()` reads nearly every `projects` column) showed both selects are
+  genuinely needed — narrowing would either break a real feature or save near-nothing since the
+  dominant-size field (`diagnosis_json`) is required regardless. **Neither was shipped — verified
+  false positives, not shipped-and-hoped.** The real, verified win was `GET /api/picks` (APT-54,
+  a follow-up to the already-Done APT-48 pattern): narrowed `candidate_products`/
+  `product_evaluations(*)` to the exact 9 columns `app/picks/page.tsx`'s `PickProduct` interface
+  reads. Also checked APT-54's third named route (`app/api/bundles/route.ts`'s
+  `product_bundle_items(*)`) and found it doesn't need work — that table has only 6 small scalar
+  columns, no jsonb/text bloat unlike its sibling `candidate_products`/`room_diagnoses`. Recorded
+  in a Linear comment so a future run doesn't re-flag it.
+- **Artifact freshness: 1 finding, caught wrong by the scout, corrected by review — never
+  shipped.** The scout (and my own initial read) flagged README.md's "Gemini: vision, product
+  scoring" / "GEMINI_API_KEY: vision + scoring" as inaccurate, reasoning that
+  `getProvider("scoring")` defaults to DeepSeek. **Both reviewers independently caught the actual
+  bug in my reasoning**: `lib/agents/fit-scorer.ts` — the real per-product AI-fit scoring engine,
+  not the `getProvider("scoring")` call sites I'd checked (`self-correction.ts`,
+  `keep-replace-reconciler.ts`, which are narrower reconciliation paths) — imports and calls
+  `geminiProvider` directly, exactly like `room-diagnostician.ts` does for room understanding,
+  completely bypassing `getProvider()`/`AI_PROVIDER`. The ORIGINAL README wording was accurate;
+  my "fix" would have shipped a real regression in doc accuracy. Caught by 2/2 reviewers before
+  the PR was even opened; cleanly reverted via `git reset --hard` back to the last-good commit
+  + cherry-pick of the still-valid picks fix, so no revert-noise landed in PR/commit history.
+  **Lesson, reinforcing a pattern this file has recorded before (Run 178's design-bar false
+  positive, multiple prior runs' "verify a scout claim before shipping"): the discipline has to
+  extend to MY OWN synthesis of a scout's finding, not just the scout's raw claim — I grepped for
+  `getProvider("scoring")` callers and stopped there instead of checking whether the actual
+  scoring engine even goes through that function.**
+- **Test/eval coverage: 1 real gap filed, not attempted.** `lib/agents/validation-agent.ts`'s
+  harmony-loop convergence state machine (best-version restore, velocity tracking, loop-exit
+  decisions) has only indirect cassette-based coverage, no hermetic unit test of the orchestration
+  layer itself. Filed as **APT-56** with a concrete acceptance check rather than attempted this
+  run (real implementation effort, not a mechanical fix). A secondary, lower-priority finding
+  (`orchestrator.ts`'s `runAgenticSearch` dispatch sequencing) noted in the same issue rather than
+  filed separately, to avoid board sprawl for two related-but-distinct-priority gaps.
+
+### Shipped: PR #953 — discarded-error sweep + picks perf narrowing
+
+Two commits, each independently reviewed (2 fresh subagents, correctness + value/phase-fit, both
+APPROVE on both): the diagnosis-stream/saved-designs error-logging fix, and the picks-route
+select-narrowing. Consolidated into one PR per this session's single-designated-branch git policy
+(same precedent as Run 178/150). `npx tsc --noEmit` clean, `npm test` 3134/3150 passing (16
+skipped, pre-existing), `npm run check:determinism` clean, targeted test re-runs for all 3 touched
+routes green. CI: verify/build/mobile/lint/security-invariants/validate-capabilities/validate-gtm
+all green (`journeys` still in progress at merge time — reconfirms Run 178's finding that it is
+NOT a required check). Squash-merged cleanly.
+
+**Board bookkeeping**: APT-54 updated with a detailed comment (what shipped, what's ruled
+not-needed, what's still open) and released back to Backlog, unassigned — 1 of its 3 named routes
+done this run, 1 investigated and found not to need work, 1 (`saved-designs` POST snapshot path)
+still open for a future run's field-tracing pass. APT-56 filed fresh. No ROADMAP Track/DoD
+checkbox ticked — all shipped work is below Track-checkbox granularity (mechanical correctness +
+a real but sub-phase perf narrowing). No migration, no live secret.
+
+**Cold container note (repeat of Run 152/164's lesson, worth repeating again since it recurred
+identically)**: this container had zero `node_modules` at root AND in `mobile/` — `npm install`
+(~1min) + `cd mobile && npm install` fixed both before any gate command was trustworthy.
