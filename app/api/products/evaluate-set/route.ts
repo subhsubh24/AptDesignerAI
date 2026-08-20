@@ -97,6 +97,12 @@ export async function POST(request: Request) {
   if (roomRes.error || !roomRes.data) {
     return NextResponse.json({ error: "Room not found" }, { status: 404 });
   }
+  // A room with no diagnosis yet is a legitimate empty state (PGRST116 from
+  // .single()'s 0-row case), matching this codebase's established
+  // .single()-optional-row convention (app/api/products/evaluate/route.ts).
+  if (diagRes.error && diagRes.error.code !== "PGRST116") {
+    logServerError("products.evaluateSet.diagnosis", diagRes.error);
+  }
 
   const room = roomRes.data;
   const roomImageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
@@ -115,6 +121,8 @@ export async function POST(request: Request) {
       .eq("project_id", room.project_id)
       .neq("id", room_id),
   ]);
+  if (projectRes.error) logServerError("products.evaluateSet.project", projectRes.error);
+  if (otherRoomsRes.error) logServerError("products.evaluateSet.otherRooms", otherRoomsRes.error);
 
   const project = projectRes.data;
   const designProfile = buildDesignProfile(project);

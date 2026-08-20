@@ -52,6 +52,7 @@
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { createClient, supabaseDataBackendEnabled } from "@/lib/supabase/server";
+import { logServerError } from "@/lib/utils/api-error";
 
 /**
  * Minimum share-token length. Tokens are minted as 16 random bytes rendered hex
@@ -98,13 +99,18 @@ export async function readSharedDesignByToken(
 
   const client = await publicShareReader();
 
-  const { data } = await client
+  const { data, error } = await client
     .from("saved_designs")
     .select(PUBLIC_SHARE_COLUMNS)
     // Both filters are load-bearing — see the invariants in the file header.
     .eq("share_token", token)
     .eq("is_public", true)
     .maybeSingle();
+  // .maybeSingle() returns no error for the legitimate "0 rows" case (data is
+  // simply null), so any error here is a real DB failure — log it, but still
+  // return null: per the invariants above, "real error" and "no such share"
+  // must render identically to the caller, so this cannot change the response.
+  if (error) logServerError("publicShare.readByToken", error);
 
   return (data as PublicSharedDesignRow | null) ?? null;
 }
