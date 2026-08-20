@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { getCurrentUserId } from "@/lib/supabase/server";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
@@ -55,12 +55,14 @@ export async function PATCH(
   const is_public = body.is_public ?? false;
 
   // Verify ownership and get existing share_token
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("saved_designs")
     .select("id, share_token, is_public")
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (existingError) logServerError("saved-designs.update.existing", existingError);
 
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

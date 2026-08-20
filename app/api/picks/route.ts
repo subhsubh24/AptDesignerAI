@@ -48,9 +48,12 @@ export async function GET(request: Request) {
     ])
   );
 
+  // Narrowed to only the columns app/picks/page.tsx's PickProduct interface
+  // reads — description/dimensions/materials/colors/metadata/etc. are never
+  // rendered on this cross-room list page. See APT-54 (follow-up to APT-48).
   const { data: products, error: prodError } = await supabase
     .from("candidate_products")
-    .select("*, product_evaluations(*)")
+    .select("id, title, category, price, image_url, product_url, status, room_id, product_evaluations(final_item_score)")
     .in("room_id", roomIds)
     .in("status", ["shortlisted", "accepted"])
     .order("created_at", { ascending: false })
