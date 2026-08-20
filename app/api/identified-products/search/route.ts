@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logServerError } from "@/lib/utils/api-error";
 import {
   getIdentifiableBrands,
   type IdentifiableBrand,
@@ -72,13 +73,14 @@ export async function GET(request: NextRequest) {
   // Substring typeahead only reads these 5 fields; selecting "*" also pulls the
   // 1408-dim image embedding vector (~5.6KB/row × 500 rows ≈ 2.8MB) on every
   // keystroke for no reason. Narrow the projection to what's actually consumed.
-  const { data: embedRows } = await supabase
+  const { data: embedRows, error: embedRowsError } = await supabase
     .from("product_image_embeddings")
     .select("brand, model, variant, image_url, source, id")
     .order("brand", { ascending: true })
     .order("model", { ascending: true })
     .order("id", { ascending: true })
     .limit(500);
+  if (embedRowsError) logServerError("identified-products.search.embedRows", embedRowsError);
   const rows = (embedRows as Pick<ProductImageEmbedding, "brand" | "model" | "variant" | "image_url" | "source" | "id">[] | null) ?? [];
   for (const row of rows) {
     if (
