@@ -63,11 +63,17 @@ export async function POST(request: Request) {
   if (postOwnership) return postOwnership;
 
   // Fetch room
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
+  // Ownership was already verified above, so PGRST116 here means the room was
+  // deleted in the race between that check and this fetch — a legitimate
+  // (if rare) empty state, not a failure; any other error is.
+  if (roomError && roomError.code !== "PGRST116") {
+    logServerError("search.stream.room", roomError);
+  }
 
   if (!room) {
     return new Response(JSON.stringify({ error: "Room not found" }), { status: 404 });
@@ -78,7 +84,7 @@ export async function POST(request: Request) {
   // parallel to save two round-trips on this hot streaming entry point,
   // mirroring the non-stream /api/search route. Destructured by position, not
   // completion order, so ordering stays deterministic.
-  const [{ data: project }, { data: diagnosis }, { data: priorSession }] = await Promise.all([
+  const [projectRes, diagnosisRes, priorSessionRes] = await Promise.all([
     // Fetch project for full building/apartment context
     supabase.from("projects").select("*").eq("id", room.project_id).single(),
     // Fetch room diagnosis for design direction
@@ -101,6 +107,18 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle(),
   ]);
+  if (projectRes.error) logServerError("search.stream.project", projectRes.error);
+  // A room with no diagnosis yet is a legitimate empty state (PGRST116 from
+  // .single()'s 0-row case), matching this codebase's established
+  // .single()-optional-row convention (app/api/products/evaluate/route.ts).
+  if (diagnosisRes.error && diagnosisRes.error.code !== "PGRST116") {
+    logServerError("search.stream.diagnosis", diagnosisRes.error);
+  }
+  if (priorSessionRes.error) logServerError("search.stream.priorSession", priorSessionRes.error);
+
+  const project = projectRes.data;
+  const diagnosis = diagnosisRes.data;
+  const priorSession = priorSessionRes.data;
 
   const designProfile = buildDesignProfile(project);
 
@@ -182,21 +200,23 @@ export async function POST(request: Request) {
   // Build other-rooms context for cross-room coherence
   let otherRoomsContext: string | undefined;
   if (project) {
-    const { data: otherRooms } = await supabase
+    const { data: otherRooms, error: otherRoomsError } = await supabase
       .from("rooms")
       .select("id, name, room_type")
       .eq("project_id", room.project_id)
       .neq("id", room_id);
+    if (otherRoomsError) logServerError("search.stream.otherRooms", otherRoomsError);
     if (otherRooms && otherRooms.length > 0) {
       // Get diagnoses for other rooms that have been analyzed within the
       // last 90 days — older palette/material choices reflect preferences the
       // user has since evolved past.
       const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: otherDiagnoses } = await supabase
+      const { data: otherDiagnoses, error: otherDiagnosesError } = await supabase
         .from("room_diagnoses")
         .select("room_id, design_direction_json, created_at")
         .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
         .gte("created_at", staleCutoff);
+      if (otherDiagnosesError) logServerError("search.stream.otherDiagnoses", otherDiagnosesError);
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(
@@ -218,7 +238,7 @@ export async function POST(request: Request) {
   // compares candidate product images against the designer-generated mockup.
   let recommendationMockups: Record<string, { imageUrl: string; prompt: string }> | undefined;
   {
-    const { data: recRuns } = await supabase
+    const { data: recRuns, error: recRunsError } = await supabase
       .from("agent_runs")
       .select("output_json")
       .eq("room_id", room_id)
@@ -226,6 +246,7 @@ export async function POST(request: Request) {
       .eq("status", "completed")
       .order("created_at", { ascending: false })
       .limit(20);
+    if (recRunsError) logServerError("search.stream.recRuns", recRunsError);
     if (recRuns && recRuns.length > 0) {
       const map: Record<string, { imageUrl: string; prompt: string }> = {};
       for (const run of recRuns) {

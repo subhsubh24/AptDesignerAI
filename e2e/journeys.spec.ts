@@ -136,6 +136,37 @@ test.describe("public + structural journeys", () => {
     await captureJourneyStep(page, "public-pricing");
   });
 
+  // Billing-outcome redirects (ROUTE_INVENTORY.md "Tracked gaps" — previously
+  // had zero coverage of any kind). Both render for a logged-out visitor, so
+  // both belong in the public tier rather than the authed one.
+
+  test("checkout-cancel page confirms no charge was made", async ({ page }) => {
+    const res = await page.goto("/billing/checkout-cancel");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    // The page's whole purpose is reassuring the visitor they were not charged
+    // — a generic heading would pass even if that specific promise regressed.
+    await expect(page.getByRole("heading", { name: /no charge was made/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /back to pricing/i })).toBeVisible();
+    await captureJourneyStep(page, "public-checkout-cancel");
+  });
+
+  test("checkout-success page never claims an upgrade for a logged-out visitor (SIDE-EFFECT INTEGRITY)", async ({
+    page,
+  }) => {
+    const res = await page.goto("/billing/checkout-success?tier=pro");
+    expect(res?.status() ?? 0).toBeLessThan(400);
+    await expectNoErrorBoundary(page);
+    // With no signed-in user, getWebBillingStatus is never even reached — the
+    // page must fall to its honest "finalizing" state, NEVER the confirmed
+    // "Welcome to Pro" copy. Asserting the confirmed heading is ABSENT is the
+    // real regression guard here: a bug that flipped the `confirmed` branch
+    // open would fake a paid upgrade for anyone who just visits this URL.
+    await expect(page.getByRole("heading", { name: /finalizing your upgrade/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /welcome to pro/i })).toHaveCount(0);
+    await captureJourneyStep(page, "public-checkout-success-unconfirmed");
+  });
+
   // The public CONTENT pages — the marketing and compliance surface a visitor
   // and an app-store reviewer land on before any account exists.
   //
