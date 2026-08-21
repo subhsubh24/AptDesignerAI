@@ -3016,3 +3016,111 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   Run 25's ship-critical GTM fixes are still intact, closed out two trivial auditor nits, and completed
   a genuine (negative-result) research attempt on the last open demand-signal gap — a quiet, honest run
   with no fabricated progress and no new owner action required.
+
+---
+
+## Run 27 — 2026-08-21
+
+### What we found
+- All Run 1-26 owner blockers remain unresolved: verified directly against `PENDING_OPS.md` — `as_of`
+  is still 2026-08-19, unchanged since Run 26, and every growth-relevant item's own `status` field
+  (`set-site-gate-password`, `connect-email-resend`, `set-metrics-token`, `set-cron-secret`,
+  `apply-migration-031`, all ten PRIORITY items) is still `open`. 27th consecutive run, ~55 days since
+  Run 1.
+- Re-probed `https://aptdesignerai.com/` and the metrics API a 27th time: still
+  `connect_rejected`/gateway 502 to CONNECT, identical signature, cross-checked directly against
+  `/__agentproxy/status` `recentRelayFailures` (2026-08-21T05:07:57.326Z). No new information.
+- Re-verified `docs/growth/GTM_SCORECARD.md` and `docs/quality/QUALITY_SCORECARD.md` directly by
+  grepping their live content (not trusting Run 26's own "unchanged" conclusion): both are genuinely
+  unchanged since Run 26 — GTM_SCORECARD still `as_of: 2026-08-10` (Run 6, overall B, ship_gate_met
+  false); QUALITY_SCORECARD still `as_of: 2026-08-17` (12th grade, PR #923, functional_reality C /
+  design_taste B the only sub-A ship-critical dims). Both S6 outreach lanes stay hard-off.
+- Checked all 20 commits landed between Run 26's own commit (3e59415) and this run's start (343745c)
+  via the GitHub API (`list_commits` — this session's local clone is shallow, so the API is the
+  reliable source, per Run 19's established practice): every one is Product-Factory work — a
+  recurring discarded-Supabase-error sweep (~10 API routes), `next/image` conversions (APT-39), an
+  a11y focus-ring fix, new e2e coverage for the Stripe checkout-outcome pages that surfaced and fixed
+  a real auth-redirect bug, and 3 housekeeping ledger commits. None touch pricing, billing, checkout
+  copy, `ROADMAP.md`, `VISION.md`, or `docs/BUSINESS_CASE.md` — no marketing-doc reconciliation needed.
+
+### What we built this run
+- **Closed out Run 26's one open research item with a dispositive result.** Run 26 had flagged a
+  Provoke Insights furniture-industry PDF as "genuinely inconclusive... could not be parsed with this
+  sandbox's available tooling" while investigating theme 1's demand-signal disconfirming gap. This
+  run: located the PDF's real URL via WebSearch
+  (`provokeinsights.com/wp-content/uploads/2024/11/Provoke-Insights_FALL2024_Furniture-11.4.pdf`),
+  downloaded it directly (HTTP 200, a genuine 35-page PDF), and — after the Read tool's built-in PDF
+  path failed (`pdftoppm` not installed) and a first `pip install pypdf` attempt also failed (a
+  missing `_cffi_backend` broke its cryptography dependency) — installed `pymupdf` via pip (a local,
+  reversible text-extraction tool; no network-policy or infra change) and extracted the complete text
+  of all 35 pages. Result: the WebSearch synthesis had attributed a "62% find it hard to visualize
+  furniture in their home" stat and a "78.65% cart abandonment rate" to this document as its own
+  findings — but grepping the full extracted text for every on-theme term (`visualiz`, `abandon`,
+  `paralysis`, `augmented`, `AR `, `chatbot`, `AI `, `personalized`, `78.6`) returns ZERO hits. The
+  real deck (1,501 U.S. respondents, Sept-Oct 2024, Provoke Insights' ninth-wave bi-annual
+  furniture-industry study) covers hybrid shopping behavior, social/review influence, and
+  category-level in-store-vs-online purchase splits — nothing about visualization difficulty, cart
+  abandonment, or AI features. **Confirmed MISATTRIBUTION**, not a data point: the third time this
+  project's research has caught a search-engine synthesis attributing a specific quantified claim to
+  a named real source that, on direct primary-source verification, never made it (a Havenly App Store
+  quote, Run 26; a Wayfair AR-returns stat, Run 22; now this). Recorded in `docs/growth/GROWTH_STATUS.md`
+  (validation block + `demand_signal.method_note`) so a future run does not re-attempt the same PDF
+  expecting a different result.
+- **`docs/growth/GROWTH_STATUS.md` update:** bumped `as_of` to 2026-08-21; refreshed the
+  `internal_metrics_api`/`web_research`/`gtm_scorecard` validation entries with the 27th probe result
+  and the direct scorecard re-verification; added the Run 27 `demand_signal.method_note` entry (kept
+  Run 26's entry intact below it, per this doc's append-only-history practice); refreshed
+  `learnings`/`next_actions`/`owner_blockers` for the 27th consecutive circuit-breaker run. Ran
+  `node scripts/validate-gtm.mjs` (OK) and `node scripts/validate-computation.mjs` (12 figures, all
+  PASS), plus a direct `js-yaml` parse of the fenced block to confirm it is still valid YAML after
+  these edits.
+
+### What we did NOT do (and why)
+- Did not pull real funnel metrics: no reachable source, re-confirmed this run (27th probe, same 502
+  signature). Correctly stayed 0/null.
+- Did not attempt outreach: `site_gate_up: false` AND `ship_gate_met: false` (QUALITY_SCORECARD) —
+  both S6 lanes stay hard-off. Zero outreach drafts this run, correct.
+- Did not touch `ROADMAP.md` / `VISION.md` / `docs/BUSINESS_CASE.md`: no new data this run clears the
+  S3 bar for a steer — the demand-signal work this run was a misattribution correction (removing a
+  claim that was never actually there to begin with), not new evidence in either direction; re-verified
+  zero commits touched any GTM-owned marketing doc, ROADMAP, or VISION since Run 26 beyond this run's
+  own edit (see "What we found" above for the full commit-range check).
+- Did not re-attempt the ASO keyword change: still blocked on unverifiable App Store Connect Search
+  Ads data; no new information since Run 3.
+- Did not spawn a maker != checker reviewer: this run's edits are a research no-op (a dispositive
+  honest negative — no new claim was added to any doc, an existing inconclusive flag was resolved to
+  "no") and a mechanical validation-block refresh (probe timestamps, a commit-range diff-check).
+  Neither meets GTM_STANDARD S3/S5's bar for a substantive change requiring independent review,
+  consistent with Runs 5/6/8/26's established precedent for routine dashboard-and-research updates.
+- Did not edit `PENDING_OPS.md`: no new owner action surfaced — the misattribution finding isn't
+  owner-actionable, it's a research-integrity correction.
+
+### Lessons learned
+- **"Could not be parsed with this sandbox's tooling" is a claim worth re-testing, not just
+  inheriting.** Run 26 left the Provoke Insights PDF as a genuinely-inconclusive flag rather than a
+  negative, specifically because PDF extraction wasn't available at the time. This run found that a
+  simple, reversible `pip install pymupdf` (after the Read tool's native PDF path and a first
+  `pypdf` attempt both failed for unrelated reasons — missing `pdftoppm`, then a broken `cryptography`
+  binding) closed the gap completely. Worth checking, in any future run that hits an "un-parseable in
+  this sandbox" wall, whether a lightweight local tool install actually resolves it before accepting
+  the limitation as permanent.
+- **A "found nothing" result on a primary-source check is not the same as "no signal" — it can be a
+  positive finding in its own right.** This run didn't add a demand-signal data point, but it
+  converted an open, ambiguous flag into a closed, dispositive one, and caught a third instance of a
+  real, recurring failure mode (WebSearch-synthesis misattribution) worth treating as a durable
+  project-wide rule now, not a one-off caution restated each time it recurs.
+- **Verifying "unchanged" claims about external scorecards directly, every run, is cheap insurance
+  against exactly the kind of miss Run 25 called out in Run 24 ("routine verification crowded out
+  actually reading the file closely enough to notice it had moved").** This run re-grepped both
+  scorecards' live content rather than trusting Run 26's own conclusion, and confirmed it — a small,
+  repeatable discipline worth keeping as the default rather than an occasional gut-check.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-26? YES — circuit breaker remains FIRED (Run 27, 27th consecutive
+  run, ~55 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run
+  re-verified both external scorecards directly, confirmed no intervening commit needs a marketing-doc
+  reconciliation, and closed out the one open research item from Run 26 with a dispositive
+  misattribution finding — a quiet, honest run with no fabricated progress and no new owner action
+  required.
