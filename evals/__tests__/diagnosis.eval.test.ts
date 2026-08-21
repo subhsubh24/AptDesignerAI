@@ -155,4 +155,23 @@ describe("room-diagnosis live evals — run with RUN_EVALS=1", () => {
     },
     EVAL_TIMEOUT_MS,
   );
+
+  it.skipIf(!evalsEnabled())(
+    "bedroom-dark-jewel-tone-moody: first dark/jewel-tone fixture — recognizes a deep, saturated palette instead of defaulting to warm/neutral",
+    async () => {
+      const gold = cases.find((c) => c.id === "bedroom-dark-jewel-tone-moody");
+      expect(gold, "bedroom-dark-jewel-tone-moody fixture missing").toBeTruthy();
+      if (!gold) return;
+
+      const data = await runGoldCase(gold);
+      const flat = flattenDiagnosisOutput(data);
+      const verdict = scoreAgainstExpectations(gold, flat);
+
+      expect(
+        verdict.passed,
+        `eval failures for ${gold.id}: ${verdict.failures.join("; ")}`,
+      ).toBe(true);
+    },
+    EVAL_TIMEOUT_MS,
+  );
 });
