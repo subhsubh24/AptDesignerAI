@@ -249,7 +249,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold mb-3">Contact</h2>
             <p className="text-muted-foreground">
               Questions or data requests? Email{" "}
-              <a href="mailto:hello@aptdesignerai.com" className="text-accent-warm font-medium hover:underline">
+              <a href="mailto:hello@aptdesignerai.com" className="text-accent-warm font-medium hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 hello@aptdesignerai.com
               </a>
               .

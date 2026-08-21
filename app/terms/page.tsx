@@ -87,7 +87,7 @@ export default function TermsPage() {
               your account page; if it is temporarily unavailable, email{" "}
               <a
                 href="mailto:hello@aptdesignerai.com"
-                className="text-accent-warm font-medium hover:underline"
+                className="text-accent-warm font-medium hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 hello@aptdesignerai.com
               </a>{" "}
@@ -125,7 +125,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold mb-3">9. Contact</h2>
             <p className="text-muted-foreground">
               Questions? Reach us at{" "}
-              <a href="mailto:hello@aptdesignerai.com" className="text-accent-warm font-medium hover:underline">
+              <a href="mailto:hello@aptdesignerai.com" className="text-accent-warm font-medium hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 hello@aptdesignerai.com
               </a>
               .
