@@ -76,7 +76,7 @@ export default function SupportPage() {
               <p className="text-sm font-medium mt-3">
                 <a
                   href="mailto:hello@aptdesignerai.com"
-                  className="text-accent-warm hover:underline"
+                  className="text-accent-warm hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   hello@aptdesignerai.com
                 </a>

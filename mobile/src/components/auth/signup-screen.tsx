@@ -116,6 +116,7 @@ export function SignupScreen({ onLogin }: SignupScreenProps) {
             </ThemedText>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Go to sign in"
               style={({ pressed }) => [
                 styles.primaryButton,
                 { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 },

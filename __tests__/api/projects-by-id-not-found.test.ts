@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetUser = vi.fn();
 const mockSingle = vi.fn();
+const selectCalls: string[] = [];
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
@@ -17,7 +18,10 @@ vi.mock("@/lib/supabase/server", () => ({
     from: vi.fn(() => {
       const builder: Record<string, unknown> = {};
       const chain = () => builder;
-      builder.select = chain;
+      builder.select = (cols: string) => {
+        selectCalls.push(cols);
+        return builder;
+      };
       builder.eq = chain;
       builder.single = mockSingle;
       return builder;
@@ -34,6 +38,7 @@ function ctx(projectId = "proj-missing") {
 beforeEach(() => {
   mockGetUser.mockReset();
   mockSingle.mockReset();
+  selectCalls.length = 0;
   mockGetUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
 });
 afterEach(() => vi.restoreAllMocks());
@@ -84,5 +89,16 @@ describe("GET /api/projects/[projectId]", () => {
     const res = await GET(new Request("http://localhost/api/projects/proj-1"), ctx("proj-1"));
     expect(res.status).toBe(401);
     expect(mockSingle).not.toHaveBeenCalled();
+  });
+
+  // Regression guard: the route used to select("*, rooms(*)") — every project
+  // column plus the full rooms relation — even though the sole consumer (the
+  // focus page's preload) only reads `building_research`. A silent revert to
+  // the wide select would re-bloat this hot per-navigation payload without
+  // any other test catching it.
+  it("selects only id + building_research, never the wide '*, rooms(*)' shape", async () => {
+    mockSingle.mockResolvedValue({ data: { id: "proj-1", building_research: null }, error: null });
+    await GET(new Request("http://localhost/api/projects/proj-1"), ctx("proj-1"));
+    expect(selectCalls).toEqual(["id, building_research"]);
   });
 });
