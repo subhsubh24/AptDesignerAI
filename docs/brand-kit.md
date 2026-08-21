@@ -106,8 +106,9 @@ Required sizes (export from SVG master):
 - Android adaptive background: 432 × 432 px PNG (solid fill or gradient)
 - Android monochrome: 432 × 432 px PNG (white on transparent)
 
-Current placeholder icons live in `mobile/assets/images/`. Replace with
-production-quality art before EAS Build for store submission.
+Production icons are committed in `mobile/assets/images/` (`icon.png` at
+1024×1024, plus the Android adaptive foreground/background/monochrome
+variants) — no longer placeholder.
 
 ---
 
