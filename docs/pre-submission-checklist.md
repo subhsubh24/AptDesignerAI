@@ -102,7 +102,7 @@ Run `grep -r "TODO\|placeholder\|lorem ipsum" mobile/app.json` — should return
 ## 8. Migrations applied to production
 
 - [ ] `supabase db push` run after each migration in `supabase/migrations/` not yet applied
-  - `supabase/migrations/` (currently through `029_grant_stripe_customers_access.sql`) is
+  - `supabase/migrations/` (currently through `033_design_profiles_saved_items_with_check.sql`) is
     the source of truth for *which* migrations exist; `supabase db push` applies every
     un-applied one in ascending order regardless of tracking. `PENDING_OPS.md` carries
     apply + verify notes for most of them (the `apply-migration-*` / `apply-migrations-*`
