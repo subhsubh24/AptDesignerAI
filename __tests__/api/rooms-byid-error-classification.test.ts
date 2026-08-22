@@ -116,4 +116,27 @@ describe("DELETE /api/rooms/[roomId] — ownership-check error classification", 
       expect.objectContaining({ code: "53300" }),
     );
   });
+
+  it("returns apiError when ownership succeeds but the delete query itself fails", async () => {
+    // First `.from("rooms")` call is the ownership check (resolves via `.single()`);
+    // the second is the actual delete (resolves via the chain's own `.then()`).
+    const ownershipStub = queryStub({ data: { id: "room-1" }, error: null });
+    const deleteStub = queryStub({ data: null, error: { code: "500", message: "connection reset" } });
+    mockCreateClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
+      from: vi.fn().mockReturnValueOnce(ownershipStub).mockReturnValueOnce(deleteStub),
+    });
+    const res = await DELETE(new Request("http://localhost/api/rooms/room-1"), params());
+    // `apiError()` logs internally via its own module-local `logServerError`
+    // (not the mocked re-export imported by route.ts), so the ownership-check
+    // sibling tests' `mockLogServerError` assertion doesn't apply here — this
+    // case exercises the delete query's `apiError` branch via the response
+    // shape instead, the thing route.ts's own `if (error) return apiError(...)`
+    // line is meant to produce.
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Something went wrong. Please try again.");
+    // The ownership check itself succeeded — no false-positive log from that step.
+    expect(mockLogServerError).not.toHaveBeenCalled();
+  });
 });

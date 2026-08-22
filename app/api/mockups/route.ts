@@ -655,7 +655,11 @@ RULES:
       .from("product_bundle_items")
       .select("candidate_products(*)")
       .eq("bundle_id", bundle_id);
-    if (bundleItemsError) logServerError("mockups.bundleItems", bundleItemsError);
+    // A real DB error here (timeout, RLS denial, connection error) must not be
+    // treated the same as "bundle legitimately has zero items" — that would
+    // return a misleading 400 "no products to render" instead of surfacing the
+    // actual failure, and would do so right before an expensive paid render.
+    if (bundleItemsError) return apiError("mockups.bundleItems", bundleItemsError);
     // A nested-join row whose candidate_products FK was deleted comes back as
     // null; unfiltered it derefs below (`products.map((p) => p.id)`) → an
     // uncaught 500 on a paid render path. Filter the nulls, and if the bundle
