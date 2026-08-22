@@ -9055,3 +9055,77 @@ identically)**: this container had zero `node_modules` at root AND in `mobile/` 
 **Lesson for future runs:** large "ahead" counts (`git rev-list --count default..branch`) on a long-abandoned branch are NOT evidence of real unmerged content once the repo's merge convention is squash — every stale branch keeps its own unsquashed local commit chain forever, while the equivalent work lands on default as a single differently-SHA'd, differently-worded squash commit. The signal that matters is "behind" (staleness) plus a targeted content check on the branch's most distinguishing commits, not "ahead" alone.
 
 **Gate.** No product/test/eval file touched this run — value came entirely from board + cross-routine PR hygiene (Linear comments/state, GitHub PR merge/close via MCP tools, one merge-commit rebase of someone else's PR branch verified with the full local gate before push). This bookkeeping PR touches only `IMPROVEMENT_LOG.md` + `docs/loop-memory.md`. No migration, no live secret, no `.claude/`/`.github/` edit. No ROADMAP Track/DoD checkbox ticked (board/PR hygiene is below Track-checkbox granularity). No fresh DEEP AUDIT this run — last full 8-lens was Run 179 (2026-08-20), and Run 183 (2026-08-21) ran a fresh 6-lens sweep, both within the ~24h/~4-run staleness window.
+
+## Run 2026-08-22 (Run 185) — APT-42 GTM ship-gate fix + rooms API error-classification fix
+
+**Board check.** Linear `Todo` was empty. `Backlog` triage: **APT-42** (High, ship-critical for
+the GTM readiness gate — GTM Auditor Run 7 self_validation_honesty/pmf_read_accuracy finding) was
+the clear top pick — unclaimed, no comments, cleanly scoped, runnable acceptance check. **APT-9**
+stays structurally barred (owner-only routine-prompt `update_trigger` edit, `created_via: "http_api"`
+permission error re-confirmed 08-15 by a prior run) — not re-derived, left in place. **APT-50**
+(harness-ratchet.test.ts `stripComments` string-literal bug) is also structurally blocked: its own
+state history shows a prior run claimed it and released it back to Backlog within 17 seconds on
+2026-08-20 on discovering the fix requires editing `__tests__/ai/harness-ratchet.test.ts`, a
+hard-guarded file per `AGENTS.md`'s brakes ("a hook blocks them") — re-confirmed this run by reading
+the issue's own "Why not fixed this run" section rather than re-attempting the same dead end.
+
+**APT-42 fix.** `docs/growth/GROWTH_STATUS.md`'s `pmf.unbuilt_disclosure` block claimed
+`activation_rate`/`retention_d1/d7/d30`/`organic_share_rate` all had "ZERO code path" in
+`lib/growth/metrics.ts`. This was stale: Product Factory PR #912 (APT-38, merged 2026-08-16) had
+already wired `computeActivationRate()`/`computeRollingRetention()` for 4 of the 5 fields, called
+from `gatherGrowthMetrics()` — they correctly stay `null` pre-launch (no cohort yet), but the
+self-report contradicted the actual code. A parallel `stripe_reporting` validation entry made the
+same stale claim about `churn_rate_30d` (now a real computed rate, `cancelled_30d / active_30d_ago`).
+Rewrote the disclosure text (not just re-dated it) to correctly describe the 4 fields as
+built-but-empty, leaving `organic_share_rate` and `mrr_usd` as the two genuinely unbuilt fields.
+**Reviewer A's first pass caught a real gap this session's own diff had missed**: a duplicate stale
+claim in the file's `next_actions` section, verbatim-repeating the "ZERO code path" line the
+`pmf.unbuilt_disclosure` fix had just corrected elsewhere in the same file — shipping without fixing
+it would have left the document self-contradicting. Also caught: a line-number citation pointing at
+`lib/growth/metrics.ts:53` (the `churn_rate_30d` TYPE declaration) instead of `:277` (the actual
+computation). Both fixed before merge; re-verified the YAML block still parses (`npx js-yaml` on the
+extracted fenced block) after each edit. **Reviewer B's scope question** — is it appropriate for the
+Product Factory to edit a doc whose header says "owned by the Growth Agent"? — was resolved as yes,
+narrowly: the correction only touches a factual claim about what code exists (not any Growth-Agent
+judgment call — funnel numbers, demand_signal confidence, experiment results all untouched), the
+error originated in the Product Factory's own earlier PR, and the fix is clearly attributed inline
+("CORRECTED ... by the Product Factory (APT-42)") so provenance stays traceable. **Lesson for future
+runs touching cross-routine-owned docs:** a narrow, cited, provenance-tagged factual correction is
+in scope even when the file's stated owner is a different routine — but grep the WHOLE file for the
+stale claim's exact wording before shipping, not just the one location the filing issue named; stale
+claims travel in more than one place once a doc has been edited across many runs.
+
+**Rooms API fix.** A background scout (read-only discovery, no code) found a real, previously-missed
+instance of this codebase's recurring discarded-Supabase-error bug class (tracked historically as
+APT-15/16/17/25/28 and others): `app/api/rooms/[roomId]/route.ts`'s PATCH and DELETE ownership-check
+queries discarded `error`, silently collapsing a genuine DB failure (timeout, RLS denial, connection
+error) into the same 404 as a legitimate not-found/not-owned room, with nothing logged server-side.
+The sibling file `app/api/rooms/[roomId]/diagnosis/route.ts` had already been fixed for the identical
+pattern — ported the same fix (capture `error`, `logServerError` unless `PGRST116`) plus a new
+regression test file (`__tests__/api/rooms-byid-error-classification.test.ts`, 4 tests) mirroring the
+sibling test's mock/queryStub structure. Both reviewers APPROVE first cycle. Filed **APT-58** (Low,
+non-blocking) for a gap Reviewer A noted: the new test's DELETE-query-error branch (the delete itself
+failing, distinct from the ownership check) isn't directly exercised — a real but minor coverage gap,
+not a defect in what ships.
+
+**Single-branch mid-run complication.** This session's harness pins development to one designated
+branch (`claude/sleepy-goldberg-lpm0pn`) rather than the routine's usual one-branch-per-change model.
+Auto-merge fired on the first PR (#965, APT-42 fix) mid-session, WHILE the second commit (the rooms
+fix) was still being written — the second `git push` landed on a branch whose PR had already merged
+and closed with only the first commit squashed in. Recovered cleanly: fetched the updated default
+branch, `git rebase --onto origin/<default> <first-commit-sha> <branch>` to replay only the
+second commit onto the new base, force-with-lease pushed (safe — sole owner of this branch, no one
+else pushing to it), re-ran the full gate on the rebased result, and opened a fresh PR (#966) for the
+surviving commit. **Lesson for future single-branch-constrained runs:** check the PR's merge state
+with `pull_request_read (method: get)` — not just `get_status`, which can report stale/cached
+data — immediately after each push if a second logically-distinct change is still in flight on the
+same branch, since auto-merge can fire between review and the next push.
+
+**Gate.** `npx tsc --noEmit` clean; `npm test` 3143 passed / 17 skipped (0 regressions vs. the prior
+3139/16, net +4 from the new rooms test file); `npx eslint` clean on all touched files; `npm run
+check:determinism` clean. Both PRs' required CI checks (`verify`, `build`, `mobile`, `lint`,
+`security-invariants`, `validate-gtm`, `journeys`) green; both auto-merged. No ROADMAP Track/DoD
+checkbox ticked (a doc-accuracy fix and an error-observability fix are both sub-Track-checkbox
+granularity, same class as prior runs' discarded-error sweeps). No migration, no live secret, no
+`.claude/`/`.github/` edit. Last full DEEP AUDIT was Run 183 (2026-08-21, one run prior) — not yet
+stale by the ~24h/~4-run threshold, so none run this session.
