@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { scoreProduct } from "@/lib/agents/fit-scorer";
@@ -99,6 +99,16 @@ export async function POST(request: Request) {
       .eq("project_id", room.project_id)
       .neq("id", room_id),
   ]);
+  // diagnosisRes is a .single() over "latest diagnosis for this room" — a room
+  // with no diagnosis yet legitimately 0-rows (PGRST116), not a failure; only
+  // log it when it's a real DB error, matching this codebase's established
+  // .single()-optional-row convention (see app/api/rooms/[roomId]/route.ts).
+  if (projectRes.error) logServerError("products.evaluate.project", projectRes.error);
+  if (diagnosisRes.error && diagnosisRes.error.code !== "PGRST116") {
+    logServerError("products.evaluate.diagnosis", diagnosisRes.error);
+  }
+  if (otherRoomsRes.error) logServerError("products.evaluate.otherRooms", otherRoomsRes.error);
+
   const project = projectRes.data;
   const diagnosis = diagnosisRes.data;
   const otherRooms = otherRoomsRes.data;

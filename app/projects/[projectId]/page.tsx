@@ -34,6 +34,8 @@ export default async function ProjectPage({
     .from("projects")
     .select("*, rooms(*)")
     .eq("id", projectId)
+    .order("created_at", { referencedTable: "rooms", ascending: false })
+    .limit(100, { referencedTable: "rooms" })
     .single();
 
   if (error || !project) notFound();

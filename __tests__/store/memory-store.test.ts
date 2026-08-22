@@ -59,3 +59,49 @@ describe("memory-store QueryBuilder.single()", () => {
     expect(error).toBeNull();
   });
 });
+
+/**
+ * APT-51: `resolveRelations()`'s `relationPattern` only matches a top-level
+ * `table(...)` whose OWN content has no nested parens — so an outer relation
+ * like `product_bundle_items(*, candidate_products(...))` (GET /api/bundles'
+ * real select string) was never assigned onto the parent row at all, and the
+ * nested-attachment pass silently no-opped on the missing key. Reproduces the
+ * exact production select shape as a permanent regression test.
+ */
+describe("memory-store resolveRelations() nested embeds", () => {
+  it("resolves an outer relation whose own content contains a nested table(...) call", async () => {
+    const client = createMemoryClient();
+
+    const { data: room } = await client.from("rooms").insert({ name: "Test Room" }).select().single();
+    const { data: bundle } = await client
+      .from("product_bundles")
+      .insert({ room_id: room.id, name: "Test Bundle" })
+      .select()
+      .single();
+    const { data: product } = await client
+      .from("candidate_products")
+      .insert({ room_id: room.id, title: "Test Sofa" })
+      .select()
+      .single();
+    await client
+      .from("product_bundle_items")
+      .insert({ bundle_id: bundle.id, product_id: product.id, category: "sofa" });
+    await client.from("bundle_evaluations").insert({ bundle_id: bundle.id });
+
+    const { data, error } = await client
+      .from("product_bundles")
+      .select("*, product_bundle_items(*, candidate_products(id, title)), bundle_evaluations(*)")
+      .eq("id", bundle.id)
+      .single();
+
+    expect(error).toBeNull();
+    expect(Array.isArray(data.product_bundle_items)).toBe(true);
+    expect(data.product_bundle_items).toHaveLength(1);
+    expect(data.product_bundle_items[0].candidate_products).toBeTruthy();
+    expect(data.product_bundle_items[0].candidate_products.id).toBe(product.id);
+    expect(data.product_bundle_items[0].candidate_products.title).toBe("Test Sofa");
+    // The sibling flat relation on the same select string must keep working.
+    expect(Array.isArray(data.bundle_evaluations)).toBe(true);
+    expect(data.bundle_evaluations).toHaveLength(1);
+  });
+});

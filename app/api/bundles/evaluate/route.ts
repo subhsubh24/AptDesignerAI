@@ -43,12 +43,15 @@ export async function POST(request: Request) {
   if (!bundle_id) return NextResponse.json({ error: "bundle_id required" }, { status: 400 });
 
   // Fetch bundle with items
-  const { data: bundle } = await supabase
+  const { data: bundle, error: bundleError } = await supabase
     .from("product_bundles")
     .select("*, product_bundle_items(*, candidate_products(*))")
     .eq("id", bundle_id)
     .single();
 
+  if (bundleError && bundleError.code !== "PGRST116") {
+    logServerError("bundles.evaluate.bundle", bundleError);
+  }
   if (!bundle) return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
 
   // Ownership guard BEFORE the (paid) bundle evaluation: bundle_id is
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
   // Room (with images) and the latest diagnosis both key only on bundle.room_id
   // and are independent of each other — fetch them together. Fixed-position
   // destructure keeps the result mapping deterministic.
-  const [{ data: room }, { data: diagnosis }] = await Promise.all([
+  const [{ data: room, error: roomError }, { data: diagnosis, error: diagnosisError }] = await Promise.all([
     supabase
       .from("rooms")
       .select("*, room_images(*)")
@@ -92,6 +95,17 @@ export async function POST(request: Request) {
       .limit(1)
       .single(),
   ]);
+
+  // PGRST116 ("no rows") is a legitimate empty state on both — a bundle whose
+  // room was deleted mid-flow, or a room with no diagnosis yet — not a
+  // failure; only log genuine DB errors, matching this codebase's established
+  // .single()-optional-row convention (app/api/rooms/[roomId]/route.ts).
+  if (roomError && roomError.code !== "PGRST116") {
+    logServerError("bundles.evaluate.room", roomError);
+  }
+  if (diagnosisError && diagnosisError.code !== "PGRST116") {
+    logServerError("bundles.evaluate.diagnosis", diagnosisError);
+  }
 
   const roomImageUrls = (room?.room_images || []).map((img: { image_url: string }) => img.image_url);
 

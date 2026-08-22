@@ -178,24 +178,3 @@ export function ScrollReveal({ children, className, delay = 0 }: ScrollRevealPro
   );
 }
 
-interface ScrollStaggerProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-export function ScrollStagger({ children, className }: ScrollStaggerProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-40px" });
-
-  return (
-    <motion.div
-      ref={ref}
-      variants={staggerContainer}
-      initial="hidden"
-      animate={inView ? "visible" : "hidden"}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}

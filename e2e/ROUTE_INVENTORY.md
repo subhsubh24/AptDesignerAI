@@ -2,8 +2,8 @@
 
 Records runtime functional coverage: which routes/flows have a spec, the **intended
 outcome** it asserts (not `status < 400`), and what is still uncovered. It does NOT
-claim every route is covered — **20 of the 35 `app/**/page.tsx` routes appear in the
-table below**, and all 15 that do not are listed under "Tracked gaps" so the
+claim every route is covered — **22 of the 35 `app/**/page.tsx` routes appear in the
+table below**, and all 13 that do not are listed under "Tracked gaps" so the
 shortfall is counted rather than implied away. (Counts derived from
 `find app -name page.tsx` against the backticked paths in the table; if you edit
 either, re-derive rather than adjusting by hand — a hand-count is how the previous
@@ -48,6 +48,8 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
 | `/login` (logged in) | authed | redirects to `/dashboard` | ✅ |
 | `/account` (logged in) | authed | renders real screen; no boundary | ✅ |
 | `/billing/upgrade?tier=pro` | authed | real checkout entry renders; no boundary | ✅ |
+| `/billing/checkout-cancel` | public | "No charge was made" heading + a "Back to pricing" link | ✅ |
+| `/billing/checkout-success` (logged out) | public | falls to the honest "Finalizing your upgrade…" state, NEVER the confirmed "Welcome to Pro" copy (SIDE-EFFECT INTEGRITY — no fake upgrade claim without a real entitlement) | ✅ |
 
 ## Tracked gaps (next coverage to add — listed honestly, not silently skipped)
 - **Full core pipeline E2E** (photo upload → area-analysis → diagnosis → product sourcing →
@@ -65,12 +67,11 @@ Suite: `e2e/journeys.spec.ts` · helpers: `e2e/helpers/seed.ts` · runner: `scri
   smoke check. `focus` is **not** in that scan and has no coverage of any kind: opening it
   starts the room-analysis pipeline, so scanning it would be slow and dependent on live LLM
   behaviour (`journeys.spec.ts:271-273`).
-- **The 15 routes absent from the table**, in full, so the number above is checkable:
+- **The 13 routes absent from the table**, in full, so the number above is checkable:
   - marketing / content (1): `/picks`
   - product (9): `/projects/[projectId]`, `/projects/[projectId]/rooms/[roomId]`, and the seven
     per-room routes above (`setup`, `focus`, `diagnosis`, `products`, `bundles`, `mockups`,
     `compare`) — six a11y-scanned, none functionally asserted
-  - billing outcomes (2): `/billing/checkout-success`, `/billing/checkout-cancel`
   - sharing / waitlist (3): `/saved/[id]`, `/shared/[token]`, `/waitlist/confirmed`
 
 ## Human-only (cannot run headlessly — verify manually, never assume working)

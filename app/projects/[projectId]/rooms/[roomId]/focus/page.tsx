@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -49,6 +50,7 @@ import { cn } from "@/lib/utils/cn";
 import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/components/ui/toast";
 import { buildRoomDimensionMap, lookupRoomDimension } from "@/lib/floor-plan/room-dimensions";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -1024,8 +1026,12 @@ export default function FocusPage() {
                                 className="w-full h-full relative group"
                                 onClick={() => setExpandedMockup(isExpanded ? null : item.category)}
                               >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={mockupUrl} alt={`Preview: ${item.category}`} className="w-full h-full object-cover" />
+                                {canOptimizeImageHost(mockupUrl) ? (
+                                  <Image src={mockupUrl} alt={`Preview: ${item.category}`} fill sizes="80px" className="object-cover" />
+                                ) : (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={mockupUrl} alt={`Preview: ${item.category}`} className="w-full h-full object-cover" />
+                                )}
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                                   <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
                                 </div>
@@ -1044,9 +1050,21 @@ export default function FocusPage() {
                         {/* Expanded mockup view */}
                         {isExpanded && mockupUrl && (
                           <div className="px-3 pb-3">
-                            <div className="relative rounded-lg overflow-hidden border">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={mockupUrl} alt={`${item.search_title || item.category} in your room`} className="w-full h-auto" />
+                            {/* generateItemMockup always requests aspect_ratio: "1:1", so the
+                                container's true aspect is known, not guessed. */}
+                            <div className="relative aspect-square rounded-lg overflow-hidden border">
+                              {canOptimizeImageHost(mockupUrl) ? (
+                                <Image
+                                  src={mockupUrl}
+                                  alt={`${item.search_title || item.category} in your room`}
+                                  fill
+                                  sizes="(min-width: 1024px) 920px, 100vw"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={mockupUrl} alt={`${item.search_title || item.category} in your room`} className="w-full h-full object-cover" />
+                              )}
                               <button
                                 type="button"
                                 aria-label="Close expanded image"
@@ -1113,7 +1131,7 @@ export default function FocusPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="View design vision full size"
-                      className="relative rounded-xl overflow-hidden border cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="relative aspect-video rounded-xl overflow-hidden border cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => setShowVisionOverlay(true)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -1122,8 +1140,21 @@ export default function FocusPage() {
                         }
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={visionUrl} alt="Design vision preview" className="w-full h-auto" />
+                      {/* The vision-mode /api/mockups call never sends aspect_ratio, so it
+                          renders at IMAGE_GENERATION_CONFIG.defaultAspectRatio (16:9) —
+                          aspect-video above matches that real default, not a guess. */}
+                      {canOptimizeImageHost(visionUrl) ? (
+                        <Image
+                          src={visionUrl}
+                          alt="Design vision preview"
+                          fill
+                          sizes="(min-width: 1024px) 944px, 100vw"
+                          className="object-cover"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={visionUrl} alt="Design vision preview" className="w-full h-full object-cover" />
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                         <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium bg-black/60 px-3 py-1.5 rounded-full">
                           View full size
@@ -1648,9 +1679,13 @@ function ImageOverlay({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in-up">
       <div className="max-w-4xl w-full bg-background rounded-2xl overflow-hidden shadow-2xl">
-        <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
+        <div className="relative aspect-video">
+          {canOptimizeImageHost(imageUrl) ? (
+            <Image src={imageUrl} alt={title} fill sizes="(min-width: 896px) 896px, 100vw" className="object-cover" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={title} className="w-full aspect-video object-cover" />
+          )}
           <button
             type="button"
             aria-label="Close"
@@ -1806,8 +1841,14 @@ function RecommendationTable({
                 return (
                   <div key={tier} className="flex items-center gap-3 p-2 rounded-xl bg-muted/30">
                     {product.image_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.image_url} alt={product.title || "Product image"} className="h-12 w-12 rounded object-cover shrink-0" />
+                      <div className="relative h-12 w-12 rounded overflow-hidden shrink-0">
+                        {canOptimizeImageHost(product.image_url) ? (
+                          <Image src={product.image_url} alt={product.title || "Product image"} fill sizes="48px" className="object-cover" />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={product.image_url} alt={product.title || "Product image"} className="h-full w-full object-cover" loading="lazy" />
+                        )}
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -1886,8 +1927,14 @@ function TierCell({ product, tier }: { product: ProductResult | null; tier: Pric
     <td className="px-4 py-3">
       <div className="flex flex-col items-center gap-1 text-center">
         {product.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image_url} alt={product.title || "Product image"} className="h-10 w-10 rounded object-cover" />
+          <div className="relative h-10 w-10 rounded overflow-hidden">
+            {canOptimizeImageHost(product.image_url) ? (
+              <Image src={product.image_url} alt={product.title || "Product image"} fill sizes="40px" className="object-cover" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.image_url} alt={product.title || "Product image"} className="h-full w-full object-cover" loading="lazy" />
+            )}
+          </div>
         )}
         <span className={cn("text-xs font-semibold", tierColorClass)}>
           {product.price ? `$${product.price}` : "—"}

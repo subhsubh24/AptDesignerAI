@@ -15,6 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logServerError } from "@/lib/utils/api-error";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
@@ -89,11 +90,12 @@ export async function GET(request: NextRequest) {
   const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
   if (getOwnership) return getOwnership;
 
-  const { data: messages } = await supabase
+  const { data: messages, error: messagesError } = await supabase
     .from("refine_messages")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: true });
+  if (messagesError) logServerError("refine-chat.messages", messagesError);
 
   return NextResponse.json({ messages: messages || [] });
 }
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
 
   // Independent reads (both keyed only on room_id, no dependency between
   // them) — parallelized to save one DB round-trip per refine turn.
-  const [{ data: room }, { data: latestDiagnosis }] = await Promise.all([
+  const [{ data: room, error: roomError }, { data: latestDiagnosis, error: latestDiagnosisError }] = await Promise.all([
     supabase.from("rooms").select("*").eq("id", room_id).single(),
     supabase
       .from("room_diagnoses")
@@ -143,6 +145,8 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle(),
   ]);
+  if (roomError) logServerError("area-analysis.refine-chat.room", roomError);
+  if (latestDiagnosisError) logServerError("area-analysis.refine-chat.latestDiagnosis", latestDiagnosisError);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   if (!latestDiagnosis) {
@@ -180,12 +184,13 @@ export async function POST(request: NextRequest) {
   try {
     // Gather every refinement request (the just-inserted message included) so
     // the re-analysis reflects the full conversation, not just the last line.
-    const { data: allUserMsgs } = await supabase
+    const { data: allUserMsgs, error: allUserMsgsError } = await supabase
       .from("refine_messages")
       .select("content")
       .eq("room_id", room_id)
       .eq("role", "user")
       .order("created_at", { ascending: true });
+    if (allUserMsgsError) logServerError("area-analysis.refine-chat.allUserMsgs", allUserMsgsError);
 
     const directions: string[] = (allUserMsgs || [])
       .map((m: { content: string }) => (m.content || "").trim())

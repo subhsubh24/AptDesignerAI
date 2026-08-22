@@ -27,6 +27,15 @@ export async function GET(request: Request) {
     roomsQuery = roomsQuery.eq("project_id", projectId);
   }
 
+  // Bound the owned-rooms fetch — unbounded today at realistic project sizes,
+  // but this scans every project the user owns with no ceiling (APT-41).
+  // Explicit .order() is required alongside .limit(): Postgres/PostgREST give
+  // no ordering guarantee without one, so an unordered .limit() would silently
+  // (and non-deterministically) drop an arbitrary subset of rooms once a user
+  // exceeds the cap. Newest-first so a recently added room is never the one
+  // dropped in favor of an older one.
+  roomsQuery = roomsQuery.order("created_at", { ascending: false }).limit(100);
+
   const { data: rooms, error: roomsError } = await roomsQuery;
   if (roomsError) return apiError("picks", roomsError);
   if (!rooms?.length) return NextResponse.json([]);
@@ -39,9 +48,12 @@ export async function GET(request: Request) {
     ])
   );
 
+  // Narrowed to only the columns app/picks/page.tsx's PickProduct interface
+  // reads — description/dimensions/materials/colors/metadata/etc. are never
+  // rendered on this cross-room list page. See APT-54 (follow-up to APT-48).
   const { data: products, error: prodError } = await supabase
     .from("candidate_products")
-    .select("*, product_evaluations(*)")
+    .select("id, title, category, price, image_url, product_url, status, room_id, product_evaluations(final_item_score)")
     .in("room_id", roomIds)
     .in("status", ["shortlisted", "accepted"])
     .order("created_at", { ascending: false })

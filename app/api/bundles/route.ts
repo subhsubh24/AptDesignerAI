@@ -18,9 +18,18 @@ export async function GET(request: Request) {
 
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 100, maxLimit: 300 });
 
+  // Nested embeds narrowed to only the columns the client actually reads
+  // (bundles/page.tsx) — candidate_products(*) and bundle_evaluations(*) were
+  // pulling every column (description, metadata, dimensions, colors,
+  // materials, reasoning, ...) on every item of every bundle. See APT-48.
   const { data, error } = await supabase
     .from("product_bundles")
-    .select("*, product_bundle_items(*, candidate_products(*)), bundle_evaluations(*)")
+    .select(
+      "*, product_bundle_items(*, candidate_products(id, title, category, image_url, price)), " +
+        "bundle_evaluations(final_bundle_score, palette_harmony_score, material_balance_score, " +
+        "scale_balance_score, style_consistency_score, room_completion_score, practicality_score, " +
+        "analysis, room_vibe)",
+    )
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);

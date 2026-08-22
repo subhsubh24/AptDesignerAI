@@ -22,6 +22,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
 import { sanitizeUserContext } from "@/lib/utils/sanitize-prompt";
 import { createLogger } from "@/lib/logging/logger";
+import { logServerError } from "@/lib/utils/api-error";
 import { withTrace } from "@/lib/observability/tracing";
 import { runWithMarginSession } from "@/lib/observability/margin-context";
 import type { AgentContext } from "@/lib/agents/types";
@@ -98,12 +99,13 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
   if (postOwnership) return postOwnership;
 
   // Fetch room + images
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
 
+  if (roomError) logServerError("diagnosis.room", roomError);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   const imageUrls = (room.room_images || []).map((img: { image_url: string }) => img.image_url);
@@ -173,22 +175,24 @@ async function handleDiagnosisPost(supabase: any, userId: string, room_id: unkno
   // considers palettes/materials already chosen for sibling rooms.
   let otherRoomsContext: string | undefined;
   if (project) {
-    const { data: otherRooms } = await supabase
+    const { data: otherRooms, error: otherRoomsError } = await supabase
       .from("rooms")
       .select("id, name, room_type")
       .eq("project_id", room.project_id)
       .neq("id", room_id);
+    if (otherRoomsError) logServerError("diagnosis.otherRooms", otherRoomsError);
     if (otherRooms && otherRooms.length > 0) {
       // 90-day freshness window — palette/material choices older than that
       // reflect a prior user preference that has likely evolved. Falling back
       // to stale sibling context pulls the current room toward a direction
       // the user no longer wants.
       const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: otherDiagnoses } = await supabase
+      const { data: otherDiagnoses, error: otherDiagnosesError } = await supabase
         .from("room_diagnoses")
         .select("room_id, design_direction_json, created_at")
         .in("room_id", otherRooms.map((r: { id: string }) => r.id))
         .gte("created_at", staleCutoff);
+      if (otherDiagnosesError) logServerError("diagnosis.otherDiagnoses", otherDiagnosesError);
       const otherRoomSummaries: string[] = [];
       for (const otherRoom of otherRooms) {
         const otherDiag = otherDiagnoses?.find(

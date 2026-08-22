@@ -74,11 +74,13 @@ export async function POST(request: Request) {
   if (postOwnership) return postOwnership;
 
   // Fetch room + images
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
+
+  if (roomError && roomError.code !== "PGRST116") logServerError("diagnosis.stream.room", roomError);
 
   if (!room) {
     return new Response(JSON.stringify({ error: "Room not found" }), { status: 404 });
@@ -160,21 +162,23 @@ export async function POST(request: Request) {
         // Build cross-room coherence context
         let otherRoomsContext: string | undefined;
         if (project) {
-          const { data: otherRooms } = await supabase
+          const { data: otherRooms, error: otherRoomsError } = await supabase
             .from("rooms")
             .select("id, name, room_type")
             .eq("project_id", room.project_id)
             .neq("id", room_id);
+          if (otherRoomsError) logServerError("diagnosis.stream.otherRooms", otherRoomsError);
           if (otherRooms && otherRooms.length > 0) {
             // 90-day freshness window — stale sibling palettes from months ago
             // pull the current direction toward preferences the user has since
             // evolved past.
             const staleCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-            const { data: otherDiagnoses } = await supabase
+            const { data: otherDiagnoses, error: otherDiagnosesError } = await supabase
               .from("room_diagnoses")
               .select("room_id, design_direction_json, created_at")
               .in("room_id", (otherRooms as Array<{ id: string }>).map((r) => r.id))
               .gte("created_at", staleCutoff);
+            if (otherDiagnosesError) logServerError("diagnosis.stream.otherDiagnoses", otherDiagnosesError);
             const otherRoomSummaries: string[] = [];
             for (const otherRoom of otherRooms) {
               const otherDiag = otherDiagnoses?.find(

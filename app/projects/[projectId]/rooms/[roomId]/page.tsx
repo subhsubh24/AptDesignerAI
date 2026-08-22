@@ -15,8 +15,10 @@ import {
   ChevronRight,
   CheckCircle2,
 } from "lucide-react";
+import Image from "next/image";
 import { RoomImageGallery } from "@/components/rooms/room-image-gallery";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 const ROOM_TYPE_LABELS: Record<string, string> = {
   living_room: "Living Room",
@@ -152,13 +154,24 @@ export default async function RoomPage({
         {/* Room hero banner */}
         {hasImages && room.room_images[0]?.image_url && (
           <div className="relative rounded-2xl overflow-hidden mb-6 shadow-warm-sm">
-            <div className="aspect-[21/9] w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={room.room_images[0].image_url}
-                alt={room.name}
-                className="w-full h-full object-cover"
-              />
+            <div className="relative aspect-[21/9] w-full">
+              {canOptimizeImageHost(room.room_images[0].image_url) ? (
+                <Image
+                  src={room.room_images[0].image_url}
+                  alt={room.name}
+                  fill
+                  sizes="(min-width: 896px) 896px, 100vw"
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={room.room_images[0].image_url}
+                  alt={room.name}
+                  className="w-full h-full object-cover"
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
             </div>
             <div className="absolute bottom-0 left-0 right-0 p-6">

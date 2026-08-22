@@ -35,13 +35,58 @@ const MAX_RAW_IMG = 30;
 
 /**
  * Strip block + line comments so a `<img>` mentioned in prose (a code comment
- * that discusses img tags) is not miscounted as a real element. Mirrors the
- * stripComments helper in __tests__/ai/harness-ratchet.test.ts.
+ * that discusses img tags) is not miscounted as a real element.
+ *
+ * Tracks string-literal state (single/double/backtick) so a literal `/*`
+ * inside a string is never mistaken for a comment opener. A naive
+ * `/\*[\s\S]*?\*\//` replace is fooled by exactly this: this codebase has an
+ * `accept: { "image/*": [...] }` MIME-type string, and the lazy regex paired
+ * that stray `/*` with the next INCIDENTAL `*\/` later in the file (an
+ * unrelated JSX comment), silently deleting every real line in between —
+ * including a genuine `<img>` element — and undercounting the true total by
+ * 1. A ratchet whose own counter can be defeated by an ordinary string
+ * literal is worse than no ratchet: a new raw `<img>` could land inside a
+ * similarly-swallowed range and never trip the ceiling.
  */
 function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments (incl. JSDoc)
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1"); // line comments, preserving URLs (://)
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  let inString: string | null = null;
+  while (i < n) {
+    const c = src[i];
+    const c2 = src[i + 1];
+    if (inString) {
+      out += c;
+      if (c === "\\" && i + 1 < n) {
+        out += src[i + 1];
+        i += 2;
+        continue;
+      }
+      if (c === inString) inString = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      inString = c;
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === "/" && c2 === "*") {
+      const end = src.indexOf("*/", i + 2);
+      i = end === -1 ? n : end + 2;
+      continue;
+    }
+    if (c === "/" && c2 === "/") {
+      const end = src.indexOf("\n", i + 2);
+      i = end === -1 ? n : end; // keep the newline so line numbers stay meaningful
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }
 
 function walk(dir: string): string[] {
@@ -97,5 +142,30 @@ describe("raw <img> usage ratchet (perf: next/image adoption)", () => {
       `Raw <img> count is ${total} but the ratchet still allows ${MAX_RAW_IMG}. ` +
         `Lower MAX_RAW_IMG to ${total} to lock in the improvement.`,
     ).toBe(MAX_RAW_IMG);
+  });
+
+  it("stripComments does not treat a `/*` inside a string literal as a comment opener", () => {
+    // Regression guard for the exact bug this fix closes: a literal `/*`
+    // inside a string (e.g. a MIME-type wildcard) must not pair with a LATER,
+    // unrelated `*/` and swallow real code in between. The trailing unrelated
+    // `/* comment */` is required to reproduce the bug — the old regex only
+    // misfires once it finds SOME later `*/` to lazily pair the stray `/*`
+    // with; without one, the old code (wrongly) leaves the string alone too,
+    // so a single-line case would pass under both the buggy and fixed
+    // implementations and prove nothing.
+    const src =
+      'const accept = "image/*";\n' +
+      'const keep = "<img data-marker=\\"keep-me\\" />";\n' +
+      "/* trailing unrelated comment */\n";
+    const stripped = stripComments(src);
+    expect(stripped).toContain("keep-me");
+  });
+
+  it("stripComments still strips real block and line comments", () => {
+    const src = "/* a comment with <img> in prose */\nconst x = 1; // <img> trailing note\nconst real = \"<img data-marker='keep' />\";";
+    const stripped = stripComments(src);
+    expect(stripped).not.toContain("comment with");
+    expect(stripped).not.toContain("trailing note");
+    expect(stripped).toContain("keep");
   });
 });

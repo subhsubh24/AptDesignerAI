@@ -235,7 +235,7 @@ export async function POST(request: Request) {
   // serializing them stacked an extra round-trip on the mockup-render path
   // (the core "wow" moment). The project read below needs room.project_id, so
   // it stays sequential after the 404 guard.
-  const [{ data: room }, { data: diagnosis }] = await Promise.all([
+  const [roomRes, diagnosisRes] = await Promise.all([
     supabase.from("rooms").select("*, room_images(*)").eq("id", room_id).single(),
     supabase
       .from("room_diagnoses")
@@ -245,6 +245,15 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle(),
   ]);
+  // Ownership is verified before this fetch (see below), so PGRST116 here means
+  // a delete raced the check — a legitimate empty state, not a failure.
+  if (roomRes.error && roomRes.error.code !== "PGRST116") {
+    logServerError("mockups.room", roomRes.error);
+  }
+  if (diagnosisRes.error) logServerError("mockups.diagnosis", diagnosisRes.error);
+
+  const room = roomRes.data;
+  const diagnosis = diagnosisRes.data;
 
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
@@ -642,10 +651,11 @@ RULES:
     if (bundleOwnErr) return apiError("mockups", bundleOwnErr);
     if (!ownedBundle) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const { data } = await supabase
+    const { data, error: bundleItemsError } = await supabase
       .from("product_bundle_items")
       .select("candidate_products(*)")
       .eq("bundle_id", bundle_id);
+    if (bundleItemsError) logServerError("mockups.bundleItems", bundleItemsError);
     // A nested-join row whose candidate_products FK was deleted comes back as
     // null; unfiltered it derefs below (`products.map((p) => p.id)`) → an
     // uncaught 500 on a paid render path. Filter the nulls, and if the bundle

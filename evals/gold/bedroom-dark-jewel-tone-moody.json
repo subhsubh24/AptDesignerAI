@@ -1,0 +1,13 @@
+{
+  "id": "bedroom-dark-jewel-tone-moody",
+  "description": "Dark, moody bedroom seen through an arched doorway: deep teal/forest-green wainscoted accent wall, a slim vertical wall sconce as the only visible light source (a bright white/cool-toned LED bar, not a warm bulb — confirmed by zooming into the actual pixels, not assumed from 'sconce' as a category), a dark mahogany/walnut-toned bed frame and matching nightstand, gray-blue floral bedding with white pillows, a small potted fern, a framed landscape print, and warm cream/off-white walls in the foreground hallway. Adds coverage the DEEP AUDIT scout flagged as missing: every prior fixture (bedroom-modern-minimalist, kitchen-white-modern-budget, living-room-warm-sofa, great-room-keep-leather-sectional) is a bright, evenly-lit room with a warm/neutral palette — none tests a dark/jewel-tone room lit mainly by a single accent fixture. userContext deliberately names no specific object or color, so a pass depends on the pipeline actually perceiving the photo rather than parroting the prompt. Palette terms below were verified by eye against the actual downloaded image (dark teal-green paneling, mahogany/walnut-toned wood, brass sconce hardware, cream archway walls) and cross-checked against two real live diagnosis runs (RUN_EVALS=1, both stable: dominant 'Forest Green', supporting 'Cream/Oatmeal', accent 'Aged Brass' plus a cognac/walnut wood tone) — not reverse-engineered from a single lucky pass or copied verbatim from raw model output.",
+  "input": {
+    "roomType": "bedroom",
+    "imageUrls": ["https://images.unsplash.com/photo-1785529907915-f389194590ed?w=1280&q=80"],
+    "userContext": "This room feels heavy and closed-in once the sun goes down — I still want that cozy, cocooning mood, just a bit more intentional and elevated.",
+    "budgetMode": "balanced"
+  },
+  "expectations": {
+    "paletteIncludes": ["teal", "green", "forest", "emerald", "dark", "charcoal", "deep", "mahogany", "brown", "walnut", "cognac", "warm", "brass", "gold", "cream", "ivory", "gray", "grey"]
+  }
+}

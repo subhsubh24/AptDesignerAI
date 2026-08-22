@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import { PageTransition, ScrollReveal } from "@/components/ui/motion";
 import { SkeletonBundleCard } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
 import { ASSESSMENT_PANEL } from "@/lib/utils/assessment-colors";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 // Pure SVG radar chart component
 function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
@@ -354,13 +356,23 @@ export default function BundlesPage() {
                     {products.map((product) => (
                       <div key={product.id} className="shrink-0 w-28 snap-start space-y-2">
                         {product.image_url && (
-                          <div className="aspect-square rounded-xl overflow-hidden bg-muted shadow-sm">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={product.image_url}
-                              alt={product.title}
-                              className="h-full w-full object-cover hover:scale-105 transition-transform duration-300"
-                            />
+                          <div className="relative aspect-square rounded-xl overflow-hidden bg-muted shadow-sm">
+                            {canOptimizeImageHost(product.image_url) ? (
+                              <Image
+                                src={product.image_url}
+                                alt={product.title}
+                                fill
+                                sizes="112px"
+                                className="object-cover hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={product.image_url}
+                                alt={product.title}
+                                className="h-full w-full object-cover hover:scale-105 transition-transform duration-300"
+                              />
+                            )}
                           </div>
                         )}
                         <p className="text-xs font-medium line-clamp-2">{product.title}</p>

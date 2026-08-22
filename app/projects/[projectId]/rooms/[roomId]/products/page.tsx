@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import { PageTransition, StaggerList, StaggerItem, CardHover } from "@/component
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 import type { Verdict } from "@/lib/types/scoring";
 
 interface ProductWithEval {
@@ -423,13 +425,23 @@ export default function ProductsPage() {
               >
                 {product.image_url && (
                   <div className="aspect-square w-full overflow-hidden bg-muted relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={product.image_url}
-                      alt={product.title || "Product"}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                    />
+                    {canOptimizeImageHost(product.image_url) ? (
+                      <Image
+                        src={product.image_url}
+                        alt={product.title || "Product"}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.image_url}
+                        alt={product.title || "Product"}
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                    )}
                     {isShortlisted && (
                       <div className="absolute top-3 right-3">
                         <div className="h-7 w-7 rounded-full bg-accent-warm flex items-center justify-center shadow-warm-sm">
@@ -568,13 +580,23 @@ export default function ProductsPage() {
               </DialogHeader>
 
               {detailProduct.image_url && (
-                <div className="aspect-square rounded-xl overflow-hidden bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={detailProduct.image_url}
-                    alt={detailProduct.title || "Product"}
-                    className="h-full w-full object-cover"
-                  />
+                <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
+                  {canOptimizeImageHost(detailProduct.image_url) ? (
+                    <Image
+                      src={detailProduct.image_url}
+                      alt={detailProduct.title || "Product"}
+                      fill
+                      sizes="(min-width: 512px) 464px, 100vw"
+                      className="object-cover"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={detailProduct.image_url}
+                      alt={detailProduct.title || "Product"}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
                 </div>
               )}
 

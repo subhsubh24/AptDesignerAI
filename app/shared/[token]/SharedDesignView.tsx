@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LogoMark } from "@/components/ui/logo-mark";
 import { PageTransition, StaggerList, StaggerItem } from "@/components/ui/motion";
 import { CheckCircle2, XCircle, ArrowRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 import type { SharedDesign } from "./page";
 
 import {
@@ -77,13 +79,24 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
 
         {/* Mockup image */}
         {(assessment.mockup_url || design.thumbnail_url) && (
-          <div className="overflow-hidden rounded-2xl border shadow-sm">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={assessment.mockup_url ?? design.thumbnail_url!}
-              alt={`AI-designed ${design.room_type?.replace(/_/g, " ") ?? "room"}`}
-              className="w-full max-h-[480px] object-cover"
-            />
+          <div className="relative w-full h-[480px] overflow-hidden rounded-2xl border shadow-sm">
+            {(() => {
+              const mockupSrc = assessment.mockup_url ?? design.thumbnail_url!;
+              const alt = `AI-designed ${design.room_type?.replace(/_/g, " ") ?? "room"}`;
+              return canOptimizeImageHost(mockupSrc) ? (
+                <Image
+                  src={mockupSrc}
+                  alt={alt}
+                  fill
+                  sizes="(min-width: 896px) 864px, 100vw"
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={mockupSrc} alt={alt} className="w-full h-full object-cover" />
+              );
+            })()}
           </div>
         )}
 
@@ -179,9 +192,13 @@ export function SharedDesignView({ design }: { design: SharedDesign }) {
                       const inner = (
                         <>
                           {p.image_url && (
-                            <div className="h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
+                            <div className="relative h-16 w-16 rounded-lg overflow-hidden bg-muted shrink-0">
+                              {canOptimizeImageHost(p.image_url) ? (
+                                <Image src={p.image_url} alt={p.title} fill sizes="64px" className="object-cover" />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={p.image_url} alt={p.title} className="h-full w-full object-cover" />
+                              )}
                             </div>
                           )}
                           <div className="min-w-0 flex-1">

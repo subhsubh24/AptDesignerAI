@@ -4,6 +4,134 @@ Durable lessons across runs. Each run appends; nothing is deleted until a guard 
 
 ---
 
+## Run 2026-08-19 (Run 177) — APT-39 continued across 4 files in one run (bundles/room/mockups/products), stuck-PR triage, no DEEP AUDIT (not due)
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only APT-9 (structural owner-only bar — `created_via: "http_api"`, no agent session can update the trigger; read the latest comment, did NOT re-derive). `In Progress` held APT-39 (raw-`<img>`→`next/image`, multi-run by design, Run 176's comment naming 6 remaining files). `Backlog` held APT-50 (hard-guarded, `__tests__/ai/harness-ratchet.test.ts` — a hook blocks edits, self-documented as unbuildable by any session) and APT-52 (CI `journeys` install-step intermittent hang, `.github/`-adjacent, not independently actionable this run beyond what APT-52 already recorded). No full DEEP AUDIT due (last full pass Run 173, 2026-08-17, well under the ~24h/~4-run threshold).
+
+### Stuck-PR triage before claiming new work
+Four PRs were sitting open from prior runs:
+- **#934** (Run 176's own housekeeping PR): `journeys` job had been cancelled (not failed) — re-queued via `rerun_failed_jobs`, went green, auto-merged. This is the exact hang class APT-52 already tracks; no new finding, no re-filing.
+- **#917** (an orphaned duplicate of Run 172's housekeeping PR — the REAL Run 172 ledger had already landed via #922 four runs ago): closed as stale/superseded with an explanatory comment. Zero content lost.
+- **#918** (gtm-auditor Run 7) and **#919** (Growth Agent Run 26): both based on a default-branch commit ~15 merges stale, both with a genuinely failing (not just stale) `verify` check. These belong to separate, independent routines (maker≠checker) — rebasing/merging their scorecard/status content myself would be overstepping into judgment calls (grades, growth narrative) that aren't this loop's to make. Filed **APT-53** instead of touching them, with the specific fix direction (their own next run should rebase-and-verify or close-as-superseded).
+
+### APT-39 continuation: 4 files, one run (bundles → room → mockups → products)
+Each its own file-disjoint branch/PR/review cycle, all merged:
+- **`bundles/page.tsx`** (PR #935) — product-carousel thumbnail, `sizes="112px"` matching the exact fixed `w-28` (112px) column width.
+- **`page.tsx`** (room detail, PR #936) — the room hero banner, the page's largest above-the-fold image. Marked `priority`: reviewers confirmed this is a required part of a correct conversion (an un-prioritized hero image would actively regress LCP vs. the eager `<img>` it replaced), not scope creep.
+- **`mockups/page.tsx`** (PR #937) — converted the grid-card thumbnail; deliberately left the `LightboxImage` zoom-viewer's raw `<img>` with an inline comment. Its click-to-zoom origin math reads the rendered element's own `getBoundingClientRect()` at click time, and it has no fixed box (`w-full h-auto max-h-[90vh] object-contain`) — incompatible with `fill` mode's sized-ancestor requirement. Matches the issue's own acceptance-check carve-out ("stay >0 with an inline comment explaining why").
+- **`products/page.tsx`** (PR #938) — converted BOTH occurrences (grid thumbnail + detail-dialog image) in one PR. Reviewer B's explicit reasoning, worth recording: the file-disjoint convention is about not colliding ACROSS runs on the same file, not about artificially fragmenting occurrences WITHIN one file across separate PRs — splitting this into two PRs would have been padding, not discipline.
+
+All 8 reviewer passes (2 per PR × 4 PRs) independently APPROVE. One PR (products) carried a non-blocking nitpick: the `sizes` breakpoint copied verbatim from the `picks/page.tsx` precedent (640px) doesn't perfectly match this page's own `md:` (768px) grid breakpoint — a harmless minor over-fetch in a narrow viewport range, not a rendering bug, not worth a fix cycle.
+
+**Lesson for future runs — a 4-in-one-run pace is sustainable for this specific sweep because every file's conversion is genuinely independent and low-risk** (same established pattern, same helper, disjoint files, full gate re-run each time). Reviewer B was asked explicitly whether the 4th file was still value-clearing or had become padding, and judged it on its own merits each time rather than rubber-stamping — worth continuing to ask that question explicitly as batch size grows, rather than assuming N+1 is fine because N was.
+
+### APT-39: 1 file left
+`app/projects/[projectId]/rooms/[roomId]/setup/page.tsx` — 2 occurrences (`img.url`, uploaded-photo/reference-image previews). Not started this run; flagged in the Linear comment that these may be local blob-preview URLs (pre-upload file previews), which `next/image` cannot optimize regardless of host — the next run should check the actual data source before assuming the same `canOptimizeImageHost()` pattern applies.
+
+### Board hygiene
+Updated APT-39's comment (twice, incrementally as PRs merged) with the run's progress + remaining file list. Filed APT-53 (stale cross-routine PRs, see above). APT-9/APT-50/APT-52 not re-derived — all previously established as structural/hard-guarded bars, their latest comments read, not re-attempted.
+
+## Run 2026-08-18 (Run 176) — claimed APT-51 (real memory-store data bug), continued APT-39, hit and recovered from a genuine CI infra hang
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only APT-9 (structural bar, not re-derived — read the latest comment, still owner-only `created_via: "http_api"`, unchanged). `In Progress` held APT-39 (raw-`<img>`→`next/image`, multi-run by design, its own comment naming `focus/page.tsx` as a plausible next target — continued it). `Backlog` held APT-51 (a real data-correctness bug found by the prior run while implementing APT-48, Medium priority, concrete acceptance check) — claimed it (moved to `In Progress`, self-assigned) over the gtm-quality issues (APT-42/43/44/45/46, explicitly scoped to the separate GTM Factory routine per repeated prior-run notes — maker≠checker, not this routine's lane), APT-34 (mobile Expo SDK major bump — isolated verification pass, deliberately deferred again this run for scope reasons), APT-23/APT-27/APT-50 (all previously-established hard-guarded or owner-only, not re-attempted).
+
+### Shipped: PR #933 — APT-51 (memory-store nested-embed fix) + APT-39 continuation (focus/page.tsx), file-disjoint, one PR (same single-branch harness constraint as Run 175)
+
+- **APT-51**: `lib/store/memory-store.ts`'s `resolveRelations()` two-pass relation resolver could never populate `result[relTable]` for an outer relation whose own select-string content contains a nested `table(...)` call (`relationPattern`'s content-matching regex structurally excludes parens) — confirmed by hand-tracing the regex against the real `GET /api/bundles` select string. Fixed by extracting the FK-derivation/filter logic (previously inline) into a shared `resolveTopLevelRelation()` helper, called from both the flat pass and the nested pass right before the nested-attachment check. Added a regression test reproducing the exact production select shape in `__tests__/store/memory-store.test.ts`, verified by hand that it fails pre-fix and passes post-fix. Both reviewers (correctness/security + value/phase-fit) independently re-traced the regex/FK logic from scratch and APPROVE first cycle — one flagged that this transitively fixes the identical bug in `app/api/bundles/evaluate/route.ts` too, a beneficial side effect noted but not separately claimed.
+- **APT-39 continuation**: `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx` (3 occurrences) converted to the established `canOptimizeImageHost()`-gated pattern. Two of the three needed a real design decision beyond the mechanical swap: the expanded-mockup and vision-preview containers previously rendered at natural `w-full h-auto` aspect, but `next/image`'s `fill` mode requires a sized ancestor — resolved by tracing the ACTUAL aspect ratio each image is generated at (grep'd the same file's own `generateItemMockup`/`generateVisionInBackground` request payloads and `lib/config/pipeline.ts`'s `defaultAspectRatio`) rather than guessing, landing on `aspect-square`/`aspect-video` respectively. Both reviewers independently re-verified the aspect-ratio claims against source (not just trusted the code comments) and the container-width `sizes` math by hand, APPROVE first cycle. **Lesson: when a raw-`<img>`→`next/image` conversion needs `fill` mode on a currently-unconstrained-aspect image, trace the real generation request in the SAME file/route rather than assuming a fixed ratio — this codebase already had the answer sitting in the request payload two functions away.**
+
+### Genuine CI infrastructure hang, recovered per the CI-red rules
+After all 6 other required checks went green within ~90 seconds, the `journeys` job sat motionless on step 7 "Install deps + browser" for 45+ minutes — two separate status checks ~15 minutes apart showed byte-identical state (same step, same `in_progress`, no new step started, no log growth). This is the "died before any test body ran (checkout, install, runner loss)" case the CI-red rules explicitly allow ONE re-run for. Cancelled the workflow run (`actions_run_trigger cancel_workflow_run`), waited for the cancellation to actually propagate to `completed`/`cancelled` (an immediate `rerun_failed_jobs` attempt got a `403 This workflow is already running` — cancellation is asynchronous, confirm terminal state before re-running), then `rerun_failed_jobs` re-queued only the `journeys` job while preserving the other 6 already-green jobs. The re-run passed cleanly and the PR auto-merged. **Lesson: a stuck-not-failed job (still shows `in_progress`, not a red X) can still block a merge indefinitely — don't wait passively for a `status:failed` webhook that will never fire; if two checks several minutes apart show zero progress on the same step, treat it as a hang and apply the one-allowed-re-run rule, but cancel first and confirm the run reached a terminal state before calling `rerun_failed_jobs`, or the API rejects it as still-running.**
+
+### Board hygiene
+Closed APT-51 (Done) with the acceptance check re-run against the merged tree (`fa58968`) and its output pasted in. Updated APT-39's comment with this run's file + remaining 6-file list (still `In Progress`, multi-run by design). APT-9 not re-derived (still the same owner-only `created_via: "http_api"` blocker). No new issue filed this run — both findings folded into this run's own shipped work rather than deferred.
+
+---
+
+## Run 2026-08-18 (Run 175) — claimed 2 previously-deferred Backlog items (APT-48 perf narrowing, APT-49 live eval), both shipped in one PR; APT-9/APT-42/APT-50 correctly left untouched
+
+### State on entry
+Cold container. `Todo` held only APT-9 (structural owner-only bar, last confirmed 2026-08-15 — read the standing comment, did NOT re-derive, left untouched). No full DEEP AUDIT due (last full 8-lens pass Run 173, 2026-08-17 — only 1 day / 2 runs prior, well under the ~24h/~4-run threshold), so this run scouted directly from the Backlog instead of running a fresh audit sweep.
+
+### Backlog triage — 2 claimed, 3 correctly left alone
+Reviewed every open Backlog/Todo item before selecting. **APT-42** (High priority, gtm-quality self_validation_honesty/pmf_read_accuracy) is explicitly scoped to the separate GTM Factory routine per Run 174's own note and `docs/growth/GROWTH_STATUS.md`'s own contract ("owned by the Growth Agent") — not this routine's lane (maker≠checker across the two factories), left untouched despite its high priority. **APT-50** (harness-ratchet.test.ts stripComments bug) is hard-guarded — `__tests__/ai/harness-ratchet.test.ts` is in the brakes' explicit never-touch list (a hook blocks edits) — correctly still unclaimable by any factory session. **APT-34** (mobile Expo SDK major bump, 30 vulnerabilities) was considered but skipped this run: a real compatibility-risk migration needing an isolated EAS-build verification pass this run's scope didn't budget for; left in Backlog for a dedicated future run.
+
+Claimed the two Run 174 had explicitly deferred for lack of budget: **APT-48** (bundles/products oversized nested-select payload) and **APT-49** (product-discovery live eval gap) — both Low priority but genuinely value-bar-clearing (payload-shape perf on a hot path; closing a real eval-coverage gap), and both file-disjoint from each other.
+
+### Shipped: PR #931 — APT-48 + APT-49 (one PR; this session's designated-branch harness constrains it to a single branch, so both disjoint changes landed as two separate commits in one PR rather than two parallel branches)
+Delegated each to its own implementer subagent working in the same tree (disjoint files, no conflict), then independently reviewed each with 2 fresh reviewer subagents (correctness/security + value/phase-fit) before committing either.
+
+- **APT-48**: narrowed `candidate_products(*)`/`bundle_evaluations(*)`/`product_evaluations(*)` nested embeds on `GET /api/bundles`/`GET /api/products` to explicit column lists, traced field-by-field against all 4 real consuming pages (bundles/products/compare/focus) — confirmed independently by both reviewers, no field any page reads was dropped. Required a companion fix: `lib/store/memory-store.ts`'s `resolveRelations()` only matched a literal `(*)` embed pattern, so narrowing to named columns would have silently stopped the embed resolving on this repo's default in-memory backend — generalized the regex (`\*` → `[^()]*`), verified equivalent for every other existing `(*)` caller in the codebase. **Found and filed APT-51** (a separate, pre-existing, unrelated bug: `product_bundle_items` never resolves on the memory backend at all, unchanged before/after this fix) rather than folding it in — correct maker≠checker/scope discipline per both reviewers.
+- **APT-49**: added `evals/__tests__/product-discovery.eval.test.ts`, the first live (`RUN_EVALS=1`-gated) eval chaining `searchProducts()` → `quickScreenCandidates()` → `extractFromUrlBatch()` against the `living-room-warm-sofa` gold fixture, asserting plausibility bounds (non-empty, category match, price band, valid URL) rather than exact-match. Closes a real gap: the only prior live eval (`sourcing.eval.test.ts`) exercised `scoreProduct()` alone, never the upstream search/extraction stages a prompt or model change could silently degrade. Reviewers verified all 4 called functions against their real exported signatures (no hallucinated API) and confirmed the file correctly skips (no network calls) without `RUN_EVALS=1`.
+
+Both closed on Linear with the acceptance check re-run against the merged commit (`d0bdcc9`) and its output pasted in, not the word "done." APT-48's literal acceptance-check grep string also matches the fix's own explanatory code comments (which quote the old `(*)` shape for context) — noted this false-positive explicitly in the closing comment along with the real `.select()` lines confirming the actual narrowing, rather than silently reinterpreting the check.
+
+### Lesson for future runs
+The Agent tool's `model` parameter only exposes `sonnet`/`opus`/`haiku`/`fable` aliases (resolving to the latest tier of each), with no way to pin the reviewer tier to `claude-sonnet-4-6` specifically as the routine's model-diversity design calls for — this is the same gap **APT-23** already tracks (filed by a prior run); not re-filed, reviewers ran on the default `sonnet` alias (same tier as the orchestrator) as the best currently-available option.
+
+## Run 2026-08-18 (Run 174) — APT-39 continued, a scoped 3-lens audit found + fixed a real `.single()`-error bug in the core diagnosis pipeline, APT-9 correctly not re-derived
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only the permanently-structural APT-9 (last confirmed 2026-08-15, not re-derived per rule). `In Progress` held APT-39 (raw-`<img>`→`next/image` conversion, multi-run by design, prior comment naming `app/shared/[token]/SharedDesignView.tsx` as the next target). Full 8-lens DEEP AUDIT ran last run (Run 173, same day as Run 172, both 2026-08-17) — not stale enough to re-run the full 8 lenses; ran a scoped 3-lens sweep instead (security/RLS, correctness/dead-code, quality-grade-reconcile) as a lighter-weight check between full passes.
+
+### APT-39 continuation: `app/shared/[token]/SharedDesignView.tsx` (PR #928)
+Converted the hero mockup image + product thumbnail (public, no-auth shared-design page) to the established `canOptimizeImageHost()`-gated `next/image`/fallback pattern. Round-1 review (Reviewer A) caught a real bug: the hero image's `sizes` prop used a `(min-width: 1024px) 896px, 100vw` breakpoint that didn't match this page's actual `max-w-4xl px-4` container width (~864px effective, breakpoint 896px) — would have over-fetched a larger-than-needed image between 896–1024px viewport width and ~4% oversized above it. Fixed by copying the exact precedent already shipped in `app/saved/[id]/page.tsx:285` (`sizes="(min-width: 896px) 864px, 100vw"`) rather than re-deriving it — this repo's own container width was already solved once. Both reviewers APPROVE round 2. 7 files remain (Linear comment has the current list); next run should pick up `app/projects/[projectId]/rooms/[roomId]/focus/page.tsx`.
+
+### Scoped 3-lens audit (security/RLS, correctness/dead-code, quality-grade-reconcile) — 1 real finding, fixed same run
+- **Security/RLS: clean.** `check-security-invariants.mjs` 26/26 RLS tables; migrations 031-033 spot-checked, all follow established patterns; no `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` secret leaks; API-route ownership guards intact.
+- **Correctness: 1 real, verified bug → fixed same run.** `app/api/area-analysis/route.ts`'s `runAnalysis()` (the core diagnosis pipeline — one of the most heavily-used endpoints in the app) and `app/api/area-analysis/refine-chat/route.ts`'s POST handler both destructured Supabase `.single()`/`Promise.all` results without capturing `error`, silently discarding real DB errors (timeout, RLS denial, connection error) as an indistinguishable "not found" via the existing null check — the identical bug class fixed repeatedly before (APT-28/PR #882). Fixed with `error: xError` + `logServerError()` at each site (room, project, otherRooms, latestDiagnosis) — purely additive, verified every downstream usage of the affected values already tolerates null/undefined before touching anything, so no behavior changed beyond making the errors observable in logs. Both reviewers APPROVE first-cycle. PR #929.
+- **Quality-grade reconcile: no drift, gaps confirmed still genuinely open.** `QUALITY_SCORECARD.md` overall C; both ship-critical gaps below A (`functional_reality` C — DATA_BACKEND persistence blocker, 9th consecutive cycle; `design_taste` B — F7 authed screenshots, blocked on the same persistence step) independently re-verified STILL open against current source (`DATA_BACKEND` absent from `ci.yml`'s env block; exactly 30 committed screenshots, all `public-*`, zero authed-route coverage) — both are the same owner-gated/`.github/`-adjacent bars prior audits already established, not re-attempted, not re-filed. `GROWTH_STATUS.md` unchanged: circuit breaker still firing (25 consecutive runs, same owner blockers), zero funnel measurement pre-launch (site gate not up).
+
+### Board hygiene
+Updated APT-39's comment with this run's progress + remaining file list (still `In Progress`, multi-run by design). APT-9 not re-derived (still owner-only `created_via: "http_api"` blocker, last confirmed 2026-08-15 — this run's check was a read of the existing comment, not a fresh attempt). No new Linear issue filed — the one real finding (area-analysis `.single()` errors) was fixed in the same run per the "file what you find, in the same run" rule's own exception (a fixed finding doesn't need a tracking issue). Reviewed several Backlog items without acting: APT-42 (High, GTM-quality) is explicitly scoped to the separate GTM Factory routine (maker≠checker, not this routine's to touch); APT-48 (bundles/products oversized payload) has 5+ real client consumers across pages needing individual field-tracing before a safe narrowed `select()` — genuinely risky to do blind per the issue's own caution and this repo's lack of a visual-regression harness, correctly left for a run with more budget to trace it properly; APT-49 (product-discovery live eval) needs real gold-case curation + live API calls, not a mechanical fix; APT-50 (harness-ratchet.test.ts stripComments bug) is hard-guarded, no session can edit it.
+
+## Run 2026-08-17 (Run 173) — full 8-lens DEEP AUDIT (overdue since Run 167), APT-39 continued, a same-run audit finding fixed, and a genuine ratchet-integrity bug found + fixed while chasing a misdiagnosed Linear issue
+
+### State on entry
+Cold container; `npm install` needed. `Todo` held only the permanently-structural APT-9 (re-confirmed 2026-08-15, not re-derived per rule). `In Progress` held APT-39 (raw-`<img>`→`next/image` conversion, multi-run by design, its own last comment naming the next target file) — continued it rather than treating it as untouchable; nothing in the board contract reserves an `In Progress` issue whose own comment explicitly invites the next run to continue it. Last full 8-lens DEEP AUDIT was Run 167 (2026-08-15), ~2 days/6 runs stale — due this run.
+
+### APT-39 continuation: `app/saved/[id]/page.tsx` (PR #924)
+Converted the room-vision mockup hero image and per-tier product thumbnails to the established `canOptimizeImageHost()`-gated `next/image`/fallback-`<img>` pattern. Mockup container moved from a `max-h-[400px]` cap to a fixed `h-[400px]` since `fill` mode requires a sized, positioned ancestor — same tradeoff already accepted on the dashboard building-photo conversion. Both reviewers APPROVE round 1. 8 files remain (see the Linear comment for the current list); next run should pick up `app/shared/[token]/SharedDesignView.tsx`.
+
+### Full 8-lens DEEP AUDIT (overdue — last full pass Run 167, 2026-08-15)
+Ran all 8 lenses as parallel Haiku scouts.
+- **Correctness/dead-code, security/RLS, dependency/config health, artifact freshness: all clean.** No real findings on any of the four.
+- **Performance: 3 findings, 1 fixed this run.** `app/projects/[projectId]/page.tsx` fetched a project's rooms via an embedded `select("*, rooms(*))` with no `.limit()`/`.order()` — the same unbounded-embed class APT-41 fixed for picks/area-analysis, just via `.limit(N, {referencedTable})`/`.order(..., {referencedTable})` instead of the top-level variants since `rooms` here is embedded, not the queried table. Fixed + mutation-verified regression test, PR #925, both reviewers APPROVE. The other 2 (oversized nested payloads in `/api/bundles` and `/api/products`; a dashboard sequential-fetch "finding" that turned out to be a genuine data dependency — `/api/rooms` needs the just-fetched project ID, not a fixable N+1 — the latter a false positive, not actioned) — the payload one filed as **APT-48** rather than guessed-and-shipped blind (narrowing an embedded `select()` needs real client-usage tracing per field first).
+- **Test/eval coverage: 5 findings, 1 filed.** Product-discovery search/extraction (`shopping-researcher.ts`, `product-extractor.ts`, `product-identifier.ts`) has zero live-eval coverage — verified the scout's own claim that "product-sourcing has a gold-case eval" was about a DIFFERENT, downstream stage (`fit-scorer.ts`'s relevance *scoring*, not search/extraction) before filing **APT-49** with the correct, narrower scope. The other 4 (prompt-builder unit tests, self-correction eval, otel-bridge tests) judged sub-bar/standing-F3-work this run, not filed individually to avoid board noise.
+
+### APT-47 was misdiagnosed — investigating it surfaced a real ratchet-integrity bug instead (PR #926)
+APT-47 assumed one of the 30 `eslint-disable(no-img-element)` comments was orphaned (dead, no longer above a real `<img>`). Verified from scratch: **every one of the 30 legitimately precedes a real `<img>`** — the premise was wrong. The actual cause of the "30 disable comments vs 29 counted elements" mismatch: `__tests__/perf/no-img-growth.test.ts`'s `stripComments()` used a naive `/\*[\s\S]*?\*\//` regex, fooled by the literal `/*` inside `app/dashboard/page.tsx`'s `accept: { "image/*": [...] }` MIME-type string — the lazy regex paired that stray `/*` with an unrelated `*/` ~47 lines later (a JSX comment), silently deleting every real line in between (including a genuine `<img>`) before counting. This is also why PR #921 "corrected" `MAX_RAW_IMG` to 29 — it was chasing the same bug's undercounted output. **Lesson: a regex-based comment-stripper that isn't string-literal-aware is a live liability in any file-scanning guard test — a stray `/*` inside an ordinary string (MIME type, glob, URL fragment) can pair with an unrelated later `*/` and silently swallow real code, meaning a NEW violation landing inside the swallowed range would never trip the ratchet.** Fixed with a string-literal-aware single-pass state machine; restored `MAX_RAW_IMG` to the true count (30). Round-1 review caught the first regression test was vacuous (a single-line source with no later `*/` can't trigger the old regex's mis-pairing at all, so it passed under both old and new code) — fixed by adding a trailing unrelated `/* comment */` so the test actually discriminates old-vs-fixed behavior (verified by hand: old strips `keep-me`, new preserves it). Round 2 both reviewers APPROVE. Closed APT-47 with the corrected root cause (not the originally-filed one) and pasted the acceptance check output. **Filed APT-50**: `__tests__/ai/harness-ratchet.test.ts` (the LLM-cost-contract enforcement test) has the byte-identical buggy `stripComments` — same silent-defeat risk, but that file is hard-guarded (a hook blocks edits per AGENTS.md's brakes), so the fix is staged as a ready-to-port issue for a session/context that can touch it.
+
+### Board hygiene
+Closed APT-47 (Done, corrected diagnosis). Filed APT-48, APT-49, APT-50 (all Backlog, `type:factory`, runnable acceptance checks). Updated APT-39's comment with this run's progress + remaining file list. APT-9 not re-derived (still owner-only, `created_via: "http_api"` blocker, last confirmed 2026-08-15).
+
+## Run 2026-08-17 (Run 172) — APT-41 shipped (with a review-caught self-inflicted bug), an unrelated CI-blocking ratchet found and fixed en route, 1 issue filed, 1 harness-limitation recurrence recorded
+
+### State on entry
+Cold container; `npm install` needed. `Todo` was empty except the permanently-structural APT-9 (not re-derived, per rule). Claimed **APT-41** (Backlog → Todo → In Progress) — a same-day DEEP AUDIT finding (unbounded `rooms` queries in `/api/picks`, `/api/area-analysis`, `/api/area-analysis/refine`) — over APT-42 (High priority, but explicitly scoped to the separate GTM Factory routine, not this one — left alone per maker≠checker) and the still-`In Progress`/owner-assigned APT-39 (not mine to touch).
+
+### APT-41: bounded 3 unbounded `rooms` queries — round-1 review caught a self-inflicted determinism bug
+Added `.limit(100)` (picks, owned-rooms) / `.limit(30)` (both area-analysis sibling-rooms fetches). **Both independent reviewers, working from fresh context, independently caught the same real bug in the first pass**: `.limit()` with no preceding `.order()` gives Postgres/PostgREST no ordering guarantee — the "bounded" result becomes an arbitrary, non-deterministic subset once a user/project exceeds the cap, and for the two `area-analysis` routes that subset feeds straight into an LLM prompt, which is a genuine violation of `.claude/rules/determinism.md` ("every sort needs a deterministic final tiebreaker"), not just a style nit. Fixed with `.order("created_at", {ascending:false})` before each `.limit()` (newest-first, so a recently-created room is never the one silently dropped); both reviewers APPROVE round 2. **Lesson: adding a bare `.limit()` to an existing Supabase query builder is not neutral — it needs a coupled `.order()` or the fix itself introduces a new correctness/determinism bug. Watch for this pattern on any future unbounded-query fix.** Mutation-verified all 3 new order-assertion tests fail when `.order()` is reverted.
+
+### Unrelated CI-blocking ratchet found and fixed mid-flight (PR #921, ahead of #920)
+PR #920's own CI run failed on an assertion totally unrelated to the diff: `__tests__/perf/no-img-growth.test.ts`'s `MAX_RAW_IMG` ratchet was still 30, but PR #915 (APT-39, merged the prior run) had already dropped the real raw-`<img>` count to 29 without updating the ratchet — meaning **the default-branch tip itself was CI-red**, blocking every PR built on top of it. Verified this reproduced identically against the base commit before touching anything (not a flake, not caused by this run's diff). Fixed as its own small, disjoint, 2-reviewer-approved PR (#921) targeting the default branch directly, merged it first, then merged the updated default branch into the APT-41 branch so its CI re-ran against a green base. **Lesson: when a PR's CI fails on a file your diff never touched, check whether it reproduces on the base branch tip before assuming your own change caused it — here it did, and was a pre-existing gap left by the immediately-prior merged PR.** One of round-2 reviewer's own findings on the ratchet fix (an orphaned `eslint-disable(no-img-element)` comment left over from #915) filed as APT-47 rather than fixed inline, to keep the ratchet-fix PR itself minimal and disjoint.
+
+### Harness note: stale local branch pointer, and reviewer-model-tier limitation (3rd occurrence)
+Mid-run, `git checkout claude/ai-apartment-design-app-iHAdb` (intending to base the ratchet fix on the local copy of the default branch) landed on a **stale, disconnected-history local branch** — 50 commits divergent from `origin/claude/ai-apartment-design-app-iHAdb` in both directions, with an *empty* `git merge-base` (a real history rewrite happened upstream at some point after this local ref's last update, orphaning it). Investigated before touching anything (per the git-safety discipline: never assume divergence is real data loss risk without checking); confirmed via commit-message inspection that every "local-only" commit already has an equivalent already merged into the current origin history — this was a dead pointer, not unmerged work. Recovered by working directly from `origin/claude/ai-apartment-design-app-iHAdb` (fetch + `checkout -b <name> origin/<default>`) instead of the local branch name, and later `git reset --hard origin/<default>` to fix the stale local pointer once confirmed safe. **Lesson: in this container, `git checkout <default-branch-name>` can silently land on a stale local ref rather than the real remote tip — always verify `git log -1 <local-branch>` matches `git log -1 origin/<same-name>` before basing new work on a "default branch" checkout by name; prefer branching directly off `origin/<default>` explicitly.**
+
+Also hit (3rd independent occurrence, commented on the existing APT-23 rather than re-filing): `Agent({model: "claude-sonnet-4-6"})` still fails with `InputValidationError` — the tool's `model` param only accepts `sonnet|opus|haiku|fable`. Fell back to the session default (`sonnet` = `claude-sonnet-5`, same tier as the orchestrator) per AGENTS.md's own documented fallback.
+
+### Bookkeeping
+**2 PRs merged**: #920 (APT-41, 2 review cycles — round 1 REQUEST_CHANGES on the missing `.order()`, round 2 both APPROVE) and #921 (ratchet fix, 1 cycle, both APPROVE). Both re-verified fresh against their respective merged-tree tips (`tsc --noEmit` clean, targeted vitest green, `eslint` clean on touched files). APT-41 closed on Linear with the acceptance check re-run against the merged tree and full output pasted in. APT-47 filed with a runnable acceptance check. No migration, no live secret. Neither PR ticks a ROADMAP Track/DoD box (both below Track-checkbox granularity — a query-shape/determinism fix and a CI-gate ratchet correction).
+
+### Carry-forward
+- **DEEP AUDIT**: a full 8-lens pass already ran earlier the same day (2026-08-17, referenced by APT-41's own filing) — not due again this run; this run only claimed and shipped one of its findings.
+- **Board**: `Todo` empty except structural APT-9. `Backlog` has APT-46/45/44/43 (all `gtm-quality` — separate GTM Factory routine's lane, not this one's), APT-42 (High, same GTM-Factory lane — do not claim from this routine), APT-27 (branch-cleanup, same class as APT-9), APT-34, APT-23 (harness proposal, now 3 occurrences — a future run should consider whether this crosses the "file only after it recurs" bar into "needs an actual fix", though META still caps meta-issues at one per run), APT-47 (this run's new finding).
+
+---
+
 ## Run 2026-08-16 (Run 171) — closed a stale merged-but-unclosed Linear issue (APT-35), built the PMF instrumentation gap (APT-38) end to end, filed 2 follow-ups
 
 ### State on entry
@@ -8611,3 +8739,303 @@ a change-slot on any `toast.tsx`/`badge.tsx`/`app/page.tsx` "off-system color" f
 No migration, no live secret, no ROADMAP Track/DoD box ticked (the fix is below Track-checkbox
 granularity). APT-33 and APT-34 filed with runnable acceptance checks, both correctly landed in
 `Backlog` (not yet prioritized) rather than forced into `Todo`.
+
+## Run 2026-08-20 (Run 178) — Linear unreachable (LOUD FALLBACK), 4-lens scout sweep, 3 disjoint fixes shipped as one consolidated PR, a real CI-gate assumption corrected mid-run
+
+**Note on numbering**: this file's last entry is Run 167 (2026-08-15); git history shows commit
+messages up through "Run 177" (PR #939, merged) and an attempted, still-open "Run 178" ledger PR
+(#942, stuck — see below). This entry picks up the "178" label from #942 rather than re-deriving
+a number, but does not attempt to backfill the 168–176 gap in this file — those runs' work is in
+`IMPROVEMENT_LOG.md` even where this file never got an entry.
+
+**Board.** Linear MCP required OAuth re-authorization; this session is non-interactive
+(scheduled) and cannot complete that flow, so no `list_issues` call was attempted. Logged as a
+LOUD FALLBACK in `TODO.md` per `CLAUDE.md` → "## The board", in the same shape a Linear issue
+would carry (title, why, acceptance check), rather than silently skipping STEP 0c.
+
+**Git policy this run**: the outer harness restricted this session to a single designated branch
+(`claude/sleepy-goldberg-bq531j`), not the usual per-change branch pattern — matching the
+precedent Run 150 already established for this scenario. All 3 code changes below were committed
+separately (own commit each, own pair of reviewers each) but pushed as ONE consolidated PR
+(#951) rather than 3 separate PRs, since the session could not open multiple branches.
+
+**Scout sweep (4 lenses, Haiku tier, scoped rather than the full 8 given the session's single-
+branch constraint)**: correctness/dead-code (recurring discarded-Supabase-error bug class),
+security/RLS re-audit, Track F quality gaps (F3 eval coverage / F4 functional validation), and
+performance/design-bar/a11y. Security and perf/a11y both came back **clean** — no findings, not
+padded to look busy. Correctness surfaced 5 real unfixed instances of the established
+"discarded `.error`" bug class (APT-15/16/17/25/28's pattern, ~10 prior fixes: PRs #944-949).
+Track F surfaced a small, concrete, previously-tracked gap: `/billing/checkout-success` and
+`/billing/checkout-cancel` had zero e2e coverage (`e2e/ROUTE_INVENTORY.md` "Tracked gaps").
+
+**Shipped, PR #951 (3 commits, each independently reviewed by 2 fresh subagents, all APPROVE):**
+
+1. **Discarded-error fixes** — the scout's 5 candidates plus 4 more found during review (Reviewer
+   A caught one same-file sibling the scout missed in `products/evaluate-set/route.ts`; Reviewer
+   B caught 3 more in `search/stream/route.ts` on a deeper read) — 13 sites total across 4 files.
+   Same established pattern throughout: log the error via `logServerError`, exempt `PGRST116`
+   only where 0 rows is a legitimate state (a room with no diagnosis yet), matching
+   `app/api/products/evaluate/route.ts`'s precedent exactly. `lib/supabase/public-share.ts` needed
+   extra care — its own file header documents a strict "real error and 'not found' must render
+   identically" anti-enumeration invariant; the fix logs server-side only, never changes the
+   return value. **Lesson: a reviewer doing a full-file read (not just the diff hunk) keeps
+   finding one more sibling instance of this bug class every time — worth a scout prompt next
+   time that explicitly asks "read the WHOLE file, not just grep hits" for this class.**
+
+2. **e2e coverage for the two billing-outcome routes** — and this is the run's most useful
+   finding: **actually running the new tests against a live local server caught a real bug that
+   static review (both reviewers, reading the real page source) did not.** This sandbox has
+   Chromium pre-installed at the same path CI uses
+   (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, matched by `playwright.config.ts`'s own
+   `existsSync` check), and `scripts/run-journeys.sh --public-only` is specifically designed to
+   run with zero real credentials (a placeholder Supabase identity, dev-mode `next dev` so
+   `assertProductionEnv()` never enforces) — so there was no reason not to actually execute the
+   suite instead of stopping at tsc/eslint. First run: both new tests failed — the page snapshot
+   showed the LOGIN page instead of checkout content, meaning middleware was redirecting a
+   logged-out visitor away before either page component ever ran.
+
+3. **The middleware fix** the live run surfaced — `/billing/checkout-success` and
+   `/billing/checkout-cancel` (the actual Stripe `success_url`/`cancel_url` targets, confirmed in
+   `app/api/billing/checkout/route.ts`) were missing from `PUBLIC_PATHS`, even though both page
+   components are explicitly written to degrade gracefully with no session. A paying customer
+   whose session cookie didn't round-trip the cross-site Stripe redirect got a login wall instead
+   of their own payment confirmation — a real, money-path-adjacent UX bug, not hypothetical.
+   Fixed by adding both routes to `PUBLIC_PATHS`; both reviewers independently verified the
+   pre-launch site-gate curtain (`lib/security/site-gate.ts`) is a SEPARATE allowlist unaffected
+   by this change, so nothing pre-launch became prematurely public. Re-ran the suite after the
+   fix — both tests passed live, real screenshots (verified via the PNG/pixel-content checks in
+   `__tests__/design/screenshot-manifest.test.ts`, not placeholders) committed at both widths.
+
+**A stray side effect worth flagging for future runs**: running `npm run dev` locally to serve
+the app for the journeys suite caused Next.js's own dev server to auto-write a
+`<!-- BEGIN:nextjs-agent-rules -->` boilerplate block into `AGENTS.md` (documented in
+`node_modules/next/dist/server/lib/generate-agent-files.js` — this is stock Next.js dev-mode
+behavior, not anything specific to this repo or an injection). Reverted before committing; also
+reverted ~26 pre-existing `e2e/__screenshots__/*.png` that the full local suite run silently
+re-captured (this sandbox's rendering isn't guaranteed pixel-identical to CI's, and re-committing
+them was out of scope for this run's actual changes) — only the 4 new checkout screenshots were
+kept. **Lesson: after running the journeys suite locally for verification, always diff
+`git status` before staging — the suite has real side effects beyond the specific test you meant
+to check.**
+
+**A real CI-gate assumption was corrected mid-run.** `TODO.md`'s first version (written before
+any code was shipped) re-confirmed APT-52's `journeys`-job "Install deps + browser" hang was
+still active (workflow-run history: every push-triggered run since 2026-08-19T16:26Z cancelled
+after ~6h) and, following PR #942's own body, assumed `journeys` was a required check blocking
+every merge. It is not: PR #951 (this run's own PR) merged in ~4 minutes — far too fast for that
+job to have completed — confirming the actually-required checks are `verify`/`build`/`mobile`
+(matching what `ROADMAP.md`'s "Merge decision" section says, which this run had read but not
+cross-checked against the live PR body's claim before writing it down). Corrected in `TODO.md`
+before this entry. **Lesson: a prior run's claim about WHAT blocks merge is not automatically
+trustworthy just because it's specific and detailed — cross-check it against `ROADMAP.md`'s own
+stated required-checks list, or against a fresh PR's actual merge behavior, before propagating
+it further.** PRs #941/#942 are still stuck, but very likely NOT for the APT-52 reason their own
+bodies claim — #941's base commit (`3e59415`) is now several commits behind the current tip,
+which is a much more mundane explanation (stale base, needs an "Update branch" or a fresh push)
+worth checking before assuming CI infra again. Left untouched this run — they belong to a
+different session's work, not this run's disjoint scope.
+
+No migration, no live secret. No ROADMAP Track/DoD checkbox ticked — all 3 fixes are below
+Track-checkbox granularity (mechanical correctness + a small F4 coverage gap + the auth bug it
+surfaced), consistent with this run's actual value, not inflated.
+
+## Run 2026-08-20 (Run 179) — housekeeping first, then the overdue full 8-lens DEEP AUDIT, 2 disjoint fixes shipped, a review-caught false start reverted before it ever reached a PR
+
+**Board.** Linear reachable this run (contrast with the immediately-prior Run 178, which hit an
+OAuth wall). `list_issues` on `Todo` returned exactly one item, APT-9 — the auditor-routines
+Linear-migration prompt fix, already re-confirmed structurally blocked (owner-only trigger-prompt
+edit) by Run 178 and multiple runs before it. Read its latest comment, did not re-derive, moved
+straight to Backlog triage per the "Backlog = not-yet-prioritized, not blocked" rule.
+
+**Housekeeping first — 3 stale PRs from before this run.** Before any new work: closed **#941**
+(the last APT-39 `next/image` file) as superseded — `merge-tree` against the current default
+branch showed the only conflict was a duplicate `import Image from "next/image"`, because PR
+**#943** (merged earlier, between when #941 was opened and this run started) already converted
+the exact same two image grids in the exact same file. Closed **#942** (an earlier attempt at the
+Run 178 housekeeping ledger) as superseded by the actually-merged **#952**, confirmed via
+`git merge-base --is-ancestor` returning false (none of #942's content is otherwise on the
+default branch). Then took **#949** (a real, still-needed one-line discarded-error fix,
+`app/api/identified-products/search/route.ts`, matching the APT-15/16/17/25/28 pattern) through a
+fresh 2-reviewer APPROVE cycle — it had zero recorded GitHub reviews despite its own PR body
+claiming verification — and merged it. **Lesson: a PR sitting open with all required CI checks
+green but `mergeable_state: blocked` is often just missing the review-approval branch-protection
+requirement, not a real CI problem — check `get_reviews` before assuming it's stuck on
+infrastructure.**
+
+### Full 8-lens DEEP AUDIT (overdue — last full pass Run 167, 2026-08-15, ~5 days/many runs stale)
+
+Ran all 8 lenses as parallel Haiku scouts per the standard rotation.
+
+- **Security/RLS: clean.** `check-security-invariants.mjs` 26/26 tables, 6 critical routes
+  spot-checked for IDOR (all correctly scoped), no SECURITY DEFINER/mutable-search_path issues,
+  `getAdminClient()` server-side only, no new unguarded public tables since Run 167.
+- **a11y/design-bar: clean.** Focus-visible rings complete (including the Run-178-adjacent
+  dashboard fix), form labels/alt text complete, off-system-palette ratchet passing with pinned
+  exemptions intact.
+- **Quality-scorecard-reconcile: clean, no regressions.** Independently re-verified the
+  2026-08-17 scorecard's two remaining ship-critical-below-A gaps (`functional_reality` C — the
+  DATA_BACKEND cutover; `design_taste` B — F7 authed screenshots) are both still genuinely open
+  and still correctly `.github/`-blocked, not stale-in-the-bad-direction. The two recovered-to-A
+  dimensions (`security_rls`, `artifact_integrity`) still hold. 50 commits shipped since the
+  scorecard's date with zero impact on any graded dimension.
+- **Dependency health: clean, improving.** Root 0 vulnerabilities. Mobile's already-tracked
+  APT-34 Expo-SDK-chain vulnerability count dropped from 30 to 21 since Run 167 (transitive dep
+  movement, not our doing) — noted, not re-filed as new.
+- **Correctness: 2 more real instances of the discarded-`.error` bug class**, found by re-reading
+  full files (not just recent diffs) rather than trusting the scout's exact line numbers: 3 sites
+  in `app/api/diagnosis/stream/route.ts` (room fetch, otherRooms, otherDiagnoses — mirroring
+  `app/api/search/stream/route.ts`'s exact precedent down to the PGRST116-exemption comment
+  wording) and 1 in `app/api/saved-designs/[id]/route.ts`'s PATCH ownership check. Fixed,
+  reviewed, shipped.
+- **Performance: 1 real fix shipped (APT-54), 3 real false positives caught before implementing.**
+  The scout initially flagged `app/api/projects/route.ts`'s and
+  `app/api/bundles/evaluate/route.ts`'s `select("*")` calls as oversized-payload bloat. Tracing
+  actual consumers (`app/dashboard/page.tsx`'s onboarding-restore flow reads `building_research`
+  directly; `buildDesignProfile()` reads nearly every `projects` column) showed both selects are
+  genuinely needed — narrowing would either break a real feature or save near-nothing since the
+  dominant-size field (`diagnosis_json`) is required regardless. **Neither was shipped — verified
+  false positives, not shipped-and-hoped.** The real, verified win was `GET /api/picks` (APT-54,
+  a follow-up to the already-Done APT-48 pattern): narrowed `candidate_products`/
+  `product_evaluations(*)` to the exact 9 columns `app/picks/page.tsx`'s `PickProduct` interface
+  reads. Also checked APT-54's third named route (`app/api/bundles/route.ts`'s
+  `product_bundle_items(*)`) and found it doesn't need work — that table has only 6 small scalar
+  columns, no jsonb/text bloat unlike its sibling `candidate_products`/`room_diagnoses`. Recorded
+  in a Linear comment so a future run doesn't re-flag it.
+- **Artifact freshness: 1 finding, caught wrong by the scout, corrected by review — never
+  shipped.** The scout (and my own initial read) flagged README.md's "Gemini: vision, product
+  scoring" / "GEMINI_API_KEY: vision + scoring" as inaccurate, reasoning that
+  `getProvider("scoring")` defaults to DeepSeek. **Both reviewers independently caught the actual
+  bug in my reasoning**: `lib/agents/fit-scorer.ts` — the real per-product AI-fit scoring engine,
+  not the `getProvider("scoring")` call sites I'd checked (`self-correction.ts`,
+  `keep-replace-reconciler.ts`, which are narrower reconciliation paths) — imports and calls
+  `geminiProvider` directly, exactly like `room-diagnostician.ts` does for room understanding,
+  completely bypassing `getProvider()`/`AI_PROVIDER`. The ORIGINAL README wording was accurate;
+  my "fix" would have shipped a real regression in doc accuracy. Caught by 2/2 reviewers before
+  the PR was even opened; cleanly reverted via `git reset --hard` back to the last-good commit
+  + cherry-pick of the still-valid picks fix, so no revert-noise landed in PR/commit history.
+  **Lesson, reinforcing a pattern this file has recorded before (Run 178's design-bar false
+  positive, multiple prior runs' "verify a scout claim before shipping"): the discipline has to
+  extend to MY OWN synthesis of a scout's finding, not just the scout's raw claim — I grepped for
+  `getProvider("scoring")` callers and stopped there instead of checking whether the actual
+  scoring engine even goes through that function.**
+- **Test/eval coverage: 1 real gap filed, not attempted.** `lib/agents/validation-agent.ts`'s
+  harmony-loop convergence state machine (best-version restore, velocity tracking, loop-exit
+  decisions) has only indirect cassette-based coverage, no hermetic unit test of the orchestration
+  layer itself. Filed as **APT-56** with a concrete acceptance check rather than attempted this
+  run (real implementation effort, not a mechanical fix). A secondary, lower-priority finding
+  (`orchestrator.ts`'s `runAgenticSearch` dispatch sequencing) noted in the same issue rather than
+  filed separately, to avoid board sprawl for two related-but-distinct-priority gaps.
+
+### Shipped: PR #953 — discarded-error sweep + picks perf narrowing
+
+Two commits, each independently reviewed (2 fresh subagents, correctness + value/phase-fit, both
+APPROVE on both): the diagnosis-stream/saved-designs error-logging fix, and the picks-route
+select-narrowing. Consolidated into one PR per this session's single-designated-branch git policy
+(same precedent as Run 178/150). `npx tsc --noEmit` clean, `npm test` 3134/3150 passing (16
+skipped, pre-existing), `npm run check:determinism` clean, targeted test re-runs for all 3 touched
+routes green. CI: verify/build/mobile/lint/security-invariants/validate-capabilities/validate-gtm
+all green (`journeys` still in progress at merge time — reconfirms Run 178's finding that it is
+NOT a required check). Squash-merged cleanly.
+
+**Board bookkeeping**: APT-54 updated with a detailed comment (what shipped, what's ruled
+not-needed, what's still open) and released back to Backlog, unassigned — 1 of its 3 named routes
+done this run, 1 investigated and found not to need work, 1 (`saved-designs` POST snapshot path)
+still open for a future run's field-tracing pass. APT-56 filed fresh. No ROADMAP Track/DoD
+checkbox ticked — all shipped work is below Track-checkbox granularity (mechanical correctness +
+a real but sub-phase perf narrowing). No migration, no live secret.
+
+**Cold container note (repeat of Run 152/164's lesson, worth repeating again since it recurred
+identically)**: this container had zero `node_modules` at root AND in `mobile/` — `npm install`
+(~1min) + `cd mobile && npm install` fixed both before any gate command was trustworthy.
+
+## Run 2026-08-20 (Run 180) — single-branch session; APT-54 saved-designs perf + discarded-error sweep + APT-39 final 2 files; APT-56 premise corrected, APT-57 filed
+
+**Board.** Linear reachable. `Todo` held only APT-9 (owner-only trigger-prompt edit, re-confirmed structural bar many runs running — NOT re-derived, per its latest comment). Triaged Backlog. Claimed APT-39 (In Progress from a prior run — verified NOT actually done: a full `grep -rl '<img'` sweep showed `compare/page.tsx` had 2 fully-ungated product imgs and `focus/page.tsx` 3 more, so the prior "13th and final file" close-out via #941 had NOT covered these two files), APT-54 (perf), and briefly APT-50/APT-56 (both released — see below).
+
+**Cold container note (recurring, Run 152/164/179 lesson):** root `node_modules` was present this run (no reinstall needed) — but confirm before trusting a huge tsc error count regardless.
+
+**Scout sweep (4 lenses, Haiku):** correctness (discarded-`.error` class), security/RLS, performance (APT-54 saved-designs trace), test-coverage (APT-56). **Security + a11y both CLEAN, not padded** (26/26 RLS, IDOR spot-check clean, no NEXT_PUBLIC_/EXPO_PUBLIC_ secret leak, handle_new_user search_path hardened in migration 028).
+
+**Shipped (3 file-disjoint commits, single-branch → one PR per Run 178/179 precedent; each commit independently 2-reviewer APPROVE first cycle):**
+
+1. **APT-54 item #1 — saved-designs snapshot perf (`app/api/saved-designs/route.ts`).** Narrowed the POST snapshot-build path's two over-fetched embeds: `candidate_products` `"*, product_evaluations(*)"` → `"id, title, category, retailer, product_url, image_url, price, metadata"`, and `product_bundles` `"*, product_bundle_items(*), bundle_evaluations(*)"` → `"*"`. **Verified safe three ways before shipping** (not scout-trusted): (a) field-by-field against the persisted+read-back snapshot shape in `app/saved/[id]/page.tsx` and `app/shared/[token]/SharedDesignView.tsx` — every rendered field kept, `metadata` kept for `groupByTier`'s `price_tier`; (b) `product_evaluations`/`bundles` confirmed never field-accessed (typed `unknown[]`); (c) **in-memory backend** (`lib/store/memory-store.ts`): it never PROJECTS columns — `resolveRelations` starts from the full row and only ATTACHES relations named in the select string, and is skipped entirely when select === `"*"`. So narrowing only stops attaching now-unreferenced relations; it cannot drop a needed scalar. ~70% payload cut on full-stage saves. **Lesson: the memory-store's non-projecting select is why column-narrowing is always scalar-safe there but relation-DROPPING needs the "is it read back?" check — the two are different risks.** Reviewer A independently re-verified the memory-store semantics.
+
+2. **Discarded-`.error` sweep (`diagnosis/route.ts`, `refine-chat/route.ts`).** 3 more sites of the established class — `otherRooms`/`otherDiagnoses` (diagnosis cross-room coherence context) + `allUserMsgs` (refine-chat refinement history), all log-only (optional context, must degrade not 500). Plus the 2 in-file saved-designs fixes folded into commit 1 (diagnosisError fail-loud vs. masquerading 404; projectError log-only). Both files already imported `logServerError`; matched their own scope-string convention.
+
+3. **APT-39 final 2 files (`compare/page.tsx`, `focus/page.tsx`).** `compare` (2 product thumbnails, zero prior gating) + `focus` (ImageOverlay modal + 2 tier thumbnails). Gated `next/image` behind `canOptimizeImageHost()`. Modal parent went `relative` → `relative aspect-video` because `fill` is out-of-flow and establishes no height itself (reviewer A confirmed this was necessary, not incidental). Raw-`<img>` ratchet count unchanged (MAX_RAW_IMG=30) — all conversions moved unconditional imgs into fallback branches. **APT-39 is now genuinely complete for compare+focus; the remaining `<img>` in the app are all host-gated fallbacks or the deliberately-raw mockups lightbox (its own inline comment explains the natural-aspect-ratio + getBoundingClientRect zoom-origin rationale).**
+
+**Board discipline — 2 issues released rather than force-built (maker judgment):**
+- **APT-56 (harmony-loop unit test): premise corrected, released to Backlog.** A dedicated read established the convergence *state machine* the issue names ("best-version restore, velocity tracking, loop-exit decisions") is NOT in `validation-agent.ts`. That file's Pass C convergence decision is LLM-DELEGATED (builds a prompt, parses `{needs_more_rounds, round_budget}`) — no pure logic to unit-test hermetically. The REAL pure state machine is `evaluateAutoFinalize` in `design-coordinator.ts`, and it's ALREADY hermetically tested (`__tests__/agents/design-coordinator.test.ts` — 8.5 boundary, 0.2 velocity, ≥1-round gate, exit precedence). `best-version restore` doesn't exist in either file. So the gap is largely already covered; the untested part (Pass C) needs a PROD REFACTOR (extract the decision rules into a pure `evaluateConvergence()`), not a test add — priced as a feature-with-review, not a coverage drive-by. Left the corrected map on the issue. **Lesson: "add a test" issues can encode a wrong mental model of where the logic lives — verify the target function is pure and exported before claiming a hermetic test is even possible.**
+- **APT-50 (harness-ratchet stripComments bug): left in Backlog.** Confirmed still a hard-guarded file (`__tests__/ai/harness-ratchet.test.ts` — a hook blocks edits per AGENTS.md brakes). No new capability; not re-attempted.
+
+**Filed:** APT-57 (regression test pinning the narrowed saved-designs select strings, mirroring the APT-48 `bundles-products-narrowed-embeds.test.ts` guard) — surfaced by Reviewer B; the current diff was hand-verified against every consumer but has no test asserting the select strings, so a future revert-to-`(*)` would pass silently.
+
+**Gate.** tsc clean, `npm test` 3134 passing / 16 skipped (0 regressions from baseline), determinism clean, eslint clean on all 5 touched files, img-ratchet 4/4. No migration, no live secret. No ROADMAP Track/DoD checkbox ticked — all 3 changes are below Track-checkbox granularity (mechanical correctness + a sub-phase perf narrowing + design-bar img conversions). No fresh DEEP AUDIT this run (last full 8-lens was Run 179, 2026-08-20 — not yet stale; a targeted 4-lens scout sweep does not reset that clock, per the established partial-scout convention).
+
+## Run 2026-08-21 (Run 181) — APT-57: regression test pinning the APT-54 narrowed saved-designs selects
+
+**Board.** Linear reachable. `Todo` held only APT-9 (owner-only trigger-prompt edit under a `.github/`-adjacent structural bar — re-confirmed from its latest comment, not re-derived). Backlog held several items; triaged and prioritised **APT-57** (Low priority, but the smallest, most concretely-scoped, cleanly file-disjoint item with a runnable acceptance check — filed by Reviewer B during Run 180's own APT-54 review). Claimed it (assigned to self, moved to In Progress) before building.
+
+**Considered and correctly left alone:**
+- **APT-42** (High, `gtm-quality: self_validation_honesty B / pmf_read_accuracy B`) — tempting given its priority, but its own "Fix" section is explicitly labelled "GTM Factory next-run priority" and its fix touches `docs/growth/GROWTH_STATUS.md`, which ROADMAP.md's GROWTH DATA FEEDS section assigns to the separate Growth Agent's ownership ("owned + updated every run by the Growth Agent"). Claiming and editing it here would cross the maker≠checker boundary between the Product Factory and the Growth Agent routines that share this one Linear board. Left in Backlog for the correct routine.
+- **APT-52** (CI journeys-job intermittent hang) — genuinely not actionable: root cause requires a `.github/workflows/ci.yml` edit (`timeout-minutes`), which trips the sensitive-file permission bar. Already correctly recorded as such; not re-derived.
+- **APT-53** (stale cross-routine PRs #918/#919) — content belongs to the GTM Auditor / Growth Agent routines, not this one; the issue's own fix direction says so. Left for those routines' next runs.
+- **APT-50** (harness-ratchet stripComments bug) — still a hard-guarded test file (hook-blocked per AGENTS.md brakes); not re-attempted.
+
+**Lesson for future runs:** when Backlog holds an item whose OWN description names a different factory/routine as the one meant to act on it (e.g. "GTM Factory next-run priority"), that's a signal to leave it even if priority is high — the label is telling you which of the several routines sharing this board owns the fix, not that it's unclaimed work for whichever routine reads it first.
+
+**Shipped: PR #956 — `__tests__/api/saved-designs-narrowed-embeds.test.ts` (APT-57).** Pins the two nested `.select()` embeds APT-54 (Run 180) narrowed on the `saved-designs` POST snapshot-build path — `candidate_products` → the 8 scalar columns the snapshot actually persists/reads back, `product_bundles` → `"*"` (no nested embeds) — mirroring the existing `bundles-products-narrowed-embeds.test.ts` precedent built for the analogous APT-48 narrowing. Also covers the two discarded-error branches from the same prior change: `diagnosisError` (must fail loud with 500, not fall through to the "no analysis found" 404) and `projectError` (must log via `logServerError` but NOT fail the save). Reused the `makeQuery`/`makeClient` thenable-chain mock pattern from `saved-designs-full-persistence.test.ts` (same route, same mocks), extended with a `selectCalls` capture keyed by table name so the exact select string per table can be asserted, not just presence/absence.
+
+**Proved the guard non-vacuous before shipping** (own verification, ahead of review): manually reverted the `candidate_products` select back to `"*, product_evaluations(*)"` — the new test's exact-match `toEqual` assertion failed red as expected (`AssertionError: expected [ '*, product_evaluations(*)' ] to deeply equal [ Array(1) ]`); restored, confirmed green. Reviewer A independently repeated this for all three assertions (candidate_products select, diagnosisError branch, projectError branch) by removing each check in isolation and confirming each turns exactly its own test red, isolated from the other three.
+
+**Gate.** `npx tsc --noEmit` clean. `npm test` 3138 passed / 16 skipped (+4 tests vs. the pre-change 3134/16 baseline, zero regressions). `npx eslint` clean on the new file. `npm run check:determinism` clean (pure vitest unit test — no LLM calls, no `Math.random()`/`Date.now()` in assertions, no cost/determinism-contract involvement, confirmed by Reviewer B). Both reviewers (correctness + mock-fidelity; value/phase-fit + spend/security) APPROVE first cycle, no requested changes. CI required checks (verify/build/mobile/lint/journeys/security-invariants/validate-capabilities/validate-gtm) all green; auto-merge landed PR #956 as squash commit `b403f82`. Re-ran the acceptance check on the merged tree (`npx vitest run __tests__/api/saved-designs-narrowed-embeds.test.ts` → 4/4 pass) before closing the Linear issue with that output pasted in, per the board contract.
+
+**Cold container note (recurring, Run 152/164/178/179/180 lesson):** root `node_modules` AND `mobile/node_modules` were both absent this run (fully cold) — `npm install` (root) + `cd mobile && npm install` fixed both (~1–2 min combined) before any gate command was trustworthy. The `mobile/` install touched `mobile/package-lock.json` with pure `dev`→`devOptional` metadata churn (no dependency/version change) — reverted via `git checkout -- mobile/package-lock.json` before committing, to keep the shipped diff exactly file-disjoint (one new test file only).
+
+**Board bookkeeping.** APT-57 moved to Done, PR #956 attached, acceptance-check output pasted as a comment (not the word "done"). No ROADMAP Track/DoD checkbox affected — this is sub-Track-checkbox granularity (test-coverage hardening on an already-shipped, already-ticked perf change), same class as prior runs' discarded-error-sweep and perf-narrowing commits. No migration, no live secret, no `.claude/`/`.github/` edit. No fresh DEEP AUDIT this run — last full 8-lens pass was Run 179 (2026-08-20, per Run 180's own note), not yet stale by the ~24h/~4-run threshold; a single small, well-scoped Backlog item does not need one. Nothing new filed this run — the 4 Backlog items reviewed (APT-42/50/52/53) were correctly left for their respective owning routines/blockers, not gaps needing a fresh issue.
+
+## Run 2026-08-21 (Run 182) — single-branch session; 5 file-disjoint fixes (a11y web+mobile, perf, orchestrator reliability, doc freshness); `@supabase/ssr` bump attempted and correctly reverted
+
+**Board.** Linear reachable. `Todo` held only APT-9 (owner-only trigger-prompt edit — re-confirmed structurally barred from its own comment history, going back to Run 152/153; not re-derived). Backlog triaged: APT-42/45/46 (gtm-quality items) explicitly belong to the separate GTM/Growth routines per their own text — left alone (maker≠checker across routines, per Run 181's established reasoning). APT-52/53 need a `.github/` edit or belong to other routines — left alone. APT-50 (harness-ratchet bug) is still hook-blocked — not re-attempted. APT-27/34 (orphaned branches, mobile dep vulns) have no concrete code action available this run. APT-56 (harmony-loop unit test) re-verified via a dedicated scout: the premise correction from Run 180 still holds — `validation-agent.ts`'s Pass C convergence is LLM-delegated, not a pure function; `design-coordinator.ts`'s `evaluateAutoFinalize` (the actual pure state machine) is already tested; no new untested pure convergence logic exists anywhere in `lib/agents/**`. Left in Backlog, nothing to build. **Attempted APT-55** (`@supabase/ssr` 0.9.0→0.12.4, auth-infra) — see below; correctly reverted, not closed.
+
+**Cold container note (recurring, Run 152/164/178/179/180/181 lesson):** root `node_modules` AND `mobile/node_modules` were both absent this run (fully cold) — `npm install` (root, ~1 min) + `cd mobile && npm install` (~1 min) fixed both before any gate command was trustworthy. The `mobile/` install again touched `mobile/package-lock.json` with pure `dev`→`devOptional` metadata churn (no dependency/version change) — reverted via `git checkout -- mobile/package-lock.json` before any commit, keeping every shipped diff exactly file-disjoint.
+
+**Scout sweep (6 lenses first pass: correctness, security/RLS, performance, test-coverage, deps-compat, design-bar/a11y; +3 second pass: mobile, AI-pipeline reliability, artifact freshness — all Haiku).** Security + test-coverage both **clean, not padded**: `check-security-invariants.mjs` 26/26 RLS tables clean, 8 IDOR spot-checks all correctly bound to the authenticated user (routes not already covered in the last QUALITY_SCORECARD security_rls sweep), no new untested pure convergence logic found. One correctness finding was a **verified false positive**, not shipped: the scout flagged `diagnosis/route.ts`'s non-stream `inferUserPreferences` call as missing the `.catch(() => null)` its stream sibling has — but `inferUserPreferences` (`lib/design-context/infer-preferences.ts:234-299`) already wraps its ENTIRE body in a top-level try/catch returning `null` on any failure, so it can never actually reject; the "fix" would have been a defensive-parity no-op on a call that provably cannot throw. Caught before implementing, not after.
+
+**Shipped: PR #959 — 5 independently-reviewed, file-disjoint changes, one PR (this session's designated-branch precedent, same as Run 178/179/180/181):**
+
+1. **a11y (web) — focus-visible ring on 7 unstyled `mailto:`/contact `<a>` tags** across `app/account/page.tsx`, `app/billing/checkout-cancel/page.tsx`, `app/billing/checkout-success/page.tsx`, `app/terms/page.tsx` (×2), `app/support/page.tsx`, `app/privacy/page.tsx` — a real WCAG 2.4.7 gap (no visible keyboard-focus indicator), matching the established `rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring` pattern already used elsewhere (e.g. `compare/page.tsx`). Verified `components/ui/button.tsx` already carries this ring baked in, so `support/page.tsx`'s second (`Button asChild`-wrapped) mailto link was deliberately left untouched rather than double-applied — a signal (per Reviewer B) that this was a judgment-driven pass, not a mechanical find-replace.
+2. **perf(api) — narrowed `GET /api/projects/[projectId]`** from `select("*, rooms(*)")` to `select("id, building_research")`. Traced every repo-wide caller before narrowing (not scout-trusted): the sole GET consumer is the focus page's `Promise.all` preload, which reads only `project.building_research`; the dashboard's identically-shaped URL call is actually a `PUT` (the separate `updateProject` handler, unaffected). Extended `__tests__/api/projects-by-id-not-found.test.ts` with a select-string-pinning regression test (mirroring the APT-54/57 narrowed-embed-test precedent) and proved it non-vacuous by manually reverting the select and confirming exactly that assertion turns red.
+3. **a11y (mobile) — missing `accessibilityLabel`** on `mobile/src/components/auth/signup-screen.tsx`'s post-signup "Go to sign in" `Pressable` — had `accessibilityRole="button"` but no label, unlike ~90 other labeled buttons in the mobile app including this same file's sibling footer button (which already has `accessibilityLabel="Sign in to your account"`).
+4. **docs — stale migration pointer** in `docs/pre-submission-checklist.md`: referenced `029_grant_stripe_customers_access.sql` as the latest migration; migrations 030-033 had landed since (`030_saved_designs_drop_permissive_public_policy`, `031_waitlist_unsubscribe`, `032_backfill_update_with_check`, `033_design_profiles_saved_items_with_check`). Corrected to 033. Per ROADMAP's LIVING ARTIFACTS rule.
+5. **fix(agents) — fail-open on the orchestrator's deep-scoring fan-out.** `lib/agents/orchestrator.ts`'s `runAgenticSearch`, inside the `deepScorePromises` per-(category,tier) fan-out: previously no `.catch()` on the pushed `deepScoreLimit(...)` promise, so an unhandled rejection from `scoreProducts()` would sink `Promise.all(deepScorePromises)` and lose deep-score coverage for every OTHER category in the room, not just the failing one. Verified (by both reviewers independently, not just the scout) that this is a real if rare failure mode: `fit-scorer.ts`'s `scoreProductsImpl`/`scoreProductImpl` already catch LLM/parse failures internally and return `{success: false}` rather than throwing, but setup code ahead of those try/catch blocks — `selectModel`, `computeProductMathScores` (called per-product on possibly-malformed scraped data), `crypto.createHash` — is unguarded and CAN throw. Added a `.catch()` that logs (`category`, `count`, `error`) and fails open, mirroring the existing `semanticDedupTasks` fail-open pattern ~250 lines above in the same file (that precedent has no logging at all; this one adds it — a strict observability improvement, per Reviewer B). Confirmed no downstream `evaluations.get/has` consumer crashes on a missing entry (all ~30 call sites already guard, since the pre-existing "token budget exceeded" branch produces the identical missing-evaluation state deliberately).
+
+**Attempted and correctly reverted: `@supabase/ssr` 0.9.0 → 0.12.4 (APT-55).** Scout assessed it safe (no breaking API-surface change for this repo's `createServerClient`/`createBrowserClient` usage, peer-dep range satisfied, full green gate). Reviewer B (value/phase-fit) APPROVEd. **Reviewer A (correctness/security) correctly REQUEST_CHANGES'd it** on a real, non-hand-wavy finding: the CHANGELOG between 0.9.0 and 0.12.4 documents genuine cookie-handling behavior changes exactly in the auth-critical PKCE/cookie path (0.12.4 "flush PKCE verifier slot removals on the server" — this app's `/api/auth/callback` route is on that exact code-exchange path; 0.12.1 "deduplicate server cookie writes"; 0.12.3 "keep domain-scoped deletion in name-keyed cookie stores") — and every test that touches this (`__tests__/supabase/middleware.test.ts`, `__tests__/supabase/data-backend.test.ts`, `__tests__/api/auth-callback.test.ts`) `vi.mock`s `@supabase/ssr`/`@/lib/supabase/server` wholesale, so zero test in the repo exercises the actual un-mocked package code that changed. Rather than force a weak fix within the review cycle cap (no live-network test infra exists in this repo's conventions; a real fix needs either a non-mocked cookie-round-trip integration test or a human-run manual QA pass against a live Supabase project — neither buildable headlessly this run), reverted cleanly via `git revert` (commit `b6db33b`, keeping history intact rather than force-pushing) and recorded the full risk analysis as a Linear comment on APT-55 so a future run doesn't re-derive it from scratch. **Lesson, reinforcing this file's repeated pattern: a scout's "no breaking API signature" read is necessary but not sufficient for a dependency bump on auth-critical infra — the CHANGELOG's documented *behavior* changes matter even when the type signatures don't move, and "mocked tests still pass" proves nothing about code that's entirely mocked out.**
+
+**Gate.** `npx tsc --noEmit` clean (repo + `cd mobile && npx tsc --noEmit`). `npm test` 3139 passed / 16 skipped (3155), 291 files, 0 regressions (+1 net new test vs. the 3138/16 Run 181 baseline). `npm run check:determinism` clean. `npx eslint` clean on every touched file (repo + mobile). CI required checks (verify/build/mobile/lint/security-invariants/validate-capabilities/validate-gtm) all green on the final 5-commit head; `journeys` still in progress at merge time (reconfirms the now well-established Run 178+ finding that it is not a required check). Auto-merge landed PR #959 as merge commit `cb18011` at 08:38:17 UTC, ~13 minutes after PR creation.
+
+**Board bookkeeping.** No Linear issue closed this run (APT-55 stays open in Backlog with the revert analysis recorded as a comment; nothing else was claimed). No ROADMAP Track/DoD checkbox ticked — all 5 shipped changes are sub-Track-checkbox granularity (a11y/perf/reliability/doc-freshness fixes), same class as prior runs. No migration, no live secret, no `.claude/`/`.github/` edit. No fresh DEEP AUDIT this run — last full 8-lens pass was Run 179 (2026-08-20), not yet stale by the ~24h/~4-run threshold; the 9-lens scout sweep (6+3) this run was a normal targeted sweep, not a full audit, per the established partial-scout convention (Run 180/181).
+
+## Run 2026-08-21 (Run 183) — full DEEP AUDIT (6 lenses, 4 runs since last full pass) + dead code + artifact freshness + F3 eval gold-set growth
+
+**Board.** Linear reachable. `Todo` held only APT-9 (owner-only `.github/`-adjacent trigger-prompt edit — structural bar re-confirmed across many runs, not re-derived). Backlog (13 items: APT-55/56/50/34/52/53/27/23/46/45/44/43/42) is fully triaged by recent runs — all either belong to the separate GTM/Growth routines (own text says so), are hook-blocked (APT-50), need a `.github/` edit (APT-52), or have no concrete code action available this run (APT-27/34/23). Nothing new to claim; no issue claimed this run.
+
+**Cadence check.** Last full 8-lens DEEP AUDIT was Run 179 (2026-08-20); Runs 180-182 each ran smaller targeted sweeps, not full audits (per their own text). Four runs since 179 — due per the routine's ~24h/~4-run threshold. Ran a fresh 6-lens sweep (Haiku scouts, parallel): functional-reality (actual-run check), quality-scorecard reconcile, store-readiness/marketing-freshness, eval gold-set + orchestrator fan-out coverage, correctness/dead-code full-codebase sweep, security/RLS fresh sweep.
+
+**Findings, by lens:**
+- **Security/RLS: clean.** `check-security-invariants.mjs` 26/26 tables. All 9 migrations 025-033 individually re-verified: each either adds a table with RLS+policy, adds a table with RLS+no-policy (service-role-only), or is a non-table-adding alter/backfill/grant — none missing RLS. 5 fresh IDOR spot-checks on previously-unchecked routes (rooms/[roomId], billing/status, mobile/entitlements, user/delete, rooms/[roomId]/images) all correctly scoped to `auth.uid()`.
+- **Functional-reality: unchanged, C-grade evidence re-confirmed byte-identical** to 08-17 (owner-gated DATA_BACKEND cutover, `.github/`-blocked). No new bug found on a scan of recently-changed routes/pages.
+- **Quality-scorecard reconcile: clean.** All ship-critical dimensions' cited evidence still holds as of today; the only drift is design_taste's screenshot count (30→34, net positive, doesn't move the B). One scout claim ("ROADMAP.md doesn't exist in the repo") was independently verified false — the file was read directly at this run's own session start (965 lines) — disregarded as a scout hallucination, not acted on.
+- **Store-readiness/marketing-freshness: 1 real finding** (shipped — see below); pricing consistent across `docs/BUSINESS_CASE.md`/`app/pricing/page.tsx`/`docs/store-listing.md`, no drift.
+- **Eval gold-set (F3) + orchestrator coverage:** gold-set gap identified and closed (see below). Orchestrator `runAgenticSearch` fan-out coverage: investigated, genuinely not addressable with a small test — the untested branches (outer error handler, category-planning fallback, token-budget-exhaustion early-exits, semantic-dedup fail-open, deep-score-batch fail-open) all require mocking 15+ top-level imports or extracting the orchestration into a pure, dependency-injected layer (a real architectural refactor), not a ~40-line addable test. Same class of conclusion as Run 180's APT-56 premise-correction — recorded here rather than force-building a fake-small test, per that same discipline. Not filed as a fresh Linear issue since it restates the QUALITY_SCORECARD's own already-tracked tests_evals gap with no new actionable angle.
+- **Correctness/dead-code full-codebase sweep: 2 candidates, 1 shipped, 1 correctly rejected.** `components/ui/motion.tsx`'s `ScrollStagger` had zero references anywhere in the repo (confirmed by 2 independent reviewers plus my own grep) — removed. **Caught my own mistake before shipping**: an initial pass also removed `staggerContainer` (the variants object `ScrollStagger` consumed), reasoning it was now orphaned too — but `npx tsc --noEmit` immediately caught that `StaggerList`, a different, very much still-used component later in the same file, also consumes `staggerContainer`. My own cross-file-only grep habit (a pattern this file has flagged before, e.g. Run 180's fit-scorer.ts miss) missed a same-file usage further down. Restored it, re-verified clean. The second candidate, `lib/ai/openai-schema.ts`'s `zodToOpenAISchema`, looked identically dead (only referenced by its own test file, zero production call sites) but was correctly **not** removed on inspection: its test block (`describe("zodToOpenAISchema — end-to-end contract")`) exercises the shared `cleanForOpenAI` helper via genuinely different input shape (real `z.toJSONSchema()` output) than `geminiSchemaToOpenAI`'s tests (hand-crafted JSON Schema), so removing it would have deleted real regression coverage of a shared function dressed as cleanup — the same anti-pattern this file has repeatedly warned about (verify a scout's "dead code" claim traces the actual coverage graph, not just production call sites).
+
+**Shipped, 3 changes across 2 PRs (the eval-fixture builder agent was still mid-run when the first pair cleared review, so it shipped separately rather than blocking on it):**
+
+1. **PR #961 — `components/ui/motion.tsx` (ScrollStagger removal) + `docs/brand-kit.md` (stale icon claim fix).** The brand-kit fix: the doc claimed mobile app icons were still "placeholder" and needed replacement before EAS Build; `mobile/assets/images/icon.png` is verified (via `file` + `ls -la`) as a real, committed 1024×1024 799KB production PNG, with the Android adaptive foreground/background/monochrome variants also present. Both reviewers (correctness/security; value/phase-fit) APPROVE first cycle — Reviewer A separately noted (not a diff defect, informational) that the doc's required-sizes table still says Android adaptive icons should be 432×432 while the actual committed files are 512×512 — a pre-existing, this-diff-doesn't-touch-it spec/asset mismatch, left as-is rather than scope-creeping into this PR. Gate green: `tsc` clean, `npm test` 3139/16 (0 regressions), `eslint` clean, `check:determinism` clean. Auto-merged as `12f32c1`.
+
+2. **PR #962 — `evals/gold/bedroom-dark-jewel-tone-moody.json` + `evals/__tests__/diagnosis.eval.test.ts` (F3 gold-set growth).** Delegated fixture-building to a dedicated agent (GEMINI_API_KEY available in this environment): it sourced a real Unsplash image (verified `curl -sI` → 200, `image/jpeg`), built the fixture following the existing 4 fixtures' schema/discipline, and — notably — caught its own initial assumption wrong: it first assumed the room's wall sconce cast a warm bulb glow (matching the "cozy" framing), then zoomed into the actual photo pixels and corrected the fixture's description to say the light source is a cool-white LED, not warm (the warm palette terms are justified instead by the sconce's brass hardware color and the cream archway walls — a materially different, more honest claim than the first draft). The agent correctly identified that dropping a JSON file alone doesn't wire it into the live-eval suite — `diagnosis.eval.test.ts` looks up fixtures by hardcoded id per `it()` block, not a generic loop over `evals/gold/*` — so it built and ran a temporary scratch test to verify live twice, then cleaned it up per its own instructions not to touch other files. I then added the permanent `it()` block myself (mirroring the 4 existing ones exactly), ran it live a third time independently (passed), and Reviewer A ran it live a FOURTH time as part of its own verification (also passed) — four independent live passes total before merge, well past the "not reverse-engineered from a single lucky pass" bar this repo's fixtures hold themselves to. **Incidental finding, not a regression**: the same full-suite run that included my new fixture also hit one failure on the pre-existing `great-room-keep-leather-sectional` fixture; re-run in isolation immediately after, it passed cleanly — confirmed as LLM-sampling flakiness (the diagnosis pipeline's self-consistency sampling loop isn't perfectly seed-stable in practice, unlike the deterministic-contract's non-LLM paths), not a real regression, since this diff touches no pipeline code. Not filed as an issue — this is the same known category of live-eval variance the repo's `DETERMINISTIC_SEED` contract doesn't (and can't) fully eliminate for LLM sampling, distinct from the deterministic non-LLM paths the contract actually covers. Both reviewers APPROVE first cycle, one of them (Reviewer A) independently re-running the live eval as part of its own verification rather than trusting the description. Gate green. Auto-merged as `ab1fb7a`.
+
+**Lesson for future runs (two, both about verification discipline, reinforcing this file's recurring theme):** (1) a same-file grep for "is this referenced elsewhere" is not enough when a would-be-dead symbol could be consumed later in the SAME file by a different, live export — `tsc --noEmit` caught what a targeted grep missed; run the type check before trusting a dead-code removal, not just after. (2) "only referenced by its own test" is not sufficient evidence a function is safely removable — check whether that test exercises shared underlying logic via a materially different code path first (zodToOpenAISchema vs. geminiSchemaToOpenAI both call into `cleanForOpenAI`, but via structurally different input).
+
+**Gate.** `npx tsc --noEmit` clean (both PRs, independently). `npm test` 3139 passed / 16 skipped (3155), 0 regressions across both PRs. `npm run check:determinism` clean. `npx eslint` clean on all touched files. CI required checks green on both PR heads; both auto-merged within ~5 minutes of PR creation. No ROADMAP Track/DoD checkbox ticked — F3 stays explicitly open per its own text ("do NOT tick this closed — it is a standing quality task, ongoing"); the dead-code and doc-freshness fixes are sub-Track-checkbox granularity, same class as prior runs. No migration, no live secret, no `.claude/`/`.github/` edit. No Linear issue claimed or closed this run (nothing new on the board; the work this run came from the DEEP AUDIT sweep itself, per ROADMAP's "work that is not a Linear issue... is still yours and still comes from the ROADMAP/deep audit" carve-out).

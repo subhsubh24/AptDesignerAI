@@ -19,6 +19,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ArrowRight, Paperclip, Lightbulb, AlertTriangle, RefreshCw } from "lucide-react";
 import { PageTransition } from "@/components/ui/motion";
+import Image from "next/image";
+import { canOptimizeImageHost } from "@/lib/utils/image-url";
 
 export default function RoomSetupPage() {
   const params = useParams();
@@ -184,8 +186,18 @@ export default function RoomSetupPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               {images.map((img, i) => (
                 <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt={`Room photo ${i + 1}`} className="h-full w-full object-cover" />
+                  {canOptimizeImageHost(img.url) ? (
+                    <Image
+                      src={img.url}
+                      alt={`Room photo ${i + 1}`}
+                      fill
+                      sizes="(min-width: 640px) 33vw, 50vw"
+                      className="object-cover"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={img.url} alt={`Room photo ${i + 1}`} className="h-full w-full object-cover" />
+                  )}
                 </div>
               ))}
             </div>
@@ -329,8 +341,18 @@ export default function RoomSetupPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {referenceImages.map((img, i) => (
                   <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.url} alt={`Reference photo ${i + 1}`} className="h-full w-full object-cover" />
+                    {canOptimizeImageHost(img.url) ? (
+                      <Image
+                        src={img.url}
+                        alt={`Reference photo ${i + 1}`}
+                        fill
+                        sizes="(min-width: 640px) 33vw, 50vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img.url} alt={`Reference photo ${i + 1}`} className="h-full w-full object-cover" />
+                    )}
                   </div>
                 ))}
               </div>

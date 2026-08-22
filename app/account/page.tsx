@@ -63,7 +63,7 @@ export default function AccountPage() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             View your profile, change your password, and manage connected services from your{" "}
-            <a href="/faq" className="underline underline-offset-4 hover:text-foreground transition-colors">
+            <a href="/faq" className="underline underline-offset-4 hover:text-foreground transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               help center
             </a>
             .

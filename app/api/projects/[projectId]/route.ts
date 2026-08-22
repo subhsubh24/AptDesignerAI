@@ -12,9 +12,13 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Narrowed from "*, rooms(*)": the sole consumer (the focus page's
+  // Promise.all preload) only reads building_research off this response —
+  // fetching every project column plus the full rooms(*) relation wasted a
+  // multi-KB payload on a hot per-navigation call for data nothing renders.
   const { data, error } = await supabase
     .from("projects")
-    .select("*, rooms(*)")
+    .select("id, building_research")
     .eq("id", projectId)
     .eq("user_id", user.id)
     .single();

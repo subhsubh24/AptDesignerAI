@@ -1847,6 +1847,18 @@ export async function runAgenticSearch(
               status: "running",
               data: { deepScored: stats.totalDeepScored, total: totalToDeepScore },
             });
+          }).catch((error) => {
+            // Fail-open, matching the semanticDedupTasks pattern above: a
+            // scoring failure for one category (e.g. an unexpected error in
+            // math scoring or model selection, ahead of scoreProducts' own
+            // internal per-batch/per-product retry+fallback) must not sink
+            // Promise.all and lose deep-score coverage for every other
+            // category in this room.
+            log.warn("Deep-scoring batch failed — skipping this category", {
+              category: productCategory,
+              count: toScore.length,
+              error: error instanceof Error ? error.message : String(error),
+            });
           })
         );
       }

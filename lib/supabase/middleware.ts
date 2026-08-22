@@ -26,6 +26,17 @@ const PUBLIC_PATHS = new Set([
   // missing here, an anonymous visitor clicking "Gallery" from the pre-launch
   // landing page was redirected to /login.
   "/gallery",
+  // Stripe checkout redirects land here. Both pages are already written to
+  // degrade gracefully with no session (checkout-success explicitly branches
+  // on `user` being null and shows an honest "finalizing" state rather than a
+  // fake confirmation; checkout-cancel needs no identity at all) — but before
+  // being listed here, the middleware bounced a logged-out visitor to /login
+  // BEFORE either page ever ran, so that handling was unreachable. A paying
+  // customer whose session cookie doesn't round-trip the Stripe redirect (a
+  // real, not hypothetical, cross-site-redirect case) was sent to a login wall
+  // instead of their own payment confirmation.
+  "/billing/checkout-success",
+  "/billing/checkout-cancel",
 ]);
 
 // The subset of PUBLIC_PATHS that a signed-in user should be bounced away from.
