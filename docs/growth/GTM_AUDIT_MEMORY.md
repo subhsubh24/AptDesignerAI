@@ -519,3 +519,142 @@ having done exactly that.
   drift against GTM_STANDARD S10 (cross-dimension, currently unfiled).
 - Do not let the two-consecutive-improvement-run trend anchor the next grade upward. Re-run every
   script and re-fetch every citation cold, exactly as this run did.
+
+---
+
+## Run 7 — 2026-08-17
+
+**Overall: B · ship_gate_met: FALSE** (was B / false at Run 6 — same letter, but the blocker MOVED,
+not persisted: business_case_honesty is finally fixed after three straight runs; a different
+ship-critical dimension took its place for an unrelated reason)
+
+Graded GROWTH_STATUS (as_of 2026-08-15, Growth Agent Run 25) + BUSINESS_CASE (as_of 2026-08-15,
+commit 32ea347c0) with eight fresh, independent, adversarial per-dimension graders, each explicitly
+tasked to re-verify Run 6's specific claimed fixes against real code/scripts/citations, not trust
+the Factory's self-report. Read GTM_AUDIT_MEMORY first and diffed against Run 6.
+
+### Grades
+| Dimension | R4 | R5 | R6 | R7 | Ship-critical | Δ vs R6 |
+|---|---|---|---|---|---|---|
+| Metric integrity | A | A | A | **A** | ★ | = |
+| Business-case honesty | B | B | B | **A+** | ★ | ↑↑ (B→A+, gate-opening on this dim) |
+| Experiment validity | C | B | A | **A** | | = |
+| Roadmap-steer justification | A | A | A+ | **A+** | ★ | = |
+| Self-validation honesty | C | A | A | **B** | ★ | ↓ (gate-closing, new reason) |
+| PMF read accuracy | B | B | A | **B** | | ↓ (same root cause as above) |
+| Compliance | B | A | A | **A** | | = |
+| Artifact freshness | C | C | B | **A** | | ↑ |
+
+### The business-case fix that finally broke the 3-run streak
+1. **Business-case honesty B → A+.** Growth Agent Run 25 added the "steady-state, not year-1"
+   caveat to both remaining sensitivity figures (monthly-churn-12%, annual-churn-40%), registered
+   two new scripts, and annotated the `arr_year1` misnomer. Independently re-executed both new
+   scripts cold: `$60,593` and `$69,934` reproduce exactly, via the same `computeYear1ExitRunRate()`
+   helper already used elsewhere in the doc — no formula shortcut. Then, critically, swept the
+   ENTIRE document fresh for a FOURTH instance of the disclosure-asymmetry pattern that has recurred
+   at Run 4→5 and Run 5→6 — found none (the one candidate, Scenario C, already carries its own
+   adjacent caveat). This is the first time this exact ship-critical gap has been closed clean in
+   three tries. Only a trivial follow-up remains (Scenario C lacks a registered year-1 script,
+   unlike every other scenario) — not enough to cap the grade below A+.
+
+### The new gap that took its place (self_validation_honesty A → B, pmf_read_accuracy A → B)
+2. **A genuinely new finding, corroborated independently by two graders with no shared context.**
+   Product Factory PR #912 (Linear APT-38, "build activation_rate + rolling retention_d1/d7/d30",
+   merged 2026-08-16 — one day after GROWTH_STATUS.md's own `as_of`) added real, wired Supabase
+   queries to `lib/growth/metrics.ts`. A separate commit built `churn_rate_30d` as a real computed
+   rate. Both the self_validation_honesty grader and the pmf_read_accuracy grader independently ran
+   the doc's OWN prescribed verification grep and got a result — 15+ hits — that contradicts the
+   doc's own `pmf.unbuilt_disclosure` text ("all 5 fields above are UNBUILT... exist[s] nowhere in
+   the codebase") and the `stripe_reporting` validation entry's parallel churn-rate claim. This is
+   the textbook self-validation failure mode: a self-report the artifacts now contradict. Important
+   framing: this is NOT a GTM Factory failure in the usual sense — the doc was accurate when written;
+   the Product Factory shipped the fix to the underlying gap the very next day, and no GTM run has
+   touched the doc since to catch up. Not a fabrication either — the funnel/pmf numbers stay
+   honestly null (no cohort exists yet pre-launch), so the direction of the error understates
+   capability rather than flattering it. But it is live and false today, which is what the rubric
+   grades. This is now the SOLE reason the ship gate stays closed.
+
+### What else moved
+3. **Artifact freshness B → A.** Growth Agent Run 25's claimed fix to `docs/email-lifecycle.md`'s
+   top banner (previously contradicting its own "Delivery notes for owner" section) is confirmed —
+   and, critically, a full adversarial sweep of every OTHER GTM doc in the repo found no fourth
+   instance of the 3-run-recurring "fix one spot, miss a duplicate" pattern. The one thing NOT fixed:
+   Run 6's recommended structural guard (a preflight/validate-gtm check tying FunnelEvent's count to
+   docs/analytics.md) was never built — the current match holds by luck, not enforcement, which is
+   why this is A and not A+.
+4. **Experiment validity held A.** The Wayfair theme-1 disconfirming citation is genuine and
+   WebFetch-verified (4.9/5 across ~2.5M ratings, Jami303 quote verbatim). The OTHER Run 6 nit (the
+   theme-4 "sixth consecutive dead end" tally, inflated by one per Run 19's own method_note) is
+   UNFIXED for a third cycle running — three subsequent runs (23, 24, 25) touched the document
+   without correcting a nit named explicitly two runs ago.
+5. **Metric integrity and compliance held A**, both on freshly re-derived evidence, not carried
+   forward: compliance's test suite was actually re-executed this run (25/25 passing, not just read);
+   metric_integrity's citations were checked against raw HTML/embedded JSON rather than the WebFetch
+   tool's own AI-summarized pass (which itself mischaracterized RoomGPT's ratings on first read —
+   the raw JSON was needed to confirm the doc, not the summarizer, was right). Metric integrity's one
+   nit (engine_pct not CI-enforced) is unfixed for a second cycle; a new adjacent finding was added
+   (validate-gtm.mjs's tripwire doesn't cover email/content/outreach/experiments).
+6. **Roadmap-steer justification held A+**, re-verified with zero findings across every channel
+   (GitHub-API history reconstruction, demand-signal source grep, Linear/GitHub issue search).
+
+### Ship gate
+NOT MET. The blocker moved rather than persisting: business_case_honesty (blocker for Runs 4, 5, 6)
+is finally A+; self_validation_honesty (previously clean since Run 5) is now the sole ship-critical
+gap at B. Every other ship-critical dimension is A/A+, and pmf_read_accuracy's B already clears the
+non-critical >=B bar.
+
+### Issue tracking this run
+Filed to **Linear** (team `AptDesignerAI`, label `source:gtm-auditor` + `type:gtm`), not GitHub —
+see the methodological note below for why. Checked for duplicates first (none found for any of these
+topics; `APT-38`, the Product-Factory build that CAUSED this run's new gap, is already Done, so no
+separate build issue is needed — only the GTM doc-update issue below):
+- Filed **new**: "gtm-quality: self_validation_honesty B / pmf_read_accuracy B → raise to A" (the
+  stale unbuilt_disclosure/stripe_reporting text vs. PR #912) — ship-critical, top priority.
+- Filed **new**: "gtm-quality: artifact_freshness A → A+" (missing FunnelEvent/docs.analytics.md
+  structural guard).
+- Filed **new**: "gtm-quality: metric_integrity A → A+" (engine_pct not CI-enforced, 2nd cycle
+  unfixed; validate-gtm.mjs tripwire coverage gap).
+- Filed **new**: "gtm-quality: experiment_validity A → A+" (theme-4 dead-end tally inflated by one,
+  3rd cycle unfixed).
+- Filed **new**: "gtm-quality: business_case_honesty A+ follow-up" (Scenario C lacks a year-1
+  script) — low priority, near-exemplary nit only.
+
+### Methodological note — corrected a stale instruction, did not wait for the owner
+This routine's own fired prompt still says "open or UPDATE a GitHub issue." `PENDING_OPS.md`
+(`Apply the Linear-issue-filing prompt fix...`, added 2026-08-08) documents that this instruction is
+stale: the Product Factory claims work from Linear (team `AptDesignerAI`), not GitHub, so a
+GitHub-filed finding is invisible to the factory (tracked as Linear issue `APT-9`, still open — the
+routine's own stored trigger prompt can only be edited by the owner via the dashboard, not by any
+agent session, per the tool's own access model). Verified via `mcp__Linear__list_issues` that zero
+`source:gtm-auditor`-labeled issues exist yet, confirming this gap is real and current. Per
+AGENTS.md's "decide, don't park" directive (a structural bar, not a judgment call, and the fix is
+already fully drafted with exact label/title conventions in PENDING_OPS.md), filed this run's
+findings to Linear instead of GitHub, using the prescribed `source:gtm-auditor` label. This is the
+first run any GTM Auditor pass has produced a Linear-visible finding.
+
+### Methodological note carried forward
+This repo's local clone is SHALLOW (`.git/shallow` present) — reconfirmed again this run. The
+roadmap-steer sweep used the GitHub API to reconstruct full history rather than local `git log`, per
+the standing note since Run 4.
+
+### Notes for next run
+- Re-check whether GROWTH_STATUS.md's `pmf.unbuilt_disclosure` and the `stripe_reporting`
+  validation entry have been updated to reflect PR #912 (activation_rate/retention_d1/d7/d30 now
+  built) and the churn_rate_30d build — this is the single highest-priority fix, ship-critical, and
+  should be cheap (a doc edit, not a rebuild). Confirm `organic_share_rate` is still correctly named
+  the one remaining unbuilt field.
+- Re-check the two carried-forward self_validation_honesty nits (vercel_analytics package.json line
+  citation, still 31 vs actual 35; demand_signal `confidence` vs GTM_STANDARD S10's
+  `overall_strength`) — both now unfixed for 2+ cycles despite being cheap one-line fixes.
+- Re-check experiment_validity's theme-4 tally correction (six → five) — unfixed for 3 cycles now.
+  If a 4th run passes without a fix, name the NON-fix itself (not just the miscount) as a process
+  finding.
+- Re-check whether a preflight/validate-gtm structural guard was added for engine_pct (CI
+  enforcement) or the FunnelEvent/docs.analytics.md count match (artifact_freshness) — both are
+  recommended-but-not-built structural fixes now spanning 2+ cycles.
+- Watch whether the newly-filed Linear issues get picked up by the Product/GTM Factory loop —
+  this is the first real test of whether Linear-filing (vs. the routine's stale GitHub instruction)
+  actually closes the visibility gap APT-9 named.
+- Do not let "the blocker moved but the gate is still closed" read as a wash. Business-case honesty
+  breaking a 3-run streak is real, hard-won progress — grade the artifact in front of you, not the
+  overall letter's stability.
