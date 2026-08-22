@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { enforceWriteRateLimit, DELETE_WRITE_LIMIT } from "@/lib/utils/write-rate-limit";
 
 export async function GET(
@@ -35,12 +35,18 @@ export async function PATCH(
   if (limited) return limited;
 
   // Verify ownership
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("id, projects!inner(user_id)")
     .eq("id", roomId)
     .eq("projects.user_id", user.id)
     .single();
+  // PGRST116 ("no rows") is the normal shape of "not found or not owned" here
+  // — the inner join + eq(user.id) filters it out just like an ownership
+  // check would — so it's not logged as a failure; a genuine DB error is.
+  if (roomError && roomError.code !== "PGRST116") {
+    logServerError("rooms.byId.patch.room", roomError);
+  }
   if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -143,12 +149,18 @@ export async function DELETE(
   if (limited) return limited;
 
   // Verify ownership
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("id, projects!inner(user_id)")
     .eq("id", roomId)
     .eq("projects.user_id", user.id)
     .single();
+  // PGRST116 ("no rows") is the normal shape of "not found or not owned" here
+  // — the inner join + eq(user.id) filters it out just like an ownership
+  // check would — so it's not logged as a failure; a genuine DB error is.
+  if (roomError && roomError.code !== "PGRST116") {
+    logServerError("rooms.byId.delete.room", roomError);
+  }
   if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { error } = await supabase.from("rooms").delete().eq("id", roomId);
