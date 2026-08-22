@@ -67,8 +67,11 @@ function makeClient(opts: {
   // rows derived from ownedProductIds — lets a test inject a null candidate_products
   // (a deleted-FK nested join) to exercise the null-filter guard.
   bundleItemsRaw?: Array<{ candidate_products: unknown }>;
+  // A real DB error on the product_bundle_items query (timeout, RLS denial, etc.),
+  // as distinct from the table legitimately returning zero rows.
+  bundleItemsError?: { code: string; message: string };
 }) {
-  const { user, ownedProductIds = [], bundleBelongsToRoom = false, jobInsertSpy, bundleItemsRaw } = opts;
+  const { user, ownedProductIds = [], bundleBelongsToRoom = false, jobInsertSpy, bundleItemsRaw, bundleItemsError } = opts;
   const from = vi.fn((table: string) => {
     if (table === "rooms") {
       const chain: Record<string, unknown> = {};
@@ -109,10 +112,14 @@ function makeClient(opts: {
     if (table === "product_bundle_items") {
       const chain: Record<string, unknown> = {};
       chain.select = vi.fn().mockReturnValue(chain);
-      chain.eq = vi.fn().mockResolvedValue({
-        data: bundleItemsRaw ?? ownedProductIds.map((id) => ({ candidate_products: { id } })),
-        error: null,
-      });
+      chain.eq = vi.fn().mockResolvedValue(
+        bundleItemsError
+          ? { data: null, error: bundleItemsError }
+          : {
+              data: bundleItemsRaw ?? ownedProductIds.map((id) => ({ candidate_products: { id } })),
+              error: null,
+            },
+      );
       return chain;
     }
     if (table === "candidate_products") {
@@ -215,6 +222,23 @@ describe("standard mockup product<->room binding", () => {
     // Got past the null-deref (line was BEFORE the job insert) into the render.
     expect(res.status).not.toBe(404);
     expect(jobInsertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression guard: a real DB error on product_bundle_items must not be
+  // misclassified as "bundle legitimately has zero items" (400) — it's a
+  // genuine failure that should surface as a 500, not a misleading 400 right
+  // before what would otherwise be an expensive paid render.
+  it("500s (not 400) and starts NO render when the bundle-items query itself errors", async () => {
+    const jobInsertSpy = vi.fn().mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "job-1" }, error: null }) }) });
+    makeClient({
+      user: { id: "owner-1" },
+      bundleBelongsToRoom: true,
+      bundleItemsError: { code: "53300", message: "too many connections" },
+      jobInsertSpy,
+    });
+    const res = await mockupsPost(req({ room_id: "room-1", bundle_id: "bundle-1" }));
+    expect(res.status).toBe(500);
+    expect(jobInsertSpy).not.toHaveBeenCalled();
   });
 
   it("rejects with 400 and starts NO render when every bundle product was deleted", async () => {
