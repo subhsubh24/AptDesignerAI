@@ -36,65 +36,83 @@ export default function PhotoCaptureScreen() {
   }, []);
 
   const pickFromGallery = useCallback(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      if (!permission.canAskAgain) {
-        Alert.alert(
-          'Permission denied',
-          'AptDesignerAI needs photo library access. Please enable it in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Permission needed',
-          'AptDesignerAI needs access to your photo library to select a room photo.',
-          [{ text: 'OK' }]
-        );
+    // Every ImagePicker call below can reject (revoked permission mid-flow,
+    // native module error, the app backgrounding during a pick) — this is the
+    // first screen of the core funnel, so an unhandled rejection here means
+    // the button silently does nothing with no user feedback. Every other
+    // async handler in this app (settings.tsx, saved.tsx, results.tsx) wraps
+    // its body the same way; this was the one outlier.
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        if (!permission.canAskAgain) {
+          Alert.alert(
+            'Permission denied',
+            'AptDesignerAI needs photo library access. Please enable it in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Permission needed',
+            'AptDesignerAI needs access to your photo library to select a room photo.',
+            [{ text: 'OK' }]
+          );
+        }
+        return;
       }
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: false,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setSelectedImageUri(result.assets[0].uri);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        setSelectedImageUri(result.assets[0].uri);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err) {
+      console.warn('pickFromGallery failed', err);
+      Alert.alert('Something went wrong', 'We couldn’t open your photo library. Please try again.');
     }
   }, []);
 
   const takePhoto = useCallback(async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      if (!permission.canAskAgain) {
-        Alert.alert(
-          'Permission denied',
-          'AptDesignerAI needs camera access. Please enable it in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Permission needed',
-          'AptDesignerAI needs camera access to photograph your room.',
-          [{ text: 'OK' }]
-        );
+    // See pickFromGallery above — same unhandled-rejection risk on every
+    // await in this function.
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        if (!permission.canAskAgain) {
+          Alert.alert(
+            'Permission denied',
+            'AptDesignerAI needs camera access. Please enable it in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Permission needed',
+            'AptDesignerAI needs camera access to photograph your room.',
+            [{ text: 'OK' }]
+          );
+        }
+        return;
       }
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.85,
-      allowsEditing: false,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setSelectedImageUri(result.assets[0].uri);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        setSelectedImageUri(result.assets[0].uri);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err) {
+      console.warn('takePhoto failed', err);
+      Alert.alert('Something went wrong', 'We couldn’t open your camera. Please try again.');
     }
   }, []);
 
