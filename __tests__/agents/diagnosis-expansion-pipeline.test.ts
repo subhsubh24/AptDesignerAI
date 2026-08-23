@@ -29,6 +29,11 @@ function makeSupabase(opts: {
   siblingRooms?: unknown;
   singleThrows?: boolean;
   limitThrows?: boolean;
+  // In-band Supabase failure — {data: null, error} resolved (not thrown), the
+  // real shape a query failure takes. Distinct from *Throws above, which
+  // simulate a thrown exception (e.g. a network-level rejection).
+  budgetError?: { code?: string; message: string };
+  siblingsError?: { code?: string; message: string };
 }) {
   const builder: Record<string, unknown> = {};
   const self = () => builder;
@@ -38,11 +43,11 @@ function makeSupabase(opts: {
   builder.single = () =>
     opts.singleThrows
       ? Promise.reject(new Error("budget db down"))
-      : Promise.resolve({ data: opts.budgetRoom ?? null });
+      : Promise.resolve({ data: opts.budgetRoom ?? null, error: opts.budgetError ?? null });
   builder.limit = () =>
     opts.limitThrows
       ? Promise.reject(new Error("siblings db down"))
-      : Promise.resolve({ data: opts.siblingRooms ?? null });
+      : Promise.resolve({ data: opts.siblingRooms ?? null, error: opts.siblingsError ?? null });
   return { from: vi.fn(() => builder) };
 }
 
@@ -160,5 +165,64 @@ describe("runFullDiagnosisExpansion", () => {
     // Budget context degraded to null -> passed through to the expansion call.
     const passedBudget = runDiagnosisExpansion.mock.calls[0][0].budget;
     expect(passedBudget).toBeNull();
+  });
+
+  // Regression guard: buildExpansionBudgetContext / fetchSiblingRoomSummaries
+  // destructured only `data` from their Supabase calls, discarding `error`.
+  // A real DB failure resolves IN-BAND as {data: null, error} — it never
+  // throws — so the surrounding try/catch alone never observed it, and
+  // nothing was logged server-side. Both now capture and log the error.
+  it("logs a warning when the budget lookup fails with a real (non-PGRST116) DB error", async () => {
+    runDiagnosisExpansion.mockResolvedValue({
+      expanded_items: [item("sofa")],
+      decision_log: null,
+      added_count: 0,
+      stop_reason: "saturated",
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = makeSupabase({
+      budgetError: { code: "53300", message: "too many connections" },
+    });
+    await runFullDiagnosisExpansion(baseArgs({ supabase: supabase as unknown as never }));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("buildExpansionBudgetContext: room lookup error"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("does NOT log when the budget lookup errors with PGRST116 (genuine no-row)", async () => {
+    runDiagnosisExpansion.mockResolvedValue({
+      expanded_items: [item("sofa")],
+      decision_log: null,
+      added_count: 0,
+      stop_reason: "saturated",
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = makeSupabase({
+      budgetError: { code: "PGRST116", message: "no rows" },
+    });
+    await runFullDiagnosisExpansion(baseArgs({ supabase: supabase as unknown as never }));
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("buildExpansionBudgetContext"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("logs a warning when the siblingRooms lookup fails with a real DB error", async () => {
+    runDiagnosisExpansion.mockResolvedValue({
+      expanded_items: [item("sofa")],
+      decision_log: null,
+      added_count: 0,
+      stop_reason: "saturated",
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = makeSupabase({
+      siblingsError: { code: "53300", message: "too many connections" },
+    });
+    await runFullDiagnosisExpansion(baseArgs({ supabase: supabase as unknown as never }));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("fetchSiblingRoomSummaries: siblingRooms lookup error"),
+    );
+    warnSpy.mockRestore();
   });
 });
