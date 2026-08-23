@@ -86,7 +86,7 @@ export async function POST(request: Request) {
   }
 
   // Load other rooms for cross-room awareness
-  const { data: otherRooms } = await supabase
+  const { data: otherRooms, error: otherRoomsError } = await supabase
     .from("rooms")
     .select("name, room_type, room_diagnoses(diagnosis_json, design_direction_json)")
     .eq("project_id", project?.id || room.project_id)
@@ -98,6 +98,11 @@ export async function POST(request: Request) {
     // /api/area-analysis route's identical fetch.
     .order("created_at", { ascending: false })
     .limit(30);
+  // Best-effort cross-room context, not a 404-determining query — log and
+  // continue on a real DB error rather than failing the refinement request.
+  if (otherRoomsError) {
+    logServerError("area-analysis.refine.otherRooms", otherRoomsError);
+  }
 
   // Build content blocks
   const contentBlocks: AIContentBlock[] = [];
