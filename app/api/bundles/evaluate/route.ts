@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     .single();
 
   if (bundleError && bundleError.code !== "PGRST116") {
-    logServerError("bundles.evaluate.bundle", bundleError);
+    return apiError("bundles.evaluate.bundle", bundleError);
   }
   if (!bundle) return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
 
