@@ -85,6 +85,11 @@ export interface BudgetAllocationResult {
   }>;
   issues: Array<{
     category: string;
+    /** Full alias list for this target (e.g. ["sofa","sectional"]) — used by
+     *  getBudgetIssuesForItem to match an item against ANY alias, not just
+     *  the display-name `category` (aliases[0]). Optional so hand-built
+     *  fixtures (tests) can omit it and fall back to matching `category` alone. */
+    aliases?: string[];
     issue: string;
     suggestion: string;
   }>;
@@ -191,12 +196,14 @@ export function computeBudgetAllocation(
     if (status === "under" && !target.accentOnly) {
       issues.push({
         category: target.aliases[0],
+        aliases: target.aliases,
         issue: `Under-spent on ${target.aliases[0]}: ${Math.round(share * 100)}% of budget vs. typical ${Math.round(lo * 100)}-${Math.round(hi * 100)}%`,
         suggestion: `Increase ${target.aliases[0]} budget — anchor piece, don't cheap out (raise to $${Math.round(totalSpend * lo)}+)`,
       });
     } else if (status === "over" && !target.focalOnly) {
       issues.push({
         category: target.aliases[0],
+        aliases: target.aliases,
         issue: `Over-spent on ${target.aliases[0]}: ${Math.round(share * 100)}% of budget vs. typical ${Math.round(lo * 100)}-${Math.round(hi * 100)}%`,
         suggestion: `Reallocate — reduce ${target.aliases[0]} budget to $${Math.round(totalSpend * hi)} and invest the difference in under-budgeted categories`,
       });
@@ -240,7 +247,16 @@ export function getBudgetIssuesForItem(
 ): string[] {
   const cat = normalizeCategory(category);
   return result.issues
-    .filter((i) => i.category === cat || cat.includes(i.category) || i.category.includes(cat))
+    .filter((i) => {
+      // Match against every alias for this target (e.g. an item categorized
+      // "sectional" must still match the "sofa" target's issue), not just the
+      // display-name `category` (aliases[0]) — a target's non-first alias
+      // never equaled `category` under the old single-string check, so items
+      // in it silently never picked up their own budget issue. Falls back to
+      // `[i.category]` when `aliases` is absent (hand-built test fixtures).
+      const candidates = i.aliases && i.aliases.length > 0 ? i.aliases : [i.category];
+      return candidates.some((a) => cat === a || cat.includes(a) || a.includes(cat));
+    })
     .map((i) => i.issue);
 }
 

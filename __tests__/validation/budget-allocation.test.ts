@@ -191,4 +191,26 @@ describe("getBudgetIssuesForItem", () => {
     expect(getBudgetIssuesForItem(base, "rug")).toEqual([]);
     expect(getBudgetIssuesForItem({ ...base, issues: [] }, "sofa")).toEqual([]);
   });
+
+  it("matches a target's SECONDARY alias, not just its display-name category", () => {
+    // Regression guard: computeBudgetAllocation always names an issue's
+    // `category` after aliases[0] (e.g. "sofa" for the sofa/sectional
+    // target), but a real what_it_needs item can be categorized under any
+    // alias in that target (e.g. "sectional"). Before `aliases` was carried
+    // on each issue, "sectional" never equaled "sofa" and this silently
+    // never matched — the item's own budget issue was dropped.
+    const withAliases: BudgetAllocationResult = {
+      ...base,
+      issues: [
+        { category: "sofa", aliases: ["sofa", "sectional"], issue: "sofa is under-invested", suggestion: "spend more" },
+      ],
+    };
+    expect(getBudgetIssuesForItem(withAliases, "sectional")).toEqual(["sofa is under-invested"]);
+  });
+
+  it("falls back to matching bare `category` when `aliases` is absent (hand-built fixtures)", () => {
+    // `base` above has no `aliases` field on its issues — confirms the
+    // fallback path (not just the new aliases-aware path) still works.
+    expect(getBudgetIssuesForItem(base, "sofa")).toEqual(["sofa is under-invested"]);
+  });
 });
