@@ -437,13 +437,18 @@ These photos show the REST of the apartment. Study them to understand:
   // (byte-for-byte inert) when the feature is off or no rows exist.
   let identifiedProducts: IdentifiedProduct[] = [];
   try {
-    const { data: latestDiag } = await supabase
+    const { data: latestDiag, error: latestDiagError } = await supabase
       .from("room_diagnoses")
       .select("diagnosis_json")
       .eq("room_id", room_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    // supabase-js returns query errors in-band ({data, error}), not via throw —
+    // this surrounding try/catch alone does NOT observe a real DB failure here,
+    // so without this check it silently degrades to an empty list with zero
+    // server-side visibility, indistinguishable from "feature off/no rows".
+    if (latestDiagError) logServerError("area-analysis.identifiedProducts", latestDiagError);
     const dj = latestDiag?.diagnosis_json as { identified_products?: IdentifiedProduct[] } | undefined;
     identifiedProducts = dj?.identified_products ?? [];
   } catch {
