@@ -11,6 +11,8 @@
 //
 // Complements spatial-graph.ts; uses the same zone vocabulary.
 
+import { categoriesShareToken } from "./category-token-match";
+
 // Canonical zone tokens (shared vocabulary with spatial-graph.ts)
 const ZONE_TOKENS: Array<{ pattern: RegExp; canonical: string }> = [
   { pattern: /\bnorth\s*wall\b/i, canonical: "north_wall" },
@@ -191,7 +193,7 @@ export function getOutletReachIssuesForItem(
 ): string[] {
   const cat = normalizeCategory(category);
   return result.issues
-    .filter((i) => i.category === cat || cat.includes(i.category) || i.category.includes(cat))
+    .filter((i) => categoriesShareToken(cat, i.category))
     .map((i) => i.issue);
 }
 

@@ -213,4 +213,16 @@ describe("getBudgetIssuesForItem", () => {
     // fallback path (not just the new aliases-aware path) still works.
     expect(getBudgetIssuesForItem(base, "sofa")).toEqual(["sofa is under-invested"]);
   });
+
+  it("does NOT cross-match a nightstand against an unrelated bed issue (APT-61)", () => {
+    // Under the old cat.includes(a)/a.includes(cat) substring check,
+    // "bedside_table".includes("bed") was true, so an item categorized
+    // "bedside_table" (the nightstand target's second alias) wrongly picked
+    // up an unrelated "bed" issue. Whole-token matching must not.
+    const bedOnly: BudgetAllocationResult = {
+      ...base,
+      issues: [{ category: "bed", issue: "bed is under-invested", suggestion: "spend more" }],
+    };
+    expect(getBudgetIssuesForItem(bedOnly, "bedside_table")).toEqual([]);
+  });
 });

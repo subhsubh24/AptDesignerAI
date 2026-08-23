@@ -15,6 +15,8 @@
 // A bundle that spends 60% on a chandelier is a red flag — the LLM doesn't
 // reason about proportions across items without help.
 
+import { categoriesShareToken } from "./category-token-match";
+
 type PctRange = [number, number]; // [min, max] as 0-1 fractions
 
 interface AllocationTarget {
@@ -255,7 +257,7 @@ export function getBudgetIssuesForItem(
       // in it silently never picked up their own budget issue. Falls back to
       // `[i.category]` when `aliases` is absent (hand-built test fixtures).
       const candidates = i.aliases && i.aliases.length > 0 ? i.aliases : [i.category];
-      return candidates.some((a) => cat === a || cat.includes(a) || a.includes(cat));
+      return candidates.some((a) => categoriesShareToken(cat, a));
     })
     .map((i) => i.issue);
 }
