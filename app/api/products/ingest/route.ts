@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { createClient } from "@/lib/supabase/server";
 import { extractFromUrl, extractFromImage } from "@/lib/agents/product-extractor";
 import { createAgentRun, completeAgentRun } from "@/lib/db/agent-runs";
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     .eq("id", room_id)
     .single();
   if (roomError || !room) {
-    console.error("[products.ingest] Room fetch failed after ownership check:", roomError?.message);
+    logServerError("products.ingest.room", roomError);
     return NextResponse.json({ error: "Failed to load room context. Please retry." }, { status: 500 });
   }
   const roomImageUrls: string[] = (
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
     ? await supabase.from("projects").select("*").eq("id", room.project_id).single()
     : { data: null, error: null };
   if (projectError) {
-    console.error("[products.ingest] Project fetch failed:", projectError.message);
+    logServerError("products.ingest.project", projectError);
   }
   const designProfile = buildDesignProfile(project);
 
