@@ -9156,3 +9156,106 @@ checkbox ticked (a doc-accuracy fix and an error-observability fix are both sub-
 granularity, same class as prior runs' discarded-error sweeps). No migration, no live secret, no
 `.claude/`/`.github/` edit. Last full DEEP AUDIT was Run 183 (2026-08-21, one run prior) — not yet
 stale by the ~24h/~4-run threshold, so none run this session.
+
+## Run 2026-08-23 (Run 187) — APT-9 fix attempted and confirmed dead; 3-scout sweep; 2 review-caught real bugs fixed before merge
+
+**Board check.** Linear `Todo` held only **APT-9** (auditor routine prompts still file GitHub issues,
+not Linear). Unlike prior runs that read the prior comment and released it without re-attempting,
+this run went further: extracted both trigger prompts in full via `list_triggers` (~634KB response,
+sliced to disk and grepped for the two `trig_` IDs), wrote the complete edited step (4)/(5) text for
+both prompts — Linear team `AptDesignerAI`, titled `quality: <dimension> ...` / `gtm-quality:
+<dimension> ...`, `type:factory` + `source:quality-auditor`/`source:gtm-auditor` labels, a runnable-
+acceptance-check requirement, dedupe via `list_issues` — then called `update_trigger` on both.
+**Both rejected identically:** `this routine was created via "http_api", not by an agent. Agents can
+only update routines they created (via create_trigger).` This is a hard tool-capability wall, not a
+stale permission snapshot: the CCR harness's `update_trigger` tool structurally refuses to touch ANY
+Routine whose `job_config` was set outside a `create_trigger` call from inside a session, regardless
+of which session or account calls it. Recorded the full attempted diff + the exact error on the
+issue, released back to `Todo` unassigned. **Lesson for future runs: do not re-attempt `update_trigger`
+on APT-9 or any other `http_api`-created Routine — that path is dead by design, not by a fixable
+permission gap.** The fix needs a human editing the Routine directly via the claude.ai dashboard/API.
+
+**3 parallel Haiku scouts** (discarded-Supabase-error sweep across `app/api/`, F3 eval gold-set
+coverage gaps, dead-code/weak-test-coverage sweep across `lib/`) surfaced three genuinely disjoint,
+value-bar-clearing changes:
+
+**(1) Discarded-error sweep — `app/api/area-analysis/route.ts` + `app/api/area-analysis/refine/
+route.ts`.** Found and fixed 5 instances of this codebase's recurring bug class (APT-15/16/17/25/
+28/54/58 lineage): GET's diagnosis fetch and `runAnalysis`'s dedup fetch (`route.ts`) and the room +
+project fetches (`refine/route.ts`) all destructured only `data`, discarding `error`. Ported the
+established sibling pattern (`rooms/[roomId]/diagnosis/route.ts`, `rooms/[roomId]/route.ts`): capture
+`error`, `logServerError` unless `PGRST116`, no response-behavior change. **Reviewer A's first pass
+found a 6th instance in the SAME function this PR was already touching** — `route.ts`'s identified-
+products lookup, wrapped in a `try/catch` that gives FALSE confidence, since supabase-js returns query
+errors in-band (`{data, error}`), never via throw, so the catch block silently never observed a real
+DB failure there. Fixed before merge, with a test proving the fix (the try/catch alone does not catch
+a mocked DB-error result). Reviewer B independently found and flagged (not blocking) one more residual
+instance in `refine/route.ts` (the `otherRooms` context fetch) — filed as **APT-60** rather than widen
+the PR further.
+
+**(2) Dead-code removal — `lib/validation/durability-map.ts`.** `formatLifestyleFitForPrompt` had zero
+production callers. Verified (not just trusted the scout): `product-math.ts` consumes
+`scoreLifestyleFit`'s result as a flat `issues` array directly, and its OWN separate
+`formatProductMathForPrompt` already inlines an equivalent `pet=.. kid=.. traffic=.. clean=..`
+rendering — a parallel, already-wired formatter independently reimplementing the same output. Removed
+the function + its orphaned test file. This corrects a stale Run 108 record (`docs/loop-memory.md`/
+`IMPROVEMENT_LOG.md` both still narrate it as shipped/load-bearing) — Run 108 wrote the test without
+checking the function had a caller; a future scout reading those old entries could be misled, so this
+note documents the correction inline for the next reader.
+
+**(3) `getBudgetIssuesForItem` integration — `lib/validation/harmony-math.ts`.** Every OTHER per-item
+math sub-dimension in `computeHarmonyScores` (spatial graph, pairwise, ergonomics, access, outlet
+reach) was wired into the per-item `violations` loop; budget allocation was the sole exception, despite
+its score already feeding the per-item weighted `mathScore`. Traced real downstream impact before
+committing to the fix (not just internal-consistency reasoning): `violations` feeds
+`formatMathScoresForPrompt`'s per-item evidence line sent to the harmony-revision LLM prompt, AND
+`app/api/area-analysis/route.ts` uses `violations.length > 0` to widen `computeConfidenceInterval`'s
+returned uncertainty in the API response — both were blind to a budget-only problem on a specific item
+before this fix. **Reviewer A's first pass found a real bug this activated**: `getBudgetIssuesForItem`
+matched only against an issue's display-name `category` field (always `target.aliases[0]`, e.g.
+`"sofa"`), never the full alias list — so an item categorized under ANY other alias of the same target
+(`"sectional"` vs. the sofa target's own second alias, `"bedside_table"` vs. `nightstand`,
+`"office_chair"`/`"task_chair"` vs. `desk_chair`, `"bookcase"`/`"shelving"` vs. `bookshelf`,
+`"chandelier"` vs. `pendant_light`, `"credenza"` vs. `sideboard`, `"counter_stool"` vs. `bar_stool`)
+silently never matched — the majority of multi-alias targets across every room type. The two original
+tests both happened to use category `"sofa"` (which equals `aliases[0]` exactly), so they didn't catch
+it. Fixed the missed-match half: carried the full `aliases` array on each issue (optional field,
+falls back to `[category]` for hand-built test fixtures), matched against any alias. Reviewer A ALSO
+found a genuine false-positive (`"bedside_table".includes("bed")` → true, wrongly cross-matching an
+unrelated `bed` issue) — confirmed real but judged NOT a blocker for this PR: it's a pre-existing
+weakness shared by ALL FIVE sibling `get*IssuesForItem` helpers (outlet-reach, ergonomics, access,
+pairwise, spatial-graph all use the same naive `.includes()` substring match), so fixing it here would
+be a partial, inconsistent patch to a cross-cutting problem rather than this PR's actual scope. Filed
+**APT-61** for a coordinated fix across all five helpers with a proper regression fixture. Re-reviewed
+after the alias-matcher fix (1 cycle, within the 2-cycle cap) — Reviewer A confirmed the original
+finding resolved and re-verified the false-positive is unchanged-but-non-blocking; APPROVE.
+
+**Single-branch → per-change branches, again.** Confirmed the Run 185 lesson still holds: this
+session's harness pins a single designated branch, but the routine's disjoint-changes model needs one
+branch per change. Committed all 3 (plus the review-driven follow-up fixes) to the designated branch
+as separate commits, then created 3 fresh branches off the current default-branch tip and
+`git cherry-pick`ed each commit onto its matching branch (clean — no conflicts, since the 3 changes
+touch entirely disjoint files: `app/api/area-analysis/*`, `lib/validation/durability-map.ts`,
+`lib/validation/{budget-allocation,harmony-math}.ts`). One near-miss: after cherry-picking, ran
+`git push -u origin <branch>` for two of the three but the tool call for the third (dead-code removal)
+silently didn't execute in the same batch — `create_pull_request` failed with `PullRequest.head
+(invalid)` because the branch existed only locally. Caught immediately from the error, pushed, then
+the PR created cleanly. **Lesson: after `git cherry-pick`, verify each branch actually reached origin
+(`git ls-remote origin <branch>` or `git rev-parse origin/<branch>`) before calling
+`create_pull_request` — don't assume a push succeeded just because the local commit exists.**
+
+**Gate.** `npx tsc --noEmit` clean on all 3 branches independently; `npm test` net +14 tests across
+the three changes from the 3143/17 baseline (0 regressions on any branch); `npx eslint` clean on every
+touched file; `npm run check:determinism` clean. All 3 PRs' required CI checks green; all 3
+auto-merged (`#970`, `#971`, `#972`). No ROADMAP Track/DoD checkbox ticked — all 3 changes are
+sub-Track-checkbox granularity (error-observability + correctness + dead-code fixes, not phase
+completions), same class as prior runs. No migration, no live secret, no `.claude/`/`.github/` edit.
+Last full DEEP AUDIT was Run 183 (2026-08-21) — 4 runs stale by the routine's ~24h/~4-run threshold,
+but this run's 3-scout sweep plus 2 independently review-caught real bugs already delivered
+substantive cross-cutting findings (discarded-errors, dead code, per-item scoring gaps); deferred the
+full 8-lens pass to the next run rather than stack it on an already-substantive session.
+
+**Board bookkeeping.** APT-9 re-confirmed structurally barred (attempted-and-rejected diff now on the
+issue, not just a comment reference) — left `Todo`, unassigned. Filed **APT-60** (Low, `refine/
+route.ts` otherRooms fetch still discards its error) and **APT-61** (Low, cross-cutting substring
+false-positive in all 5 `get*IssuesForItem` helpers) as follow-ups with runnable acceptance checks.
