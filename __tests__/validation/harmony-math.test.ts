@@ -302,6 +302,31 @@ describe("computeHarmonyScores — per-item budget-allocation issues surface as 
     const sofa = result.itemScores.find((s) => s.category === "sofa");
     expect(sofa?.violations.some((v) => /spent on/.test(v))).toBe(false);
   });
+
+  it("attaches the sofa target's issue to an item categorized under its SECONDARY alias (sectional)", () => {
+    // Regression guard for a review-caught matching bug in
+    // getBudgetIssuesForItem: computeBudgetAllocation always names the issue
+    // after aliases[0] ("sofa"), so an item categorized "sectional" (the
+    // living-room sofa target's second alias) must still pick it up.
+    const result = computeHarmonyScores(
+      {
+        what_it_needs: [
+          { category: "sectional", specs: "budget sectional" },
+          { category: "floor_lamp", specs: "statement brass floor lamp" },
+        ],
+      },
+      {
+        roomType: "living_room",
+        bundle: [
+          { category: "sectional", price: 100 },
+          { category: "floor_lamp", price: 900 },
+        ],
+      },
+    );
+
+    const sectional = result.itemScores.find((s) => s.category === "sectional");
+    expect(sectional?.violations.some((v) => /Under-spent on sofa/.test(v))).toBe(true);
+  });
 });
 
 describe("formatMathScoresForPrompt", () => {
