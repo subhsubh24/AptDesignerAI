@@ -31,4 +31,16 @@ describe("categoriesShareToken", () => {
     expect(categoriesShareToken("rug", "sofa")).toBe(false);
     expect(categoriesShareToken("floor_lamp", "dining_table")).toBe(false);
   });
+
+  it("does NOT cross-match two unrelated COMPOUND categories that share only a generic sub-token", () => {
+    // A pure set-intersection over both sides' tokens would wrongly match
+    // these — "table_lamp" and "coffee_table" both contain "table";
+    // "wall_sconce" and "wall_art" both contain "wall" — even though neither
+    // pair is the same item. This is the same bug class categoriesShareToken
+    // exists to fix, one level up: only match when at least one side is a
+    // SINGLE token (a simple category matching one component of a compound
+    // one), never two multi-token compounds sharing a generic sub-token.
+    expect(categoriesShareToken("table_lamp", "coffee_table")).toBe(false);
+    expect(categoriesShareToken("wall_sconce", "wall_art")).toBe(false);
+  });
 });
