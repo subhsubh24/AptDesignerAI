@@ -64,7 +64,13 @@ const ROOM_TARGETS: Record<string, AllocationTarget[]> = {
   ],
   kitchen: [
     { aliases: ["pendant_light", "chandelier"], share: [0.10, 0.30] },
-    { aliases: ["bar_stool", "counter_stool"], share: [0.10, 0.30] },
+    // "bar_stools" (plural) is the canonical slug used elsewhere in the
+    // pipeline (lib/config/pipeline.ts's kitchen `essential` list,
+    // area-analysis-validator.ts's matchTerms) — carried as its own alias so
+    // getBudgetIssuesForItem's whole-token match (categoriesShareToken)
+    // still finds it now that "bar_stools".includes("bar_stool") substring
+    // matching no longer papers over the singular/plural gap (APT-61 review).
+    { aliases: ["bar_stool", "counter_stool", "bar_stools"], share: [0.10, 0.30] },
   ],
 };
 
