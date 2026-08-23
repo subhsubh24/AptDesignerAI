@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logServerError } from "@/lib/utils/api-error";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
@@ -59,21 +60,30 @@ export async function POST(request: Request) {
   if (postOwnership) return postOwnership;
 
   // Load room with images
-  const { data: room } = await supabase
+  const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("*, room_images(*)")
     .eq("id", room_id)
     .single();
-
+  // PGRST116 ("no rows") is the normal shape of "not found" here — ownership
+  // was already verified above, so this would only miss on a genuine race
+  // (room deleted between the check and this fetch); any other error code is
+  // a real DB failure and must not be silently collapsed into the same 404.
+  if (roomError && roomError.code !== "PGRST116") {
+    logServerError("area-analysis.refine.room", roomError);
+  }
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   // Load project. Derive the project from the OWNED room (not a client-supplied
   // project_id) so the prompt can never be fed a different user's project.
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from("projects")
     .select("*")
     .eq("id", room.project_id)
     .single();
+  if (projectError && projectError.code !== "PGRST116") {
+    logServerError("area-analysis.refine.project", projectError);
+  }
 
   // Load other rooms for cross-room awareness
   const { data: otherRooms } = await supabase
