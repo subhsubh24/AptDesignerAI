@@ -348,7 +348,7 @@ export const ROOM_FURNISHING_TIERS: Record<string, {
     minItemCount: 7,
     optimalRange: [10, 20],
   },
-  dining_room: {
+  dining_area: {
     essential: ["dining_table", "dining_chairs", "pendant_light"],
     standard: ["area_rug", "sideboard", "table_runner"],
     finishing: ["wall_art", "plant", "centerpiece", "candles", "decorative_bowl",

@@ -48,7 +48,7 @@ const ROOM_TARGETS: Record<string, AllocationTarget[]> = {
     { aliases: ["floor_lamp", "table_lamp", "pendant_light", "wall_sconce"], share: [0.03, 0.15], accentOnly: true },
     { aliases: ["wall_art", "artwork"], share: [0.02, 0.12], accentOnly: true },
   ],
-  dining_room: [
+  dining_area: [
     { aliases: ["dining_table"], share: [0.22, 0.40] },
     { aliases: ["dining_chair"], share: [0.18, 0.35] },
     { aliases: ["area_rug", "rug"], share: [0.05, 0.15] },

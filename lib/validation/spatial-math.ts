@@ -134,15 +134,15 @@ const ROOM_SIZE_RATIOS: Record<string, Record<string, number>> = {
   // room_type → fraction of total apartment sqft
   "1_bed": {
     living_room: 0.25, bedroom: 0.20, kitchen: 0.12,
-    dining_room: 0.10, bathroom: 0.06, entryway: 0.04,
+    dining_area: 0.10, bathroom: 0.06, entryway: 0.04,
   },
   "2_bed": {
     living_room: 0.22, bedroom: 0.15, kitchen: 0.10,
-    dining_room: 0.08, bathroom: 0.05, entryway: 0.04,
+    dining_area: 0.08, bathroom: 0.05, entryway: 0.04,
   },
   "3_bed": {
     living_room: 0.20, bedroom: 0.13, kitchen: 0.09,
-    dining_room: 0.07, bathroom: 0.04, entryway: 0.03,
+    dining_area: 0.07, bathroom: 0.04, entryway: 0.03,
   },
 };
 
@@ -151,7 +151,7 @@ const ROOM_ASPECT_RATIOS: Record<string, number> = {
   living_room: 0.75, // typically wider than deep
   bedroom: 0.85,
   kitchen: 1.2, // often deeper than wide (galley)
-  dining_room: 0.9,
+  dining_area: 0.9,
   home_office: 0.8,
   bathroom: 0.7,
   entryway: 2.0, // narrow and long
@@ -253,7 +253,7 @@ function parseRoomDimensions(
 const IDEAL_COVERAGE: Record<string, [number, number]> = {
   living_room: [0.45, 0.65],
   bedroom: [0.40, 0.60],
-  dining_room: [0.35, 0.55],
+  dining_area: [0.35, 0.55],
   home_office: [0.35, 0.55],
   kitchen: [0.50, 0.70],
   bathroom: [0.40, 0.60],

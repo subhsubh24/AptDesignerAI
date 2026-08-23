@@ -23,7 +23,7 @@ export interface MaterialBalanceResult {
 const IDEAL_SOFT_RATIO: Record<string, [number, number]> = {
   living_room: [0.40, 0.60],
   bedroom: [0.50, 0.70],
-  dining_room: [0.20, 0.40],
+  dining_area: [0.20, 0.40],
   home_office: [0.25, 0.45],
   kitchen: [0.10, 0.30],
   bathroom: [0.15, 0.35],

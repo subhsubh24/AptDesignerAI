@@ -228,7 +228,7 @@ const ACCENT_CATEGORIES = new Set(["wall_sconce", "picture_light", "led_strip", 
 
 // Minimum recommended light sources by room type
 const MIN_LIGHT_SOURCES: Record<string, number> = {
-  living_room: 3, bedroom: 2, dining_room: 2, home_office: 2,
+  living_room: 3, bedroom: 2, dining_area: 2, home_office: 2,
   kitchen: 2, bathroom: 2, entryway: 1, nursery: 2,
 };
 

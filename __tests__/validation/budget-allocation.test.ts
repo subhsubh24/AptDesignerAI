@@ -248,4 +248,25 @@ describe("getBudgetIssuesForItem", () => {
     };
     expect(getBudgetIssuesForItem(bedOnly, "bedside_table")).toEqual([]);
   });
+
+  it("resolves real dining-room-tuned targets for roomType 'dining_area' (APT-63)", () => {
+    // The `rooms` table's DB CHECK constraint and every web-app write path only
+    // ever produce "dining_area" (never "dining_room") — ROOM_TARGETS must be
+    // keyed to match, or every dining room silently falls through to "no
+    // allocation targets defined" and skips this check entirely.
+    const result = computeBudgetAllocation(
+      {},
+      {
+        roomType: "dining_area",
+        bundle: [
+          { category: "dining_table", price: 200 }, // far under its 22-40% target share
+          { category: "area_rug", price: 800 },
+        ],
+      },
+    );
+    expect(result.warnings.some((w) => w.includes("No allocation targets defined"))).toBe(false);
+    const tableRow = result.per_category.find((p) => p.category === "dining_table");
+    expect(tableRow?.status).toBe("under");
+    expect(result.issues.some((i) => i.category === "dining_table")).toBe(true);
+  });
 });
