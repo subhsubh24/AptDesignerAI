@@ -54,6 +54,7 @@ function jsonReq(body: unknown): Request {
 function makeClient(
   roomResult: { data: unknown; error?: unknown },
   projectResult: { data: unknown; error?: unknown } = { data: { id: PROJECT_ID }, error: null },
+  otherRoomsResult: { data: unknown; error?: unknown } = { data: [], error: null },
 ) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: "caller-1" } } }) },
@@ -67,7 +68,7 @@ function makeClient(
         chain.eq = vi.fn(() => chain);
         chain.neq = vi.fn(() => chain);
         chain.order = vi.fn(() => chain);
-        chain.limit = vi.fn(() => Promise.resolve({ data: [], error: null }));
+        chain.limit = vi.fn(() => Promise.resolve({ error: null, ...otherRoomsResult }));
         chain.single = vi.fn(() => Promise.resolve({ error: null, ...roomResult }));
         return chain;
       }
@@ -137,6 +138,36 @@ describe("POST /api/area-analysis/refine — error classification", () => {
     await refinePost(jsonReq({ room_id: OWNED_ROOM_ID, user_feedback: "cozier" }));
     expect(mockLogServerError).toHaveBeenCalledWith(
       "area-analysis.refine.project",
+      expect.objectContaining({ code: "53300" }),
+    );
+  });
+
+  it("does NOT log when the otherRooms fetch returns a normal empty list", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeClient(
+        { data: { id: OWNED_ROOM_ID, project_id: PROJECT_ID, room_images: [] }, error: null },
+        { data: { id: PROJECT_ID }, error: null },
+        { data: [], error: null },
+      ),
+    );
+    await refinePost(jsonReq({ room_id: OWNED_ROOM_ID, user_feedback: "cozier" }));
+    expect(mockLogServerError).not.toHaveBeenCalledWith(
+      "area-analysis.refine.otherRooms",
+      expect.anything(),
+    );
+  });
+
+  it("DOES log when the otherRooms fetch hits a real DB error", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeClient(
+        { data: { id: OWNED_ROOM_ID, project_id: PROJECT_ID, room_images: [] }, error: null },
+        { data: { id: PROJECT_ID }, error: null },
+        { data: null, error: { code: "53300", message: "too many connections" } },
+      ),
+    );
+    await refinePost(jsonReq({ room_id: OWNED_ROOM_ID, user_feedback: "cozier" }));
+    expect(mockLogServerError).toHaveBeenCalledWith(
+      "area-analysis.refine.otherRooms",
       expect.objectContaining({ code: "53300" }),
     );
   });
