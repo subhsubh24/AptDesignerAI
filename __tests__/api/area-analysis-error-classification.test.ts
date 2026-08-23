@@ -63,6 +63,30 @@ function diagnosesStub(result: { data: unknown; error?: unknown }) {
   return chain;
 }
 
+/**
+ * `room_diagnoses` is queried twice in runAnalysis before the first gemini
+ * call: the dedup check (`select("*")`) and, further down, the
+ * identified-products lookup (`select("diagnosis_json")`) — distinguish them
+ * by the select column so each `.from("room_diagnoses")` call can resolve an
+ * independent result.
+ */
+function diagnosesTableStub(
+  dedupResult: { data: unknown; error?: unknown },
+  identifiedProductsResult: { data: unknown; error?: unknown } = { data: null, error: null },
+) {
+  return vi.fn(() => {
+    const chain: Record<string, unknown> = {};
+    let result = dedupResult;
+    chain.select = vi.fn((sel: string) => {
+      result = sel === "diagnosis_json" ? identifiedProductsResult : dedupResult;
+      return chain;
+    });
+    for (const m of ["eq", "order", "limit"]) chain[m] = vi.fn(() => chain);
+    chain.maybeSingle = vi.fn(() => Promise.resolve({ error: null, ...result }));
+    return chain;
+  });
+}
+
 function makeGetClient(diagnosisResult: { data: unknown; error?: unknown }) {
   return {
     auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
@@ -70,8 +94,16 @@ function makeGetClient(diagnosisResult: { data: unknown; error?: unknown }) {
   };
 }
 
-/** Full client for the POST/runAnalysis path — stops right after the dedup check (geminiProvider throws next). */
-function makePostClient(dedupResult: { data: unknown; error?: unknown }) {
+/**
+ * Full client for the POST/runAnalysis path — stops right after the
+ * identified-products lookup (geminiProvider throws on the first chat call,
+ * which happens later in the pipeline).
+ */
+function makePostClient(
+  dedupResult: { data: unknown; error?: unknown },
+  identifiedProductsResult?: { data: unknown; error?: unknown },
+) {
+  const roomDiagnosesFrom = diagnosesTableStub(dedupResult, identifiedProductsResult);
   return {
     auth: { getUser: async () => ({ data: { user: { id: "caller-1" } } }) },
     from: vi.fn((table: string) => {
@@ -99,7 +131,7 @@ function makePostClient(dedupResult: { data: unknown; error?: unknown }) {
         chain.single = vi.fn(() => Promise.resolve({ data: { id: PROJECT_ID }, error: null }));
         return chain;
       }
-      if (table === "room_diagnoses") return diagnosesStub(dedupResult);
+      if (table === "room_diagnoses") return roomDiagnosesFrom();
       return {};
     }),
   };
@@ -151,6 +183,31 @@ describe("POST /api/area-analysis (runAnalysis dedup) — error classification",
     await areaAnalysisPost(jsonReq({ room_id: OWNED_ROOM_ID }));
     expect(mockLogServerError).toHaveBeenCalledWith(
       "area-analysis.runAnalysis.dedup",
+      expect.objectContaining({ code: "53300" }),
+    );
+  });
+
+  it("does NOT log for identified-products when there's simply no diagnosis yet", async () => {
+    mockCreateClient.mockResolvedValue(
+      makePostClient({ data: null, error: null }, { data: null, error: null }),
+    );
+    await areaAnalysisPost(jsonReq({ room_id: OWNED_ROOM_ID }));
+    expect(mockLogServerError).not.toHaveBeenCalledWith(
+      "area-analysis.identifiedProducts",
+      expect.anything(),
+    );
+  });
+
+  it("DOES log when the identified-products lookup hits a real DB error, despite the surrounding try/catch", async () => {
+    mockCreateClient.mockResolvedValue(
+      makePostClient(
+        { data: null, error: null },
+        { data: null, error: { code: "53300", message: "too many connections" } },
+      ),
+    );
+    await areaAnalysisPost(jsonReq({ room_id: OWNED_ROOM_ID }));
+    expect(mockLogServerError).toHaveBeenCalledWith(
+      "area-analysis.identifiedProducts",
       expect.objectContaining({ code: "53300" }),
     );
   });
