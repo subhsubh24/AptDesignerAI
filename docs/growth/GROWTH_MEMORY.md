@@ -3124,3 +3124,103 @@ via `git fetch`), and no unique commits of its own. No reset needed.
   reconciliation, and closed out the one open research item from Run 26 with a dispositive
   misattribution finding — a quiet, honest run with no fabricated progress and no new owner action
   required.
+
+---
+
+## Run 28 — 2026-08-23
+
+### What we found
+- **Git infrastructure regression, out of GTM's remit but load-bearing for this run.** The shared
+  default branch ref (`origin/claude/ai-apartment-design-app-iHAdb`) had regressed ~16 commits
+  backward since Run 27 — orphaning real, previously-merged Product Factory work AND Run 26's own
+  GTM dashboard commit (`3e59415`). This session's own designated branch (`claude/beautiful-cori-sr0esb`)
+  independently held the full, un-regressed history, so this run's own continuity was unaffected —
+  but any *other* session checking out the default branch right now silently loses that work. Filed
+  as Linear APT-62 with the exact orphaned-commit list and a one-line verification command, rather
+  than fixed directly (repo/CI mechanics are outside the GTM Factory's blast radius) or silently
+  worked around.
+- **GTM Auditor Run 7 landed (as_of 2026-08-17), unseen by Run 27's own check.** The composition of
+  the ship-critical blocker moved, not just the grade: `business_case_honesty` (Run 6's sole
+  blocker) is now A+ (a full 4th-instance sweep found none); `self_validation_honesty` dropped
+  A->B and became the new sole blocker — GROWTH_STATUS.md's own `pmf.unbuilt_disclosure` and
+  `stripe_reporting` validation text called 4 PMF fields "unbuilt" one day after Product Factory PR
+  #912 (APT-38) had already built real Supabase-backed queries for them.
+- **That exact gap is now closed on the artifact side.** The Product Factory fixed the stale
+  disclosure text itself on 2026-08-22 (APT-42), one day before this run. Verified independently via
+  `grep` on `lib/growth/metrics.ts` rather than trusting the doc's own claim: `computeActivationRate`/
+  `computeRollingRetention`/`churnRate30d` are real and wired; `organic_share_rate` remains genuinely
+  unbuilt, matching the doc's corrected text exactly. Whether the next independent auditor pass
+  regrades the dimension back to A is for that pass to decide — this run verifies, it does not
+  self-grade.
+- **The remaining Run-7 nit this run could fix directly:** the demand_signal theme-4
+  `research_status` field overcounted "six consecutive dedicated attempts" when the auditor's own
+  re-derivation (checked against Run 19's preserved method_note, which never touched theme 4) found
+  the real count is five. Corrected in place. The auditor's other nit (`engine_pct` not wired into
+  any CI job) is a Product-Factory CI task, already tracked as APT-44 — out of GTM's remit, not
+  re-filed.
+- **Demand-signal research on themes 1/4 is now genuinely exhausted, not just "diminishing returns"
+  in prose.** Attempted Run 27's own flagged fresh angle (Google Play / independent-aggregator
+  reviews for Article-brand furniture) — zero relevant complaints found in a direct fetch of
+  slumbersearch.com's full complaint section. This is the 7th consecutive dead end across these two
+  themes. Reddit/X remain the only structurally unmined source categories, and both are
+  policy-gated (S10's Responsible Builder Policy / paid-API requirement), not tooling-gated — so a
+  future run should not expect a fresh Reddit/X angle to open up on its own.
+- **Owner blockers: no movement, 28th consecutive run.** PENDING_OPS.md `as_of` still 2026-08-19
+  (unchanged since Run 26); every growth-relevant item still `status: open`. `aptdesignerai.com` and
+  the metrics API still unreachable from this runtime (28th probe, same underlying `connect_rejected`
+  signature at the agent-proxy level, cross-checked against `/__agentproxy/status`).
+
+### What we did this run
+- Filed Linear APT-62 (default-branch regression, evidence + repro command).
+- Verified GTM_SCORECARD.md's Run 7 findings against the actual codebase (not just re-read the doc).
+- Fixed the theme-4 attempt-count nit in GROWTH_STATUS.md's demand_signal block.
+- Ran the fresh demand-signal angle Run 27 recommended (Article/Google-Play reviews) — honest
+  negative, recorded.
+- Re-probed both S10 structural gaps (Reddit exclusion — unchanged policy stance; Trustpilot — still
+  403) and the production host (28th probe, unchanged).
+- Ran `node scripts/validate-gtm.mjs` and `node scripts/validate-computation.mjs` against the edited
+  dashboard — both PASS (validate-computation: 12/12 figures re-verified).
+- Updated GROWTH_STATUS.md's `as_of`, validation block, demand_signal method_note, learnings, and
+  next_actions/owner_blockers run-counts to reflect all of the above.
+
+### What we did NOT do (and why)
+- No outreach drafts (Lane A, GTM_STANDARD S6) — the readiness gate stays hard-off: QUALITY_SCORECARD
+  `ship_gate_met` is still false (12th grade, `functional_reality` C, `design_taste` B, unchanged for
+  a 6th consecutive check).
+- No ROADMAP/VISION/BUSINESS_CASE steer — no new statistically-significant, causally revenue-linked
+  finding exists this run; the demand-signal work this run was a doc-accuracy fix and an honest
+  negative, not new evidence.
+- No channel execution or paid spend — `channels_connected: []`, `awaiting_connect: true` unchanged.
+- Did not attempt to fix the default-branch regression (APT-62) directly — repo/CI-mechanics work is
+  outside GTM's blast radius; filed for the Product Factory / owner instead.
+- No maker != checker reviewer spawned — every edit this run is either a mechanical accuracy
+  correction or a research no-op (an honest negative adds no new claim to any doc), neither meeting
+  GTM_STANDARD S3/S5's bar for independent review.
+
+### Lessons learned
+- **A prior run's own "no divergence to reconcile" framing assumes the DEFAULT branch is stable —
+  this run is the first time that assumption broke.** Worth checking `git merge-base` between the
+  designated branch and the default branch at the start of every future run, not just assuming a
+  clean checkout means "nothing to reconcile" — the direction of any divergence matters (ahead is
+  fine and requires no action; behind would mean re-basing before trusting locally-read growth docs).
+- **A scorecard's `as_of` date is not proof of when this session last saw it.** GTM Auditor Run 7 is
+  dated 2026-08-17 — four days before Run 27 ran (2026-08-21) — yet Run 27 reported "still Run 6."
+  The auditor pass likely merged into whatever branch state existed shortly after Run 27's own
+  check, not before. Re-verify the scorecard fresh every run regardless of how recent its stamped
+  `as_of` looks relative to the last run's own report.
+- **When a Product-adjacent factory (not the Growth Agent itself) fixes a GTM-doc accuracy gap, this
+  doc should still independently re-verify the fix rather than just cite it.** APT-42's fix landed
+  from the Product Factory, not this routine — verifying it via a fresh `grep` (not trusting the
+  cross-factory commit message) is exactly the self-validation discipline GTM_STANDARD S4 requires,
+  applied symmetrically regardless of which routine made the edit.
+
+### Circuit breaker check
+- Same owner blockers as Runs 1-27? YES — circuit breaker remains FIRED (Run 28, 28th consecutive
+  run, ~57 days elapsed since Run 1). No new owner blocker this run. Highest-leverage pair unchanged:
+  SITE_GATE_PASSWORD (2 min) + RESEND_API_KEY/RESEND_FROM_EMAIL (15 min) — neither requires code, both
+  are pure Vercel environment variable sets. Independent of the stuck owner blockers, this run
+  surfaced and filed a real (if out-of-remit) infrastructure regression (APT-62), verified a new
+  independent GTM Auditor pass against the actual codebase rather than trusting its own prior read,
+  fixed a doc-accuracy nit, and closed out Run 27's recommended fresh research angle with a
+  dispositive honest negative — a quiet, honest run with no fabricated progress and no new owner
+  action required.
