@@ -19,6 +19,7 @@
 // Missing access data → skip with "insufficient_data" flag; we don't fabricate.
 
 import { parseDimensions } from "./spatial-math";
+import { categoriesShareToken } from "./category-token-match";
 
 export interface AccessConstraintResult {
   /** 0-1 score. 1 = all large items fit; 0 = impossible delivery. */
@@ -288,7 +289,7 @@ export function getAccessIssuesForItem(
 ): string[] {
   const cat = normalizeCategory(category);
   return result.issues
-    .filter((i) => i.category === cat || cat.includes(i.category) || i.category.includes(cat))
+    .filter((i) => categoriesShareToken(cat, i.category))
     .map((i) => i.issue);
 }
 

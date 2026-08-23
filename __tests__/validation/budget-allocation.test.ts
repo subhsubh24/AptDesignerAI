@@ -213,4 +213,39 @@ describe("getBudgetIssuesForItem", () => {
     // fallback path (not just the new aliases-aware path) still works.
     expect(getBudgetIssuesForItem(base, "sofa")).toEqual(["sofa is under-invested"]);
   });
+
+  it("surfaces the kitchen bar_stools issue via its canonical PLURAL slug (APT-61 review follow-up)", () => {
+    // lib/config/pipeline.ts's kitchen `essential` list and
+    // area-analysis-validator.ts's matchTerms both use "bar_stools" (plural)
+    // as the canonical category slug, while this target's own aliases only
+    // listed "bar_stool" (singular). Under the OLD substring check,
+    // "bar_stools".includes("bar_stool") accidentally papered over the
+    // mismatch; the whole-token rewrite (categoriesShareToken) no longer
+    // does, so "bar_stools" must be a real alias, not rely on substring luck.
+    const result = computeBudgetAllocation(
+      {},
+      {
+        roomType: "kitchen",
+        bundle: [
+          { category: "pendant_light", price: 1200 },
+          { category: "bar_stools", price: 100 }, // far under the 10-30% target share
+        ],
+      },
+    );
+    const issue = result.issues.find((i) => i.category === "bar_stool");
+    expect(issue).toBeDefined();
+    expect(getBudgetIssuesForItem(result, "bar_stools")).toEqual([issue!.issue]);
+  });
+
+  it("does NOT cross-match a nightstand against an unrelated bed issue (APT-61)", () => {
+    // Under the old cat.includes(a)/a.includes(cat) substring check,
+    // "bedside_table".includes("bed") was true, so an item categorized
+    // "bedside_table" (the nightstand target's second alias) wrongly picked
+    // up an unrelated "bed" issue. Whole-token matching must not.
+    const bedOnly: BudgetAllocationResult = {
+      ...base,
+      issues: [{ category: "bed", issue: "bed is under-invested", suggestion: "spend more" }],
+    };
+    expect(getBudgetIssuesForItem(bedOnly, "bedside_table")).toEqual([]);
+  });
 });

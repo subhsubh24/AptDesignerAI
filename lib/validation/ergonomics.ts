@@ -16,6 +16,7 @@
 // Each rule returns pass/fail with actionable suggestion text.
 
 import { parseDimensions } from "./spatial-math";
+import { categoriesShareToken } from "./category-token-match";
 
 export interface ErgonomicsResult {
   /** 0-1 overall ergonomics fitness */
@@ -366,7 +367,7 @@ export function getErgonomicsIssuesForItem(
 ): string[] {
   const cat = normalizeCategory(category);
   return result.issues
-    .filter((i) => i.item === cat || cat.includes(i.item) || i.item.includes(cat))
+    .filter((i) => categoriesShareToken(cat, i.item))
     .map((i) => i.issue);
 }
 
