@@ -67,13 +67,14 @@ export async function GET(request: NextRequest) {
   const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
   if (getOwnership) return getOwnership;
 
-  const { data: diagnosis } = await supabase
+  const { data: diagnosis, error: diagnosisError } = await supabase
     .from("room_diagnoses")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (diagnosisError) logServerError("area-analysis.diagnosis", diagnosisError);
 
   if (!diagnosis) return NextResponse.json({ analysis: null });
 
@@ -175,13 +176,14 @@ export async function runAnalysis(
   options?: { forceRefresh?: boolean; extraDirection?: string },
 ): Promise<NextResponse> {
   // Dedup: if a valid area-analysis already exists for this room, return it
-  const { data: existingDiagnosis } = await supabase
+  const { data: existingDiagnosis, error: existingDiagnosisError } = await supabase
     .from("room_diagnoses")
     .select("*")
     .eq("room_id", room_id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (existingDiagnosisError) logServerError("area-analysis.runAnalysis.dedup", existingDiagnosisError);
 
   if (existingDiagnosis && !options?.forceRefresh) {
     const existingJson = existingDiagnosis.diagnosis_json as Record<string, unknown>;
@@ -435,13 +437,18 @@ These photos show the REST of the apartment. Study them to understand:
   // (byte-for-byte inert) when the feature is off or no rows exist.
   let identifiedProducts: IdentifiedProduct[] = [];
   try {
-    const { data: latestDiag } = await supabase
+    const { data: latestDiag, error: latestDiagError } = await supabase
       .from("room_diagnoses")
       .select("diagnosis_json")
       .eq("room_id", room_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    // supabase-js returns query errors in-band ({data, error}), not via throw —
+    // this surrounding try/catch alone does NOT observe a real DB failure here,
+    // so without this check it silently degrades to an empty list with zero
+    // server-side visibility, indistinguishable from "feature off/no rows".
+    if (latestDiagError) logServerError("area-analysis.identifiedProducts", latestDiagError);
     const dj = latestDiag?.diagnosis_json as { identified_products?: IdentifiedProduct[] } | undefined;
     identifiedProducts = dj?.identified_products ?? [];
   } catch {
