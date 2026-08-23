@@ -71,11 +71,20 @@ async function buildExpansionBudgetContext(
   currentItems: ActionItem[],
 ): Promise<ExpansionBudget | null> {
   try {
-    const { data: room } = await supabase
+    const { data: room, error: roomError } = await supabase
       .from("rooms")
       .select("budget_dollars, budget_mode")
       .eq("id", roomId)
       .single();
+    // Best-effort budget context, not a 404-determining query — a real DB
+    // error resolves in-band as {data: null, error}, never a throw, so the
+    // surrounding try/catch alone would never observe it. Log it explicitly.
+    if (roomError && roomError.code !== "PGRST116") {
+      log.warn("buildExpansionBudgetContext: room lookup error", {
+        roomId,
+        error: roomError.message ?? String(roomError),
+      });
+    }
 
     const dollars =
       (room?.budget_dollars as number | null | undefined) ??
@@ -99,12 +108,22 @@ async function fetchSiblingRoomSummaries(
   currentRoomId: string,
 ): Promise<SiblingRoomSummary[] | null> {
   try {
-    const { data: siblingRooms } = await supabase
+    const { data: siblingRooms, error: siblingRoomsError } = await supabase
       .from("rooms")
       .select("id, room_type, room_diagnoses(id, design_direction_json, action_list, created_at)")
       .eq("project_id", projectId)
       .neq("id", currentRoomId)
       .limit(6);
+    // Best-effort cross-room context — a real DB error resolves in-band as
+    // {data: null, error}, never a throw, so the surrounding try/catch alone
+    // would never observe it. Log it explicitly before falling through.
+    if (siblingRoomsError) {
+      log.warn("fetchSiblingRoomSummaries: siblingRooms lookup error", {
+        projectId,
+        currentRoomId,
+        error: siblingRoomsError.message ?? String(siblingRoomsError),
+      });
+    }
 
     if (!siblingRooms?.length) return null;
 

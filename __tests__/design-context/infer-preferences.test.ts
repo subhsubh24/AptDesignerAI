@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   aggregatePreferenceSignals,
   formatPreferencesForPrompt,
+  inferUserPreferences,
   EMPTY_PREFERENCE_SIGNALS,
 } from "@/lib/design-context/infer-preferences";
 
@@ -235,5 +236,43 @@ describe("formatPreferencesForPrompt", () => {
     expect(block).toContain("glass coffee table");
     expect(block).toContain("walnut");
     expect(block).toContain("oak");
+  });
+});
+
+// Regression guard: inferUserPreferences discarded `error` on its rooms
+// fetch, destructuring only `data`. A real DB failure resolves IN-BAND as
+// {data: null, error} — it never throws — so the surrounding try/catch alone
+// never observed it, and nothing was logged server-side.
+describe("inferUserPreferences — error classification", () => {
+  function makeSupabase(result: { data: unknown; error?: unknown }) {
+    const chain: Record<string, unknown> = {};
+    chain.select = vi.fn(() => chain);
+    chain.eq = vi.fn(() => Promise.resolve({ error: null, ...result }));
+    return { from: vi.fn(() => chain) };
+  }
+
+  it("logs a warning when the rooms lookup hits a real DB error", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = makeSupabase({
+      data: null,
+      error: { code: "53300", message: "too many connections" },
+    });
+    const result = await inferUserPreferences(supabase, "proj-1", "room-1");
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("inferUserPreferences: rooms lookup error"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("does NOT log when the rooms lookup returns a normal empty result", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const supabase = makeSupabase({ data: [], error: null });
+    const result = await inferUserPreferences(supabase, "proj-1", "room-1");
+    expect(result).toBeNull();
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("inferUserPreferences"),
+    );
+    warnSpy.mockRestore();
   });
 });

@@ -238,12 +238,22 @@ export async function inferUserPreferences(
   currentRoomId: string,
 ): Promise<PreferenceSignals | null> {
   try {
-    const { data: rooms } = await supabase
+    const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
       .select(
         "id, room_type, keep_items, replace_items, priorities, user_context, budget_mode, room_diagnoses(id, design_direction_json, action_list, created_at)",
       )
       .eq("project_id", projectId);
+    // Strictly-optional context, not a 404-determining query — a real DB
+    // error resolves in-band as {data: null, error}, never a throw, so the
+    // surrounding try/catch alone would never observe it. Log it explicitly.
+    if (roomsError) {
+      log.warn("inferUserPreferences: rooms lookup error", {
+        projectId,
+        currentRoomId,
+        error: roomsError.message ?? String(roomsError),
+      });
+    }
 
     if (!rooms?.length) return null;
 
