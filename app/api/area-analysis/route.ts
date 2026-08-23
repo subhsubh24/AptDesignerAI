@@ -67,13 +67,14 @@ export async function GET(request: NextRequest) {
   const getOwnership = await requireRoomOwnership(supabase, roomId, user.id);
   if (getOwnership) return getOwnership;
 
-  const { data: diagnosis } = await supabase
+  const { data: diagnosis, error: diagnosisError } = await supabase
     .from("room_diagnoses")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (diagnosisError) logServerError("area-analysis.diagnosis", diagnosisError);
 
   if (!diagnosis) return NextResponse.json({ analysis: null });
 
@@ -175,13 +176,14 @@ export async function runAnalysis(
   options?: { forceRefresh?: boolean; extraDirection?: string },
 ): Promise<NextResponse> {
   // Dedup: if a valid area-analysis already exists for this room, return it
-  const { data: existingDiagnosis } = await supabase
+  const { data: existingDiagnosis, error: existingDiagnosisError } = await supabase
     .from("room_diagnoses")
     .select("*")
     .eq("room_id", room_id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (existingDiagnosisError) logServerError("area-analysis.runAnalysis.dedup", existingDiagnosisError);
 
   if (existingDiagnosis && !options?.forceRefresh) {
     const existingJson = existingDiagnosis.diagnosis_json as Record<string, unknown>;
