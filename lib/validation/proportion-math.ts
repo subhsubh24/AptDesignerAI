@@ -67,7 +67,7 @@ const RUG_EXTENSIONS: Record<string, RugRule[]> = {
     { category: "chair", minExtension: 6 },
     { category: "coffee_table", minExtension: 12 },
   ],
-  dining_room: [
+  dining_area: [
     { category: "dining_table", minExtension: 24 }, // Chair pullback
   ],
   bedroom: [

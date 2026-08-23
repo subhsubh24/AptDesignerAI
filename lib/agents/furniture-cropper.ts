@@ -54,7 +54,7 @@ export interface CropperResult {
 const ROOM_PRIORITY_HINTS: Record<string, string> = {
   living_room: "sofa, sectional, armchair, coffee_table, side_table, media_console, floor_lamp, area_rug, artwork",
   bedroom: "bed, nightstand, dresser, armchair, floor_lamp, table_lamp, area_rug, artwork, mirror",
-  dining_room: "dining_table, dining_chair, console_table, pendant, area_rug, artwork, bar_cart",
+  dining_area: "dining_table, dining_chair, console_table, pendant, area_rug, artwork, bar_cart",
   kitchen: "pendant, bar_cart, dining_chair, artwork",
   home_office: "desk, office_chair, bookshelf, floor_lamp, table_lamp, area_rug, artwork",
   office: "desk, office_chair, bookshelf, floor_lamp, table_lamp, area_rug, artwork",
