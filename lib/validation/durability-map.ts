@@ -293,16 +293,6 @@ export function scoreLifestyleFit(
   };
 }
 
-export function formatLifestyleFitForPrompt(result: LifestyleFitResult): string {
-  const lines: string[] = [];
-  lines.push(`### Lifestyle Durability: ${result.score.toFixed(2)}/1.0`);
-  lines.push(
-    `- pet=${result.axes.pet_friendly.toFixed(2)} kid=${result.axes.kid_friendly.toFixed(2)} traffic=${result.axes.high_traffic.toFixed(2)} clean=${result.axes.easy_clean.toFixed(2)}`,
-  );
-  for (const issue of result.issues) lines.push(`- ISSUE: ${issue}`);
-  return lines.join("\n");
-}
-
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
