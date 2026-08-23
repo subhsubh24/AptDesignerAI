@@ -257,6 +257,53 @@ describe("computeConfidenceInterval", () => {
   });
 });
 
+describe("computeHarmonyScores — per-item budget-allocation issues surface as violations", () => {
+  // Regression guard: every other math dimension with a "get issues for this
+  // item" helper (spatial graph, pairwise, ergonomics, access, outlet reach)
+  // was already wired into the per-item `violations` list — budget allocation
+  // was the one exception: its score fed into mathScore, but getBudgetIssuesForItem
+  // was never called, so a badly-allocated bundle never explained WHY to the
+  // per-item consumer (only the aggregate formatMathScoresForPrompt block saw it).
+  it("attaches an under-spend issue to the specific under-budgeted item", () => {
+    const result = computeHarmonyScores(
+      {
+        what_it_needs: [
+          { category: "sofa", specs: "loveseat, budget pick" },
+          { category: "floor_lamp", specs: "statement brass floor lamp" },
+        ],
+      },
+      {
+        roomType: "living_room",
+        bundle: [
+          { category: "sofa", price: 100 },
+          { category: "floor_lamp", price: 900 },
+        ],
+      },
+    );
+
+    const sofa = result.itemScores.find((s) => s.category === "sofa");
+    expect(sofa?.violations.some((v) => /Under-spent on sofa/.test(v))).toBe(true);
+  });
+
+  it("does NOT attach a budget violation to an item whose spend share is within target", () => {
+    const result = computeHarmonyScores(
+      { what_it_needs: [{ category: "sofa", specs: "84\" sofa" }] },
+      {
+        roomType: "living_room",
+        // sofa share = 300/1000 = 30%, within the living-room sofa target
+        // [22%, 40%] — "within", so no issue should attach.
+        bundle: [
+          { category: "sofa", price: 300 },
+          { category: "unmatched_misc_item", price: 700 },
+        ],
+      },
+    );
+
+    const sofa = result.itemScores.find((s) => s.category === "sofa");
+    expect(sofa?.violations.some((v) => /spent on/.test(v))).toBe(false);
+  });
+});
+
 describe("formatMathScoresForPrompt", () => {
   it("renders the evidence block with the headline sections and overall score", () => {
     const result = computeHarmonyScores(

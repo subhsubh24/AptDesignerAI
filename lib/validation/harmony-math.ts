@@ -43,6 +43,7 @@ import {
 import {
   computeBudgetAllocation,
   formatBudgetAllocationForPrompt,
+  getBudgetIssuesForItem,
   type BudgetAllocationResult,
 } from "./budget-allocation";
 import {
@@ -480,6 +481,9 @@ export function computeHarmonyScores(
       violations.push(`⚠ DELIVERY: ${msg}`);
     }
     for (const msg of getOutletReachIssuesForItem(outletReach, item.category)) {
+      violations.push(msg);
+    }
+    for (const msg of getBudgetIssuesForItem(budgetAlloc, item.category)) {
       violations.push(msg);
     }
 
