@@ -288,7 +288,7 @@ describe("tap-target call sites", () => {
     // Controls sized by layout rather than by their own style are listed
     // EXPLICITLY, so the boundary of what this guard measures is reviewable
     // instead of implicit. A new one has to be looked at, not absorbed.
-    expect(layoutSized).toEqual(["mobile/src/app/photo.tsx:125"]);
+    expect(layoutSized).toEqual(["mobile/src/app/photo.tsx:143"]);
     // ...and the count is ASSERTED, not described. Two successive commit
     // messages quoted a figure nobody had counted — first "all 15 resolve",
     // then "the scan processes 29" — and both were wrong, the second because it
