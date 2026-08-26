@@ -1,0 +1,13 @@
+{
+  "id": "dining-area-open-plan-wood",
+  "description": "First dining_area room-type fixture (evals/gold/ previously had zero dining_area coverage — APT-64; a fixture like this would have caught the dining_area/dining_room key-mismatch bug, APT-63, earlier). Open-plan dining nook flowing into an adjoining living room: medium honey-toned wood plank flooring, a dark-stained wood rectangular dining table with 4 black-metal-framed dining chairs (dark upholstered seats), two amber-glass pendant lights hung low over the table, a large potted floor plant, a red/burgundy framed piece of wall art, white wainscoting trim below a pale sage-green upper wall, and (in the adjoining living room beyond) a grey sofa + neutral patterned area rug. Palette terms verified by eye against the actual downloaded image — deliberately excludes wood-SPECIES terms (e.g. 'oak', 'walnut') since species cannot be determined from a photo alone.",
+  "input": {
+    "roomType": "dining_area",
+    "imageUrls": ["https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1280&q=80"],
+    "userContext": "This dining nook feels like an afterthought tacked onto the living room — I want it to feel like an intentional space for hosting a dinner with friends.",
+    "budgetMode": "balanced"
+  },
+  "expectations": {
+    "paletteIncludes": ["wood", "brown", "honey", "warm", "natural", "white", "cream", "black", "dark", "sage", "green", "gray", "grey"]
+  }
+}
