@@ -121,7 +121,7 @@ export function WaitlistForm() {
         }}
         placeholder="your@email.com"
         disabled={state === "loading"}
-        className="flex-1 h-11 rounded-xl border bg-background px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-warm/50 disabled:opacity-60 transition"
+        className="flex-1 h-11 rounded-xl border bg-background px-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/50 disabled:opacity-60 transition"
         aria-label="Email address"
       />
       {/* ONLY the in-flight request disables this. Every other reason a submit
@@ -205,7 +205,7 @@ function ReferralShare({ code }: { code: string | null }) {
           value={shareUrl}
           onFocus={(e) => e.currentTarget.select()}
           aria-label="Your referral link"
-          className="flex-1 h-9 rounded-lg border bg-background px-3 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-warm/50"
+          className="flex-1 h-9 rounded-lg border bg-background px-3 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/50"
         />
         <Button type="button" variant="outline" size="sm" onClick={copy} aria-label="Copy referral link" className="shrink-0">
           {copied ? <Check className="h-4 w-4 text-accent-warm" /> : <Copy className="h-4 w-4" />}

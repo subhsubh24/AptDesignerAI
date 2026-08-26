@@ -96,7 +96,7 @@ export function EmailPreferences() {
               onClick={toggle}
               className={cn(
                 "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/50 disabled:opacity-60",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warm/50 disabled:opacity-60",
                 marketingEmails ? "bg-accent-warm" : "bg-muted",
               )}
             >
