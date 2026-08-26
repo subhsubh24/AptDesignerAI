@@ -65,19 +65,48 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 }
 
+// POSTs a registered Expo push token to the server-side receiver
+// (app/api/mobile/push-tokens/route.ts) so it is persisted for a future
+// sender, instead of only ever living in on-device AsyncStorage. Best-effort:
+// a failure here is silently swallowed by the caller and simply retries the
+// next time the effect below re-runs (app relaunch or session change).
+export async function sendPushTokenToServer(pushToken: string, accessToken: string): Promise<void> {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (!apiUrl) return;
+
+  const platform = Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : undefined;
+
+  await fetch(`${apiUrl}/api/mobile/push-tokens`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ token: pushToken, platform }),
+  });
+}
+
 // Wire this hook in the root layout after the user session is established.
-// Requests permission, registers the device push token (stored in AsyncStorage),
-// and attaches a listener so notification taps bring the app to the foreground.
-export function usePushNotifications(userId: string | undefined): void {
+// Requests permission, registers the device push token (stored in AsyncStorage
+// and sent to the server receiver), and attaches a listener so notification
+// taps bring the app to the foreground.
+export function usePushNotifications(userId: string | undefined, accessToken: string | undefined): void {
   const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !accessToken) return;
+    let cancelled = false;
 
     // requestPermissionsAsync is idempotent: if the permission sheet is already
     // showing (e.g. React Strict Mode double-invoke), the second call returns the
     // current status without displaying a second dialog.
-    registerForPushNotificationsAsync().catch(() => {});
+    (async () => {
+      const pushToken = await registerForPushNotificationsAsync();
+      if (cancelled || !pushToken) return;
+      // Best-effort — a transmit failure (offline, transient 5xx) must not
+      // surface to the user; the next session-change/relaunch retries it.
+      await sendPushTokenToServer(pushToken, accessToken).catch(() => {});
+    })().catch(() => {});
 
     // Handle notification taps while the app is open or backgrounded.
     responseListenerRef.current =
@@ -90,7 +119,8 @@ export function usePushNotifications(userId: string | undefined): void {
       });
 
     return () => {
+      cancelled = true;
       responseListenerRef.current?.remove();
     };
-  }, [userId]);
+  }, [userId, accessToken]);
 }

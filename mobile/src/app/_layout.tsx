@@ -74,8 +74,9 @@ export default function RootLayout() {
   const { session, loading } = useSession();
   const [showSignup, setShowSignup] = useState(false);
 
-  // Register for push notifications once the user is authenticated.
-  usePushNotifications(session?.user.id);
+  // Register for push notifications once the user is authenticated, and send
+  // the token to the server receiver (app/api/mobile/push-tokens/route.ts).
+  usePushNotifications(session?.user.id, session?.access_token);
 
   // Configure RC once on mount — shared singleton guard in rc-init.ts prevents double-configure
   useEffect(() => {

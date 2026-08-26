@@ -224,28 +224,36 @@ describe("privacy artifacts match what the code actually collects", () => {
 
   /**
    * The push token is the one piece of notification data that could become a
-   * declarable identifier. It is not declared today because it never leaves the
-   * device — so this pins that PREMISE rather than the conclusion: the day a
-   * caller sends the token to a server, this fails and the forms get revisited.
+   * declarable identifier. It now DOES leave the device — the hook transmits
+   * it to app/api/mobile/push-tokens/route.ts (APT-67) — so this pins the new
+   * PREMISE (the hook makes a network call with the token) rather than the
+   * old one, and requires the forms to declare it as an identifier. If a
+   * future change stops transmitting the token, this test's premise check
+   * fails first and the assertion relaxes rather than going stale.
    */
-  it("keeps the push token on-device, which is why no Device ID is declared", () => {
+  it("declares the push token as a Device ID identifier now that it is transmitted off-device", () => {
     const hook = read("mobile/src/hooks/use-push-notifications.ts");
     expect(hook, "the token must still be persisted locally").toContain("AsyncStorage.setItem");
-    // No network call in the module that obtains the token.
-    expect(hook).not.toMatch(/\bfetch\s*\(|apiFetch|axios/);
+    // Establish the premise from the code: the hook now makes a network call
+    // that carries the token off the device.
+    expect(hook, "the hook must transmit the token to the server").toMatch(/\bfetch\s*\(/);
+    expect(hook).toMatch(/push-tokens/);
 
     // Anchor on the push-token passage itself and read only that window. A
-    // document-wide search for a phrase like "not collected" passes on the
-    // unrelated "**Not collected:**" paragraph this file already parses
-    // elsewhere — which it did, on the exact revision that had no push-token
-    // disclosure at all.
+    // document-wide search would risk matching unrelated prose elsewhere.
     const doc = read(APP_PRIVACY);
     const at = doc.search(/push token/i);
     expect(at, `${APP_PRIVACY} must have a push-token passage`).toBeGreaterThan(-1);
     const passage = doc.slice(at, at + 900).replace(/\s+/g, " ");
     expect(
-      /not\b[^.]{0,60}declared|never leaves the device|nothing sends it/i.test(passage),
-      `${APP_PRIVACY} must explain why the push token is not declared as an identifier`,
+      /device id/i.test(passage),
+      `${APP_PRIVACY} must declare the push token as a Device ID identifier now that it is transmitted`,
     ).toBe(true);
+
+    // Both store forms must carry the identifier row, not just the narrative
+    // passage — an attestation that only lives in prose is easy to miss when
+    // actually filling the form.
+    expect(doc).toMatch(/Identifiers[\s\S]{0,20}(→|->)?\s*Device ID/i);
+    expect(doc).toMatch(/Device or other IDs/i);
   });
 });
