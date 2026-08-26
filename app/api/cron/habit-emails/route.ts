@@ -32,8 +32,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, isEmailDryRun } from "@/lib/email";
-import { isMarketingOptedOut } from "@/lib/email/preferences";
-import { hasProEntitlementWeb } from "@/lib/entitlements/web";
+import { getMarketingOptOutMap } from "@/lib/email/preferences";
+import { getProEntitlementMapWeb } from "@/lib/entitlements/web";
 import {
   buildHabitEmail1,
   buildHabitEmail2,
@@ -158,30 +158,48 @@ export async function GET(request: NextRequest) {
     let skipped = 0;
     let errors = 0;
 
+    // Batch the three per-candidate lookups below into a handful of queries for
+    // the whole cohort instead of 3 sequential round-trips PER candidate (a
+    // 100+ user cohort was turning into 300+ sequential DB/auth calls). Each
+    // check is read-only, so computing all three up front for every candidate —
+    // even ones a different check will end up skipping — is harmless.
+    const [stagesResult, entitlementMap, optOutMap] = await Promise.all([
+      admin
+        .from("user_email_stages")
+        .select("user_id")
+        .eq("stage", stage)
+        .in("user_id", userIds),
+      // hasProEntitlementWeb's batched sibling — same paid semantics, fails
+      // safe (treats an unconfirmable status as paid → no nudge).
+      getProEntitlementMapWeb(userIds, admin),
+      getMarketingOptOutMap(userIds, admin),
+    ]);
+    if (stagesResult.error) {
+      console.error(
+        `[habit-cron] batched stage lookup error for ${stage}:`,
+        stagesResult.error.message,
+      );
+    }
+    const alreadySentSet = new Set(
+      (stagesResult.data ?? []).map((row) => row.user_id as string),
+    );
+
     for (const userId of userIds) {
       // Idempotency check: has this stage already been sent?
-      const { data: alreadySent } = await admin
-        .from("user_email_stages")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("stage", stage)
-        .maybeSingle();
-      if (alreadySent) {
+      if (alreadySentSet.has(userId)) {
         skipped++;
         continue;
       }
 
       // The habit sequence upsells the paid Apartment plan — anyone who has
       // already upgraded (one-time Apartment or a Pro subscription) drops out.
-      // hasProEntitlementWeb encapsulates the paid semantics and fails safe
-      // (treats an unconfirmable status as paid → no nudge).
-      if (await hasProEntitlementWeb(userId)) {
+      if (entitlementMap.get(userId) ?? true) {
         skipped++;
         continue;
       }
 
       // Habit nudges are MARKETING — honour the user's opt-out (CAN-SPAM).
-      if (await isMarketingOptedOut(userId, admin)) {
+      if (optOutMap.get(userId) ?? true) {
         skipped++;
         continue;
       }

@@ -9,17 +9,19 @@ vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false, dryRun: true })),
   isEmailDryRun: vi.fn(() => true),
 }));
-vi.mock("@/lib/email/preferences", () => ({ isMarketingOptedOut: vi.fn(async () => false) }));
+vi.mock("@/lib/email/preferences", () => ({
+  getMarketingOptOutMap: vi.fn(async (userIds: string[]) => new Map(userIds.map((id) => [id, false]))),
+}));
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, isEmailDryRun } from "@/lib/email";
-import { isMarketingOptedOut } from "@/lib/email/preferences";
+import { getMarketingOptOutMap } from "@/lib/email/preferences";
 import { GET } from "@/app/api/cron/winback-emails/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockSendEmail = sendEmail as unknown as Mock;
 const mockDryRun = isEmailDryRun as unknown as Mock;
-const mockOptedOut = isMarketingOptedOut as unknown as Mock;
+const mockOptOutMap = getMarketingOptOutMap as unknown as Mock;
 
 const SECRET = "test-cron-secret";
 
@@ -71,6 +73,12 @@ function fakeAdmin(
           data: state.stage && alreadySent.has(state.stage) ? { id: "x" } : null,
           error: null,
         }),
+        // Batched idempotency check: one .in("user_id", ids) query per stage
+        // for the whole cohort instead of one per candidate.
+        in: async (_col: string, ids: string[]) => {
+          const sentIds = state.stage && alreadySent.has(state.stage) ? ids : [];
+          return { data: sentIds.map((user_id) => ({ user_id })), error: null };
+        },
         // Claim-before-send INSERT: fail with claimError when configured.
         insert: async () =>
           opts.claimError ? { error: { message: opts.claimError } } : { error: null },
@@ -108,8 +116,8 @@ beforeEach(() => {
   mockSendEmail.mockResolvedValue({ delivered: false, dryRun: true });
   mockDryRun.mockReset();
   mockDryRun.mockReturnValue(true);
-  mockOptedOut.mockReset();
-  mockOptedOut.mockResolvedValue(false);
+  mockOptOutMap.mockReset();
+  mockOptOutMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, false])));
   process.env.CRON_SECRET = SECRET;
 });
 afterEach(() => vi.restoreAllMocks());
@@ -167,7 +175,7 @@ describe("GET /api/cron/winback-emails", () => {
   });
 
   it("skips users who opted out of marketing (CAN-SPAM)", async () => {
-    mockOptedOut.mockResolvedValue(true);
+    mockOptOutMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, true])));
     mockGetAdmin.mockReturnValue(fakeAdmin({ cancelledUserIds: ["user-1"] }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);

@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, isEmailDryRun } from "@/lib/email";
-import { isMarketingOptedOut } from "@/lib/email/preferences";
+import { getMarketingOptOutMap } from "@/lib/email/preferences";
 import {
   buildActivationEmail1,
   buildActivationEmail2,
@@ -122,33 +122,56 @@ export async function GET(request: NextRequest) {
     let skipped = 0;
     let errors = 0;
 
+    // Batch the three per-candidate lookups below into a handful of queries for
+    // the whole cohort instead of 3 sequential round-trips PER candidate (a
+    // 100+ user cohort was turning into 300+ sequential DB/auth calls). Each
+    // check is read-only, so computing all three up front for every candidate —
+    // even ones a different check will end up skipping — is harmless; it only
+    // trades a little unused data for O(1) checks instead of O(n) queries.
+    const candidateIds = candidates.map(({ id }) => id);
+    const [stagesResult, projectsResult, optOutMap] = await Promise.all([
+      admin
+        .from("user_email_stages")
+        .select("user_id")
+        .eq("stage", stage)
+        .in("user_id", candidateIds),
+      admin.from("projects").select("user_id").in("user_id", candidateIds),
+      getMarketingOptOutMap(candidateIds, admin),
+    ]);
+    if (stagesResult.error) {
+      console.error(
+        `[activation-cron] batched stage lookup error for ${stage}:`,
+        stagesResult.error.message,
+      );
+    }
+    if (projectsResult.error) {
+      console.error(
+        `[activation-cron] batched engaged-check error for ${stage}:`,
+        projectsResult.error.message,
+      );
+    }
+    const alreadySentSet = new Set(
+      (stagesResult.data ?? []).map((row) => row.user_id as string),
+    );
+    // Has the user opened the app? (any project = engaged)
+    const engagedSet = new Set(
+      (projectsResult.data ?? []).map((row) => row.user_id as string),
+    );
+
     for (const { id: userId } of candidates) {
       // Idempotency check: has this stage already been sent?
-      const { data: alreadySent } = await admin
-        .from("user_email_stages")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("stage", stage)
-        .maybeSingle();
-      if (alreadySent) {
+      if (alreadySentSet.has(userId)) {
         skipped++;
         continue;
       }
 
-      // Has the user opened the app? (any project = engaged)
-      const { data: project } = await admin
-        .from("projects")
-        .select("id")
-        .eq("user_id", userId)
-        .limit(1)
-        .maybeSingle();
-      if (project) {
+      if (engagedSet.has(userId)) {
         skipped++;
         continue;
       }
 
       // Activation nudges are MARKETING — honour the user's opt-out (CAN-SPAM).
-      if (await isMarketingOptedOut(userId, admin)) {
+      if (optOutMap.get(userId) ?? true) {
         skipped++;
         continue;
       }
