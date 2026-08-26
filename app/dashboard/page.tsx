@@ -546,7 +546,7 @@ export default function DashboardPage() {
               placeholder="e.g. 725"
               value={apartmentSqft}
               onChange={(e) => setApartmentSqft(e.target.value.replace(/[^\d]/g, ""))}
-              className="h-12 w-full rounded-full border-2 border-border bg-background px-5 text-sm font-medium outline-none transition-all focus:border-accent-warm focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="h-12 w-full rounded-full border-2 border-border bg-background px-5 text-sm font-medium outline-none transition-all focus-visible:border-accent-warm focus-visible:ring-2 focus-visible:ring-accent-warm/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
@@ -812,7 +812,7 @@ export default function DashboardPage() {
                       value={buildingName}
                       onChange={(e) => setBuildingName(e.target.value)}
                       placeholder="e.g. Porte Apartments"
-                      className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus:border-ring transition-all"
+                      className="w-full h-11 px-4 rounded-xl border bg-background text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring transition-all"
                     />
                   </div>
                 ) : (
@@ -1142,7 +1142,7 @@ export default function DashboardPage() {
                       setRoomContext((prev) => ({ ...prev, [selectedRoom]: e.target.value }))
                     }
                     placeholder={"e.g. \"Ignore the yoga mat, it won't be there\" or \"The clutter will be cleaned up — focus on the furniture and layout\""}
-                    className="w-full h-24 px-4 py-3 rounded-xl border bg-background text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus:border-ring transition-all"
+                    className="w-full h-24 px-4 py-3 rounded-xl border bg-background text-sm shadow-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring transition-all"
                   />
                 </div>
 

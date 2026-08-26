@@ -280,7 +280,7 @@ export function PlaceAutocomplete({
             onInputChange?.(e.target.value);
           }}
           placeholder={placeholder}
-          className="w-full h-11 pl-9 pr-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+          className="w-full h-11 pl-9 pr-4 rounded-xl border bg-background text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring transition-all"
         />
       </div>
     );
@@ -306,7 +306,7 @@ export function PlaceAutocomplete({
         onKeyDown={handleKeyDown}
         onFocus={() => suggestions.length > 0 && setIsOpen(true)}
         placeholder={placeholder}
-        className="w-full h-11 pl-9 pr-4 rounded-xl border bg-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all"
+        className="w-full h-11 pl-9 pr-4 rounded-xl border bg-background text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring transition-all"
         role="combobox"
         aria-expanded={isOpen}
         aria-autocomplete="list"
