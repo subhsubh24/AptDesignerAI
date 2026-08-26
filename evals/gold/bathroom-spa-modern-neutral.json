@@ -1,0 +1,13 @@
+{
+  "id": "bathroom-spa-modern-neutral",
+  "description": "First bathroom room-type fixture (evals/gold/ previously had zero bathroom coverage — APT-64). Warm cream-walled bathroom with a white floating vanity (3 drawers), rectangular backlit mirror with cove LED lighting, matte-black fixtures (ladder towel warmer, wall-mount faucet, exposed hand-shower), a matte-black wall-hung toilet, a recessed backlit toiletry niche, and a patterned beige/grey/white geometric mosaic tile floor plus a matching patterned tile accent wall inside the glass-enclosed shower. Palette terms below were verified by eye against the actual downloaded image (not inferred from a caption) — deliberately excludes any claim about natural-stone/marble since the visible surfaces read as painted plaster + porcelain tile, not stone.",
+  "input": {
+    "roomType": "bathroom",
+    "imageUrls": ["https://images.unsplash.com/photo-1643949700215-e61cdca053f7?w=1280&q=80"],
+    "userContext": "This bathroom feels a little dated and cramped — I want it to feel more spa-like and modern without a full gut renovation.",
+    "budgetMode": "balanced"
+  },
+  "expectations": {
+    "paletteIncludes": ["white", "cream", "off-white", "beige", "warm", "black", "matte black", "charcoal", "gray", "grey"]
+  }
+}

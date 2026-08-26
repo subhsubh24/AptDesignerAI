@@ -174,4 +174,42 @@ describe("room-diagnosis live evals — run with RUN_EVALS=1", () => {
     },
     EVAL_TIMEOUT_MS,
   );
+
+  it.skipIf(!evalsEnabled())(
+    "bathroom-spa-modern-neutral: first bathroom fixture — recognizes a warm-neutral/black palette from an unprimed userContext",
+    async () => {
+      const gold = cases.find((c) => c.id === "bathroom-spa-modern-neutral");
+      expect(gold, "bathroom-spa-modern-neutral fixture missing").toBeTruthy();
+      if (!gold) return;
+
+      const data = await runGoldCase(gold);
+      const flat = flattenDiagnosisOutput(data);
+      const verdict = scoreAgainstExpectations(gold, flat);
+
+      expect(
+        verdict.passed,
+        `eval failures for ${gold.id}: ${verdict.failures.join("; ")}`,
+      ).toBe(true);
+    },
+    EVAL_TIMEOUT_MS,
+  );
+
+  it.skipIf(!evalsEnabled())(
+    "dining-area-open-plan-wood: first dining_area fixture — recognizes a warm wood/neutral palette from an unprimed userContext",
+    async () => {
+      const gold = cases.find((c) => c.id === "dining-area-open-plan-wood");
+      expect(gold, "dining-area-open-plan-wood fixture missing").toBeTruthy();
+      if (!gold) return;
+
+      const data = await runGoldCase(gold);
+      const flat = flattenDiagnosisOutput(data);
+      const verdict = scoreAgainstExpectations(gold, flat);
+
+      expect(
+        verdict.passed,
+        `eval failures for ${gold.id}: ${verdict.failures.join("; ")}`,
+      ).toBe(true);
+    },
+    EVAL_TIMEOUT_MS,
+  );
 });
