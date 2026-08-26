@@ -122,9 +122,23 @@ test.describe("public + structural journeys", () => {
     });
   }
 
-  test("root / resolves to a real screen (login when logged out)", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/(login|dashboard)/);
+  // The bare root serves the MARKETING LANDING PAGE to a logged-out visitor —
+  // it must NOT redirect. This test previously asserted /login|/dashboard,
+  // which pinned a real bug: updateSession() redirected "/" to /dashboard
+  // unconditionally, before the auth check, so every anonymous visitor was
+  // bounced on to a login wall and app/page.tsx (a complete, SEO-annotated
+  // landing page) was unreachable dead code. Asserting the landing page RENDERS
+  // is strictly stronger than asserting "some screen resolved".
+  test("root / serves the marketing landing page to a logged-out visitor", async ({ page }) => {
+    const res = await page.goto("/");
+    expect(res?.status()).toBe(200);
+    // Stayed at "/" — no redirect to /login or /dashboard.
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveTitle(/AptDesigner/i);
+    // Real landing content, not an auth form: the marketing header's primary
+    // CTA is present and the login form's password field is not.
+    await expect(page.locator("main").first()).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
     await expectNoErrorBoundary(page);
   });
 
