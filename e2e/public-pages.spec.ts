@@ -78,10 +78,21 @@ test("the waitlist CTA is live on arrival, and an empty submit says why", async 
   await expect(submit).toBeEnabled();
 });
 
-test("root / redirects to /dashboard or /login", async ({ page }) => {
+// The bare root serves the MARKETING LANDING PAGE to a logged-out visitor and
+// must NOT redirect. This test used to assert /dashboard|/login, which pinned a
+// real bug rather than the intended behavior: updateSession() redirected "/" to
+// /dashboard unconditionally, BEFORE the auth check, so every anonymous visitor
+// was bounced on to a login wall and app/page.tsx — a complete, SEO-annotated
+// landing page — was unreachable dead code. It was encoded in three separate
+// tests (here, e2e/journeys.spec.ts, and __tests__/supabase/middleware.test.ts),
+// which is why it survived as long as it did.
+test("root / serves the marketing landing page, without redirecting", async ({ page }) => {
   const response = await page.goto("/");
-  // Should redirect, not 404 or 500
-  expect(response?.status()).toBeLessThan(400);
-  const url = page.url();
-  expect(url).toMatch(/\/(dashboard|login)/);
+  expect(response?.status()).toBe(200);
+  // Stayed at "/" — no bounce to /login or /dashboard.
+  expect(page.url()).toMatch(/\/$/);
+  await expect(page).toHaveTitle(/AptDesigner/i);
+  // Provably the landing page and provably not an auth form.
+  await expect(page.locator("main").first()).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
 });

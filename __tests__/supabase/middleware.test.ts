@@ -69,8 +69,24 @@ describe("updateSession — auth-gating boundary", () => {
     expect(getUser).not.toHaveBeenCalled();
   });
 
-  it("redirects the bare root to /dashboard", async () => {
+  // The bare root is the whole top of the funnel: it is what a visitor typing
+  // the domain gets, what every other page canonicalises to, and what a crawler
+  // indexes as the home page. It used to redirect to /dashboard UNCONDITIONALLY,
+  // before the auth check ran, so an anonymous visitor was bounced on to /login
+  // and app/page.tsx — a complete, SEO-annotated landing page — was dead code
+  // that nothing could ever render. These two tests pin both halves of the fix.
+  it("serves the landing page at the bare root for a logged-OUT visitor", async () => {
     withSupabase();
+    userResult = { user: null };
+    const res = await updateSession(req("/"));
+    // Not a redirect: the request falls through to app/page.tsx.
+    expect(res.status).toBe(200);
+    expect(locationOf(res)).toBeNull();
+  });
+
+  it("redirects the bare root to /dashboard for a SIGNED-IN user", async () => {
+    withSupabase();
+    userResult = { user: { id: "u1" } };
     const res = await updateSession(req("/"));
     expect(res.status).toBe(307);
     expect(locationOf(res)).toBe("/dashboard");

@@ -23,9 +23,18 @@ export type SitemapRoute = {
  *     a one-time token in the query string.
  */
 export const SITEMAP_ROUTES: readonly SitemapRoute[] = [
-  // The pre-launch conversion surface: the one page organic traffic should land
-  // on while the app itself is still behind the site gate.
-  { path: "/waitlist", changeFrequency: "weekly", priority: 1.0 },
+  // The marketing home. app/page.tsx declares `alternates.canonical: "/"`, so
+  // every other page points its canonical here — but "/" itself was absent from
+  // this list, so the one URL the whole site canonicalises to was never
+  // advertised to a crawler. It was also unreachable until the root redirect was
+  // gated on a session (lib/supabase/middleware.ts), which is why listing it
+  // would have been wrong before and is right now.
+  { path: "/", changeFrequency: "weekly", priority: 1.0 },
+  // The mobile-app waitlist. Still the pre-launch conversion surface (and the
+  // page the site gate redirects to while the curtain is up), but no longer the
+  // top-priority URL now that "/" is reachable and canonical: dropped 1.0 -> 0.9
+  // so a crawler is not told two different pages are equally the entry point.
+  { path: "/waitlist", changeFrequency: "weekly", priority: 0.9 },
   { path: "/pricing", changeFrequency: "weekly", priority: 0.9 },
   { path: "/guides", changeFrequency: "weekly", priority: 0.8 },
   { path: "/gallery", changeFrequency: "weekly", priority: 0.8 },
