@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, isEmailDryRun } from "@/lib/email";
-import { isMarketingOptedOut } from "@/lib/email/preferences";
+import { getMarketingOptOutMap } from "@/lib/email/preferences";
 import {
   buildWinBackEmail2,
   buildWinBackEmail3,
@@ -134,21 +134,39 @@ export async function GET(request: NextRequest) {
     let skipped = 0;
     let errors = 0;
 
+    // Batch the per-candidate lookups below into a couple of queries for the
+    // whole cohort instead of 2 sequential round-trips PER candidate (a 100+
+    // user cohort was turning into 200+ sequential DB/auth calls). Both checks
+    // are read-only, so computing them up front for every candidate — even ones
+    // the other check will end up skipping — is harmless.
+    const candidateIds = candidates.map(({ user_id }) => user_id);
+    const [stagesResult, optOutMap] = await Promise.all([
+      admin
+        .from("user_email_stages")
+        .select("user_id")
+        .eq("stage", stage)
+        .in("user_id", candidateIds),
+      getMarketingOptOutMap(candidateIds, admin),
+    ]);
+    if (stagesResult.error) {
+      console.error(
+        `[winback-cron] batched stage lookup error for ${stage}:`,
+        stagesResult.error.message,
+      );
+    }
+    const alreadySentSet = new Set(
+      (stagesResult.data ?? []).map((row) => row.user_id as string),
+    );
+
     for (const { user_id: userId } of candidates) {
       // Idempotency check: has this stage already been sent?
-      const { data: alreadySent } = await admin
-        .from("user_email_stages")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("stage", stage)
-        .maybeSingle();
-      if (alreadySent) {
+      if (alreadySentSet.has(userId)) {
         skipped++;
         continue;
       }
 
       // Win-back nudges are MARKETING — honour the user's opt-out (CAN-SPAM).
-      if (await isMarketingOptedOut(userId, admin)) {
+      if (optOutMap.get(userId) ?? true) {
         skipped++;
         continue;
       }

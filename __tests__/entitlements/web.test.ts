@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getWebBillingStatus, hasProEntitlementWeb } from "@/lib/entitlements/web";
+import { getWebBillingStatus, hasProEntitlementWeb, getProEntitlementMapWeb } from "@/lib/entitlements/web";
 
 vi.mock("@/lib/supabase/admin", () => ({
   getAdminClient: vi.fn(),
@@ -15,6 +15,16 @@ function makeSupabaseChain(data: unknown, error: { message: string } | null = nu
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+  };
+  return chain;
+}
+
+/** Batched `.in()` variant of makeSupabaseChain, for getProEntitlementMapWeb. */
+function makeSupabaseBatchChain(data: unknown, error: { message: string } | null = null) {
+  const chain = {
+    from: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    in: vi.fn().mockResolvedValue({ data, error }),
   };
   return chain;
 }
@@ -268,6 +278,64 @@ describe("hasProEntitlementWeb", () => {
     const outage = await hasProEntitlementWeb("user-1");
 
     expect({ misconfigured, outage }).toEqual({ misconfigured: false, outage: true });
+    consoleSpy.mockRestore();
+  });
+});
+
+// ── getProEntitlementMapWeb ───────────────────────────────────────────────────
+
+describe("getProEntitlementMapWeb", () => {
+  it("returns an empty map for an empty cohort without querying", async () => {
+    const chain = makeSupabaseBatchChain([]);
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const result = await getProEntitlementMapWeb([]);
+    expect(result.size).toBe(0);
+  });
+
+  it("resolves a mixed cohort per-user: active pro, cancelled, and missing-row default to their own outcome, not each other's", async () => {
+    // Same mis-keying risk as getMarketingOptOutMap — only a genuinely mixed
+    // cohort (some paid, some not, one missing) can catch a batch result
+    // getting attributed to the wrong user_id.
+    const chain = makeSupabaseBatchChain([
+      { user_id: "active-pro", tier: "pro", status: "active", current_period_end: null, updated_at: null },
+      { user_id: "cancelled", tier: "pro", status: "cancelled", current_period_end: null, updated_at: null },
+      // "no-record" has no row at all — must default to false, matching
+      // hasProEntitlementWeb's "no record" behavior, not the batch's fail-open.
+    ]);
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const result = await getProEntitlementMapWeb(["active-pro", "cancelled", "no-record"]);
+    expect(result.get("active-pro")).toBe(true);
+    expect(result.get("cancelled")).toBe(false);
+    expect(result.get("no-record")).toBe(false);
+  });
+
+  it("fails OPEN (grants every user in the cohort) on a batch query error, matching hasProEntitlementWeb's single-user outage behavior", async () => {
+    const chain = makeSupabaseBatchChain(null, { message: "DB connection failed" });
+    mockGetAdminClient.mockReturnValue(chain as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await getProEntitlementMapWeb(["user-1", "user-2"]);
+    expect(result.get("user-1")).toBe(true);
+    expect(result.get("user-2")).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  it("fails CLOSED (denies every user in the cohort) in production when no admin client is available", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    mockGetAdminClient.mockReturnValue(null as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await getProEntitlementMapWeb(["user-1", "user-2"]);
+    expect(result.get("user-1")).toBe(false);
+    expect(result.get("user-2")).toBe(false);
+    consoleSpy.mockRestore();
+  });
+
+  it("fails OPEN (grants every user in the cohort) in development when no admin client is available", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    mockGetAdminClient.mockReturnValue(null as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await getProEntitlementMapWeb(["user-1", "user-2"]);
+    expect(result.get("user-1")).toBe(true);
+    expect(result.get("user-2")).toBe(true);
     consoleSpy.mockRestore();
   });
 });

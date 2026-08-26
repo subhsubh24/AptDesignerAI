@@ -10,19 +10,23 @@ vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false, dryRun: true })),
   isEmailDryRun: vi.fn(() => true),
 }));
-vi.mock("@/lib/email/preferences", () => ({ isMarketingOptedOut: vi.fn(async () => false) }));
-vi.mock("@/lib/entitlements/web", () => ({ hasProEntitlementWeb: vi.fn(async () => false) }));
+vi.mock("@/lib/email/preferences", () => ({
+  getMarketingOptOutMap: vi.fn(async (userIds: string[]) => new Map(userIds.map((id) => [id, false]))),
+}));
+vi.mock("@/lib/entitlements/web", () => ({
+  getProEntitlementMapWeb: vi.fn(async (userIds: string[]) => new Map(userIds.map((id) => [id, false]))),
+}));
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
-import { isMarketingOptedOut } from "@/lib/email/preferences";
-import { hasProEntitlementWeb } from "@/lib/entitlements/web";
+import { getMarketingOptOutMap } from "@/lib/email/preferences";
+import { getProEntitlementMapWeb } from "@/lib/entitlements/web";
 import { GET } from "@/app/api/cron/habit-emails/route";
 
 const mockGetAdmin = getAdminClient as unknown as Mock;
 const mockSendEmail = sendEmail as unknown as Mock;
-const mockOptedOut = isMarketingOptedOut as unknown as Mock;
-const mockHasPro = hasProEntitlementWeb as unknown as Mock;
+const mockOptOutMap = getMarketingOptOutMap as unknown as Mock;
+const mockEntitlementMap = getProEntitlementMapWeb as unknown as Mock;
 
 const SECRET = "test-cron-secret";
 
@@ -74,6 +78,12 @@ function fakeAdmin(
           data: state.stage && alreadySent.has(state.stage) ? { id: "x" } : null,
           error: null,
         }),
+        // Batched idempotency check: one .in("user_id", ids) query per stage
+        // for the whole cohort instead of one per candidate.
+        in: async (_col: string, ids: string[]) => {
+          const sentIds = state.stage && alreadySent.has(state.stage) ? ids : [];
+          return { data: sentIds.map((user_id) => ({ user_id })), error: null };
+        },
         // Claim-before-send INSERT: fail with claimError when configured.
         insert: async () =>
           opts.claimError ? { error: { message: opts.claimError } } : { error: null },
@@ -102,10 +112,10 @@ function req(auth?: string) {
 beforeEach(() => {
   mockGetAdmin.mockReset();
   mockSendEmail.mockClear();
-  mockOptedOut.mockReset();
-  mockOptedOut.mockResolvedValue(false);
-  mockHasPro.mockReset();
-  mockHasPro.mockResolvedValue(false);
+  mockOptOutMap.mockReset();
+  mockOptOutMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, false])));
+  mockEntitlementMap.mockReset();
+  mockEntitlementMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, false])));
   process.env.CRON_SECRET = SECRET;
 });
 afterEach(() => vi.restoreAllMocks());
@@ -159,7 +169,7 @@ describe("GET /api/cron/habit-emails", () => {
   });
 
   it("drops out users who have already upgraded to a paid plan", async () => {
-    mockHasPro.mockResolvedValue(true);
+    mockEntitlementMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, true])));
     mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"] }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
@@ -176,7 +186,7 @@ describe("GET /api/cron/habit-emails", () => {
   });
 
   it("skips users who opted out of marketing (CAN-SPAM)", async () => {
-    mockOptedOut.mockResolvedValue(true);
+    mockOptOutMap.mockImplementation(async (userIds: string[]) => new Map(userIds.map((id) => [id, true])));
     mockGetAdmin.mockReturnValue(fakeAdmin({ userIds: ["user-1"] }));
     const res = await GET(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);

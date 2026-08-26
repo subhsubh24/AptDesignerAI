@@ -98,6 +98,44 @@ export type WebBillingStatus = {
   status: "active" | "cancelled" | "past_due" | "unpaid" | null;
 };
 
+type StripeCustomerFields = {
+  tier: "apartment" | "pro" | "pro_annual";
+  status: "active" | "cancelled" | "past_due" | "unpaid";
+  current_period_end: string | null;
+  updated_at: string;
+};
+
+/**
+ * Pure tier/status → hasPaid computation, shared by the single-user
+ * (getWebBillingStatus) and batched (getProEntitlementMapWeb) lookups so the
+ * two can never drift apart.
+ */
+function computeHasPaid(row: StripeCustomerFields): boolean {
+  // Apartment is a one-time purchase — active indefinitely once status = active.
+  if (row.tier === "apartment") return row.status === "active";
+
+  // Pro is a subscription — check status and optionally current_period_end.
+  if (row.status === "active") {
+    // If period end is set and in the past, Stripe hasn't fired the update yet.
+    if (row.current_period_end) {
+      return new Date(row.current_period_end) > new Date();
+    }
+    return true;
+  }
+
+  // Payment-retry grace: see getWebBillingStatus for the full rationale. The
+  // grace is anchored on current_period_end when known, else updated_at.
+  if (row.status === "past_due") {
+    const anchor = row.current_period_end ?? row.updated_at;
+    if (!anchor) return false;
+    const graceEnd = new Date(anchor);
+    graceEnd.setDate(graceEnd.getDate() + PAST_DUE_GRACE_DAYS);
+    return graceEnd > new Date();
+  }
+
+  return false;
+}
+
 /**
  * Returns true if the given Supabase user has an active paid Stripe entitlement.
  *
@@ -158,40 +196,75 @@ export async function getWebBillingStatus(userId: string): Promise<WebBillingSta
   const tier = data.tier as "apartment" | "pro" | "pro_annual";
   const status = data.status as "active" | "cancelled" | "past_due" | "unpaid";
 
-  // Apartment is a one-time purchase — active indefinitely once status = active.
-  if (tier === "apartment") {
-    return { hasPaid: status === "active", tier, status };
+  // Payment-retry grace (status === "past_due"): a subscription whose renewal
+  // charge just failed enters `past_due` while Stripe retries. Keep access for
+  // a bounded grace window so a transient failed charge doesn't instantly
+  // revoke a paying subscriber (the uninterrupted-access expectation of both
+  // app stores). The grace is anchored on current_period_end when known, else
+  // the webhook's updated_at (stamped on every upsert, so it marks when the row
+  // entered past_due) — making the bound REAL and self-contained rather than
+  // dependent on Stripe delivering a later canceled/unpaid event. `unpaid` and
+  // `cancelled` never get grace; they fall through to hasPaid:false.
+  return {
+    hasPaid: computeHasPaid({
+      tier,
+      status,
+      current_period_end: data.current_period_end,
+      updated_at: data.updated_at,
+    }),
+    tier,
+    status,
+  };
+}
+
+/**
+ * Batched variant of hasProEntitlementWeb — one stripe_customers query for a
+ * whole cohort instead of one per user (built for the habit-emails cron, which
+ * otherwise issues N sequential entitlement lookups per run). Same fail-open
+ * (outage) / fail-closed-in-production (misconfiguration) semantics as
+ * hasProEntitlementWeb, applied once for the batch rather than per user.
+ */
+export async function getProEntitlementMapWeb(
+  userIds: string[],
+  adminClient?: ReturnType<typeof getAdminClient>,
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  if (!userIds.length) return result;
+
+  const admin = adminClient ?? getAdminClient();
+  if (!admin) {
+    const isProduction = process.env.NODE_ENV === "production";
+    console.error(
+      "[entitlements/web] Supabase credentials not configured — " +
+      (isProduction
+        ? "denying Pro entitlement (fail-closed in production)"
+        : "granting access (fail-open in development)") +
+      ". Set SUPABASE_SERVICE_ROLE_KEY in Vercel env vars (see PENDING_OPS.md).",
+    );
+    for (const userId of userIds) result.set(userId, !isProduction);
+    return result;
   }
 
-  // Pro is a subscription — check status and optionally current_period_end.
-  if (status === "active") {
-    // If period end is set and in the past, Stripe hasn't fired the update yet
-    if (data.current_period_end) {
-      const periodEnd = new Date(data.current_period_end);
-      const now = new Date();
-      return { hasPaid: periodEnd > now, tier, status };
-    }
-    return { hasPaid: true, tier, status };
+  const { data, error } = await admin
+    .from("stripe_customers")
+    .select("user_id, tier, status, current_period_end, updated_at")
+    .in("user_id", userIds);
+
+  if (error) {
+    console.error("[entitlements/web] batched stripe_customers query error:", error.message);
+    // fail-open on a transient query error (outage), same as hasProEntitlementWeb.
+    for (const userId of userIds) result.set(userId, true);
+    return result;
   }
 
-  // Payment-retry grace: a subscription whose renewal charge just failed enters
-  // `past_due` while Stripe retries. Keep access for a bounded grace window so a
-  // transient failed charge doesn't instantly revoke a paying subscriber (the
-  // uninterrupted-access expectation of both app stores). The grace is anchored
-  // on current_period_end when known, else the webhook's updated_at (stamped on
-  // every upsert, so it marks when the row entered past_due) — making the bound
-  // REAL and self-contained rather than dependent on Stripe delivering a later
-  // canceled/unpaid event. `unpaid` and `cancelled` never get grace; they fall
-  // through to hasPaid:false below.
-  if (status === "past_due") {
-    const anchor = data.current_period_end ?? data.updated_at;
-    // No anchor at all (updated_at is NOT NULL in schema, so this is defensive):
-    // can't prove we're inside the window, so deny rather than grant unbounded.
-    if (!anchor) return { hasPaid: false, tier, status };
-    const graceEnd = new Date(anchor);
-    graceEnd.setDate(graceEnd.getDate() + PAST_DUE_GRACE_DAYS);
-    return { hasPaid: graceEnd > new Date(), tier, status };
+  const rowByUser = new Map<string, StripeCustomerFields>();
+  for (const row of (data ?? []) as (StripeCustomerFields & { user_id: string })[]) {
+    rowByUser.set(row.user_id, row);
   }
 
-  return { hasPaid: false, tier, status };
+  for (const userId of userIds) {
+    const row = rowByUser.get(userId);
+    result.set(userId, row ? computeHasPaid(row) : false);
+  }
+  return result;
 }

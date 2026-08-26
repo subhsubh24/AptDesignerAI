@@ -46,3 +46,54 @@ export async function isMarketingOptedOut(
   if (!data) return false;
   return data.marketing_emails === false;
 }
+
+/**
+ * Batched variant of isMarketingOptedOut — one query for a whole cohort instead
+ * of one per user. Built for the cron routes (activation/winback/habit emails),
+ * which otherwise issue N sequential preference lookups per run. Same
+ * fail-CLOSED semantics as the single-user function; keep that one for callers
+ * that only ever check a single user.
+ */
+export async function getMarketingOptOutMap(
+  userIds: string[],
+  adminClient?: ReturnType<typeof getAdminClient>,
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  if (!userIds.length) return result;
+
+  const admin = adminClient ?? getAdminClient();
+  if (!admin) {
+    console.warn(
+      "[email/preferences] no admin client — suppressing marketing send (fail-closed). " +
+      "Set SUPABASE_SERVICE_ROLE_KEY (see PENDING_OPS.md).",
+    );
+    for (const userId of userIds) result.set(userId, true);
+    return result;
+  }
+
+  const { data, error } = await admin
+    .from("user_email_preferences")
+    .select("user_id, marketing_emails")
+    .in("user_id", userIds);
+
+  if (error) {
+    console.error(
+      "[email/preferences] batched preference lookup failed — suppressing marketing send:",
+      error.message,
+    );
+    for (const userId of userIds) result.set(userId, true); // fail-closed
+    return result;
+  }
+
+  const rowByUser = new Map<string, boolean | null>();
+  for (const row of data ?? []) {
+    rowByUser.set(row.user_id, row.marketing_emails);
+  }
+
+  // No row → subscribed by default. A row with marketing_emails=false → suppress.
+  for (const userId of userIds) {
+    const marketingEmails = rowByUser.get(userId);
+    result.set(userId, rowByUser.has(userId) ? marketingEmails === false : false);
+  }
+  return result;
+}
