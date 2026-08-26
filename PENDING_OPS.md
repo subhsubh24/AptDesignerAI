@@ -296,6 +296,29 @@ PR #836 extracted that check into a standalone, independently-runnable script �
 2. Add `security-invariants` to `migrate`'s `needs:` list (and to the branch protection required-checks list alongside `verify`/`build`/`mobile`/`lint`/`journeys`), so a migration that fails the check cannot merge, let alone auto-apply to prod.
 3. **Verify:** open a throwaway PR that appends a `CREATE TABLE` with no `ENABLE ROW LEVEL SECURITY` to a scratch migration file → the new job should fail red and block `migrate`; revert.
 
+### 034_push_tokens.sql — new table: mobile Expo push-token receiver (added 2026-08-26, Run 190, PR #988 / APT-67)
+
+Creates `push_tokens`, the storage side of the mobile push-token receiver (`app/api/mobile/push-tokens/route.ts`) — the app already collected an Expo push token client-side but had nowhere to send it; this closes that gap for COLLECTION + STORAGE only (sending push notifications is a separate, larger feature not built yet). Tenant table (`user_id` FK to `profiles`) → RLS enabled with an explicit `USING` + `WITH CHECK` policy keyed on `auth.uid() = user_id`, matching the `design_profiles`/`saved_items` pattern. Uniqueness is on the `(user_id, token)` pair, not `token` alone — a table-wide unique(token) would conflict with RLS the moment two different users register the same physical-device token (a shared/family device, one user logging out and another logging in) — see the migration's own header comment for the full reasoning; round-1 PR review caught this before merge.
+
+Also: `docs/app-privacy.md` now discloses push-token/Device ID collection on both the Apple (Identifiers → Device ID) and Google Play (Device or other IDs) privacy forms — re-fill both store forms from the updated doc before the next store submission if they were filled before this migration landed.
+
+```sh
+psql $DATABASE_URL -f supabase/migrations/034_push_tokens.sql
+```
+
+**Verify:**
+```sql
+select relrowsecurity from pg_class where relname = 'push_tokens';
+-- expect: t
+
+select polname, pg_get_expr(polqual, polrelid) as using_expr,
+       pg_get_expr(polwithcheck, polrelid) as with_check
+from pg_policy where polrelid = 'push_tokens'::regclass;
+-- expect one row, both expressions "(user_id = auth.uid())"
+```
+
+---
+
 ### 033_design_profiles_saved_items_with_check.sql — hardening: pin explicit WITH CHECK on design_profiles/saved_items policies (added 2026-08-05, Run 145)
 
 `design_profiles` and `saved_items` (`001_initial_schema.sql`) each have a `FOR ALL` RLS policy ("Users can manage own design profiles" / "Users can manage own saved items") with a `USING` clause only, no explicit `WITH CHECK`. Per Postgres' documented behavior, a `FOR ALL`/`UPDATE` policy with no `WITH CHECK` automatically reuses its `USING` expression as the check — so these policies were already validating INSERT/UPDATE new-row values against `user_id = auth.uid()`; there is no unvalidated-write gap and never was one. This migration pins that check explicitly in the policy catalog rather than closing a live vulnerability. The real value: once WITH CHECK is explicit, a future `ALTER POLICY ... USING (...)` that only means to change row visibility can no longer silently change the write-time check along with it (today it would, since the implicit WITH CHECK always mirrors USING).
