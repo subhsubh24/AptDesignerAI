@@ -34,6 +34,23 @@ import type {
 
 const log = createLogger("computer-use-agent");
 
+/**
+ * Hard per-call timeout (ms) for the raw `generateContent` call this loop
+ * makes directly against the SDK (bypassing `geminiProvider.chat()` — see
+ * module docstring — so it does NOT inherit that wrapper's
+ * GEMINI_CALL_TIMEOUT_MS race). Without this, a stalled call blocks inside
+ * a single turn forever: the maxWallClockMs guard above only re-checks at
+ * the TOP of each turn and can't interrupt a call already in flight, which
+ * leaves the platform's own maxDuration as the only backstop — killing the
+ * whole route with a raw 504 instead of a clean, caught error.
+ *
+ * Sized well below `maxWallClockMs` (270_000, see product-verifier.ts) so a
+ * single stalled call fails with room for the loop to reach its `finally`
+ * and dispose the browser session before the route's 300s maxDuration.
+ * Mirrors GEMINI_CALL_TIMEOUT_MS's Promise.race pattern in lib/ai/gemini.ts.
+ */
+const COMPUTER_USE_CALL_TIMEOUT_MS = Number(process.env.COMPUTER_USE_CALL_TIMEOUT_MS) || 60_000;
+
 const DEFAULT_SYSTEM_PROMPT = `You are controlling a web browser to accomplish a user's goal.
 
 Operating principles:
@@ -252,33 +269,46 @@ export async function runComputerUseAgent<T = unknown>(
       }
 
       // ── Model call ───────────────────────────────────────────────
-      const response = await ai.models.generateContent({
-        model,
-        contents: contents as unknown as Parameters<typeof ai.models.generateContent>[0]["contents"],
-        config: {
-          systemInstruction: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
-          tools: [computerUseTool],
-          // OPEN COST-CONTRACT ITEM, recorded rather than quietly changed.
-          // `computer_use` is NOT on the contract's allowed-HIGH list
-          // (.claude/rules/llm-cost-contract.md), and this task does have the
-          // cheap deterministic verifier the contract asks for — product-
-          // verifier.ts parseFinal()/hasData. So the contract's answer is
-          // "run cheap, escalate on that signal", i.e. an escalation ladder,
-          // NOT a hardcoded HIGH. Building that ladder is a real change with
-          // its own review; silently dropping to the policy default instead
-          // would degrade a live route (/api/computer-use/product-verify) in a
-          // commit about seeding. Left AT ITS CURRENT VALUE and flagged, so the
-          // next audit sees a named item rather than an invisible bypass.
-          thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
-          // The determinism rule is "ALL LLM calls pass seed". This one did
-          // not. Because the loop bypasses geminiProvider.chat() (see the
-          // module docstring), neither the harness ratchet nor
-          // check:determinism can see this call — the omission was invisible
-          // by construction, not by exemption. resolveSeed() rather than a
-          // literal, so DETERMINISTIC_MODE=false still yields a stochastic run.
-          seed: resolveSeed(undefined),
-        },
-      });
+      // Promise.race against a hard timeout: the SDK's fetch has no built-in
+      // upper bound, so a stalled/silently-hung response would otherwise
+      // block this turn (and the whole route) until the platform's own
+      // maxDuration kills it — a raw 504 instead of a clean, caught error.
+      // See COMPUTER_USE_CALL_TIMEOUT_MS above for sizing.
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model,
+          contents: contents as unknown as Parameters<typeof ai.models.generateContent>[0]["contents"],
+          config: {
+            systemInstruction: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+            tools: [computerUseTool],
+            // OPEN COST-CONTRACT ITEM, recorded rather than quietly changed.
+            // `computer_use` is NOT on the contract's allowed-HIGH list
+            // (.claude/rules/llm-cost-contract.md), and this task does have the
+            // cheap deterministic verifier the contract asks for — product-
+            // verifier.ts parseFinal()/hasData. So the contract's answer is
+            // "run cheap, escalate on that signal", i.e. an escalation ladder,
+            // NOT a hardcoded HIGH. Building that ladder is a real change with
+            // its own review; silently dropping to the policy default instead
+            // would degrade a live route (/api/computer-use/product-verify) in a
+            // commit about seeding. Left AT ITS CURRENT VALUE and flagged, so the
+            // next audit sees a named item rather than an invisible bypass.
+            thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+            // The determinism rule is "ALL LLM calls pass seed". This one did
+            // not. Because the loop bypasses geminiProvider.chat() (see the
+            // module docstring), neither the harness ratchet nor
+            // check:determinism can see this call — the omission was invisible
+            // by construction, not by exemption. resolveSeed() rather than a
+            // literal, so DETERMINISTIC_MODE=false still yields a stochastic run.
+            seed: resolveSeed(undefined),
+          },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Computer Use call timed out after ${COMPUTER_USE_CALL_TIMEOUT_MS}ms`)),
+            COMPUTER_USE_CALL_TIMEOUT_MS,
+          ),
+        ),
+      ]);
 
       const candidate = response.candidates?.[0];
       const parts = (candidate?.content?.parts ?? []) as ContentPart[];

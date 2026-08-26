@@ -83,6 +83,7 @@ non_credential_allowlist:
   - GEMINI_CALL_TIMEOUT_MS
   - GEMINI_MAX_CONCURRENCY
   - GEMINI_IMAGE_FETCH_CONCURRENCY
+  - COMPUTER_USE_CALL_TIMEOUT_MS  # per-call timeout for the raw generateContent() call in lib/agents/computer-use/agent-loop.ts, which bypasses geminiProvider.chat() and so does not inherit GEMINI_CALL_TIMEOUT_MS
   - DEEPSEEK_CALL_TIMEOUT_MS
   - DEEPSEEK_MAX_CONCURRENCY
   - TAVILY_CONCURRENCY
