@@ -4,6 +4,15 @@ import { applyCorsHeaders } from "@/lib/security/cors";
 import { applySiteGate } from "@/lib/security/site-gate";
 
 const PUBLIC_PATHS = new Set([
+  // The marketing landing page. app/page.tsx is a full, SEO-annotated landing
+  // page (its own <title>/description, `alternates.canonical: "/"`, OG and
+  // Twitter cards) — but until this entry existed NOTHING ever rendered it:
+  // updateSession() redirected `/` to /dashboard unconditionally, before the
+  // auth check, so an anonymous visitor was bounced /dashboard -> /login and a
+  // crawler indexed a login form as the site's home page. The redirect now runs
+  // only for a SIGNED-IN user (see SIGNED_IN_REDIRECT_PATHS), which is what it
+  // was always for; logged-out visitors get the landing page it was written for.
+  "/",
   "/login",
   "/signup",
   // Account recovery. A locked-out user is by definition signed OUT, so these
@@ -52,6 +61,10 @@ const PUBLIC_PATHS = new Set([
 // session as it redeems the emailed token, so bouncing on a session would
 // break the flow at the exact moment it starts working.
 const SIGNED_IN_REDIRECT_PATHS = new Set([
+  // A signed-in user landing on the marketing home wants the app, not the
+  // pitch. This is the ONLY thing the old unconditional root redirect was
+  // actually right about, so it is preserved here — but now gated on a session.
+  "/",
   "/login",
   "/signup",
   "/waitlist",
@@ -123,13 +136,6 @@ export async function updateSession(request: NextRequest) {
   // env var is unset (today's default), so this ships inert.
   const gated = await applySiteGate(request);
   if (gated) return gated;
-
-  // Redirect root to dashboard always
-  if (request.nextUrl.pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
