@@ -15,7 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { logServerError } from "@/lib/utils/api-error";
+import { apiError, logServerError } from "@/lib/utils/api-error";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/utils/rate-limiter";
 import { checkDailySpend, dailySpendExceededResponse } from "@/lib/utils/spend-limiter";
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: true });
-  if (messagesError) logServerError("refine-chat.messages", messagesError);
+  if (messagesError) return apiError("refine-chat.messages", messagesError);
 
   return NextResponse.json({ messages: messages || [] });
 }
@@ -145,8 +145,14 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle(),
   ]);
-  if (roomError) logServerError("area-analysis.refine-chat.room", roomError);
-  if (latestDiagnosisError) logServerError("area-analysis.refine-chat.latestDiagnosis", latestDiagnosisError);
+  // Ownership is verified above, so PGRST116 (no rows) here means a delete
+  // raced the check — a legitimate empty state, not a failure. Any other
+  // error is real and must not be masked as "Room not found" below.
+  if (roomError && roomError.code !== "PGRST116") return apiError("area-analysis.refine-chat.room", roomError);
+  // room_diagnoses uses maybeSingle(), which returns error: null for a
+  // genuine zero-row result — so any error here is a real DB failure, never
+  // "no analysis yet" (that case is `!latestDiagnosis` with no error, below).
+  if (latestDiagnosisError) return apiError("area-analysis.refine-chat.latestDiagnosis", latestDiagnosisError);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
 
   if (!latestDiagnosis) {

@@ -156,7 +156,7 @@ describe("products POST — search_session_id must be bound to the room", () => 
     expect(captured.row).toBeUndefined();
   });
 
-  it("logs a genuine DB error on the ownership check instead of silently treating it as not-found (APT-25)", async () => {
+  it("returns a real 500 on a genuine DB error on the ownership check, not a misleading 400 (APT-25, tightened further)", async () => {
     const captured: Captured = {};
     const dbError = { message: "connection reset by peer" };
     mockCreateClient.mockResolvedValue(makeClient(captured, dbError));
@@ -166,10 +166,15 @@ describe("products POST — search_session_id must be bound to the room", () => 
       jsonReq({ room_id: OWN_ROOM, title: "Sofa", search_session_id: OWN_SESSION.id }) as never,
     );
 
-    // Still 400 (the same client-facing behavior as not-found) — but the real
-    // cause must now be logged server-side instead of discarded.
-    expect(res.status).toBe(400);
+    // A real DB error is not "search_session_id does not belong to this room"
+    // (a 400) — that message is actively misleading when the query never
+    // resolved at all. Must surface as a 500 with a generic client message,
+    // while the real cause is still logged server-side (not discarded).
+    expect(res.status).toBe(500);
     expect(captured.row).toBeUndefined();
+    const body = await res.json();
+    expect(body.error).not.toContain("does not belong");
+    expect(body.error).not.toContain("connection reset");
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringMatching(/^\[products\.search_session_ownership\].*connection reset by peer/),
       dbError,

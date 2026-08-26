@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { apiError, logServerError } from "@/lib/utils/api-error";
+import { apiError } from "@/lib/utils/api-error";
 import { parsePagination } from "@/lib/utils/pagination";
 import { requireRoomOwnership } from "@/lib/auth/ownership";
 import { enforceWriteRateLimit } from "@/lib/utils/write-rate-limit";
@@ -106,9 +106,7 @@ export async function POST(request: Request) {
       .eq("id", body.search_session_id)
       .eq("room_id", body.room_id)
       .maybeSingle();
-    if (sessionError) {
-      logServerError("products.search_session_ownership", sessionError);
-    }
+    if (sessionError) return apiError("products.search_session_ownership", sessionError);
     if (!session) {
       return NextResponse.json(
         { error: "search_session_id does not belong to this room" },
