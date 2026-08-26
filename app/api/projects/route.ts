@@ -12,9 +12,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const { offset, rangeEnd } = parsePagination(searchParams, { defaultLimit: 100, maxLimit: 500 });
 
+  // Narrowed to what the dashboard's "load existing project" flow actually
+  // reads (app/dashboard/page.tsx). Drops apartment_analysis (an unused jsonb
+  // blob) plus name/description/status/cover_image_url/location_place_id/
+  // building_place_id/latitude/longitude/unit_plan_name/created_at/user_id,
+  // none of which this list consumer touches. building_research stays — it IS
+  // read (project.building_research) to restore onboarding state. See APT-65.
   const { data, error } = await supabase
     .from("projects")
-    .select("*")
+    .select("id, bedrooms, bathrooms, apartment_sqft, city, state, neighborhood, building_name, building_url, building_research")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .range(offset, rangeEnd);
