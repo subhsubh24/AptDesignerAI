@@ -120,7 +120,7 @@ export default function AccountPage() {
                   placeholder={CONFIRM_PHRASE}
                   className={cn(
                     "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none",
-                    "focus-visible:ring-2 focus-visible:ring-destructive/30 focus:border-destructive/50",
+                    "focus-visible:ring-2 focus-visible:ring-destructive/30 focus-visible:border-destructive/50",
                     "placeholder:text-muted-foreground/50 transition-colors",
                   )}
                   autoFocus
