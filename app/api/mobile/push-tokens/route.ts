@@ -11,9 +11,9 @@ const ALLOWED_PLATFORMS = new Set(["ios", "android"]);
  * Receiver for the Expo push token mobile/src/hooks/use-push-notifications.ts
  * already collects on-device but previously had nowhere to send (APT-67).
  * Bearer-token auth (mobile clients cannot use cookies), matching the other
- * /api/mobile/* routes. Upserts on `token` (not user_id) — a user can hold
- * more than one device token, and a reinstall issues a fresh token for the
- * same device, so both are ordinary idempotent writes rather than conflicts.
+ * /api/mobile/* routes. Upserts on the (user_id, token) PAIR, not token
+ * alone — see supabase/migrations/034_push_tokens.sql for why: a table-wide
+ * unique(token) would conflict with RLS on a shared-device login switch.
  *
  * Body: { token: string, platform?: "ios" | "android" }
  *
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         platform: platform ?? null,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "token" },
+      { onConflict: "user_id,token" },
     );
 
   if (error) {

@@ -16,10 +16,19 @@
 -- with the explicit WITH CHECK convention established in
 -- 033_design_profiles_saved_items_with_check.sql).
 --
--- `token` is UNIQUE (not user_id) because a single user can hold multiple
--- device tokens (phone + tablet, or a reinstalled app issuing a new token for
--- the same device) — the receiver route upserts on token, so a reinstall or a
--- second device is a normal, idempotent write rather than a conflict.
+-- `(user_id, token)` is UNIQUE as a PAIR, not `token` alone — deliberately.
+-- Expo push tokens are tied to the device+app install, not the account, so a
+-- shared/family device is a real path: user A registers a token, logs out,
+-- user B logs in on the SAME device and registers the SAME token. A
+-- table-wide `unique(token)` plus the RLS policy above would make that
+-- upsert conflict on A's existing row while B's session can't see or update
+-- it (USING fails: that row's user_id is A, not auth.uid()) — the write
+-- fails, and since the mobile caller treats registration as best-effort
+-- (swallows the error), it fails SILENTLY and PERMANENTLY for B with no
+-- retry path. Keying the uniqueness on the pair instead makes a reinstall or
+-- a second device for the SAME user an idempotent no-op (the intended
+-- behavior), while two different users on one physical device get two
+-- independent rows instead of a cross-tenant write conflict.
 --
 -- HOW TO APPLY:
 --   psql $DATABASE_URL -f supabase/migrations/034_push_tokens.sql
@@ -35,10 +44,11 @@
 create table if not exists push_tokens (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade not null,
-  token text not null unique,
+  token text not null,
   platform text,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  unique (user_id, token)
 );
 
 create index if not exists push_tokens_user_id_idx on push_tokens(user_id);

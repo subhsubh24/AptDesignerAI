@@ -1,5 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import { NextRequest } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * The receiver for the Expo push token mobile/src/hooks/use-push-notifications.ts
@@ -98,7 +100,7 @@ describe("POST /api/mobile/push-tokens", () => {
     expect(res.status).toBe(400);
   });
 
-  it("upserts on the JWT-derived user id (never a client-supplied id), keyed on token", async () => {
+  it("upserts on the JWT-derived user id (never a client-supplied id), keyed on the (user_id, token) pair", async () => {
     tokenResolvesTo({ id: "u1" });
     const upsert = upsertResolvesTo(null);
 
@@ -111,7 +113,12 @@ describe("POST /api/mobile/push-tokens", () => {
     expect(row.user_id).toBe("u1");
     expect(row.token).toBe("ExponentPushToken[abc]");
     expect(row.platform).toBe("ios");
-    expect(opts).toEqual({ onConflict: "token" });
+    // NOT onConflict: "token" alone — a table-wide unique(token) would
+    // conflict with the RLS policy when a second user registers the same
+    // physical-device token after the first user logs out (shared/family
+    // device). See supabase/migrations/034_push_tokens.sql for the full
+    // reasoning; this pins the fix so it can't silently regress.
+    expect(opts).toEqual({ onConflict: "user_id,token" });
   });
 
   it("returns 500 on a DB upsert error, without leaking the raw error message", async () => {
@@ -123,5 +130,18 @@ describe("POST /api/mobile/push-tokens", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(JSON.stringify(body)).not.toContain("constraint xyz");
+  });
+
+  it("migration keeps the composite (user_id, token) unique key, not a table-wide unique(token)", () => {
+    // Pins the shared-device fix at the schema level too — a well-meaning
+    // future "simplify the constraint" edit to the migration would otherwise
+    // silently reintroduce the RLS-vs-uniqueness conflict this route's own
+    // onConflict depends on.
+    const sql = fs.readFileSync(
+      path.join(process.cwd(), "supabase/migrations/034_push_tokens.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/unique\s*\(\s*user_id\s*,\s*token\s*\)/i);
+    expect(sql).not.toMatch(/token\s+text\s+not\s+null\s+unique\b/i);
   });
 });
