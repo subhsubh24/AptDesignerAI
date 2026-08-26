@@ -131,9 +131,13 @@ export async function GET(request: NextRequest) {
 
   const { offset, rangeEnd } = parsePagination(request.nextUrl.searchParams, { defaultLimit: 100, maxLimit: 300 });
 
+  // Narrowed to what the mockups list/poll UI actually reads (app/projects/[projectId]/rooms/[roomId]/mockups/page.tsx's
+  // Mockup interface) — this route is polled repeatedly during generation, and
+  // selected_products/generation_metadata/error_message are unused JSONB/text
+  // the UI never touches. See APT-65.
   const { data, error } = await supabase
     .from("mockup_jobs")
-    .select("*")
+    .select("id, result_image_url, prompt, status, created_at, generation_provider")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .range(offset, rangeEnd);
