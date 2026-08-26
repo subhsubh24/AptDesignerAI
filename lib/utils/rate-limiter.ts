@@ -178,6 +178,8 @@ export const RATE_LIMITS = {
   productCorrect: { maxRequests: 10, windowMs: 60_000 },
   /** Product confirmation (self-learning embedding write-back) — 10 per minute per user */
   productConfirm: { maxRequests: 10, windowMs: 60_000 },
+  /** Mobile push-token registration — cheap DB upsert, not an LLM call — 10 per minute per user */
+  mobilePushTokenRegister: { maxRequests: 10, windowMs: 60_000 },
   /**
    * Public shared-design lookup — 60 per minute PER IP. This endpoint is
    * unauthenticated (no user to key on), so it is keyed on the caller IP to slow

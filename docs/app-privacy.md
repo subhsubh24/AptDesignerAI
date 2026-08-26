@@ -21,6 +21,7 @@ stay consistent.
 | Apartment building, neighborhood, city/state | Contact Info → Physical Address | The user types their building into an address autocomplete during project setup, so the AI can research the building's real layout, finishes and light | Yes |
 | Coordinates of the selected building | Location → Precise Location | Stored with the project (`projects.latitude` / `.longitude`) and passed to Gemini's Maps grounding for building orientation, view and neighbourhood context | Yes |
 | App interaction events | Usage Data | In-app navigation + feature usage (via Vercel Web Analytics — cookieless, no ad identifiers) | No |
+| Expo push token (mobile only) | Identifiers → Device ID | Lets the server notify the user when a design is ready. Collected only if the user grants the notification permission | Yes |
 
 **About the location entry — read before filling either form.** This is *not*
 device location. The app never requests a location permission on any platform
@@ -54,18 +55,16 @@ requesting plugin is added without being declared here and on `/privacy`.
 | Notifications | `expo-notifications` | Tell the user when a design they asked for is ready, plus occasional product updates. Declining leaves the app fully functional | An Expo push token (see below) |
 
 **The push token, stated precisely.** `mobile/src/hooks/use-push-notifications.ts`
-requests the notification permission and, if granted, obtains an Expo push token
-and writes it to on-device `AsyncStorage`. As of today nothing sends it
-anywhere: there is no server endpoint that receives it (the server-side sender
-is still an open item in `PENDING_OPS.md`). Under Apple's definition, data is
-"collected" when it is transmitted off the device, so the token is **not**
-declared as Device ID on either form today, and that is why no identifier row
-appears in the tables below.
-
-**This is the one entry most likely to go stale.** The moment the server-side
-sender lands, the token starts leaving the device and both forms must gain an
-identifier declaration (Apple: Identifiers → Device ID, linked to the user;
-Play: Device or other IDs) before the next submission.
+requests the notification permission and, if granted, obtains an Expo push
+token, writes it to on-device `AsyncStorage`, and POSTs it to
+`app/api/mobile/push-tokens/route.ts`, which upserts it into the `push_tokens`
+table (migration 034; RLS-scoped to the owning user). The token therefore
+**is** transmitted off the device and collected under Apple's definition — see
+the Identifiers row above and in "Data Linked to You" below, and the "Device
+or other IDs" row in the Play Data Safety table. Collection is receiver-only:
+this route stores the token so a future sender can reach the device; no push
+notification is actually sent yet (a deliberately separate, larger feature —
+see APT-67 for the scoping decision).
 
 ---
 
@@ -108,6 +107,11 @@ by other companies?" question.
   the layout extracted from them; free-text room notes; refine-chat messages) —
   *App Functionality*
 
+**Identifiers**
+- Device ID (Expo push token, mobile only) — *App Functionality* (lets the
+  server notify the user when a design is ready; collected only if the
+  notification permission is granted)
+
 ### Data Not Linked to You
 **Usage Data**
 - App usage data (screen views, feature interactions) — *Analytics* — collected
@@ -119,7 +123,7 @@ by other companies?" question.
 | Recipient | Data shared | Purpose |
 |---|---|---|
 | Google (Gemini API) | Room photos, room type, user context text | AI analysis — third-party processing, covered by Google's data processing terms |
-| Supabase | Email address, room photos, design data | Database + storage hosting |
+| Supabase | Email address, room photos, design data, Expo push token (mobile only) | Database + storage hosting |
 | Tavily Search API | Product search query strings derived from AI design output (e.g. "mid-century oak bookshelf") — no PII | Product sourcing — web search for furniture and décor recommendations |
 | Stripe | Name, email address, payment card data (collected directly by Stripe; we never see raw card data) | Payment processing for Apartment ($29) and Pro plans |
 | RevenueCat | Account/user ID + subscription/purchase status | Cross-platform in-app subscription + entitlement management (mobile). Inert until REVENUECAT keys are set. |
@@ -159,6 +163,7 @@ no advertising identifiers.
 | Photos & videos | Photos, floor-plan images/PDFs | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | Messages | In-app refine-chat messages between the user and the design agent | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion |
 | App activity | App interactions | Yes | Yes (TLS) | Yes |
+| Device or other IDs | Expo push token (mobile only, only if notification permission granted) | Optional (user-initiates) | Yes (TLS) | Yes — deleted on account deletion (cascades from the user's account) |
 
 ### Is the data shared with third parties? → **Yes**
 
