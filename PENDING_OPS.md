@@ -8,8 +8,29 @@ dashboard parses the fenced OWNER_ACTIONS YAML block below).
 ```yaml
 OWNER_ACTIONS:
   project: AptDesignerAI
-  as_of: 2026-08-19
+  as_of: 2026-08-26
   items:
+    - id: register-canonical-domain
+      title: "URGENT — aptdesignerai.com was NEVER REGISTERED; the whole codebase points at a domain that does not exist"
+      priority: urgent
+      status: open
+      why: "Verified 2026-08-26: `whois aptdesignerai.com` returns 'No match for domain APTDESIGNERAI.COM' and `dig +short aptdesignerai.com A` returns nothing. Vercel's domain API confirms it is AVAILABLE at $11.25/yr. aptdesigner.ai is likewise unregistered. This invalidates the premise of the reconcile-canonical-domain item below, which reconciled app.json associatedDomains, the email from-address and 7 contact surfaces onto a domain nobody owns. It also explains the GTM factory's twenty-seven consecutive runs concluding it had 'no reachable network path' to the production host: there is no host. Tracked as APT-69."
+      how: "Register aptdesignerai.com (https://vercel.com/domains/search?q=aptdesignerai.com, ~$11.25/yr) and point it at the apt-designer-ai project, OR pick a domain you do own and change the canonical everywhere. Verify: `dig +short aptdesignerai.com A` returns an A record AND `curl -s -o /dev/null -w '%{http_code}' -L https://aptdesignerai.com` returns 200, not 000."
+      blocks: launch-safety
+    - id: redeploy-production
+      title: "URGENT — production is 45 days stale (last deploy 2026-07-12) and still serves a fabricated testimonial"
+      priority: urgent
+      status: open
+      why: "Verified 2026-08-26: the live production deployment is dpl_5R3w99TkQoutkuQ86ScZGaAfqRDn, created 2026-07-12, while the repo has run to Run 191. The live login page still shows an INVENTED testimonial ('Sarah M., Brooklyn, NY') that the loop itself removed from the codebase in commit 05dea24 (Run 89, an explicit honesty/FTC fix). It is still public ONLY because production never redeployed. Every honesty, security and a11y fix merged since 2026-07-12 is real in git and absent in production. Deploys fire from a manual hook (deployHookName: manual-main), not on merge. Tracked as APT-70."
+      how: "Fire the existing manual-main deploy hook to ship current HEAD, then wire the Vercel Git integration so merges to the default branch auto-deploy. Verify: `curl -s -L https://apt-designer-ai.vercel.app | grep -c 'nailed my style'` prints 0."
+      blocks: launch-safety
+    - id: enable-vercel-analytics
+      title: "Enable Vercel Web Analytics — it is OFF, so the funnel is unmeasurable"
+      priority: high
+      status: open
+      why: "Verified 2026-08-26: the Web Analytics API returns `web_analytics_not_enabled` for project apt-designer-ai. @vercel/analytics is a live dependency and <Analytics /> is mounted in app/layout.tsx, so the client is shipping events into a product that is not switched on. GROWTH_STATUS has correctly reported visitors_7d: 0 the whole time — that is a fail-closed null, not a measurement. No demand test can be read without this."
+      how: "Vercel Dashboard -> apt-designer-ai -> Analytics -> Enable Web Analytics. No code change needed (the component is already mounted)."
+      blocks: growth-execution
     - id: reconcile-canonical-domain
       title: "DONE — canonical domain = aptdesignerai.com; app.json associatedDomains + email from-address reconciled (owner: host AASA + verify email auth, below)"
       priority: high
