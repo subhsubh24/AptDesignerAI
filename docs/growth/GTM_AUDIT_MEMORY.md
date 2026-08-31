@@ -658,3 +658,162 @@ the standing note since Run 4.
 - Do not let "the blocker moved but the gate is still closed" read as a wash. Business-case honesty
   breaking a 3-run streak is real, hard-won progress — grade the artifact in front of you, not the
   overall letter's stability.
+
+---
+
+## Run 8 — 2026-08-31
+
+**Overall: C · ship_gate_met: FALSE** (was B / false at Run 7 — a genuine drop, driven almost
+entirely by ONE dimension collapsing hard, not by broad Factory misconduct)
+
+Graded the last active GTM Factory output — GROWTH_STATUS.md (as_of 2026-08-21, Growth Agent
+Run 27) plus the follow-up commit f8a8f70 (2026-08-22, APT-42) — with eight fresh, independent,
+adversarial per-dimension graders on Sonnet (this project runs SONNET-MAX; no Opus requested for
+the Auditor or any subagent), each explicitly tasked to re-verify Run 7's specific claims against
+real code/scripts/citations, not trust the Factory's self-report. Read GTM_AUDIT_MEMORY first and
+diffed against Run 7.
+
+### Grades
+| Dimension | R4 | R5 | R6 | R7 | R8 | Ship-critical | Δ vs R7 |
+|---|---|---|---|---|---|---|---|
+| Metric integrity | A | A | A | A | **A** | ★ | = |
+| Business-case honesty | B | B | B | A+ | **A+** | ★ | = |
+| Experiment validity | C | B | A | A | **A** | | = |
+| Roadmap-steer justification | A | A | A+ | A+ | **A+** | ★ | = |
+| Self-validation honesty | C | A | A | B | **B** | ★ | = (deeper instance, same letter) |
+| PMF read accuracy | B | B | A | B | **B** | | = |
+| Compliance | B | A | A | A | **A** | | = |
+| Artifact freshness | C | C | B | A | **D** | | ↓↓↓ (the drop that matters) |
+
+### THE EVENT THIS RUN GRADES AGAINST — not a Factory action, but reshapes several grades
+On **2026-08-26** the **OWNER** (not the GTM Factory, not any prior auditor) discovered and
+documented (`docs/growth/DEMAND_TEST.md`, `PENDING_OPS.md` APT-69/70/71, Linear APT-69/70/71/72)
+four facts, each independently verified:
+1. **`aptdesignerai.com` was never registered** — `whois` returns "No match"; available for
+   $11.25/yr. The domain the entire codebase, every GTM doc, `app.json`'s `associatedDomains`, and
+   `lib/email`'s from-address all point at does not exist.
+2. **Production was 45 days stale** — last deploy 2026-07-12, repo at Run 191+. The live login
+   page (if it were reachable) would still show a fabricated testimonial the loop itself removed
+   in Run 89, because production never redeployed.
+3. **Vercel Web Analytics was never enabled.**
+4. **`/` redirected every anonymous visitor to a login wall** — `app/page.tsx`, a complete
+   marketing landing page, was unreachable dead code until PR #994 (2026-08-26) fixed it.
+
+**Conclusion: the product has never been exposed to a single real visitor. The all-zero funnel
+this project reported for ~two months was never market feedback — it was the absence of an
+experiment.** `docs/growth/DEMAND_TEST.md` pre-commits kill criteria for a real demand test and
+**pauses both the Product Factory and GTM Factory loops** (`enabled:false`, 2026-08-26) until that
+test returns a result. The two weekly auditors (Quality + this one) are deliberately kept
+running as the maker-independent safety net while the factories are down — this run fulfills
+exactly that role.
+
+### What held clean (re-derived fresh, not carried forward)
+1. **Business-case honesty A+.** `docs/BUSINESS_CASE.md` is byte-unchanged since 32ea347c0
+   (2026-08-15, confirmed via the GitHub API past the shallow local clone), but re-derived
+   anyway per this scorecard's standing rule. 5 of 12 registered scripts re-run cold, all
+   reproduce exactly ($71,207 / $73,519 / $82,873 / $55,989 / $335,934). Full document sweep for
+   a 4th instance of the Run 4→5→6 disclosure-asymmetry pattern found none.
+2. **Roadmap-steer justification A+.** Zero commits to ROADMAP.md/VISION.md/BUSINESS_CASE.md
+   since Run 7, confirmed via the GitHub API. `docs/growth/DEMAND_TEST.md` is owner-authored
+   (commit 961f8a8, author Subh Mukherjee), doesn't touch a governed file, and is correctly
+   classified as an owner-level pause action, not a GTM-authored steer — verified, not assumed.
+   PR #994 (root-redirect fix) is likewise owner-authored/merged, a plain bug fix outside GTM's
+   remit.
+3. **Metric integrity A**, **experiment validity A**, **compliance A** — all independently
+   re-derived (scripts re-run, test suite actually re-executed: 25/25 passing, citations
+   re-fetched against raw content), each with the same small carried-forward nits as Run 7
+   (engine_pct not CI-enforced; theme-4's dead-end tally off by one; migration 031 unapplied).
+   One new metric_integrity nit: the eightx.co "$55-108 all-in" citation splices two figures
+   from two different framings on the source page and mislabels the splice verbatim.
+
+### The gap that held its letter for a deeper reason (self_validation_honesty B, pmf_read_accuracy B)
+4. **Run 7's specific finding is genuinely fixed and holds** — `lib/growth/metrics.ts` still
+   matches `pmf.unbuilt_disclosure`'s corrected text exactly. But a SEPARATE, deeper instance of
+   the identical failure mode is now understood: `GROWTH_STATUS.md`'s `internal_metrics_api`
+   validation entry attributed 27 consecutive connection failures to a network-policy problem
+   and told the owner that "resolving JUST the aptdesignerai.com egress path" would fix it — a
+   confident, specific, and (per APT-69) simply WRONG causal claim, since there was never a host
+   to reach. The `vercel_analytics` entry has the same shape: it only ever asks about *read
+   access*, never whether Analytics was *enabled*. Both graders adjudicated this fairly in both
+   directions: for the Factory, a `whois`/DNS check may genuinely have been outside its
+   proxy-gated runtime, and the misdiagnosis reads as a good-faith blind spot, not something
+   self-serving (a "domain never registered" finding is more damaging to the whole program than
+   "network policy," so there was no incentive to avoid it). Against the Factory, 27 runs of
+   identical failure with the identical non-diagnosis is a real pattern-matching miss, and the
+   live document today still actively misdirects toward fixes that cannot work. Held at B, not
+   lower, because it is not a fabrication and the underlying build-status claims are solid.
+5. **PMF read accuracy** carries the same root cause from a different angle: the "network
+   policy" framing functioned as an accidental excuse that delayed the honest statement "we have
+   never tested demand" for 27 runs / 55 days. `docs/growth/DEMAND_TEST.md`'s own read ("we have
+   evidence neither for nor against this business") is a more accurate PMF statement than
+   anything the GTM Factory itself produced in that span — found independently by a second
+   grader with no shared context, corroborating rather than duplicating the self-validation
+   finding, the same cross-dimension corroboration pattern seen at Run 7.
+
+### The dimension that actually moved the overall grade: artifact_freshness A → D
+6. **The worst single non-ship-critical-dimension grade this project has recorded.** Judged this
+   a genuine Factory-attributable defect, not excused as outside practical reach: the rubric
+   explicitly names "no stale... domain... claim" in scope, a `whois` check is no harder than the
+   citation verification this Factory already performs, and the Factory had the diagnostic signal
+   every single run for 27 runs and explained it away rather than tested the cheaper hypothesis.
+   Live today (2026-08-31, 5 days after the discovery): `docs/store-listing.md` (10 refs,
+   including live support/privacy/terms URLs App Store reviewers would follow), `press-kit.md`,
+   `content-calendar.md`, `email-lifecycle.md`, `email-welcome-sequence.md`, `app-privacy.md`
+   (touched 2026-08-26 itself by an unrelated PR that did NOT fix the domain claim),
+   `mobile/app.json`'s `associatedDomains`, and `lib/email`'s `DEFAULT_FROM` all still assert
+   `aptdesignerai.com` as live/canonical, unquarantined. Not scored F — nothing here is
+   fabricated or gamed, this is an honestly self-discovered, openly disclosed gap and the
+   response (pausing both factories) was correct — but it spans nearly the entire GTM asset
+   surface, which is far beyond a single named spot-fix (the B/C-level pattern this dimension has
+   shown in prior runs), hence D.
+
+### Ship gate
+STILL NOT MET, same ship-critical dimension as Run 7 (self_validation_honesty B) — genuinely
+unresolved rather than newly broken, since the Factory has had zero runs since Run 7's fix landed
+in which to address the deeper instance this audit surfaced, and it is now paused. Every other
+ship-critical dimension holds A/A+.
+
+### Issue tracking this run
+Filed to Linear (team `AptDesignerAI`, label `source:gtm-auditor` + `type:factory`, matching the
+convention actually in use, not the `type:gtm` label this doc's Run-7 entry described). Checked
+`mcp__Linear__list_issues` first: APT-69 ("CRITICAL: aptdesignerai.com is NOT REGISTERED — 27 GTM
+runs misdiagnosed this as a network-policy problem") already exists, filed directly by the owner
+on 2026-08-26 — NOT duplicated. APT-42 (Run 7's self_validation/pmf finding) is correctly `Done`.
+APT-43/44/45/46 (Run 7's four nit-level follow-ups) are still `Backlog`, unchanged — commented on
+APT-44 and APT-45 confirming both re-verified still-open this run rather than filing duplicates;
+APT-43 (the FunnelEvent structural-guard ask) is effectively superseded by this run's much larger
+freshness finding, noted in a comment rather than closed (the underlying ask is still valid and
+cheap, just no longer the dimension's binding constraint). Filed **new**: "gtm-quality:
+self_validation_honesty B / pmf_read_accuracy B — validation block still points to fixes that
+cannot work (APT-69 root cause)" (ship-critical, top priority, cross-references APT-69 rather than
+restating it). Filed **new**: "gtm-quality: artifact_freshness A → D — GTM docs + native app
+config still assert the unregistered domain as live/canonical" (severity-2, the dimension that
+actually moved `overall`).
+
+### Methodological note carried forward
+This repo's local clone is SHALLOW — reconfirmed again this run (`.git/shallow` present,
+`docs/BUSINESS_CASE.md`'s only local-history commit is the graft point itself). The
+roadmap-steer sweep and the business-case-honesty history check both used the GitHub API, per
+the standing note since Run 4.
+
+### Notes for next run
+- Re-check whether GROWTH_STATUS.md's `internal_metrics_api`/`vercel_analytics` validation
+  entries have been corrected to name APT-69/70/71 as the real root cause and drop the
+  egress-path/API-access framing — this is the single highest-priority fix, ship-critical, and
+  is the SAME fix that would close both self_validation_honesty and pmf_read_accuracy's gaps.
+  It cannot happen until the GTM Factory loop is un-paused — check `docs/growth/DEMAND_TEST.md`'s
+  status and the trigger's `enabled` state before assuming a lack of a fix reflects Factory
+  inaction rather than an owner-imposed pause.
+- Re-check whether the demand test in `docs/growth/DEMAND_TEST.md` has returned a result. If it
+  has, both factories may have resumed — re-read the doc's `Status:` line fresh; do not assume
+  from a prior run's note.
+- Re-check artifact_freshness: has any GTM doc been updated to quarantine or caveat its
+  `aptdesignerai.com` references, mirroring the Pro Annual treatment? This is now the largest
+  open freshness gap this project has recorded — do not let a partial fix (one doc updated, others
+  missed) read as fully closed; sweep all of them again.
+- Re-check the eightx.co citation-splice nit (metric_integrity) and the theme-4 tally (still
+  unfixed a 3rd cycle, experiment_validity) — both cheap, both now overdue.
+- Do not grade the artifact-freshness collapse as Factory misconduct in the ordinary sense — it
+  is real, it is severe, and it was avoidable with a cheap check the Factory had 27 opportunities
+  to run, but nothing this run found was fabricated, flattered, or gamed. Keep those two readings
+  distinct in any future framing of this run's grade.
