@@ -7,6 +7,127 @@ history behind it.
 
 ---
 
+## 2026-09-07 — THIRTEENTH INDEPENDENT GRADE (overall HELD at C, capped by functional_reality for a TENTH cycle — a FULL CONFIRMATORY HOLD: all NINE dimensions landed at the exact same letter as the last grade, the first fully flat cycle in this scorecard's visible history)
+
+**Overall: C · ship_gate_met: false.** The headline HELD at C for a TENTH consecutive cycle. This
+cycle is notable for what did NOT move: all nine dimensions graded to the exact same letter as the
+2026-08-17 grade — functional_reality C, correctness A, security_rls A, design_taste B, store_readiness
+A, artifact_integrity A, business_case_strength A, tests_evals B, performance B. 73 commits landed in
+the 21-day gap between grades, a larger window than most prior cycles, yet produced zero letter-grade
+movement in either direction — no fresh adversarial finding dropped a previously-clean dimension, and
+no gap-closing work touched either of the two ship-critical blockers (functional_reality's persistence
+cutover, design_taste's F7 screenshot baselines). **TWO ship-critical dimensions remain below A**
+(functional_reality C, design_taste B) — unchanged in count and identity from last cycle.
+
+**Per-dimension diff vs 2026-08-17:** functional_reality **C→C** (byte-identical, still purely
+owner-gated) · correctness **A→A** (held; same 3 ceiling items, zero new regressions in a 6-commit
+adversarial spot-check) · security_rls **A→A** (held; but this cycle's sweep was the most thorough on
+record — 41 of 58 routes read line-by-line vs ~10 in prior cycles — and found zero new instances of the
+project's historically recurring IDOR class) · design_taste **B→B** (held; F7 gap unchanged, but this
+cycle's notably larger 24-file UI diff was fully re-swept for slop and found clean, plus one new
+permanent a11y ratchet added) · store_readiness **A→A** (held, re-verified byte-identical, new
+push-token surface honestly disclosed) · artifact_integrity **A→A** (held; the cleanest sweep on record,
+zero new overclaims found, ROADMAP.md wasn't even touched this window) · business_case_strength **A→A**
+(held; bit-identical figures, explicit ruling that the sibling GTM auditor's domain/staleness findings
+correctly stay out of this dimension's lane) · tests_evals **B→B** (held; orchestrator.ts flat for a
+FIFTH straight cycle, but real eval-breadth growth credited — 3 new gold fixtures + a new pipeline-stage
+eval) · performance **B→B** (held; two genuine fixes — cron N+1 batching, select narrowing — but the
+structural gate/embedding-index gaps remain).
+
+**Mechanical signals actually run this cycle (cold start, npm install first; shared signals run ONCE by
+the orchestrator and handed to all 9 dimension graders, each of which additionally re-ran its own cited
+test files rather than trusting the aggregate alone):**
+- `npx tsc --noEmit` → clean · `npx eslint .` → **0 errors, 0 warnings** · `npm run check:determinism` →
+  green (all 4 checks).
+- `npm test` → **3201 passed / 19 skipped** (up from 3120/15), 299/307 files (up from 294/275... i.e.
+  294 files last cycle).
+- `npx vitest run --coverage` → **73.1% stmts / 62.34% branch / 77.19% funcs / 74.5% lines** (up from
+  72.79/62.05/76.82/74.2), above all floors (60/49/64/61).
+- `bash scripts/preflight.sh` → 51 pass / 3 fail: functional-journeys (cold env, expected), DoD
+  9-unchecked (expected pre-launch), and QUALITY_SCORECARD below ship bar (reading the STALE pre-update
+  scorecard, as expected before this cycle's write lands) — byte-identical failure pattern to every prior
+  cycle.
+- `node scripts/check-security-invariants.mjs` → PASS, **27** public tables (up from 26 — the new
+  `push_tokens` table from migration 034), all RLS-enabled; no client-secret leak web/mobile.
+- Business case: `node analysis/business_case_without_annual_arr.mjs` → **$121,339** (bit-identical);
+  `node scripts/validate-computation.mjs` → PASS, **12** figures verified (unchanged).
+- 73 commits landed since 2026-08-17 (`git log --oneline 37d0142..HEAD`) — the largest inter-grade
+  window in recent cycles. `git log` on every file underlying the two ship-critical blockers
+  (`.github/workflows/ci.yml`, `lib/supabase/server.ts`, `ROADMAP.md`) returned EMPTY for the full
+  window — confirmed byte-identical, not assumed.
+
+**Why this cycle is a full confirmatory hold, not stagnation:** the 73-commit window's dominant pattern
+was a large "discarded DB error" correctness sweep (~20 commits fixing real errors misclassified as
+404/validation across ~24 API route files — independently spot-verified as genuine fixes with regression
+tests, none weakening authorization logic), 8 next/image conversions (APT-39 continuation), several
+focus-visible a11y fixes (one new permanent ratchet test), a lifecycle-email cron N+1 batch fix, two API
+select-narrowing perf wins, an orchestrator fail-open reliability fix, and a new migration
+(034_push_tokens.sql) for a mobile push-token receiver with RLS correctly wired and docs/app-privacy.md
+correctly updated. This is real, value-adding engineering work — it just wasn't aimed at either of the
+two structurally owner-gated ship-critical blockers, which by design cannot be closed by the loop
+(`.github/` edits are permission-gated; F7 screenshot persistence needs the same CI step). The absence of
+movement is therefore the CORRECT outcome given the work actually done, not evidence of the loop avoiding
+hard problems — both blockers were independently re-verified byte-identical, not merely assumed
+unchanged from the prior write-up.
+
+**Why security_rls's hold at A (not A+) is now much better supported:** last cycle's A rested on a
+~10-of-57-route spot-sweep. This cycle's grader read 41 of 58 total routes line-by-line (the routes
+touched in the 73-commit window plus 16 additional elevated-risk routes chosen for multi-id/token-auth/
+destructive shape), plus a repo-wide grep of 55 `.eq("id", <var>)` call sites all individually triaged.
+Zero new instances of the project's six-time-recurring "bind one client id, leave another unbound" class
+were found. Per this project's own established discipline (a "clean sweep → A+" claim has been reversed
+by the next cycle's fresh sweep six times running), the orchestrator still holds this at A rather than
+A+ — 17 of 58 routes remain unread this cycle — but the gap to A+ has now narrowed from "an exhaustive
+audit has never been attempted" to "17 specific, named, lower-risk routes remain."
+
+**Why design_taste's hold at B survived a much larger diff intact:** the 73-commit window touched 24 UI
+files (vs ~5 in the prior cycle) — a real stress test of whether the design discipline holds under higher
+commit volume. All 10 of the largest changed files were read and judged against VISION.md's design bar;
+zero new slop was found (no ad-hoc hex, no gradients, no emoji-as-icon), and one new permanent a11y
+ratchet (`focus-visible-ratchet.test.ts`) was added — a genuine quality-bar investment, not just
+mechanical churn. The F7 capping gap (zero committed authed/design-dense screenshot baselines) is
+completely unchanged and remains the sole reason this holds at B.
+
+**Issues reconciled:** UPDATE #525 (functional_reality — still C, unchanged, now the sole item explaining
+overall's 10-cycle hold at C). UPDATE #204 (design_taste — unchanged; note that a much larger commit
+window produced zero new slop, reinforcing the F7 gap is structural). UPDATE #200 (tests_evals — the
+issue's scene-assembler reference is now stale, two cycles after that gap closed; cycle count for
+orchestrator.ts's flatness should update from "third" to "fifth"). UPDATE #385 (performance — credit the
+cron N+1 fix and select-narrowing win; name the missing regression test on the select narrowing as the
+cheapest next step). No action needed on #858/#727/#672/#726 (already closed, all re-confirmed genuinely
+resolved this cycle) or correctness (no open issue; three ceiling items unchanged).
+
+**Lessons for next run:**
+1. **A fully flat cycle across all nine dimensions is possible without being suspicious** — when the
+   underlying commit window's engineering effort was genuinely real but genuinely orthogonal to the named
+   gaps (owner-gated blockers; a structural screenshot-persistence step), no letter should move, and this
+   cycle's per-dimension graders each independently re-derived evidence from scratch rather than trusting
+   the prior write-up, so the flat result is a confirmed hold, not an inherited one. Watch for the failure
+   mode this could mask: an auditor that stops looking hard because "nothing ever changes" — this cycle's
+   security_rls grader deliberately used the flat-cycle opportunity to do the most thorough sweep on
+   record (41/58 routes) rather than coasting, which is the right instinct going forward.
+2. **A "most thorough sweep yet" is worth crediting explicitly even when the letter grade doesn't move.**
+   security_rls's 41/58-route read is a real, measurable narrowing of the gap to A+ (from "never
+   attempted exhaustively" to "17 specific named routes remain") — recording that precisely, rather than
+   just repeating "held at A, sweep incomplete," gives the next cycle a concrete, bounded finish line.
+3. **Stale sub-claims inside an otherwise-still-valid issue should be corrected on update, not left to
+   compound.** Issue #200 still named scene-assembler.ts as an open gap two cycles after it closed — an
+   auditor that only checks "is the dimension's letter still B" without re-reading the tracked issue's
+   own text risks the issue becoming misleading even while the scorecard stays accurate.
+4. **A larger commit window is itself a stress test worth naming.** design_taste's 24-file diff (vs ~5
+   last cycle) was a genuine opportunity for slop to slip in un-caught; finding none, plus a new
+   permanent a11y ratchet, is stronger evidence than a quiet cycle would have been — worth stating
+   explicitly rather than just recording "no change."
+5. Cold-start recipe re-confirmed and unchanged: `npm install` first; run the 9 dimension graders with
+   SHARED, pre-run mechanical signals (tsc/eslint/test/coverage/determinism/preflight run ONCE by the
+   orchestrator); each grader independently re-ran its own cited test files and grepped fresh evidence.
+   This cycle additionally had each grader read a NAMED sample of the 73-commit window's diffs (not just
+   re-check prior findings) — the discipline that let security_rls and design_taste each independently
+   confirm "no new regression in a much larger diff" rather than merely inheriting the prior cycle's
+   all-clear.
+
+---
+
 ## 2026-08-17 — TWELFTH INDEPENDENT GRADE (overall HELD at C, capped by functional_reality for a NINTH cycle — but the per-dimension picture is the BEST since 08-03: TWO ship-critical dims RECOVERED FULLY to A, security_rls B→A and artifact_integrity B→A, leaving only TWO ship-critical dims below A, down from four)
 
 **Overall: C · ship_gate_met: false.** The headline HELD at C for a NINTH consecutive cycle (still capped
