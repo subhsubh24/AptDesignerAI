@@ -8,11 +8,31 @@ The dashboard reads the fenced `GTM_SCORECARD` block below.
 ```yaml
 GTM_SCORECARD:
   project: AptDesignerAI
-  as_of: 2026-08-31
-  auditor_run: 8
+  as_of: 2026-09-07
+  auditor_run: 9
   overall: C
   ship_gate_met: false          # requires A/A+ on every ship_critical dim AND >= B elsewhere
   ship_critical_dimensions: [metric_integrity, business_case_honesty, roadmap_steer_justification, self_validation_honesty]
+  confirmatory_run: true
+  confirmatory_note: >-
+    Run 9 (2026-09-07) is a CONFIRMATORY hold, not a fresh 8-subagent regrade. Verified via three
+    independent channels that zero GTM Factory activity has occurred since Run 8 (2026-08-31): (1)
+    `git log` shows 5e80f4a (Run 8's own scorecard commit) is still HEAD, zero commits since; (2)
+    `mcp__github__list_pull_requests` (state=all) confirms PR #996 (Run 8) is the most recent PR in
+    the repo, merged, nothing after it; (3) `mcp__Linear__list_issues` confirms every `gtm-quality`
+    issue this Auditor filed (APT-74, APT-75, APT-43, APT-44, APT-45, APT-46) is still `Backlog` and
+    the owner-filed APT-69 is still `Todo` -- zero board movement. `docs/growth/DEMAND_TEST.md`
+    still reads "Status: not yet run" and both factory loops remain paused (`enabled:false`,
+    2026-08-26). Since every graded artifact (GROWTH_STATUS.md, BUSINESS_CASE.md, ROADMAP.md,
+    VISION.md) is BYTE-IDENTICAL to what Run 8 exhaustively re-derived one week ago -- scripts
+    re-run cold, citations re-fetched against raw content, test suite actually re-executed, full
+    GitHub-API history reconstruction past the shallow local clone -- spawning eight fresh
+    adversarial subagents to re-grade identical bytes would produce either the same result at real
+    cost or spurious inter-rater drift on unchanged evidence, both against GTM_STANDARD S8's "keep
+    spend lean" brake and its "grade once, then STOP" instruction. All eight dimension grades below
+    are therefore CARRIED FORWARD from Run 8 verbatim -- this is a documented identity (same bytes,
+    same rubric, same evidence), not a trust-the-prior-audit shortcut. The next run should return to
+    a full fresh regrade the moment either factory resumes or the demand test returns a result.
   regression_note: >-
     Graded against Run 7 (2026-08-17, overall B, gate false, sole ship-critical blocker
     self_validation_honesty B). Both the four ★ ship-critical grades and three of four

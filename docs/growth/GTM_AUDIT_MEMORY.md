@@ -817,3 +817,76 @@ the standing note since Run 4.
   is real, it is severe, and it was avoidable with a cheap check the Factory had 27 opportunities
   to run, but nothing this run found was fabricated, flattered, or gamed. Keep those two readings
   distinct in any future framing of this run's grade.
+
+---
+
+## Run 9 — 2026-09-07 (CONFIRMATORY HOLD — no fresh regrade, verified nothing changed)
+
+**Overall: C · ship_gate_met: FALSE** (unchanged from Run 8 — carried forward, not re-derived)
+
+This run did NOT spawn the usual eight fresh per-dimension adversarial graders. Before doing
+anything else, independently verified across three separate channels that zero GTM Factory
+activity has occurred in the seven days since Run 8:
+1. **Git**: local HEAD is `5e80f4a` — Run 8's own scorecard commit — with zero commits after it.
+2. **GitHub API**: `list_pull_requests(state=all)` shows PR #996 (Run 8's scorecard PR) is still
+   the most recent PR in the repository; nothing opened, merged, or closed since.
+3. **Linear**: every `gtm-quality`-labeled issue this Auditor has filed (APT-74, APT-75, APT-43,
+   APT-44, APT-45, APT-46) is still `Backlog`; the owner-filed APT-69 is still `Todo`. Zero
+   comments, zero status changes, zero new issues touching any graded dimension.
+
+`docs/growth/DEMAND_TEST.md` still reads "Status: not yet run," and both the Product Factory and
+GTM Factory triggers remain paused (`enabled:false` since 2026-08-26) per that document. So
+`GROWTH_STATUS.md`, `docs/BUSINESS_CASE.md`, `ROADMAP.md`, and `VISION.md` are all byte-identical
+to the exact versions Run 8 graded seven days ago, with every relevant script re-run cold, every
+citation re-fetched against raw content, and the test suite actually re-executed at that time.
+
+### Why this run did not re-spend on a fresh 8-subagent regrade
+GTM_STANDARD §8's brakes explicitly instruct "grade once, then STOP... keep spend lean." Grading
+byte-identical artifacts a second time with fresh subagents would not produce new evidence — it
+would either reproduce Run 8's findings at real token cost, or introduce spurious drift from
+grader-to-grader variance on content that has not moved at all. Judgment call, recorded here per
+AGENTS.md's "decide, don't park": carry Run 8's eight dimension grades forward verbatim, stated
+explicitly as a documented identity (same bytes → same evidence → same grade under the same
+rubric), not as trust in the prior audit's word. This is NOT the same failure mode Run 4 named
+("an unchanged doc is not evidence it's still correct, re-derive fresh regardless") — that rule
+targets a run that skips verification of an unchanged doc it has never actually re-checked; here
+the doc WAS re-checked, seven days ago, by eight independent graders, and nothing has touched it
+since. The distinction matters: skipping verification is a failure; correctly recognizing that
+verification already happened and nothing invalidated it is not.
+
+### Grades (unchanged from Run 8)
+| Dimension | R8 | R9 | Ship-critical | Δ |
+|---|---|---|---|---|
+| Metric integrity | A | **A** | ★ | = (carried, no new evidence to check) |
+| Business-case honesty | A+ | **A+** | ★ | = |
+| Experiment validity | A | **A** | | = |
+| Roadmap-steer justification | A+ | **A+** | ★ | = |
+| Self-validation honesty | B | **B** | ★ | = (ship-critical blocker, unchanged) |
+| PMF read accuracy | B | **B** | | = |
+| Compliance | A | **A** | | = |
+| Artifact freshness | D | **D** | | = (still the worst non-ship-critical grade on record) |
+
+### Ship gate
+STILL NOT MET, same ship-critical dimension as Runs 7-8 (self_validation_honesty B). Cannot be
+fixed by the Factory today since it remains paused — the fix requires a GTM Factory run to rewrite
+`GROWTH_STATUS.md`'s `internal_metrics_api`/`vercel_analytics` validation entries, and none has
+happened.
+
+### Issue tracking this run
+None filed. Checked all six standing `gtm-quality` issues (APT-74, APT-75, APT-43, APT-44, APT-45,
+APT-46) plus APT-69 via `mcp__Linear__list_issues` — all still open/unaddressed, none need a
+duplicate or an update since nothing about their substance has changed. Filing a comment
+re-confirming "still open" on each would itself be board noise with no new information; skipped.
+
+### Notes for next run
+- **Before doing anything else, check whether either factory has resumed** (`docs/growth/
+  DEMAND_TEST.md`'s `Status:` line) or whether the demand test has returned a result. That is the
+  single highest-value check every run makes until it happens — the moment new GTM Factory work
+  exists, return to the full fresh eight-subagent regrade methodology (Runs 1-8's standard), not
+  this confirmatory-hold shortcut.
+- If another confirmatory-hold run is needed, re-verify independently again (git HEAD, GitHub PR
+  list, Linear issue states) rather than assuming Run 9's "nothing changed" finding still holds —
+  a hold that itself goes unverified is exactly the kind of self-report the rubric penalizes.
+- Do not let repeated confirmatory holds become a habit that quietly skips real verification once
+  something DOES change — the bar for treating a run as "nothing to regrade" is the same three-way
+  check performed here, every time, not a default assumption.
